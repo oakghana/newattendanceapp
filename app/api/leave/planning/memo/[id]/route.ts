@@ -608,7 +608,7 @@ export async function GET(
 
     // Compute effective dates/days for memo generation
     // Use HR executor's final dates/days if set; otherwise fall back to HR office dates, then requested dates
-    const effectiveStart = lr.hr_approved_start_date || lr.preferred_start_date || lr.adjusted_start_date
+    const effectiveStart = lr.hr_approved_start_date || lr.adjusted_start_date || lr.preferred_start_date
     // The approved/adjusted leave range is authoritative. Day adjustments
     // affect entitlement only and must never extend the leave period.
     const effectiveEnd = lr.hr_approved_end_date || lr.adjusted_end_date || lr.preferred_end_date
@@ -677,12 +677,6 @@ export async function GET(
       // HARD SAFETY GUARD: table format is EXCLUSIVELY for annual leave.
       // Even if buildBuiltinBody returns useTable=true for another type, we override it.
       useTable            = leaveTypeKey === "annual" ? built.useTable : false
-      console.log("[v0] TABLE DECISION:", {
-        leaveTypeKey,
-        builtUseTable: built.useTable,
-        finalUseTable: useTable,
-        willRenderTable: useTable === true,
-      })
       tableEntitlement    = built.tableEntitlement    ?? 0
       tableTravellingDays = built.tableTravellingDays ?? 0
     }
@@ -1045,7 +1039,7 @@ export async function GET(
     }
     y += 3
 
-    // ── Footer ────────────────────────────────────────────────────────
+    // ── Footer ─────────��──────────────────────────────────────────────
     doc.setDrawColor(44, 98, 22)
     doc.setLineWidth(0.5)
     doc.line(marginLeft, pageHeight - 18, pageWidth - marginRight, pageHeight - 18)

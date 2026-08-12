@@ -61,18 +61,24 @@ export function LeaveResumptionBadge({ compact = false }: LeaveResumptionBadgePr
           .from('leave_plan_requests')
           .select('id, status, adjusted_end_date, preferred_end_date, adjusted_start_date, preferred_start_date')
           .eq('user_id', user.id)
-          .in('status', ['hr_approved', 'on_leave'])
-          .lte('adjusted_start_date', today)  // leave has already started
+          .in('status', ['approved', 'hr_approved', 'finalized', 'completed', 'memo_issued', 'on_leave'])
           .order('adjusted_end_date', { ascending: false })
-          .limit(1)
+          .limit(10)
 
         if (!isMounted) return
 
-        if (leaves && leaves.length > 0) {
-          const leave = leaves[0]
+        const activeLeave = (leaves || []).find((leave) => {
+          const startDate = leave.adjusted_start_date || leave.preferred_start_date
           const endDate = leave.adjusted_end_date || leave.preferred_end_date
-          if (!endDate) return
+          return Boolean(startDate && endDate && startDate <= today)
+        })
 
+        if (activeLeave) {
+          const endDate = activeLeave.adjusted_end_date || activeLeave.preferred_end_date
+          if (!endDate) {
+            setIsOnLeave(false)
+            return
+          }
           const days = daysUntilResumption(endDate)
 
           // Show badge when 5 or fewer days until resumption (includes overdue / today / tomorrow)
