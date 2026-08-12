@@ -1,6 +1,6 @@
 // jsPDF and jspdf-autotable are loaded dynamically inside each function
 // to avoid SSR crashes (jsPDF accesses `window` at module initialisation time).
-import { addAnnualLeaveWorkingDays } from "./annual-leave-calculator"
+import { calculateAnnualLeaveMemoDates } from "./annual-leave-calculator"
 
 export interface MemoData {
   to: string
@@ -426,8 +426,15 @@ async function generateMainMemo(
     const enjoyedDays = Number(firstStaff?.prior_leave_days_deducted ?? 0)
     const travellingDays = Number(firstStaff?.travelling_days_added ?? 0)
     const entitlementDays = Number(firstStaff?.entitlement_days ?? approvedDays)
-    const annualDaysRemaining = Math.max(0, entitlementDays - publicHolidayDays - enjoyedDays)
-    const totalGrantedDays = annualDaysRemaining + travellingDays
+    const annualMemoDates = calculateAnnualLeaveMemoDates({
+      startDate: firstStaff?.leave_period_start || new Date(),
+      entitlementDays,
+      grantedDays: approvedDays,
+      daysAlreadyEnjoyed: enjoyedDays || publicHolidayDays || null,
+      travellingDays,
+    })
+    const annualDaysRemaining = Math.max(0, annualMemoDates.entitlementDays - annualMemoDates.daysAlreadyEnjoyed)
+    const totalGrantedDays = annualMemoDates.grantedDays
 
     const entitled = entitlementDays > 0
       ? travellingDays > 0
@@ -450,12 +457,8 @@ async function generateMainMemo(
     if (firstStaff?.leave_period_end) {
       const isAnnualLeave = String(memoData.leave_type_key || "").toLowerCase() === "annual"
       if (isAnnualLeave && firstStaff.leave_period_start) {
-        const publicHolidayDays = Math.max(0, Number(firstStaff.holiday_days_deducted ?? 0))
-        const enjoyedDays = Math.max(0, Number(firstStaff.prior_leave_days_deducted ?? 0))
-        const travelDays = Math.max(0, Number(firstStaff.travelling_days_added ?? 0))
-        const annualDays = Math.max(0, entitlementDays - publicHolidayDays - enjoyedDays + travelDays)
-        // Annual leave uses the same inclusive working-day calculation as the memo API.
-        toDate = fmtDateLongPdf(addAnnualLeaveWorkingDays(firstStaff.leave_period_start, annualDays))
+        // Annual leave uses the same inclusive calculation and totals as every memo route.
+        toDate = fmtDateLongPdf(annualMemoDates.endDate)
       } else {
         toDate = fmtDateLongPdf(firstStaff.leave_period_end)
       }

@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { jsPDF } from 'jspdf'
 import fs from 'fs'
 import path from 'path'
+import { calculateAnnualLeaveMemoDates } from '@/lib/annual-leave-calculator'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest) {
         preferred_start_date, preferred_end_date,
         adjusted_start_date, adjusted_end_date,
         requested_days, adjusted_days, entitlement_days,
-        travelling_days_added, leave_year_period,
+        prior_leave_days_deducted, holiday_days_deducted, travelling_days_added, leave_year_period,
         hr_approver_id, hr_approver_name,
         hr_approved_at, hr_signature_data_url, hr_signature_text,
         submitted_at, created_at,
@@ -201,18 +202,33 @@ export async function GET(request: NextRequest) {
     const position = staffMgmt?.position || staff?.position || ''
 
     const startRaw = req.adjusted_start_date || req.preferred_start_date
-    const endRaw = req.adjusted_end_date || req.preferred_end_date
-    const grantedDays = req.adjusted_days || req.requested_days || 0
-    const entitledDays = req.entitlement_days || grantedDays
-    const travelDays = req.travelling_days_added || 0
-    const entitledLabel = travelDays > 0
-      ? `${entitledDays - travelDays} plus ${travelDays} travelling day${travelDays !== 1 ? 's' : ''}`
-      : String(entitledDays)
-    const remarks = travelDays > 0
-      ? `${travelDays} travelling day${travelDays !== 1 ? 's' : ''} added`
-      : ''
-
     const leaveTypeKey = String(req.leave_type_key || 'annual').toLowerCase()
+    const storedGrantedDays = Number(req.adjusted_days || req.requested_days || 0)
+    const storedEntitledDays = Number(req.entitlement_days || storedGrantedDays)
+    const travelDays = Number(req.travelling_days_added || 0)
+    const annualDates = leaveTypeKey === 'annual'
+      ? calculateAnnualLeaveMemoDates({
+          startDate: startRaw,
+          entitlementDays: storedEntitledDays,
+          grantedDays: storedGrantedDays,
+          daysAlreadyEnjoyed: (req.prior_leave_days_deducted != null || req.holiday_days_deducted != null)
+            ? Number(req.prior_leave_days_deducted || 0) + Number(req.holiday_days_deducted || 0)
+            : null,
+          travellingDays: travelDays,
+        })
+      : null
+    const endRaw = annualDates?.endDate.toISOString().slice(0, 10) || req.adjusted_end_date || req.preferred_end_date
+    const grantedDays = annualDates?.grantedDays ?? storedGrantedDays
+    const entitledDays = annualDates?.entitlementDays ?? storedEntitledDays
+    const entitledLabel = travelDays > 0
+      ? `${entitledDays} plus ${travelDays} travelling day${travelDays !== 1 ? 's' : ''}`
+      : String(entitledDays)
+    const remarks = annualDates && annualDates.daysAlreadyEnjoyed > 0
+      ? `${annualDates.daysAlreadyEnjoyed} day(s) already enjoyed; ${travelDays} travelling day(s) added`
+      : travelDays > 0
+        ? `${travelDays} travelling day${travelDays !== 1 ? 's' : ''} added`
+        : ''
+    
     const leaveTypeName = leaveTypeLabel(leaveTypeKey)
     const yearLabel = req.leave_year_period || String(new Date(startRaw || req.created_at).getFullYear())
     
@@ -345,7 +361,7 @@ export async function GET(request: NextRequest) {
     doc.setTextColor(0)
     y += 10
 
-    // ── Subject — bold + underline ────────────────────────────────────────────
+    // ── Subject — bold + underline ──────────────────��─────────────────────────
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(10)
     doc.text(subjectLine, mL, y)

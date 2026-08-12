@@ -6,7 +6,7 @@ import path from "path"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrApproverRole, isHrLeaveOfficeRole, isManagerRole, isStaffRole, calculateWorkingDays } from "@/lib/leave-planning"
 import { resolveEntitlementFromProfile } from "@/lib/annual-leave-entitlement"
-import { addAnnualLeaveWorkingDays, getNextWorkingDay } from "@/lib/annual-leave-calculator"
+import { calculateAnnualLeaveMemoDates, getNextWorkingDay } from "@/lib/annual-leave-calculator"
 
 export const runtime = "nodejs"
 
@@ -617,19 +617,22 @@ export async function GET(
 
     const leaveTypeKey = String(lr.leave_type_key || "annual").toLowerCase()
     let adjustedEffectiveEnd = effectiveEnd
+    let annualMemoDates: ReturnType<typeof calculateAnnualLeaveMemoDates> | null = null
     if (leaveTypeKey === "annual") {
-      // Annual memo dates are recalculated from the final numeric adjustment
-      // fields. The start date is Working Day 1 when it is a weekday; weekends are excluded.
-      const entitlement = Math.max(0, Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays))
-      const publicHolidayDeduction = Math.max(0, Number(lr.holiday_days_deducted || 0))
-      const priorLeaveDeduction = Math.max(0, Number(lr.prior_leave_days_deducted || 0))
-      const travellingAddition = Math.max(0, Number(lr.travelling_days_added || 0))
-      const annualMemoDays = Math.max(0, entitlement - publicHolidayDeduction - priorLeaveDeduction + travellingAddition)
-      adjustedEffectiveEnd = addAnnualLeaveWorkingDays(effectiveStart, annualMemoDays).toISOString().slice(0, 10)
+      annualMemoDates = calculateAnnualLeaveMemoDates({
+        startDate: effectiveStart,
+        entitlementDays: Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays),
+        grantedDays: effectiveDays,
+        daysAlreadyEnjoyed: (lr.prior_leave_days_deducted != null || lr.holiday_days_deducted != null)
+          ? Number(lr.prior_leave_days_deducted || 0) + Number(lr.holiday_days_deducted || 0)
+          : null,
+        travellingDays: Number(lr.travelling_days_added || 0),
+      })
+      adjustedEffectiveEnd = annualMemoDates.endDate.toISOString().slice(0, 10)
     }
 
     // Return-to-work date is the next working day after the calculated end.
-    const returnDate = getNextWorkingDay(adjustedEffectiveEnd)
+    const returnDate = annualMemoDates?.resumptionDate || getNextWorkingDay(adjustedEffectiveEnd)
     const returnDateIso = returnDate.toISOString()
 
     const leaveLabel   = leaveTypeLabel(leaveTypeKey)
