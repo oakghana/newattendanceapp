@@ -186,7 +186,7 @@ export async function resolveRegionalHrOffice(
       .select("id, region_id, assigned_location_id")
       .eq("assigned_location_id", locationId)
       .eq("is_active", true)
-      .in("role", ["regional_hr", "regional_hr_leave_office", "regional_leave_office"])
+      .in("role", ["hr", "hr_office", "regional_hr", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"])
       .limit(1)
       .maybeSingle()
     if (locationError) throw locationError
@@ -208,7 +208,7 @@ export async function resolveRegionalHrOffice(
     .select("id, region_id")
     .eq("region_id", regionId)
     .eq("is_active", true)
-    .in("role", ["regional_hr", "regional_hr_leave_office", "regional_leave_office"])
+    .in("role", ["hr", "hr_office", "regional_hr", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"])
     .limit(1)
     .maybeSingle()
   if (fallbackError) throw fallbackError

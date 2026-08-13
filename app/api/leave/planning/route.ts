@@ -1424,7 +1424,7 @@ export async function POST(request: NextRequest) {
       locationName = String(assignedLocation?.name || assignedLocation?.address || "")
       resolvedRegionId = resolvedRegionId || (assignedLocation?.districts as any)?.region_id || null
     }
-    const regionalHrOffice = await resolveRegionalHrOffice(admin, resolvedRegionId)
+    const regionalHrOffice = await resolveRegionalHrOffice(admin, resolvedRegionId, assignedLocationId)
     const leaveRoute = routeLeave({
       leaveType: leaveTypeKey,
       locationName,
