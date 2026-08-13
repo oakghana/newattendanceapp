@@ -262,7 +262,13 @@ export async function POST(request: NextRequest) {
       ...(isRegionalManagerApprovalComplete ? { workflow_stage: "completed", memo_generated: true, memo_generated_at: new Date().toISOString(), hr_approver_id: user.id } : {}),
       ...(mustUseHrRecordsReference ? { workflow_stage: "pending_hr_records_reference" } : {}),
       manager_recommendation: mergedRecommendations || null,
-      ...(isRegionalForward && isAnnualLeave((leavePlan as any).leave_type_key) ? { entitlement_days: effectiveEntitlement } : {}),
+      ...(isRegionalForward && isAnnualLeave((leavePlan as any).leave_type_key) ? {
+        entitlement_days: effectiveEntitlement,
+        outstanding_leave_days_added: Number(adjustment_breakdown?.outstanding_days || 0),
+        travelling_days_added: Number(adjustment_breakdown?.travelling_days || 0),
+        adjustment_breakdown: adjustment_breakdown || {},
+        adjustment_reason: String(recommendation || "").trim() || null,
+      } : {}),
       ...(isRegionalForward && String(memo_reference || "").trim() ? { memo_reference: String(memo_reference).trim() } : {}),
       updated_at: new Date().toISOString(),
     }
@@ -270,7 +276,7 @@ export async function POST(request: NextRequest) {
     // Only send columns that are part of the leave-planning table contract.
     // Approval must not fail because optional memo/signature columns are absent.
     const leavePlanColumns = new Set([
-      "status", "workflow_stage", "manager_recommendation", "memo_reference", "updated_at",
+      "status", "workflow_stage", "manager_recommendation", "memo_reference", "updated_at", "entitlement_days", "outstanding_leave_days_added", "travelling_days_added", "adjustment_breakdown", "adjustment_reason",
       "memo_generated", "memo_generated_at", "hr_approver_id", "hod_reviewer_id", "hod_reviewed_at",
       "hod_decision", "preferred_start_date", "preferred_end_date", "requested_days",
       "hr_approver_name", "hr_signature_data_url", "hr_approved_at", "hr_approval_note",

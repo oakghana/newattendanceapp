@@ -521,10 +521,12 @@ export async function GET(
       .single()
 
     // Annual entitlement is based on the applicant profile; travel days stay separate.
-    if (leaveRequest && String((leaveRequest as any).leave_type_key || "annual").toLowerCase() === "annual" && applicantProfile) {
-      const annualEntitlement = resolveEntitlementFromProfile(applicantProfile as any)
-      ;(leaveRequest as any).entitlement_days = annualEntitlement.annualLeaveDays
-    }
+  if (leaveRequest && String((leaveRequest as any).leave_type_key || "annual").toLowerCase() === "annual" && applicantProfile) {
+  const annualEntitlement = resolveEntitlementFromProfile(applicantProfile as any)
+  const savedEntitlement = Number((leaveRequest as any).entitlement_days || 0)
+  const outstandingDays = Number((leaveRequest as any).outstanding_leave_days_added ?? (leaveRequest as any).outstanding_leave_days ?? 0)
+  ;(leaveRequest as any).entitlement_days = Math.max(annualEntitlement.annualLeaveDays, savedEntitlement) + Math.max(0, outstandingDays)
+  }
 
     // Resolve HOD profile (THRO)
     let hodProfile: any = null
@@ -879,12 +881,18 @@ export async function GET(
       if (priorLeaveDaysDeducted > 0) remarksParts.push(`${priorLeaveDaysDeducted} day(s) given/already enjoyed deducted`)
       if (travelDays > 0) remarksParts.push(`${travelDays} travelling day(s) added`)
       const remarksText = String(lr.adjustment_reason || "").trim()
+      const breakdown = (lr.adjustment_breakdown && typeof lr.adjustment_breakdown === "object") ? lr.adjustment_breakdown : {}
+      const outstandingDays = Number(lr.outstanding_leave_days_added ?? lr.outstanding_leave_days ?? breakdown.outstanding_days ?? 0)
+      const breakdownTravellingDays = Number(breakdown.travelling_days ?? 0)
+      if (outstandingDays > 0) remarksParts.push(`${outstandingDays} outstanding day(s) added to entitlement`)
+      if (breakdownTravellingDays > 0 && travelDays === 0) remarksParts.push(`${breakdownTravellingDays} travelling day(s) added`)
       const calculationConfirmation = remarksParts.length > 0
         ? remarksParts.join("; ")
         : "No day adjustment applied"
-      // The HR reason is confirmation text only. Prefer it when supplied so
-      // the memo never prints the same adjustment in two different wordings.
-      const remarksSummary = remarksText || calculationConfirmation
+      const remarksSummary = [remarksText, calculationConfirmation]
+        .filter(Boolean)
+        .filter((value, index, values) => values.indexOf(value) === index)
+        .join("; ")
 
       autoTable(doc, {
         startY: y,
