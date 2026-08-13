@@ -19,6 +19,20 @@ describe("regional non-annual leave workflow", () => {
     }
   })
 
+  it("routes compassionate leave through Regional HR", () => {
+    expect(routeLeave({ leaveType: "compassionate", locationName: "Kumasi Regional Office", hasRegionalOffice: true })).toEqual({
+      route: "regional",
+      firstStage: REGIONAL_LEAVE_STAGES.regionalHrReview,
+    })
+  })
+
+  it("does not silently fall back to HOD when the regional office assignment is missing", () => {
+    const route = routeLeave({ leaveType: "compassionate", locationName: "Kumasi Regional Office", hasRegionalOffice: false })
+    expect(route.route).toBe("regional")
+    expect(route.firstStage).toBe(REGIONAL_LEAVE_STAGES.regionalHrReview)
+    expect(route.reason).toContain("Regional HR assignment is required")
+  })
+
   it("submits through Regional HR adjustment then Regional Manager approval without HOD or HR Executive stages", () => {
     const route = routeLeave({
       leaveType: "sick",

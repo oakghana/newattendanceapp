@@ -42,12 +42,33 @@ export async function GET(request: NextRequest) {
 
     const staffIds = linkedStaff.map((l: any) => l.staff_user_id).filter(Boolean)
 
-    // Fetch all pending HOD review requests from linked staff
+    // Regional staff must never appear in the HOD queue, even if an older
+    // request still has legacy workflow fields. Resolve the location/region
+    // assignment independently of the request's stale status.
+    const { data: staffProfiles } = await admin
+      .from("user_profiles")
+      .select("id, assigned_location_id, region_id")
+      .in("id", staffIds)
+    const locationIds = [...new Set((staffProfiles || []).map((profile: any) => profile.assigned_location_id).filter(Boolean))]
+    const regionIds = [...new Set((staffProfiles || []).map((profile: any) => profile.region_id).filter(Boolean))]
+    const { data: regionalOffices } = await admin
+      .from("user_profiles")
+      .select("assigned_location_id, region_id")
+      .eq("is_active", true)
+      .in("role", ["hr", "hr_office", "regional_hr", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"])
+    const regionalLocationIds = new Set((regionalOffices || []).map((office: any) => office.assigned_location_id).filter((id: string) => locationIds.includes(id)))
+    const regionalRegionIds = new Set((regionalOffices || []).map((office: any) => office.region_id).filter((id: string) => regionIds.includes(id)))
+    const regionalStaffIds = new Set((staffProfiles || []).filter((profile: any) => regionalLocationIds.has(profile.assigned_location_id) || regionalRegionIds.has(profile.region_id)).map((profile: any) => profile.id))
+    const hodStaffIds = staffIds.filter((id: string) => !regionalStaffIds.has(id))
+
+    // Fetch only genuine legacy HOD requests. Regional requests are handled
+    // by Regional HR first, regardless of leave type.
     const { data: requests, error: reqError } = await admin
       .from("leave_plan_requests")
       .select("*, user:user_profiles!user_id(*)")
-      .in("user_id", staffIds)
+      .in("user_id", hodStaffIds.length ? hodStaffIds : ["00000000-0000-0000-0000-000000000000"])
       .eq("status", "pending_hod_review")
+      .neq("workflow_route", "regional")
       .order("created_at", { ascending: false })
 
     if (reqError) {
@@ -57,7 +78,7 @@ export async function GET(request: NextRequest) {
 
     // For each request, fetch all HOD reviewers and their approval status
     const requestIds = (requests || []).map((r: any) => r.id).filter(Boolean)
-    let reviewsByRequestId: Map<string, any[]> = new Map()
+    const reviewsByRequestId: Map<string, any[]> = new Map()
 
     if (requestIds.length > 0) {
       const { data: reviews, error: reviewError } = await admin

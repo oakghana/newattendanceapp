@@ -248,7 +248,13 @@ export async function POST(request: NextRequest) {
       hasRegionalOffice: Boolean(regionalOffice),
       isManagerGrade,
     })
-    const isRegionalWorkflow = leaveRoute.route === "regional" && Boolean(leaveRoute.firstStage)
+    const isRegionalWorkflow = leaveRoute.route === "regional"
+    if (!shouldAutoApprove && isRegionalWorkflow && !regionalOffice?.user_id) {
+      return NextResponse.json(
+        { error: "This regional leave request cannot be submitted until a Regional HR Office is assigned to the staff member's location.", code: "REGIONAL_HR_ASSIGNMENT_REQUIRED" },
+        { status: 409 },
+      )
+    }
     const initialStatus = shouldAutoApprove
       ? "approved"
       : isRegionalWorkflow

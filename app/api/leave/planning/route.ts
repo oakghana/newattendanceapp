@@ -1430,7 +1430,13 @@ export async function POST(request: NextRequest) {
       locationName,
       hasRegionalOffice: Boolean(regionalHrOffice?.user_id),
     })
-    const isRegionalWorkflow = leaveRoute.route === "regional" && Boolean(regionalHrOffice?.user_id)
+    const isRegionalWorkflow = leaveRoute.route === "regional"
+    if (isRegionalWorkflow && !regionalHrOffice?.user_id) {
+      return NextResponse.json(
+        { error: "This regional leave request cannot be submitted until a Regional HR Office is assigned to the staff member's location.", code: "REGIONAL_HR_ASSIGNMENT_REQUIRED" },
+        { status: 409 },
+      )
+    }
 
     // Staff signature is optional
     const initialMemo = buildInitialLeaveMemoDraft({
