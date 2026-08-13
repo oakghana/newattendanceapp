@@ -1198,7 +1198,7 @@ export async function POST(request: NextRequest) {
 
   const profile = await getOrCreateProfile(
   admin, user,
-  "id, role, department_id, region_id, assigned_location_id, staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id, position"
+  "id, role, department_id, region_id, assigned_location_id, staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id, position, geofence_locations(name)"
   )
 
     const role = String((profile as any).role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
@@ -1254,9 +1254,9 @@ export async function POST(request: NextRequest) {
     if (leaveTypeKey === "maternity" && preferred_start_date !== delivery_date) {
       return NextResponse.json({ error: "For maternity leave, the start date must equal the date of delivery." }, { status: 400 })
     }
-    if (leaveTypeKey === "maternity" && !String(medical_report_url || "").trim()) {
-      return NextResponse.json({ error: "A medical report is mandatory for maternity leave." }, { status: 400 })
-    }
+  if (["maternity", "paternity"].includes(leaveTypeKey) && !String(medical_report_url || "").trim()) {
+  return NextResponse.json({ error: `A supporting medical attachment is mandatory for ${leaveTypeKey} leave.` }, { status: 400 })
+  }
     const requestedDays = calculateRequestedDays(preferred_start_date, preferred_end_date)
 
     // ── Annual leave: use per-staff entitlement engine ─────────────────────
@@ -1411,12 +1411,13 @@ export async function POST(request: NextRequest) {
     // queue before any Regional Manager review is created. Resolve the office
     // from the requester's region, not from the manager linkage table.
     const regionalHrOffice = await resolveRegionalHrOffice(admin, (profile as any).region_id || null)
+    const locationName = String((profile as any)?.geofence_locations?.name || "")
     const leaveRoute = routeLeave({
       leaveType: leaveTypeKey,
-      locationName: null,
+      locationName,
       hasRegionalOffice: Boolean(regionalHrOffice?.user_id),
     })
-    const isRegionalNonAnnual = leaveRoute.route === "regional_non_annual" && leaveRoute.firstStage === "pending_regional_hr_review"
+    const isRegionalWorkflow = leaveRoute.route === "regional" && Boolean(regionalHrOffice?.user_id)
 
     // Staff signature is optional
     const initialMemo = buildInitialLeaveMemoDraft({
@@ -1443,10 +1444,10 @@ export async function POST(request: NextRequest) {
         entitlement_days: entitlementDays,
         requested_days: requestedDays,
         reason: reason || null,
-        status: isRegionalNonAnnual ? "pending_regional_hr_review" : "pending_hod_review",
-        workflow_route: isRegionalNonAnnual ? "regional_non_annual" : "legacy",
-        workflow_stage: isRegionalNonAnnual ? "regional_hr_review" : "hod_review",
-        regional_hr_office_user_id: isRegionalNonAnnual ? regionalHrOffice?.user_id : null,
+        status: isRegionalWorkflow ? "pending_regional_hr_review" : "pending_hod_review",
+        workflow_route: isRegionalWorkflow ? "regional" : "legacy",
+        workflow_stage: isRegionalWorkflow ? "regional_hr_review" : "hod_review",
+        regional_hr_office_user_id: isRegionalWorkflow ? regionalHrOffice?.user_id : null,
         // Annual leave entitlement snapshot — only columns that exist in the DB
         staff_category: annualLeaveSnapshot.staffCategory || null,
         user_signature_mode: user_signature_mode || "typed",
@@ -1471,7 +1472,7 @@ export async function POST(request: NextRequest) {
       throw requestError
     }
 
-    if (!isRegionalNonAnnual) {
+    if (!isRegionalWorkflow) {
       const nonHrReviewers = await resolveManagerReviewers(admin, user.id, (profile as any).department_id || null)
 
       if (nonHrReviewers.length === 0) {
@@ -1610,9 +1611,9 @@ export async function PUT(request: NextRequest) {
     if (leaveTypeKey === "maternity" && preferred_start_date !== delivery_date) {
       return NextResponse.json({ error: "For maternity leave, the start date must equal the date of delivery." }, { status: 400 })
     }
-    if (leaveTypeKey === "maternity" && !String(medical_report_url || "").trim()) {
-      return NextResponse.json({ error: "A medical report is mandatory for maternity leave." }, { status: 400 })
-    }
+  if (["maternity", "paternity"].includes(leaveTypeKey) && !String(medical_report_url || "").trim()) {
+  return NextResponse.json({ error: `A supporting medical attachment is mandatory for ${leaveTypeKey} leave.` }, { status: 400 })
+  }
     const requestedDays = calculateRequestedDays(preferred_start_date, preferred_end_date)
     if (requestedDays <= 0) {
       return NextResponse.json({ error: "Invalid leave date range." }, { status: 400 })

@@ -242,17 +242,19 @@ export async function POST(request: NextRequest) {
       .filter((r: string | null) => !!r)
       .join("\n\n")
 
-    const isRegionalNonAnnualApproval = isRegionalManagerApproval && decision === "approved" && !isRegionalForward
+    const isRegionalWorkflow = String((leavePlan as any).workflow_route || "") === "regional"
+    const isRegionalManagerApprovalComplete = isRegionalWorkflow && isRegionalManagerApproval && decision === "approved" && !isRegionalForward
     const isDepartmentHeadApproval = decision === "approved" && !isRegionalForward && !isRegionalManagerApproval
-    const mustUseHrRecordsReference = isDepartmentHeadApproval && !isAnnualLeave((leavePlan as any).leave_type_key) && !isExcludedLocation((leavePlan as any).assigned_location_name)
+    const mustUseHrRecordsReference = !isRegionalWorkflow && isDepartmentHeadApproval && !isAnnualLeave((leavePlan as any).leave_type_key) && !isExcludedLocation((leavePlan as any).assigned_location_name)
     const requestUpdatePayload: Record<string, any> = {
-      status: isRegionalForward ? "pending_regional_manager_approval" : isRegionalNonAnnualApproval ? "approved" : mustUseHrRecordsReference ? "pending_hr_records_reference" : nextStatus,
+      status: isRegionalForward ? "pending_regional_manager_approval" : isRegionalManagerApprovalComplete ? "approved" : mustUseHrRecordsReference ? "pending_hr_records_reference" : nextStatus,
+      ...(isRegionalManagerApprovalComplete ? { workflow_stage: "completed", memo_generated: true, memo_generated_at: new Date().toISOString() } : {}),
       ...(mustUseHrRecordsReference ? { workflow_stage: "pending_hr_records_reference" } : {}),
       manager_recommendation: mergedRecommendations || null,
       updated_at: new Date().toISOString(),
     }
 
-    if (isRegionalNonAnnualApproval) {
+    if (isRegionalManagerApprovalComplete) {
       const signerName = `${String((profile as any).first_name || "").trim()} ${String((profile as any).last_name || "").trim()}`.trim()
       const { data: signerSignature } = await admin
         .from("approval_signature_registry")
@@ -338,7 +340,7 @@ export async function POST(request: NextRequest) {
     }
 
     // If fully approved by all HODs → notify HR Leave Office
-    if (!isRegionalNonAnnualApproval && (nextStatus === "hod_approved" || nextStatus === "manager_confirmed")) {
+    if (!isRegionalManagerApprovalComplete && (nextStatus === "hod_approved" || nextStatus === "manager_confirmed")) {
       const hodName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "HOD"
       notifyLeaveHodApproved(admin, {
         leavePlanRequestId: leave_plan_request_id,
@@ -351,7 +353,7 @@ export async function POST(request: NextRequest) {
       }).catch(() => {})
     }
 
-    return NextResponse.json({ success: true, status: isRegionalNonAnnualApproval ? "approved" : nextStatus })
+    return NextResponse.json({ success: true, status: isRegionalManagerApprovalComplete ? "approved" : nextStatus })
   } catch (error) {
     if (isSchemaIssue(error)) {
       return schemaIssueResponse()

@@ -97,17 +97,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Leave request not found." }, { status: 404 })
     }
 
-    const releasedReference = String((leaveRequest as any).memo_reference || "").trim()
-    if (!(leaveRequest as any).memo_reference_locked || releasedReference.length < 3 || String(memo_reference || "").trim() !== releasedReference) {
-      return NextResponse.json({ error: "HR Records must assign and release the official memo reference before HR Leave Office can continue." }, { status: 409 })
-    }
-
     const currentStatus = String((leaveRequest as any).status || "")
-    const requiresHrRecordsReference = currentStatus === "pending_hr_records_reference" || String((leaveRequest as any).workflow_route || "") === "regional_non_annual"
-    if (requiresHrRecordsReference && (!String((leaveRequest as any).memo_reference || "").trim() || !(leaveRequest as any).memo_reference_locked)) {
-      return NextResponse.json({ error: "This non-regional request must receive and lock an HR Records memo reference before HR Leave Office adjustment." }, { status: 409 })
+    const isRegionalWorkflow = String((leaveRequest as any).workflow_route || "") === "regional"
+    if (!isRegionalWorkflow && currentStatus === "pending_hr_records_reference" && (!String(memo_reference || "").trim() || String(memo_reference).trim().length < 3)) {
+      return NextResponse.json({ error: "An official memo reference is required before this non-regional workflow can continue." }, { status: 409 })
     }
-    if (!(HR_OFFICE_PENDING_STATUSES as string[]).includes(currentStatus) && currentStatus !== "pending_hr_leave_processing" && currentStatus !== "hr_office_forwarded") {
+    if (!isRegionalWorkflow && !(HR_OFFICE_PENDING_STATUSES as string[]).includes(currentStatus) && currentStatus !== "pending_hr_leave_processing" && currentStatus !== "hr_office_forwarded") {
       return NextResponse.json(
         {
           error: `This request cannot be processed in its current state (${currentStatus}). It must be HOD-approved or have HOD changes requested first.`,
@@ -169,7 +164,7 @@ export async function POST(request: NextRequest) {
     const { error: updateError } = await admin
       .from("leave_plan_requests")
       .update({
-        status: "hr_office_forwarded",
+        status: isRegionalWorkflow ? "pending_regional_manager_approval" : "hr_office_forwarded",
         original_requested_days: (leaveRequest as any).requested_days,
         adjusted_days: computedAdjustedDays,
         adjusted_start_date,
