@@ -653,8 +653,8 @@ export function LeaveManagementClient({
   }
 
   const handleForwardToRegionalManager = async (notificationId: string) => {
-    const notification = managerNotifications.find((row) => row.id === notificationId)
-    const requestId = String(notification?.leave_plan_request_id || notification?.leave_requests?.id || "")
+    const notification = managerNotifications.find((row) => row.id === notificationId || row.leave_plan_request_id === notificationId || row.leave_requests?.id === notificationId)
+    const requestId = String(notification?.leave_plan_request_id || notification?.leave_requests?.id || notification?.id || "")
     const adjustedStart = window.prompt("Adjusted start date (YYYY-MM-DD)", String(notification?.leave_requests?.start_date || "")) || ""
     const adjustedEnd = window.prompt("Adjusted end date (YYYY-MM-DD)", String(notification?.leave_requests?.end_date || "")) || ""
     const recommendation = window.prompt("Enter the adjustment note to forward this request to the Regional Manager") || ""
@@ -789,7 +789,11 @@ export function LeaveManagementClient({
     return staffRequests.filter((r) => approvedStatuses.has(String(r.status || "")))
   }, [staffRequests, initialApprovedStaffRequests, userRole])
   
-  const pendingNotifications = useMemo(() => managerNotifications.filter((n) => String(n.review_decision || "pending") === "pending"), [managerNotifications])
+  const pendingNotifications = useMemo(() => managerNotifications.filter((n) => {
+    const status = String(n.status || n.leave_requests?.status || "").toLowerCase().replace(/[\s-]+/g, "_")
+    const isRegionalReview = ["pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review"].includes(status)
+    return isRegionalReview || String(n.review_decision || "pending") === "pending"
+  }), [managerNotifications])
   const adminAllPending = useMemo(() => pendingNotifications, [pendingNotifications])
   const adminStaffQueue = useMemo(() => 
     pendingNotifications.filter((n) => {
