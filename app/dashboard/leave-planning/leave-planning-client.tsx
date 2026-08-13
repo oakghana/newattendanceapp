@@ -34,7 +34,7 @@ import {
   getWeekendsAndHolidaysInRange,
   calculateWorkingDays,
 } from "@/lib/leave-planning"
-import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
+import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays } from "@/lib/leave-policy"
 import { useToast } from "@/hooks/use-toast"
 import {
   CheckCircle2,
@@ -1129,6 +1129,8 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     holidaysInPeriod?: Array<{ date: string; name: string }>;
   } | null>(null)
   const [leaveType, setLeaveType] = useState("") // Start empty to show placeholder hint
+  const [maternityDeliveryType, setMaternityDeliveryType] = useState<string>("normal")
+  const [maternityDeliveryDate, setMaternityDeliveryDate] = useState("")
   const [reason, setReason] = useState("")
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
   const [myAnnualEntitlement, setMyAnnualEntitlement] = useState<{
@@ -1222,8 +1224,13 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
   // Travel days are tracked separately; Annual Leave entitlement is the annual leave days only.
   return { ...base, entitlementDays: myAnnualEntitlement.annualLeaveDays }
   }
+  // Maternity entitlement is delivery-specific (normal/CS/twins), never the stale
+  // fixed policy-catalog value (previously a flat 90 days) — override it here too.
+  if (leaveType === "maternity") {
+  return { ...base, entitlementDays: getMaternityEntitlementDays(maternityDeliveryType) }
+  }
   return base
-  }, [leaveTypes, leaveType, myAnnualEntitlement])
+  }, [leaveTypes, leaveType, myAnnualEntitlement, maternityDeliveryType])
   
   // Filter for active leave types only (for the application dropdown)
   const activeLeaveTypes = useMemo(
@@ -2183,6 +2190,10 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
       toast({ title: "Missing date", description: "Please select a start date.", variant: "destructive" })
       return
     }
+    if (leaveType === "maternity" && !maternityDeliveryDate) {
+      toast({ title: "Missing delivery date", description: "Please provide the date of delivery.", variant: "destructive" })
+      return
+    }
     // End date is now auto-calculated, no manual validation needed
     // part_leave_days is auto-derived from computedDays, no manual input required
     // Staff signature is optional
@@ -2202,6 +2213,8 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
           reason,
           resumption_date: autoResumptionDate,
           part_leave_days: leaveType === "part_leave" ? (computedDays || null) : null,
+          maternity_delivery_type: leaveType === "maternity" ? maternityDeliveryType : null,
+          delivery_date: leaveType === "maternity" ? maternityDeliveryDate : null,
           user_signature_mode: signatureMode,
           user_signature_text: activeSig.text,
           user_signature_data_url: activeSig.dataUrl,
@@ -2228,8 +2241,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
         title: editingId ? "Leave request updated" : "Leave request submitted",
         description: leaveType === "annual" ? `Return-to-work: ${computeReturnToWorkDate(endDate)}` : "Request submitted for HR approval",
       })
-      setStartDate(""); setEndDate(""); setReason(""); setEditingId(null)
-      setLeaveYearPeriod(getDefaultSelectedLeaveYearPeriod())
+  setStartDate(""); setEndDate(""); setReason(""); setEditingId(null)
+  setMaternityDeliveryType("normal"); setMaternityDeliveryDate("")
+  setLeaveYearPeriod(getDefaultSelectedLeaveYearPeriod())
       setTypedSignature(""); setUploadedSigUrl(null); setDrawnSigUrl(null)
       setActiveTab("my-leaves")
       await loadData()
@@ -2622,11 +2636,13 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                       setEditingId(req.id)
                       setStartDate(req.preferred_start_date || "")
                       setEndDate(req.preferred_end_date || "")
-                      setLeaveType(req.leave_type_key || "annual")
-                      setLeaveYearPeriod(req.leave_year_period || activeLeaveYearPeriod)
-                      setReason(req.reason || "")
-                      setActiveTab("apply")
-                    }}
+  setLeaveType(req.leave_type_key || "annual")
+  setLeaveYearPeriod(req.leave_year_period || activeLeaveYearPeriod)
+  setReason(req.reason || "")
+  setMaternityDeliveryType(req.maternity_delivery_type || "normal")
+  setMaternityDeliveryDate(req.delivery_date || "")
+  setActiveTab("apply")
+  }}
                     onDelete={() => deletePlan(req.id)}
                     onViewMemo={() => openMemo(req.id, req.memo_token || "")}
                   />
@@ -2741,6 +2757,29 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                   </div>
                 </div>
 
+                {leaveType === "maternity" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-lg border border-pink-200 bg-pink-50 p-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Delivery Type</Label>
+                      <Select value={maternityDeliveryType} onValueChange={setMaternityDeliveryType}>
+                        <SelectTrigger className="h-10 bg-background">
+                          <SelectValue placeholder="Select delivery type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="normal">Normal delivery — 84 days</SelectItem>
+                          <SelectItem value="cs">Caesarean section — 98 days</SelectItem>
+                          <SelectItem value="twins">Twins delivery — 98 days</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Date of Delivery</Label>
+                      <Input type="date" value={maternityDeliveryDate} onChange={(e) => setMaternityDeliveryDate(e.target.value)} className="h-10 bg-background" />
+                    </div>
+                    <p className="sm:col-span-2 text-xs text-pink-800">Entitlement is calculated from the delivery type above. The old fixed 90-day entitlement is no longer used.</p>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date</Label>
                   <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" />
@@ -2854,8 +2893,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                   </Button>
                   {editingId && (
                     <Button variant="outline" onClick={() => {
-                      setEditingId(null); setStartDate(""); setEndDate(""); setReason("")
-                    }}>Cancel</Button>
+  setEditingId(null); setStartDate(""); setEndDate(""); setReason("")
+  setMaternityDeliveryType("normal"); setMaternityDeliveryDate("")
+  }}>Cancel</Button>
                   )}
                 </div>
               </CardContent>

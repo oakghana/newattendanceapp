@@ -14,7 +14,7 @@ import {
   isStaffRole,
   HR_OFFICE_PENDING_STATUSES,
 } from "@/lib/leave-planning"
-import { DEFAULT_LEAVE_TYPES } from "@/lib/leave-policy"
+import { DEFAULT_LEAVE_TYPES, getMaternityEntitlementDays } from "@/lib/leave-policy"
 import {
   resolveEntitlementFromProfile,
   buildAnnualLeaveEntitlementSummary,
@@ -1232,6 +1232,8 @@ export async function POST(request: NextRequest) {
       user_signature_text,
       user_signature_image_url,
       user_signature_data_url,
+      maternity_delivery_type,
+      delivery_date,
     } = body
 
     if (!preferred_start_date || !preferred_end_date) {
@@ -1298,6 +1300,16 @@ export async function POST(request: NextRequest) {
         tierLabel: perStaffEntitlement.tierLabel,
         validationStatus,
       }
+    } else if (leaveTypeKey === "maternity") {
+      // Maternity entitlement is delivery-specific (normal, CS, or twins), never the
+      // legacy fixed policy-catalog value. This overrides any stale catalog entry.
+      if (!["normal", "cs", "twins", "regular", "cs_twins"].includes(String(maternity_delivery_type || ""))) {
+        return NextResponse.json({ error: "Select normal delivery, Caesarean section, or twins delivery for maternity leave." }, { status: 400 })
+      }
+      if (!delivery_date) {
+        return NextResponse.json({ error: "Delivery date is required for maternity leave." }, { status: 400 })
+      }
+      entitlementDays = getMaternityEntitlementDays(maternity_delivery_type)
     } else {
       const entitlementResult = await resolveEntitlementDays(admin, leaveTypeKey, selectedLeaveYearPeriod)
       if (entitlementResult.error) {
@@ -1425,6 +1437,8 @@ export async function POST(request: NextRequest) {
         memo_generated_at: new Date().toISOString(),
         // Flag for HR Leave Office if entitlement exceeded
         adjustment_reason: entitlementWarning,
+        maternity_delivery_type: leaveTypeKey === "maternity" ? String(maternity_delivery_type) : null,
+        delivery_date: leaveTypeKey === "maternity" ? delivery_date : null,
       })
       .select("*")
       .single()
@@ -1530,6 +1544,8 @@ export async function PUT(request: NextRequest) {
       user_signature_text,
       user_signature_image_url,
       user_signature_data_url,
+      maternity_delivery_type,
+      delivery_date,
     } = body
 
     if (!id || !preferred_start_date || !preferred_end_date) {
@@ -1588,11 +1604,22 @@ export async function PUT(request: NextRequest) {
     }
 
     const leaveTypeKey = String(leave_type || "annual").toLowerCase()
-    const entitlementResult = await resolveEntitlementDays(admin, leaveTypeKey, selectedLeaveYearPeriod)
-    if (entitlementResult.error) {
-      return NextResponse.json({ error: entitlementResult.error }, { status: 400 })
+    let entitlementDays: number | null
+    if (leaveTypeKey === "maternity") {
+      if (!["normal", "cs", "twins", "regular", "cs_twins"].includes(String(maternity_delivery_type || ""))) {
+        return NextResponse.json({ error: "Select normal delivery, Caesarean section, or twins delivery for maternity leave." }, { status: 400 })
+      }
+      if (!delivery_date) {
+        return NextResponse.json({ error: "Delivery date is required for maternity leave." }, { status: 400 })
+      }
+      entitlementDays = getMaternityEntitlementDays(maternity_delivery_type)
+    } else {
+      const entitlementResult = await resolveEntitlementDays(admin, leaveTypeKey, selectedLeaveYearPeriod)
+      if (entitlementResult.error) {
+        return NextResponse.json({ error: entitlementResult.error }, { status: 400 })
+      }
+      entitlementDays = entitlementResult.entitlementDays
     }
-    const entitlementDays = entitlementResult.entitlementDays
 
     // Track if entitlement is exceeded - still allow save but flag for HR review
     const entitlementExceededOnUpdate = entitlementDays !== null && requestedDays > entitlementDays
@@ -1670,6 +1697,8 @@ export async function PUT(request: NextRequest) {
       updated_at: new Date().toISOString(),
       // Flag for HR Leave Office if entitlement exceeded
       adjustment_reason: entitlementWarningOnUpdate,
+      maternity_delivery_type: leaveTypeKey === "maternity" ? String(maternity_delivery_type) : null,
+      delivery_date: leaveTypeKey === "maternity" ? delivery_date : null,
     }
 
     if (user_signature_mode !== undefined) updatePayload.user_signature_mode = user_signature_mode || "typed"
