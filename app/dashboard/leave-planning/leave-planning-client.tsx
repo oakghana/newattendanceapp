@@ -2653,13 +2653,15 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                     canEdit={(STAFF_EDITABLE_STATUSES as string[]).includes(req.status)}
                     onEdit={() => {
                       setEditingId(req.id)
-                      setStartDate(req.preferred_start_date || "")
-                      setEndDate(req.preferred_end_date || "")
+  setStartDate(req.leave_type_key === "maternity" ? (req.delivery_date || req.preferred_start_date || "") : (req.preferred_start_date || ""))
+  setEndDate(req.preferred_end_date || "")
   setLeaveType(req.leave_type_key || "annual")
   setLeaveYearPeriod(req.leave_year_period || activeLeaveYearPeriod)
   setReason(req.reason || "")
   setMaternityDeliveryType(req.maternity_delivery_type || "normal")
   setMaternityDeliveryDate(req.delivery_date || "")
+  setMaternityMedicalReport(null)
+  setMaternityMedicalReportUrl(req.medical_report_url || null)
   setActiveTab("apply")
   }}
                     onDelete={() => deletePlan(req.id)}

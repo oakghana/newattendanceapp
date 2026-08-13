@@ -433,7 +433,8 @@ function getUserLoanTier(position?: string | null, role?: string | null, staffCa
     return "senior"
   }
   
-  // Junior tier: junior, jr., clerk, assistant, artisan, apprentice, trainee
+  // Junior tier: junior, jr., clerk, assistant, artisan, apprentice, trainee,
+  // technician, and other explicitly junior operational roles.
   if (/junior|\bjr\b|clerk|assistant|artisan|apprentice|trainee|technician/.test(normalizedPosition) || 
       /junior|\bjr\b/.test(normalizedRole)) {
     return "junior"
@@ -457,7 +458,9 @@ function loanTypeGroupKey(loanType: LoanType) {
 function shouldIncludeLoanTypeForUser(loanType: LoanType, userTier: string | null, allTypes: LoanType[]) {
   const loanTier = resolveLoanTypeTier(loanType, allTypes)
   
-  // Shared/uncategorized loans are available to every staff category.
+  // Shared/uncategorized loans are available to every staff category, but
+  // explicitly senior/manager products must never leak to junior staff.
+  if (userTier === "junior" && loanTier !== null) return loanTier === "junior"
   if (!userTier || !loanTier) return true
   return loanTier === userTier
 }

@@ -80,7 +80,7 @@ const DUPLICATE_BLOCKING_STATUSES = OVERLAP_BLOCKING_STATUSES
  * a pre-seeded user_profiles row. This helper ensures they always get a row.
  */
 async function getOrCreateProfile(admin: any, user: any, selectCols: string) {
-  let { data: profile, error } = await admin
+  const { data: profile, error } = await admin
     .from("user_profiles")
     .select(selectCols)
     .eq("id", user.id)
