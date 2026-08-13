@@ -86,6 +86,7 @@ export function LoanOfficeLeaveModule({
         <TabsContent value="leave-center" className="space-y-4 sm:space-y-6 w-full">
           <LeavePlanningClient
             profile={{
+              id: userId,
               role: userRole,
               departmentName: userDepartmentName,
               departmentCode: userDepartmentCode,

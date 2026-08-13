@@ -223,6 +223,7 @@ export function LeaveManagementModuleClient({
           <TabsContent value="leave-planning" className="space-y-4 sm:space-y-6 w-full">
             <LeavePlanningClient
               profile={{
+                id: userId,
                 role: userRole,
                 departmentName: userDepartmentName,
                 departmentCode: userDepartmentCode,

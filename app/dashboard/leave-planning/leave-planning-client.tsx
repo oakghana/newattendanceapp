@@ -2299,12 +2299,21 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     if (action === "recommend_change" && (!hodAdjStart[reviewId] || !hodAdjEnd[reviewId])) {
       toast({ title: "Adjusted dates required", variant: "destructive" }); return
     }
-    if (action === "approve" && normalizedRole === "regional_manager") {
-      const signatureCheck = await fetch(`/api/user/signature-check/${profile.id}`, { cache: "no-store" })
-      const signatureStatus = await signatureCheck.json()
-      if (!signatureCheck.ok || !signatureStatus.hasSignature) {
-        toast({ title: "Signature required", description: "Save your Regional Manager signature in your profile before approving.", variant: "destructive" })
-        return
+    // Only pre-check the signature client-side when we actually have a user id
+    // to check. Without it, the request would 404/undefined and incorrectly
+    // block approval even when a signature is saved. The API route performs
+    // the authoritative check server-side regardless of this pre-check.
+    if (action === "approve" && normalizedRole === "regional_manager" && profile.id) {
+      try {
+        const signatureCheck = await fetch(`/api/user/signature-check/${profile.id}`, { cache: "no-store" })
+        const signatureStatus = await signatureCheck.json()
+        if (signatureCheck.ok && !signatureStatus.hasSignature) {
+          toast({ title: "Signature required", description: "Save your Regional Manager signature in your profile before approving.", variant: "destructive" })
+          return
+        }
+      } catch {
+        // If the pre-check itself fails (network issue, etc.), fall through
+        // and let the server-side check in /api/leave/planning/review decide.
       }
     }
     setHodSubmitting(reviewId)
