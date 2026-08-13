@@ -5009,7 +5009,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                           </div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <Badge className={`text-xs ${getStatusColor(String(req?.status || ""))}`}>
-                              {getStatusLabel(String(req?.status || ""))}
+                              {getStatusLabel(String(req?.status || ""), Boolean(req?.memo_reference_locked))}
                             </Badge>
                             {String(req?.status || "") === "hr_approved" && req?.memo_token && (
                               <Button
