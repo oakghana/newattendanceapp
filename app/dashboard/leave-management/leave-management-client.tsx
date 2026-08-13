@@ -138,8 +138,11 @@ export function LeaveManagementClient({
       "pending_hod_review",
       "manager_confirmed",
       "hod_approved",
-      "hr_office_forwarded",
-    ])
+  "hr_office_forwarded",
+  "pending_regional_hr_office_review",
+  "pending_regional_hr_review",
+  "regional_hr_office_review",
+  ])
     const approvedStatuses = new Set(["approved", "hr_approved"])
     const editableStatuses = new Set([
       "pending",
@@ -806,7 +809,7 @@ export function LeaveManagementClient({
   const isHrLeaveOfficeRole = ["hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isLeaveOfficeRole = ["hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr"].includes(normalizedRole)
   const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
-  const isHrExecutive = isAdmin || ["director_hr", "manager_hr", "hr_director"].includes(normalizedRole)
+  const isHrExecutive = isAdmin || ["director_hr", "manager_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const canAccessPaymentAdvice = isAdmin || isHrLeaveOfficeRole || isHrExecutive
 
   // ─── Deferment Handler ───

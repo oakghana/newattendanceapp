@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
 
     // Check if user is HR executive
     const role = String(profile.role || "").toLowerCase().trim()
-    const isHrExecutive = ["director_hr", "manager_hr", "hr_executive", "hr_director"].includes(role)
+    const isHrExecutive = ["director_hr", "manager_hr", "hr_executive", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_office"].includes(role)
 
     if (!isHrExecutive) {
       return NextResponse.json({ error: "Only HR executives can view staff requests" }, { status: 403 })
@@ -43,6 +43,9 @@ export async function GET(request: NextRequest) {
       "pending_hr_decision",
       "pending_hr_review",
       "pending_hr_approval",
+      "pending_regional_hr_office_review",
+      "pending_regional_hr_review",
+      "regional_hr_office_review",
     ]
     
     const { data: requests, error: requestsError } = await admin
