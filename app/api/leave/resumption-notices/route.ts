@@ -15,6 +15,9 @@ const HR_ROLES = new Set([
   'manager_hr',
   'director_hr',
   'hr_executive',
+  'hr_records',
+  'hr_records_officer',
+  'hr_records_manager',
 ])
 const HOD_ROLES = new Set(['hod', 'department_head'])
 
@@ -61,7 +64,7 @@ export async function GET() {
     const { data: leaves, error: leavesError } = await admin
       .from('leave_plan_requests')
       .select('id, user_id, leave_type_key, preferred_end_date, adjusted_end_date, status')
-      .in('status', ['hr_approved', 'approved', 'completed', 'hod_approved'])
+      .in('status', ['hr_approved', 'approved', 'completed', 'hod_approved', 'pending_hr_records_reference', 'pending_hr_leave_processing', 'hr_office_forwarded'])
       .or('is_archived.is.null,is_archived.eq.false')
       .in('user_id', staffIds)
     if (leavesError) throw leavesError
@@ -101,6 +104,8 @@ export async function GET() {
         staff_name: [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'Staff member',
         employee_id: profile?.employee_id || null,
         leave_type: leave.leave_type_key || 'Leave',
+        leave_status: leave.status,
+        resumption_causation: confirmation?.confirmation_status === 'confirmed' ? 'confirmed' : 'awaiting_hod_rm_confirmation',
         resumption_date: resume,
         days_until_resumption: days,
         state: overdue ? 'overdue' : days === 0 ? 'due_today' : 'upcoming',

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { notifyLeaveHodApproved, notifyLeaveHodDecision } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { calculateRequestedDays, summarizeManagerReviewStatus, type LeavePlanReviewDecision } from "@/lib/leave-planning"
+import { isAnnualLeave, isExcludedLocation } from "@/lib/hr-workflow"
 
 function isSchemaIssue(error: any) {
   const code = error?.code || ""
@@ -238,8 +239,11 @@ export async function POST(request: NextRequest) {
       .join("\n\n")
 
     const isRegionalNonAnnualApproval = isRegionalManagerApproval && decision === "approved" && !isRegionalForward
+    const isDepartmentHeadApproval = decision === "approved" && !isRegionalForward && !isRegionalManagerApproval
+    const mustUseHrRecordsReference = isDepartmentHeadApproval && !isAnnualLeave((leavePlan as any).leave_type_key) && !isExcludedLocation((leavePlan as any).assigned_location_name)
     const requestUpdatePayload: Record<string, any> = {
-      status: isRegionalForward ? "pending_regional_manager_approval" : isRegionalNonAnnualApproval ? "approved" : nextStatus,
+      status: isRegionalForward ? "pending_regional_manager_approval" : isRegionalNonAnnualApproval ? "approved" : mustUseHrRecordsReference ? "pending_hr_records_reference" : nextStatus,
+      ...(mustUseHrRecordsReference ? { workflow_stage: "pending_hr_records_reference" } : {}),
       manager_recommendation: mergedRecommendations || null,
       updated_at: new Date().toISOString(),
     }

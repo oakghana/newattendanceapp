@@ -75,7 +75,7 @@ const ALL_STAFF_ROLES = [
   "admin", "it-admin", "regional_manager", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "department_head",
   "staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "director_hr", "manager_hr",
   "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern",
-  "contract", "managing_director", "secretary",
+  "contract", "managing_director", "secretary", "hr_records", "hr_records_officer", "hr_records_manager",
 ]
 
 const navigationItems = [
@@ -150,10 +150,18 @@ const navigationItems = [
   },
   // ── Secretary oversight ──────────────────────────────────────────────────
   {
+    title: "HR Records",
+    href: "/dashboard/hr-records",
+    icon: ScrollText,
+    roles: ["hr_records", "hr_records_officer", "hr_records_manager"],
+    category: "admin",
+    executive: true,
+  },
+  {
     title: "Memo Console",
     href: "/dashboard/secretary-memos",
     icon: ScrollText,
-    roles: ["secretary", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "admin"],
+    roles: ["secretary", "hr_records", "hr_records_officer", "hr_records_manager", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "admin"],
     category: "main",
     executive: true,
   },
@@ -282,7 +290,7 @@ const navigationItems = [
     title: "Settings",
     href: "/dashboard/settings",
     icon: Settings,
-    roles: ["admin", "it-admin", "regional_manager", "department_head", "staff", "hr_leave_office"],
+    roles: ALL_STAFF_ROLES,
     category: "settings",
   },
 ]
@@ -421,16 +429,52 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
   const normalizedRole = normalizeAppRole(profile?.role)
   const effectiveRole = normalizedRole === "audit_staff" ? "staff" : normalizedRole
 
+  // A handful of "main" category items are intentionally restricted to specific
+  // roles (e.g. Disbursement Confirmation is only for Accounts/Loan Office staff,
+  // not HR Records or HR Leave Office). The blanket "main" bypass below must not
+  // apply to these — they always need to go through the roles check.
+  const ROLE_RESTRICTED_MAIN_HREFS = new Set([
+    "/dashboard/disbursement-confirmation",
+    "/offpremises-approvals",
+  ])
+
+  const HR_RECORDS_SIDEBAR_ROLES = new Set(["hr_records", "hr_records_officer", "hr_records_manager"])
+  const HR_LEAVE_OFFICE_SIDEBAR_ROLES = new Set(["hr_leave_office", "hr_office", "director_hr", "manager_hr", "regional_hr"])
+  const isRegionalHr = effectiveRole === "regional_hr"
+  const isHrRecordsOrLeaveOffice =
+    HR_RECORDS_SIDEBAR_ROLES.has(effectiveRole) || HR_LEAVE_OFFICE_SIDEBAR_ROLES.has(effectiveRole)
+
+  const REGIONAL_HR_HIDDEN_HREFS = new Set([
+    "/dashboard/disbursement-confirmation",
+    "/dashboard/hr-records",
+  ])
+
   const filteredNavItems = allNavigationItems.filter((item) => {
-    // Defense-in-depth: keep device monitoring strictly admin-only in the UI.
-  if (item.href === "/dashboard/device-violations") {
-  return effectiveRole === "admin"
+    // Disbursement confirmation belongs only to Accounts/Loan Office workflows.
+    // Explicitly deny it for HR Records and HR Leave Office even if a legacy
+    // "main" navigation fallback would otherwise make it visible.
+    if (
+      (item.href === "/dashboard/disbursement-confirmation" && isHrRecordsOrLeaveOffice) ||
+      (isRegionalHr && REGIONAL_HR_HIDDEN_HREFS.has(item.href))
+    ) {
+      return false
+    }
+    if (item.href === "/dashboard/device-violations") {
+      return effectiveRole === "admin"
+    }
+  if (item.href === "/dashboard/hr-records") {
+    return HR_RECORDS_SIDEBAR_ROLES.has(effectiveRole)
   }
   if (item.href === "/dashboard/secretary-memos") {
-  return canAccessMemoConsole(effectiveRole)
+    return canAccessMemoConsole(effectiveRole)
   }
 
-  return item.roles.some((role) => {
+    // Core navigation should remain available to every authenticated staff member.
+    // Page-level authorization still protects restricted destinations, but a role
+    // label from legacy records must not make the sidebar appear empty.
+    if (item.category === "main" && !item.executive && !ROLE_RESTRICTED_MAIN_HREFS.has(item.href)) return true
+
+    return item.roles.some((role) => {
       const normalizedAllowedRole = role.toLowerCase().replace(/[\s-]+/g, "_").trim()
       return normalizedAllowedRole === effectiveRole
     })
@@ -442,7 +486,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
     {
       title: "Leave & Reviews",
       icon: Calendar,
-      hrefs: ["/dashboard/leave-management", "/dashboard/excuse-duty-review", "/dashboard/hr-excuse-duty"],
+      hrefs: ["/dashboard/leave-management", "/dashboard/excuse-duty-review", "/dashboard/hr-excuse-duty", "/dashboard/hr-records"],
     },
     {
       title: "Reports & Monitoring",
@@ -617,6 +661,39 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                 )}
                 {adminGroupDefinitions.map((group) => {
                   if (group.items.length === 0) return null
+
+                  // A group only earns a dropdown when it actually has more than one
+                  // item to disclose. With a single item, show that item directly in
+                  // the group's place — no extra click needed to reach it.
+                  if (group.items.length === 1) {
+                    const onlyItem = group.items[0]
+                    const OnlyItemIcon = onlyItem.icon
+                    const isActive = pathname === onlyItem.href
+                    return (
+                      <Link
+                        key={onlyItem.href}
+                        href={onlyItem.href}
+                        title={isCollapsed ? onlyItem.title : undefined}
+                        className={cn(
+                          "group flex items-center rounded-lg text-sm font-medium transition-all duration-200 relative touch-manipulation min-h-[38px] border",
+                          isCollapsed ? "gap-0 px-0 py-2 justify-center" : "gap-2.5 px-3 py-2",
+                          isActive
+                            ? "bg-primary/12 border-primary/30 text-primary"
+                            : "border-transparent text-sidebar-foreground hover:bg-muted/60 hover:border-border hover:text-foreground",
+                        )}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        <OnlyItemIcon className="h-4.5 w-4.5 flex-shrink-0" />
+                        {!isCollapsed && (
+                          <>
+                            <span className="flex-1">{onlyItem.title}</span>
+                            {isActive && <ChevronRight className="h-4 w-4 opacity-70" />}
+                          </>
+                        )}
+                      </Link>
+                    )
+                  }
+
                   const GroupIcon = group.icon
                   const isOpen = isCollapsed || openAdminGroups.includes(group.title)
                   const hasActiveItem = group.items.some((item) => pathname === item.href)

@@ -72,14 +72,6 @@ export async function POST(request: NextRequest) {
       forwarded_to_hr_approver_id,
     } = body
 
-    // Reference number is mandatory before forwarding to HR Executive
-    if (!memo_reference || String(memo_reference).trim().length < 3) {
-      return NextResponse.json(
-        { error: "A memo reference number (Our Ref No.) is required before forwarding to HR Executive." },
-        { status: 400 },
-      )
-    }
-
     // Resolve the HR executive ID from whichever field was sent
     const resolvedHrApproverId = forwarded_to_hr_approver_id || hr_approver_id || null
 
@@ -97,7 +89,7 @@ export async function POST(request: NextRequest) {
     // Verify the request exists and is in a state the HR office can process
     const { data: leaveRequest, error: fetchError } = await admin
       .from("leave_plan_requests")
-      .select("id, user_id, status, requested_days, preferred_start_date, preferred_end_date, leave_type_key, entitlement_days")
+      .select("id, user_id, status, requested_days, preferred_start_date, preferred_end_date, leave_type_key, entitlement_days, memo_reference, memo_reference_locked, workflow_route")
       .eq("id", leave_plan_request_id)
       .single()
 
@@ -105,8 +97,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Leave request not found." }, { status: 404 })
     }
 
+    const releasedReference = String((leaveRequest as any).memo_reference || "").trim()
+    if (!(leaveRequest as any).memo_reference_locked || releasedReference.length < 3 || String(memo_reference || "").trim() !== releasedReference) {
+      return NextResponse.json({ error: "HR Records must assign and release the official memo reference before HR Leave Office can continue." }, { status: 409 })
+    }
+
     const currentStatus = String((leaveRequest as any).status || "")
-    if (!(HR_OFFICE_PENDING_STATUSES as string[]).includes(currentStatus)) {
+    const requiresHrRecordsReference = currentStatus === "pending_hr_records_reference" || String((leaveRequest as any).workflow_route || "") === "regional_non_annual"
+    if (requiresHrRecordsReference && (!String((leaveRequest as any).memo_reference || "").trim() || !(leaveRequest as any).memo_reference_locked)) {
+      return NextResponse.json({ error: "This non-regional request must receive and lock an HR Records memo reference before HR Leave Office adjustment." }, { status: 409 })
+    }
+    if (!(HR_OFFICE_PENDING_STATUSES as string[]).includes(currentStatus) && currentStatus !== "pending_hr_leave_processing" && currentStatus !== "hr_office_forwarded") {
       return NextResponse.json(
         {
           error: `This request cannot be processed in its current state (${currentStatus}). It must be HOD-approved or have HOD changes requested first.`,

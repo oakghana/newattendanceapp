@@ -18,12 +18,14 @@ export default async function SecretaryMemosPage() {
   // The proxy has already validated the role. Administrators and secretaries
   // may use the memo console without being sent back to the login screen.
   const normalizedRole = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-  if (!profile || !regionalSecretaryRoles(normalizedRole)) {
+  const canUseMemoConsole = regionalSecretaryRoles(normalizedRole) || ["hr_records", "hr_records_officer", "hr_records_manager"].includes(normalizedRole)
+  if (!profile || !canUseMemoConsole) {
     redirect("/dashboard/attendance")
   }
 
   const visibility = await resolveMemoVisibilityScope(admin, user.id, normalizedRole)
   const scopedStaffIds = visibility.staffIds
+  const isHrRecords = ["hr_records", "hr_records_officer", "hr_records_manager"].includes(normalizedRole)
 
   // Fetch approved loan memos (HR Executive approved stage and above)
   // Includes: awaiting_director_hr (HR signed, awaiting MD), approved_director (MD approved), staff_receiving_funds, partially_recovered
@@ -63,7 +65,7 @@ export default async function SecretaryMemosPage() {
   const { data: rawLeaveMemos } = await admin
     .from("leave_plan_requests")
     .select("id, leave_type_key, status, preferred_start_date, preferred_end_date, reason, created_at, hr_approved_at, memo_token, user_id")
-    .in("status", ["hr_approved", "approved"])
+    .in("status", ["hod_approved", "hr_approved", "approved", "regional_manager_approved"])
     .order("created_at", { ascending: false })
     .limit(300)
 

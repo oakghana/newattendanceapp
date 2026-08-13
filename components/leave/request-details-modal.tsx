@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Clock, Calendar, AlertCircle, User, CheckCircle2, Download, FileText, LayoutList } from 'lucide-react'
+import { Clock, Calendar, AlertCircle, User, CheckCircle2, Download } from 'lucide-react'
 
 export interface RequestDetailsModalProps {
   open: boolean
@@ -321,19 +321,13 @@ async function downloadSingleMemo(req: LeaveRequest) {
 
 // ── Compact list row (approved view) ─────────────────────────────────────────
 
-function ApprovedRow({ req, onView }: { req: LeaveRequest; onView: (r: LeaveRequest) => void }) {
-  const [downloading, setDownloading] = useState(false)
+function ApprovedRow({ req }: { req: LeaveRequest }) {
   const staffName = req.user_profiles?.full_name || req.staff_name || 'N/A'
   const dept = req.user_profiles?.department_name || '—'
   const leaveType = leaveTypeLabel(req.leave_type_key || req.leave_type)
   const startDate = req.adjusted_start_date || req.start_date || req.preferred_start_date
   const endDate = req.adjusted_end_date || req.end_date || req.preferred_end_date
   const approver = req.hr_approver_name || '—'
-
-  const handleDownload = async () => {
-    setDownloading(true)
-    try { await downloadSingleMemo(req) } finally { setDownloading(false) }
-  }
 
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50 transition-colors text-[12.5px]">
@@ -345,29 +339,6 @@ function ApprovedRow({ req, onView }: { req: LeaveRequest; onView: (r: LeaveRequ
       <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">{fmtShort(startDate)}</td>
       <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap hidden sm:table-cell">{fmtShort(endDate)}</td>
       <td className="py-2.5 px-3 text-slate-600 hidden lg:table-cell text-[11.5px]">{approver}</td>
-      <td className="py-2.5 px-3">
-        <div className="flex items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 px-2 text-[11.5px] text-slate-600 hover:text-slate-900"
-            onClick={() => onView(req)}
-          >
-            <FileText className="w-3.5 h-3.5 mr-1" />
-            View
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 px-2 text-[11.5px] border-[#1a6e1a] text-[#1a6e1a] hover:bg-green-50"
-            onClick={handleDownload}
-            disabled={downloading}
-          >
-            <Download className="w-3.5 h-3.5 mr-1" />
-            {downloading ? '...' : 'PDF'}
-          </Button>
-        </div>
-      </td>
     </tr>
   )
 }
@@ -621,9 +592,6 @@ export function RequestDetailsModal({ open, onOpenChange, title, filter }: Reque
   const [requests, setRequests] = useState<LeaveRequest[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // For approved view: 'list' = compact table, 'memo' = full QCC memo per entry
-  const [viewMode, setViewMode] = useState<'list' | 'memo'>('list')
-  const [selectedReq, setSelectedReq] = useState<LeaveRequest | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -690,28 +658,6 @@ export function RequestDetailsModal({ open, onOpenChange, title, filter }: Reque
 
   const isApprovedView = filter === 'approved'
 
-  // If a single memo is selected for full view
-  if (selectedReq) {
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="flex items-center justify-between">
-              <DialogTitle className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-green-600" />
-                Leave Advice Memo
-              </DialogTitle>
-              <Button size="sm" variant="ghost" className="text-xs text-muted-foreground" onClick={() => setSelectedReq(null)}>
-                Back to list
-              </Button>
-            </div>
-          </DialogHeader>
-          <QccMemoCard req={selectedReq} />
-        </DialogContent>
-      </Dialog>
-    )
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={`${isApprovedView ? 'max-w-4xl' : 'max-w-2xl'} max-h-[88vh] overflow-y-auto`}>
@@ -724,31 +670,10 @@ export function RequestDetailsModal({ open, onOpenChange, title, filter }: Reque
                 <span className="text-sm font-normal text-muted-foreground ml-1">({requests.length})</span>
               )}
             </DialogTitle>
-            {isApprovedView && !loading && requests.length > 0 && (
-              <div className="flex items-center gap-1 bg-slate-100 rounded-md p-0.5">
-                <Button
-                  size="sm"
-                  variant={viewMode === 'list' ? 'default' : 'ghost'}
-                  className="h-7 px-2.5 text-xs"
-                  onClick={() => setViewMode('list')}
-                >
-                  <LayoutList className="w-3.5 h-3.5 mr-1" />
-                  List
-                </Button>
-                <Button
-                  size="sm"
-                  variant={viewMode === 'memo' ? 'default' : 'ghost'}
-                  className="h-7 px-2.5 text-xs"
-                  onClick={() => setViewMode('memo')}
-                >
-                  <FileText className="w-3.5 h-3.5 mr-1" />
-                  Memos
-                </Button>
-              </div>
-            )}
+
           </div>
           {isApprovedView && (
-            <p className="text-xs text-muted-foreground pt-0.5">Official QCC/COCOBOD leave advice memos</p>
+            <p className="text-xs text-muted-foreground pt-0.5">Approved leave requests</p>
           )}
         </DialogHeader>
 
@@ -765,8 +690,8 @@ export function RequestDetailsModal({ open, onOpenChange, title, filter }: Reque
           <div className="py-8 text-center text-muted-foreground text-sm">No requests found</div>
         )}
 
-        {/* Approved list view — compact table */}
-        {isApprovedView && !loading && requests.length > 0 && viewMode === 'list' && (
+        {/* Approved requests — compact table only; HR Executive has no memo/download actions. */}
+        {isApprovedView && !loading && requests.length > 0 && (
           <div className="overflow-x-auto rounded border border-slate-200">
             <table className="w-full text-[12.5px]">
               <thead>
@@ -777,22 +702,14 @@ export function RequestDetailsModal({ open, onOpenChange, title, filter }: Reque
                   <th className="py-2.5 px-3">Start</th>
                   <th className="py-2.5 px-3 hidden sm:table-cell">End</th>
                   <th className="py-2.5 px-3 hidden lg:table-cell">Approved By</th>
-                  <th className="py-2.5 px-3">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {requests.map((req, idx) => (
-                  <ApprovedRow key={req.id || idx} req={req} onView={setSelectedReq} />
+                  <ApprovedRow key={req.id || idx} req={req} />
                 ))}
               </tbody>
             </table>
-          </div>
-        )}
-
-        {/* Approved memo view — full QCC letters */}
-        {isApprovedView && !loading && requests.length > 0 && viewMode === 'memo' && (
-          <div className="space-y-0 pt-2">
-            {requests.map((req, idx) => <QccMemoCard key={req.id || idx} req={req} />)}
           </div>
         )}
 

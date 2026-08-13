@@ -58,7 +58,7 @@ export function routeLeave(input: { leaveType?: string | null; locationName?: st
     return { route: "legacy", firstStage: null }
   }
   if (!input.hasRegionalOffice) {
-    return { route: "regional_non_annual", firstStage: null, reason: "No active Regional HR Leave Office is assigned for this region." }
+    return { route: "regional_non_annual", firstStage: REGIONAL_NON_ANNUAL_STAGES.hrRecordsReference, reason: "No active Regional HR Leave Office is assigned for this region; HR Records must reference the memo first." }
   }
   return { route: "regional_non_annual", firstStage: REGIONAL_NON_ANNUAL_STAGES.regionalHrReview }
 }
@@ -79,6 +79,7 @@ export async function resolveRegionalHrOffice(admin: SupabaseClient, regionId: s
 export function hrRecordsCanReference(status: string | null | undefined) {
   return [
     "pending_hr_records_reference",
+    "hr_approved",
     "hod_approved",
     "hr_office_forwarded",
     "regional_manager_approved",
@@ -152,5 +153,5 @@ export async function resolveMemoVisibilityScope(
 
 export function regionalSecretaryRoles(role: string | null | undefined) {
   const normalized = normalizeWorkflowRole(role)
-  return ["secretary", "admin", "administrator", "regional_hr_leave_office", "regional_hr", "regional_leave_office"].includes(normalized)
+  return ["secretary", "admin", "administrator", "hr_records", "hr_records_officer", "hr_records_manager", "regional_hr_leave_office", "regional_hr", "regional_leave_office"].includes(normalized)
 }

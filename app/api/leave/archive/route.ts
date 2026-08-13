@@ -51,6 +51,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const { data: currentRequest, error: lookupError } = await admin
+      .from("leave_plan_requests")
+      .select("status, is_archived")
+      .eq("id", leaveRequestId)
+      .maybeSingle()
+
+    if (lookupError) return NextResponse.json({ success: false, error: lookupError.message }, { status: 500 })
+    if (!currentRequest) return NextResponse.json({ success: false, error: "Leave request not found" }, { status: 404 })
+    const approvedStatuses = ["approved", "hr_approved", "regional_manager_approved", "regional_hr_approved"]
+    if (action === "archive" && !approvedStatuses.includes(String(currentRequest.status || ""))) {
+      return NextResponse.json({ success: false, error: "Only approved leave requests can be archived." }, { status: 409 })
+    }
+    if (action === "unarchive" && !currentRequest.is_archived) {
+      return NextResponse.json({ success: false, error: "Leave request is not archived." }, { status: 409 })
+    }
+
     // Archive or unarchive the leave request
     const updateData =
       action === "archive"

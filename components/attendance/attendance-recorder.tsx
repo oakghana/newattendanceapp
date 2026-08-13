@@ -2502,19 +2502,8 @@ export function AttendanceRecorder({
           })
         } else if (result.error?.includes("DUPLICATE CHECK-IN BLOCKED") || result.error?.includes("already checked in")) {
           console.log("[v0] Duplicate check-in prevented by server - still on duty")
-          setFlashMessage({
-            message: result.error,
-            type: "error",
-          })
-
           await fetchTodayAttendance()
-
-          toast({
-            title: "Already Checked In",
-            description: result.error,
-            variant: "destructive",
-            duration: 8000,
-          })
+          setFlashMessage(null)
         } else {
           throw new Error(result.error || "Failed to check in")
         }
