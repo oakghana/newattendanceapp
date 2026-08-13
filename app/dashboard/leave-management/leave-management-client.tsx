@@ -759,7 +759,7 @@ export function LeaveManagementClient({
     } catch (error) {
       console.error("Error rejecting leave:", error)
       toast({
-        title: "Rejection failed",
+        title: "Denyion failed",
         description: error instanceof Error ? error.message : "Could not reject leave request.",
         variant: "destructive",
       })
@@ -1993,7 +1993,7 @@ export function LeaveManagementClient({
                                     "bg-slate-100 text-slate-700"
                                   }`}>
                                     {deferment.status === "approved" ? "Approved" :
-                                     deferment.status === "rejected" ? "Rejected" :
+                                     deferment.status === "rejected" ? "Denyed" :
                                      deferment.status === "pending" || deferment.status === "pending_hod_review" ? "Pending HOD Review" :
                                      deferment.status === "pending_hr_review" || deferment.status === "hod_approved" ? "HOD Approved - Awaiting HR" :
                                      deferment.status || "Pending"}
@@ -2130,7 +2130,7 @@ export function LeaveManagementClient({
                                     "bg-slate-100 text-slate-700"
                                   }`}>
                                     {recall.status === "approved" ? "Approved" :
-                                     recall.status === "rejected" ? "Rejected" :
+                                     recall.status === "rejected" ? "Denyed" :
                                      recall.status === "pending" ? "Pending HR Review" :
                                      recall.status || "Pending"}
                                   </span>

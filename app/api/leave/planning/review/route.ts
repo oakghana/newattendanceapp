@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, role, assigned_location_id, region_id, first_name, last_name, position, signature_data_url, signature_text, signature_mode")
+      .select("id, role, assigned_location_id, region_id, first_name, last_name, position, signature_data_url")
       .eq("id", user.id)
       .single()
 
@@ -91,24 +91,9 @@ export async function POST(request: NextRequest) {
     const isRegionalManagerApproval = role === "regional_manager"
     if (isRegionalManagerApproval && decision === "approved" && !isRegionalForward) {
       const profileHasSignature =
-        Boolean(String((profile as any).signature_data_url || "").trim()) ||
-        Boolean(String((profile as any).signature_text || "").trim())
+        Boolean(String((profile as any).signature_data_url || "").trim())
 
-      const { data: registrySignature, error: registryError } = await admin
-        .from("approval_signature_registry")
-        .select("signature_data_url, signature_text, signature_mode")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      if (registryError && isSchemaIssue(registryError)) return schemaIssueResponse(registryError)
-
-      const registryHasSignature =
-        Boolean(String((registrySignature as any)?.signature_data_url || "").trim()) ||
-        Boolean(String((registrySignature as any)?.signature_text || "").trim())
-
-      if (!profileHasSignature && !registryHasSignature) {
+      if (!profileHasSignature) {
         return NextResponse.json({ error: "Save your Regional Manager signature in your profile before approving this leave request." }, { status: 400 })
       }
     }
@@ -274,7 +259,7 @@ export async function POST(request: NextRequest) {
       const signerName = `${String((profile as any).first_name || "").trim()} ${String((profile as any).last_name || "").trim()}`.trim()
       const { data: signerSignature } = await admin
         .from("approval_signature_registry")
-        .select("signature_data_url, signature_text, signature_mode")
+        .select("signature_data_url")
         .eq("user_id", user.id)
         .eq("is_active", true)
         .order("updated_at", { ascending: false })
@@ -284,10 +269,8 @@ export async function POST(request: NextRequest) {
       requestUpdatePayload.hr_approver_name = signerName || "Regional Manager"
       requestUpdatePayload.hr_approver_position = (profile as any).position || "Regional Manager"
       const savedSignature = signerSignature?.signature_data_url || (profile as any).signature_data_url || null
-      const savedSignatureText = signerSignature?.signature_text || (profile as any).signature_text || null
       requestUpdatePayload.hr_approver_signature_data_url = savedSignature
       requestUpdatePayload.hr_signature_data_url = savedSignature
-      requestUpdatePayload.hr_approver_signature_text = savedSignatureText
       requestUpdatePayload.hr_approved_at = new Date().toISOString()
       requestUpdatePayload.hr_approval_note = "Approved by the Regional Manager under the regional non-annual leave workflow."
     }
