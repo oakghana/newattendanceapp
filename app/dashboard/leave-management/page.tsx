@@ -91,9 +91,9 @@ export default async function LeaveManagementPage() {
       if (regionalStaffIds.length > 0) {
         const { data: regionalRequests } = await admin
           .from("leave_plan_requests")
-          .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id, region_id)")
+          .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, memo_token, memo_reference, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id, region_id)")
           .in("user_id", regionalStaffIds)
-          .in("status", isRegionalManager ? ["pending_regional_manager_approval"] : ["pending_hod_review", "pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review", "pending_hr_review", "pending_regional_manager_approval"])
+          .in("status", isRegionalManager ? ["pending_regional_manager_approval", "approved", "regional_manager_approved"] : ["pending_hod_review", "pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review", "pending_hr_review", "pending_regional_manager_approval"])
           .order("created_at", { ascending: false })
           .limit(100)
         const regionalLocationIds = Array.from(new Set((regionalRequests || []).map((request: any) => request.user_profiles?.assigned_location_id).filter(Boolean)))
@@ -130,6 +130,8 @@ export default async function LeaveManagementPage() {
             leave_type: request.leave_type_key || "",
             status: request.status,
             created_at: request.created_at,
+            memo_token: request.memo_token || null,
+            memo_reference: request.memo_reference || null,
             user_name: `${request.user_profiles?.first_name || ""} ${request.user_profiles?.last_name || ""}`.trim(),
           },
         }))
