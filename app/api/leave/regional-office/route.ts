@@ -66,7 +66,7 @@ const regionIds = userProfile.region_id ? [userProfile.region_id] : [];
 .update({ workflow_route: 'regional', status: 'pending_regional_hr_review', workflow_stage: 'regional_hr_review', regional_hr_office_user_id: userId, updated_at: new Date().toISOString() })
   .in('user_id', scopedStaffIds)
   .not('status', 'in', '(approved,rejected,cancelled,withdrawn)')
-  .or('workflow_route.is.null,workflow_route.eq.legacy,workflow_route.eq.regional')
+  .or('workflow_route.is.null,workflow_route.eq.legacy')
     }
 
     // Fetch leave requests for assigned locations

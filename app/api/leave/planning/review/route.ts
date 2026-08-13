@@ -74,7 +74,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "leave_plan_request_id and action are required." }, { status: 400 })
     }
 
+    const isRegionalHr = ["regional_hr", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(role)
     const isRegionalForward = action === "forward_to_regional_manager"
+    if (isRegionalForward && !isRegionalHr) {
+      return NextResponse.json({ error: "Only the assigned Regional HR Office can forward a regional leave request to the Regional Manager." }, { status: 403 })
+    }
     const decision = isRegionalForward ? "approved" : normalizeDecision(action)
     if (!decision) {
       return NextResponse.json({ error: "Invalid action. Use approve, recommend_change, or reject." }, { status: 400 })
@@ -124,12 +128,15 @@ export async function POST(request: NextRequest) {
 
       const { data: targetRequest, error: targetRequestError } = await admin
         .from("leave_plan_requests")
-        .select("id, user_id, leave_type_key, user_profiles:user_id(assigned_location_id, region_id)")
+        .select("id, user_id, leave_type_key, workflow_route, workflow_stage, status, regional_hr_office_user_id, user_profiles:user_id(assigned_location_id, region_id)")
         .eq("id", leave_plan_request_id)
         .maybeSingle()
 
       if (targetRequestError || !targetRequest) {
         return NextResponse.json({ error: "Leave request not found." }, { status: 404 })
+      }
+      if (isRegionalForward && (targetRequest as any).regional_hr_office_user_id && (targetRequest as any).regional_hr_office_user_id !== user.id) {
+        return NextResponse.json({ error: "This request is assigned to another Regional HR Office." }, { status: 403 })
       }
       const targetProfile = Array.isArray(targetRequest.user_profiles) ? targetRequest.user_profiles[0] : targetRequest.user_profiles
       const sameScope =
@@ -181,6 +188,11 @@ export async function POST(request: NextRequest) {
 
     if (leavePlanError || !leavePlan) {
       return NextResponse.json({ error: "Leave plan request not found." }, { status: 404 })
+    }
+
+    const isRegionalWorkflow = String((leavePlan as any).workflow_route || "").toLowerCase() === "regional"
+    if (isRegionalForward && !isRegionalWorkflow) {
+      return NextResponse.json({ error: "This leave request is not marked for the regional workflow." }, { status: 400 })
     }
 
     if (isRegionalManagerApproval && isRegionalRequest) {
@@ -241,7 +253,6 @@ export async function POST(request: NextRequest) {
       .filter((r: string | null) => !!r)
       .join("\n\n")
 
-    const isRegionalWorkflow = String((leavePlan as any).workflow_route || "") === "regional"
     const isRegionalManagerApprovalComplete = isRegionalWorkflow && isRegionalManagerApproval && decision === "approved" && !isRegionalForward
     const isDepartmentHeadApproval = decision === "approved" && !isRegionalForward && !isRegionalManagerApproval
     const mustUseHrRecordsReference = !isRegionalWorkflow && isDepartmentHeadApproval && !isAnnualLeave((leavePlan as any).leave_type_key) && !isExcludedLocation((leavePlan as any).assigned_location_name)

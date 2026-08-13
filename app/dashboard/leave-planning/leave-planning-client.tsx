@@ -2047,10 +2047,11 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
         leaveType: r?.leave_type_key,
         locationName: r?.location_name || r?.user?.location_name,
       })
-      const isRegionalActionableStatus = ["pending_regional_hr_review", "pending_regional_manager_approval", "pending_hod_review", "hod_approved", "manager_confirmed"].includes(status)
-      if (!((HR_OFFICE_PENDING_STATUSES as string[]).includes(status) || (isRegionalHr && workflow.route === "regional" && isRegionalActionableStatus))) return false
-      // Regional HR must only see requests that are actually routed through the regional workflow.
-      if (isRegionalHr && (workflow.route !== "regional" || !isRegionalActionableStatus)) return false
+  const isRegionalActionableStatus = status === "pending_regional_hr_review"
+  if (!((HR_OFFICE_PENDING_STATUSES as string[]).includes(status) || (isRegionalHr && workflow.route === "regional" && isRegionalActionableStatus))) return false
+  // Regional HR owns only the Regional HR review stage. Once forwarded, the
+  // request leaves this actionable queue and belongs to the Regional Manager.
+  if (isRegionalHr && (workflow.route !== "regional" || !isRegionalActionableStatus)) return false
       return true
     })
     
@@ -2587,7 +2588,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     if (isHod || isAdmin) t.push({ value: "hod-review", label: "HOD Review", Icon: UserCheck, count: hodAssignedReviews.length })
     // HR Executive HOD Review tab: for HR managers (manager_hr, director_hr) who are NOT also HODs
   if (isHrOffice && !isRegionalHr && !isHod && !isAdmin) t.push({ value: "hr-exec-hod-review", label: "HOD Review", Icon: UserCheck, count: hodReviewRequests.length })
-  if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
+  if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: isRegionalHr ? "Regional Leave Office" : "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
     if (isHrApprover || isAdmin) {
       const deferRecallPending = [...hrExecDeferRecallData.deferments, ...hrExecDeferRecallData.recalls]
         .filter((r: any) => !r.hr_office_decision && !r.hr_decision).length
