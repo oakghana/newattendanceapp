@@ -2047,12 +2047,16 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
   // the legacy database status for the Regional HR workspace display while
   // preserving the original status for API actions and audit history.
   const regionalRequests = isRegionalHr
-    ? requests.map((r: any) =>
-        String(r.status || "") === "pending_hod_review"
-          ? { ...r, workflow_status: r.status, status: "pending_regional_hr_review" }
-          : r,
-      )
-    : requests
+  ? requests.map((r: any) => {
+    // HR Records owns the reference. Keep the persisted reference on the same
+    // row consumed by the Regional HR workspace so Memo Details is populated
+    // automatically after HR Records saves it.
+    const normalized = String(r.status || "") === "pending_hod_review"
+      ? { ...r, workflow_status: r.status, status: "pending_regional_hr_review" }
+      : r
+    return { ...normalized, memo_reference: normalized.memo_reference || normalized.reference_number || "" }
+  })
+  : requests
 
     // Enhance requests with outstanding leave data if available
     return regionalRequests.map((r: any) => {
@@ -2137,12 +2141,12 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
   }, [hrOfficeFilteredQueue.length, hrOfficePageSize])
 
   const allRequestsFiltered: any[] = useMemo(() => {
-    if (!data) return []
+  if (!data) return []
   let rows = (data.requests || []).map((r: any) => {
-    if (isRegionalHr && String(r?.status || "") === "pending_hod_review" && String(r?.leave_type_key || "").toLowerCase() !== "annual") {
-      return { ...r, workflow_status: r.status, status: "pending_regional_hr_review" }
-    }
-    return r
+  const normalized = isRegionalHr && String(r?.status || "") === "pending_hod_review" && String(r?.leave_type_key || "").toLowerCase() !== "annual"
+  ? { ...r, workflow_status: r.status, status: "pending_regional_hr_review" }
+  : r
+  return { ...normalized, memo_reference: normalized.memo_reference || normalized.reference_number || "" }
   })
   if (allRequestsStatusFilter !== "all") {
     rows = rows.filter((r: any) => String(r?.status || "") === allRequestsStatusFilter)
@@ -4160,12 +4164,12 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                               />
                             </div>
 
-                            {!isRegionalHr && <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
+                            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
                               <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Details</p>
 
-                              {/* Official reference is owned by HR Records */}
-                              <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                                <Label className="text-xs font-semibold text-amber-900">Official memo reference</Label>
+                              {/* Official reference is owned by HR Records and is immutable for every HR Office role. */}
+                              <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                                <Label className="text-xs font-semibold text-emerald-900">Official memo reference</Label>
                                 <Input
                                   value={req.memo_reference || ""}
                                   readOnly
@@ -4173,7 +4177,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                                   placeholder="Awaiting HR Records reference"
                                   className="h-9 bg-muted font-mono text-sm"
                                 />
-                                <p className="text-[10px] text-amber-800">HR Leave Office cannot enter or generate this number. HR Records must assign and release it first.</p>
+                                <p className="text-[10px] text-emerald-800">Automatically assigned by HR Records. HR Office users cannot edit or generate this reference.</p>
                               </div>
 
                               {/* CC List */}
@@ -4210,7 +4214,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                                   </SelectContent>
                                 </Select>
                               </div>
-                            </div>}
+                            </div>
 
                             <Button onClick={() => {
                               if (isRegionalHr) {

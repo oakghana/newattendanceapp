@@ -439,15 +439,24 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
   ])
 
   const HR_RECORDS_SIDEBAR_ROLES = new Set(["hr_records", "hr_records_officer", "hr_records_manager"])
-  const HR_LEAVE_OFFICE_SIDEBAR_ROLES = new Set(["hr_leave_office", "hr_office", "director_hr", "manager_hr"])
+  const HR_LEAVE_OFFICE_SIDEBAR_ROLES = new Set(["hr_leave_office", "hr_office", "director_hr", "manager_hr", "regional_hr"])
+  const isRegionalHr = effectiveRole === "regional_hr"
   const isHrRecordsOrLeaveOffice =
     HR_RECORDS_SIDEBAR_ROLES.has(effectiveRole) || HR_LEAVE_OFFICE_SIDEBAR_ROLES.has(effectiveRole)
+
+  const REGIONAL_HR_HIDDEN_HREFS = new Set([
+    "/dashboard/disbursement-confirmation",
+    "/dashboard/hr-records",
+  ])
 
   const filteredNavItems = allNavigationItems.filter((item) => {
     // Disbursement confirmation belongs only to Accounts/Loan Office workflows.
     // Explicitly deny it for HR Records and HR Leave Office even if a legacy
     // "main" navigation fallback would otherwise make it visible.
-    if (item.href === "/dashboard/disbursement-confirmation" && isHrRecordsOrLeaveOffice) {
+    if (
+      (item.href === "/dashboard/disbursement-confirmation" && isHrRecordsOrLeaveOffice) ||
+      (isRegionalHr && REGIONAL_HR_HIDDEN_HREFS.has(item.href))
+    ) {
       return false
     }
     if (item.href === "/dashboard/device-violations") {

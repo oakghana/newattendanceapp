@@ -153,7 +153,7 @@ export function getStatusLabel(status: string, memoReferenceLocked?: boolean): s
   // underlying status value has not changed — reflect that in the label so it doesn't
   // read as though HR Records still needs to act on it.
   if (memoReferenceLocked && (status === "hod_approved" || status === "manager_confirmed")) {
-    return "Referenced — With HR Leave Office for Adjustment"
+    return "HR Records Reviewed — Awaiting HR Leave Office Review"
   }
   const labels: Record<string, string> = {
     pending_hod_review: "Pending HOD Review",
