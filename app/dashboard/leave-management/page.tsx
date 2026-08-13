@@ -99,12 +99,12 @@ export default async function LeaveManagementPage() {
           .limit(100)
         const regionalLocationIds = Array.from(new Set((regionalRequests || []).map((request: any) => request.user_profiles?.assigned_location_id).filter(Boolean)))
         const { data: regionalLocations } = regionalLocationIds.length
-          ? await admin.from("geofence_locations").select("id, name").in("id", regionalLocationIds)
+          ? await admin.from("geofence_locations").select("id, name, code").in("id", regionalLocationIds)
           : { data: [] }
         const regionalLocationMap = new Map((regionalLocations || []).map((location: any) => [location.id, location]))
-        const regionalStaffIds = (regionalRequests || []).map((request: any) => request.user_id).filter(Boolean)
+        const reviewerStaffIds = (regionalRequests || []).map((request: any) => request.user_id).filter(Boolean)
         const { data: regionalLinkages } = regionalStaffIds.length
-          ? await admin.from("loan_hod_linkages").select("staff_user_id, hod_user_id").in("staff_user_id", regionalStaffIds)
+          ? await admin.from("loan_hod_linkages").select("staff_user_id, hod_user_id").in("staff_user_id", reviewerStaffIds)
           : { data: [] }
         const regionalHodIds = Array.from(new Set((regionalLinkages || []).map((link: any) => link.hod_user_id).filter(Boolean)))
         const { data: regionalHods } = regionalHodIds.length

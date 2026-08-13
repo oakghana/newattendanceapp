@@ -1355,6 +1355,9 @@ export function LeaveManagementClient({
                     end_date: null,
                     reason: "",
                   }
+                  const normalizedStatus = String(notification.status || leave.status || "").toLowerCase().replace(/[\s_-]+/g, "_")
+                  const regionalHrReviewPending = normalizedStatus === "pending_regional_hr_office_review" || normalizedStatus === "pending_regional_hr_review"
+                  const approvalLocked = processingId === notification.id || regionalHrReviewPending
                   return (
                     <tr key={notification.id} className="border-t border-slate-100 align-top">
                       <td className="px-4 py-3">
@@ -1377,13 +1380,15 @@ export function LeaveManagementClient({
                         <div className="flex gap-2">
   {!regionalHrMode && <Button
   onClick={() => handleApprove(notification.id)}
-  disabled={processingId === notification.id}
+  disabled={approvalLocked}
+                            title={regionalHrReviewPending ? "Regional HR Office must complete its review first" : undefined}
                             size="sm"
-                            className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+                            className="gap-1 bg-emerald-600 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                             Approve
-  </Button>}
+                          </Button>}
+                          {regionalHrReviewPending && <p className="mt-1 text-xs text-amber-700">Waiting for Regional HR Office review</p>}
   {regionalHrMode ? <Button
   onClick={() => void handleForwardToRegionalManager(notification.id)}
   disabled={processingId === notification.id}
