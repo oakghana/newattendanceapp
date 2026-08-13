@@ -74,6 +74,11 @@ interface LeaveNotification {
   requester_role?: string
   requester_name?: string
   waiting_days?: number
+  staff_location_name?: string | null
+  staff_location_code?: string | null
+  hod_name?: string | null
+  hod_employee_id?: string | null
+  hod_position?: string | null
 }
 
 interface LeaveManagementClientProps {
@@ -1333,6 +1338,7 @@ export function LeaveManagementClient({
                 <tr>
                   <th className="px-4 py-3">Staff</th>
                   <th className="px-4 py-3">Leave Type</th>
+                  <th className="px-4 py-3">Location / HOD</th>
                   <th className="px-4 py-3">Start</th>
                   <th className="px-4 py-3">End</th>
                   <th className="px-4 py-3">Stage</th>
@@ -1356,6 +1362,11 @@ export function LeaveManagementClient({
                         <div className="text-xs text-slate-500">{formatLeaveType(String(notification.requester_role || "staff"))}</div>
                       </td>
                       <td className="px-4 py-3 font-medium text-slate-800">{formatLeaveType(String(leave.leave_type || "annual"))}</td>
+                      <td className="px-4 py-3 text-xs text-slate-600">
+                        <div className="font-medium text-slate-800">{notification.staff_location_name || "Location not assigned"}{notification.staff_location_code ? ` (${notification.staff_location_code})` : ""}</div>
+                        <div>HOD: {notification.hod_name || "No HOD linkage found"}{notification.hod_employee_id ? ` · ${notification.hod_employee_id}` : ""}</div>
+                        {notification.hod_position && <div>{notification.hod_position}</div>}
+                      </td>
                       <td className="px-4 py-3">{formatDateSafe(leave.start_date)}</td>
                       <td className="px-4 py-3">{formatDateSafe(leave.end_date)}</td>
                       <td className="px-4 py-3">
@@ -1393,7 +1404,7 @@ export function LeaveManagementClient({
                             className="gap-1"
                           >
                             {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
-  Reject
+  Deny
   </Button>}
   </div>
                       </td>
