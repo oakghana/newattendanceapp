@@ -99,8 +99,9 @@ export async function trackLeaveResumption(userId: string, checkInDate: Date) {
       
       const daysAfterLeaveEnd = Math.floor((today.getTime() - leaveEndDate.getTime()) / (1000 * 60 * 60 * 24))
       
-      // Policy: only mark resumption if within 0-9 days after leave end
-      if (daysAfterLeaveEnd >= 0 && daysAfterLeaveEnd <= 9) {
+      // The leave end date is still covered leave. Resumption starts on the next day
+      // and remains confirmable through day 9; day 10 is handled by escalation/blocking.
+      if (daysAfterLeaveEnd >= 1 && daysAfterLeaveEnd <= 9) {
         await markAsResumed(record.id, userId, checkInDate)
       }
       // If 10+ days past leave end, checkAndEscalateNonResumption will handle with query memos

@@ -74,6 +74,11 @@ interface LeaveNotification {
   requester_role?: string
   requester_name?: string
   waiting_days?: number
+  staff_location_name?: string | null
+  staff_location_code?: string | null
+  hod_name?: string | null
+  hod_employee_id?: string | null
+  hod_position?: string | null
 }
 
 interface LeaveManagementClientProps {
@@ -133,7 +138,12 @@ export function LeaveManagementClient({
       "pending_hod_review",
       "manager_confirmed",
       "hod_approved",
-      "hr_office_forwarded",
+  "hr_office_forwarded",
+  "pending_regional_hr_office_review",
+  "pending_regional_hr_review",
+      "regional_hr_office_review",
+      "pending_regional_manager_approval",
+      "regional_hr_approved",
     ])
     const approvedStatuses = new Set(["approved", "hr_approved"])
     const editableStatuses = new Set([
@@ -645,14 +655,16 @@ export function LeaveManagementClient({
   const handleForwardToRegionalManager = async (notificationId: string) => {
     const notification = managerNotifications.find((row) => row.id === notificationId)
     const requestId = String(notification?.leave_plan_request_id || notification?.leave_requests?.id || "")
-    const recommendation = window.prompt("Add an adjustment note before forwarding to the Regional Manager") || ""
-    if (!requestId || !recommendation.trim()) return
+    const adjustedStart = window.prompt("Adjusted start date (YYYY-MM-DD)", String(notification?.leave_requests?.start_date || "")) || ""
+    const adjustedEnd = window.prompt("Adjusted end date (YYYY-MM-DD)", String(notification?.leave_requests?.end_date || "")) || ""
+    const recommendation = window.prompt("Enter the adjustment note to forward this request to the Regional Manager") || ""
+    if (!requestId || !adjustedStart.trim() || !adjustedEnd.trim() || !recommendation.trim()) return
     setProcessingId(notificationId)
     try {
       const response = await fetch("/api/leave/planning/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "forward_to_regional_manager", leave_plan_request_id: requestId, recommendation }),
+        body: JSON.stringify({ action: "forward_to_regional_manager", leave_plan_request_id: requestId, recommendation, adjusted_preferred_start_date: adjustedStart, adjusted_preferred_end_date: adjustedEnd }),
       })
       if (!response.ok) throw new Error((await response.json().catch(() => ({})))?.error || "Could not forward request")
       toast({ title: "Request forwarded", description: "The Regional Manager can now review and approve this request." })
@@ -754,7 +766,7 @@ export function LeaveManagementClient({
     } catch (error) {
       console.error("Error rejecting leave:", error)
       toast({
-        title: "Rejection failed",
+        title: "Denyion failed",
         description: error instanceof Error ? error.message : "Could not reject leave request.",
         variant: "destructive",
       })
@@ -799,7 +811,7 @@ export function LeaveManagementClient({
   const isHrLeaveOfficeRole = ["hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isLeaveOfficeRole = ["hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr"].includes(normalizedRole)
   const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
-  const isHrExecutive = isAdmin || ["director_hr", "manager_hr", "hr_director"].includes(normalizedRole)
+  const isHrExecutive = isAdmin || ["director_hr", "manager_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const canAccessPaymentAdvice = isAdmin || isHrLeaveOfficeRole || isHrExecutive
 
   // ─── Deferment Handler ───
@@ -1333,6 +1345,7 @@ export function LeaveManagementClient({
                 <tr>
                   <th className="px-4 py-3">Staff</th>
                   <th className="px-4 py-3">Leave Type</th>
+                  <th className="px-4 py-3">Location / HOD</th>
                   <th className="px-4 py-3">Start</th>
                   <th className="px-4 py-3">End</th>
                   <th className="px-4 py-3">Stage</th>
@@ -1349,6 +1362,9 @@ export function LeaveManagementClient({
                     end_date: null,
                     reason: "",
                   }
+                  const normalizedStatus = String(notification.status || leave.status || "").toLowerCase().replace(/[\s_-]+/g, "_")
+                  const regionalHrReviewPending = normalizedStatus === "pending_regional_hr_office_review" || normalizedStatus === "pending_regional_hr_review"
+                  const approvalLocked = processingId === notification.id || regionalHrReviewPending
                   return (
                     <tr key={notification.id} className="border-t border-slate-100 align-top">
                       <td className="px-4 py-3">
@@ -1356,6 +1372,11 @@ export function LeaveManagementClient({
                         <div className="text-xs text-slate-500">{formatLeaveType(String(notification.requester_role || "staff"))}</div>
                       </td>
                       <td className="px-4 py-3 font-medium text-slate-800">{formatLeaveType(String(leave.leave_type || "annual"))}</td>
+                      <td className="px-4 py-3 text-xs text-slate-600">
+                        <div className="font-medium text-slate-800">{notification.staff_location_name || "Location not assigned"}{notification.staff_location_code ? ` (${notification.staff_location_code})` : ""}</div>
+                        <div>HOD: {notification.hod_name || "No HOD linkage found"}{notification.hod_employee_id ? ` · ${notification.hod_employee_id}` : ""}</div>
+                        {notification.hod_position && <div>{notification.hod_position}</div>}
+                      </td>
                       <td className="px-4 py-3">{formatDateSafe(leave.start_date)}</td>
                       <td className="px-4 py-3">{formatDateSafe(leave.end_date)}</td>
                       <td className="px-4 py-3">
@@ -1366,21 +1387,23 @@ export function LeaveManagementClient({
                         <div className="flex gap-2">
   {!regionalHrMode && <Button
   onClick={() => handleApprove(notification.id)}
-  disabled={processingId === notification.id}
+  disabled={approvalLocked}
+                            title={regionalHrReviewPending ? "Regional HR Office must complete its review first" : undefined}
                             size="sm"
-                            className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+                            className="gap-1 bg-emerald-600 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                             Approve
-  </Button>}
-  {regionalHrMode ? <Button
+                          </Button>}
+                          {regionalHrReviewPending && !regionalHrMode && <p className="mt-1 text-xs text-amber-700">Waiting for Regional HR Office review</p>}
+  {regionalHrMode && regionalHrReviewPending ? <Button
   onClick={() => void handleForwardToRegionalManager(notification.id)}
   disabled={processingId === notification.id}
   size="sm"
   className="gap-1 bg-violet-600 hover:bg-violet-700"
   >
   <ArrowUpRight className="h-4 w-4" />
-  Forward to Regional Manager
+  Adjust & forward
   </Button> : <Button
   onClick={() => {
   const rejectReason = window.prompt("Provide rejection reason") || ""
@@ -1393,7 +1416,7 @@ export function LeaveManagementClient({
                             className="gap-1"
                           >
                             {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
-  Reject
+  Deny
   </Button>}
   </div>
                       </td>
@@ -1982,7 +2005,7 @@ export function LeaveManagementClient({
                                     "bg-slate-100 text-slate-700"
                                   }`}>
                                     {deferment.status === "approved" ? "Approved" :
-                                     deferment.status === "rejected" ? "Rejected" :
+                                     deferment.status === "rejected" ? "Denyed" :
                                      deferment.status === "pending" || deferment.status === "pending_hod_review" ? "Pending HOD Review" :
                                      deferment.status === "pending_hr_review" || deferment.status === "hod_approved" ? "HOD Approved - Awaiting HR" :
                                      deferment.status || "Pending"}
@@ -2119,7 +2142,7 @@ export function LeaveManagementClient({
                                     "bg-slate-100 text-slate-700"
                                   }`}>
                                     {recall.status === "approved" ? "Approved" :
-                                     recall.status === "rejected" ? "Rejected" :
+                                     recall.status === "rejected" ? "Denyed" :
                                      recall.status === "pending" ? "Pending HR Review" :
                                      recall.status || "Pending"}
                                   </span>

@@ -27,7 +27,14 @@ export async function POST(request: NextRequest) {
   const { data: row, error: fetchError } = await admin.from(table).select(`id, status, memo_reference_locked, ${referenceColumn}`).eq("id", id).maybeSingle()
   if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 })
   if (!row) return NextResponse.json({ error: "Request not found." }, { status: 404 })
-  const isCorrection = Boolean(row.memo_reference_locked)
+  // Regional HR may already have supplied a reference before HR Records receives
+  // the request. HR Records must be able to correct that value without reopening
+  // or rewinding the workflow stage.
+  const existingReference = normalizeReference(String((row as any)[referenceColumn] || ""))
+  const regionalLeaveStatuses = new Set(["pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review", "regional_hr_approved"])
+  const isRegionalLeave = entity === "leave" && regionalLeaveStatuses.has(String(row.status || "").toLowerCase())
+  const isCorrection = Boolean(row.memo_reference_locked || existingReference)
+  if (isRegionalLeave) return NextResponse.json({ error: "Regional HR memo references are read-only for HR Records." }, { status: 403 })
   if (!isCorrection && !hrRecordsCanReference(row.status)) return NextResponse.json({ error: `Request is not ready for HR Records reference assignment (${row.status || "unknown"}).` }, { status: 409 })
 
   const { data: duplicate, error: duplicateError } = await admin.from(table).select("id").neq("id", id).ilike(referenceColumn, reference).limit(1).maybeSingle()

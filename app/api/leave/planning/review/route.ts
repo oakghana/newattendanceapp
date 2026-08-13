@@ -10,12 +10,14 @@ function isSchemaIssue(error: any) {
   return code === "PGRST205" || code === "PGRST108" || code === "42P01" || code === "42703" || message.includes("does not exist")
 }
 
-function schemaIssueResponse() {
+function schemaIssueResponse(error?: any) {
+  const code = error?.code || "unknown"
+  const message = String(error?.message || "Database schema error")
   return NextResponse.json(
     {
-      error:
-        "Leave planning tables are not visible in API schema cache. Run scripts 038_leave_planning_2026_2027_workflow.sql and 039_leave_policy_catalog.sql, then reload Supabase API schema cache.",
-      needsMigration: true,
+      error: `Leave approval database error (${code}): ${message}`,
+      databaseCode: code,
+      needsMigration: false,
       needsSchemaCacheRefresh: true,
     },
     { status: 503 },
@@ -44,12 +46,12 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, role, assigned_location_id, region_id, first_name, last_name, position, signature_data_url, signature_text, signature_mode")
+      .select("id, role, assigned_location_id, region_id, first_name, last_name, position, signature_data_url")
       .eq("id", user.id)
       .single()
 
     if (profileError && isSchemaIssue(profileError)) {
-      return schemaIssueResponse()
+      return schemaIssueResponse(profileError)
     }
 
     if (profileError || !profile) {
@@ -87,27 +89,14 @@ export async function POST(request: NextRequest) {
     }
 
     const isRegionalManagerApproval = role === "regional_manager"
-    if (isRegionalManagerApproval && decision === "approved" && !isRegionalForward) {
-      const profileHasSignature =
-        Boolean(String((profile as any).signature_data_url || "").trim()) ||
-        Boolean(String((profile as any).signature_text || "").trim())
+    const isRegionalRequest = action === "forward_to_regional_manager"
+      || String(body.workflow_route || "").toLowerCase() === "regional"
+      || role === "regional_manager"
+    if (isRegionalManagerApproval && isRegionalRequest && decision === "approved" && !isRegionalForward) {
+      const profileHasSignature = Boolean(String((profile as any).signature_data_url || "").trim())
 
-      const { data: registrySignature, error: registryError } = await admin
-        .from("approval_signature_registry")
-        .select("signature_data_url, signature_text, signature_mode")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      if (registryError && isSchemaIssue(registryError)) return schemaIssueResponse()
-
-      const registryHasSignature =
-        Boolean(String((registrySignature as any)?.signature_data_url || "").trim()) ||
-        Boolean(String((registrySignature as any)?.signature_text || "").trim())
-
-      if (!profileHasSignature && !registryHasSignature) {
-        return NextResponse.json({ error: "Save your Regional Manager signature in your profile before approving this leave request." }, { status: 400 })
+      if (!profileHasSignature) {
+        return NextResponse.json({ error: "Save your Regional Manager signature in your profile before approving this regional leave request." }, { status: 400 })
       }
     }
 
@@ -125,7 +114,7 @@ export async function POST(request: NextRequest) {
       .eq("reviewer_id", user.id)
 
     if (reviewError && isSchemaIssue(reviewError)) {
-      return schemaIssueResponse()
+      return schemaIssueResponse(reviewError)
     }
 
     if (reviewError || !reviews || reviews.length === 0) {
@@ -159,6 +148,7 @@ export async function POST(request: NextRequest) {
         const { error: assignmentError } = await admin.from("leave_plan_reviews").insert({
           leave_plan_request_id,
           reviewer_id: user.id,
+          reviewer_role: role,
           decision: "pending",
         })
         if (assignmentError) throw assignmentError
@@ -179,19 +169,19 @@ export async function POST(request: NextRequest) {
 
     if (updateReviewError) {
       if (isSchemaIssue(updateReviewError)) {
-        return schemaIssueResponse()
+        return schemaIssueResponse(updateReviewError)
       }
       throw updateReviewError
     }
 
     const { data: leavePlan, error: leavePlanError } = await admin
       .from("leave_plan_requests")
-      .select("id, user_id, preferred_start_date, preferred_end_date, entitlement_days")
+      .select("id, user_id, preferred_start_date, preferred_end_date, entitlement_days, workflow_route, leave_type_key, requested_days")
       .eq("id", leave_plan_request_id)
       .single()
 
     if (leavePlanError && isSchemaIssue(leavePlanError)) {
-      return schemaIssueResponse()
+      return schemaIssueResponse(leavePlanError)
     }
 
     if (leavePlanError || !leavePlan) {
@@ -229,7 +219,7 @@ export async function POST(request: NextRequest) {
 
     if (allReviewsError) {
       if (isSchemaIssue(allReviewsError)) {
-        return schemaIssueResponse()
+        return schemaIssueResponse(allReviewsError)
       }
       throw allReviewsError
     }
@@ -242,21 +232,36 @@ export async function POST(request: NextRequest) {
       .filter((r: string | null) => !!r)
       .join("\n\n")
 
-    const isRegionalNonAnnualApproval = isRegionalManagerApproval && decision === "approved" && !isRegionalForward
+    const isRegionalWorkflow = String((leavePlan as any).workflow_route || "") === "regional"
+    const isRegionalManagerApprovalComplete = isRegionalWorkflow && isRegionalManagerApproval && decision === "approved" && !isRegionalForward
     const isDepartmentHeadApproval = decision === "approved" && !isRegionalForward && !isRegionalManagerApproval
-    const mustUseHrRecordsReference = isDepartmentHeadApproval && !isAnnualLeave((leavePlan as any).leave_type_key) && !isExcludedLocation((leavePlan as any).assigned_location_name)
+    const mustUseHrRecordsReference = !isRegionalWorkflow && isDepartmentHeadApproval && !isAnnualLeave((leavePlan as any).leave_type_key) && !isExcludedLocation((leavePlan as any).assigned_location_name)
     const requestUpdatePayload: Record<string, any> = {
-      status: isRegionalForward ? "pending_regional_manager_approval" : isRegionalNonAnnualApproval ? "approved" : mustUseHrRecordsReference ? "pending_hr_records_reference" : nextStatus,
+      status: isRegionalForward ? "pending_regional_manager_approval" : isRegionalManagerApprovalComplete ? "approved" : mustUseHrRecordsReference ? "pending_hr_records_reference" : nextStatus,
+      ...(isRegionalManagerApprovalComplete ? { workflow_stage: "completed", memo_generated: true, memo_generated_at: new Date().toISOString() } : {}),
       ...(mustUseHrRecordsReference ? { workflow_stage: "pending_hr_records_reference" } : {}),
       manager_recommendation: mergedRecommendations || null,
       updated_at: new Date().toISOString(),
     }
 
-    if (isRegionalNonAnnualApproval) {
+    // Only send columns that are part of the leave-planning table contract.
+    // Approval must not fail because optional memo/signature columns are absent.
+    const leavePlanColumns = new Set([
+      "status", "workflow_stage", "manager_recommendation", "updated_at",
+      "memo_generated", "memo_generated_at", "hod_reviewer_id", "hod_reviewed_at",
+      "hod_decision", "preferred_start_date", "preferred_end_date", "requested_days",
+      "hr_approver_name", "hr_approver_position", "hr_approver_signature_data_url",
+      "hr_signature_data_url", "hr_approver_signature_text", "hr_approved_at", "hr_approval_note",
+    ])
+    for (const key of Object.keys(requestUpdatePayload)) {
+      if (!leavePlanColumns.has(key)) delete requestUpdatePayload[key]
+    }
+
+    if (isRegionalManagerApprovalComplete) {
       const signerName = `${String((profile as any).first_name || "").trim()} ${String((profile as any).last_name || "").trim()}`.trim()
       const { data: signerSignature } = await admin
         .from("approval_signature_registry")
-        .select("signature_data_url, signature_text, signature_mode")
+        .select("signature_data_url")
         .eq("user_id", user.id)
         .eq("is_active", true)
         .order("updated_at", { ascending: false })
@@ -266,10 +271,8 @@ export async function POST(request: NextRequest) {
       requestUpdatePayload.hr_approver_name = signerName || "Regional Manager"
       requestUpdatePayload.hr_approver_position = (profile as any).position || "Regional Manager"
       const savedSignature = signerSignature?.signature_data_url || (profile as any).signature_data_url || null
-      const savedSignatureText = signerSignature?.signature_text || (profile as any).signature_text || null
       requestUpdatePayload.hr_approver_signature_data_url = savedSignature
       requestUpdatePayload.hr_signature_data_url = savedSignature
-      requestUpdatePayload.hr_approver_signature_text = savedSignatureText
       requestUpdatePayload.hr_approved_at = new Date().toISOString()
       requestUpdatePayload.hr_approval_note = "Approved by the Regional Manager under the regional non-annual leave workflow."
     }
@@ -297,7 +300,7 @@ export async function POST(request: NextRequest) {
 
     if (requestUpdateError) {
       if (isSchemaIssue(requestUpdateError)) {
-        return schemaIssueResponse()
+        return schemaIssueResponse(requestUpdateError)
       }
       throw requestUpdateError
     }
@@ -338,7 +341,7 @@ export async function POST(request: NextRequest) {
     }
 
     // If fully approved by all HODs → notify HR Leave Office
-    if (!isRegionalNonAnnualApproval && (nextStatus === "hod_approved" || nextStatus === "manager_confirmed")) {
+    if (!isRegionalManagerApprovalComplete && (nextStatus === "hod_approved" || nextStatus === "manager_confirmed")) {
       const hodName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "HOD"
       notifyLeaveHodApproved(admin, {
         leavePlanRequestId: leave_plan_request_id,
@@ -351,12 +354,17 @@ export async function POST(request: NextRequest) {
       }).catch(() => {})
     }
 
-    return NextResponse.json({ success: true, status: isRegionalNonAnnualApproval ? "approved" : nextStatus })
+    return NextResponse.json({ success: true, status: isRegionalManagerApprovalComplete ? "approved" : nextStatus })
   } catch (error) {
     if (isSchemaIssue(error)) {
-      return schemaIssueResponse()
+      return schemaIssueResponse(error)
     }
     console.error("[v0] Leave planning manager review error:", error)
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to review leave planning request." }, { status: 500 })
+    return NextResponse.json({
+      error: `Leave approval failed: ${String((error as any)?.message || error || "Unknown database error")}`,
+      databaseCode: (error as any)?.code || null,
+      hint: (error as any)?.hint || null,
+      details: (error as any)?.details || null,
+    }, { status: 500 })
   }
 }

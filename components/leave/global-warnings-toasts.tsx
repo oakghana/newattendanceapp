@@ -99,7 +99,7 @@ export function GlobalWarningsToasts() {
         // Only show this confirmation when an active non-resumption record
         // actually exists for the employee and the check-in is linked to it.
         const linkedResumptionRecord = nonResumptionData?.some((item) =>
-          item.confirmation_status === 'pending_hod_rm' && Boolean(item.first_check_in_date),
+          item.confirmation_status === 'pending_hod_rm' && item.first_check_in_date === today,
         )
         if (hasCheckedInToday && linkedResumptionRecord) {
           allWarnings.push({

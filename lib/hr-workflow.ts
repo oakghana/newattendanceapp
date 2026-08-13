@@ -1,20 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-export const EXCLUDED_LOCATION_TERMS = [
-  "head office",
-  "swanzy",
-  "qcc head office",
-  "accra",
-  "district office",
-  "seven excluded",
-]
+export const NON_REGIONAL_LOCATIONS = [
+  "Awutu Stores",
+  "Nsawam Archive Center",
+  "QCC Head Office",
+  "HEAD OFFICE SWANZY ARCADE",
+] as const
 
-export const REGIONAL_NON_ANNUAL_STAGES = {
+export const REGIONAL_LEAVE_STAGES = {
   regionalHrReview: "pending_regional_hr_review",
   regionalManagerApproval: "pending_regional_manager_approval",
-  hrRecordsReference: "pending_hr_records_reference",
-  referenced: "referenced",
-  hrLeaveProcessing: "pending_hr_leave_processing",
   completed: "completed",
 } as const
 
@@ -38,11 +33,6 @@ export function isAnnualLeave(leaveType: string | null | undefined) {
   return /^(annual|annual_leave)$/i.test(String(leaveType || "").trim())
 }
 
-export function isExcludedLocation(locationName: string | null | undefined) {
-  const value = String(locationName || "").toLowerCase().trim()
-  return EXCLUDED_LOCATION_TERMS.some((term) => value.includes(term))
-}
-
 export function normalizeReference(value: unknown) {
   return String(value || "").trim().replace(/\s+/g, " ")
 }
@@ -51,16 +41,90 @@ export function referenceKey(value: unknown) {
   return normalizeReference(value).toLowerCase()
 }
 
-export type LeaveRoute = "legacy" | "regional_non_annual"
+export type LeaveRoute = "regional" | "legacy"
+
+export type LeaveWorkflowStep = {
+  key: string
+  label: string
+}
+
+export type LeaveWorkflowView = {
+  route: LeaveRoute
+  currentStage: string | null
+  statusLabel: string
+  steps: LeaveWorkflowStep[]
+}
+
+const LEGACY_WORKFLOW_STEPS: LeaveWorkflowStep[] = [
+  { key: "submitted", label: "Submitted" },
+  { key: "hod_review", label: "HOD Review" },
+  { key: "hr_leave_office", label: "HR Leave Office" },
+  { key: "hr_approval", label: "HR Approval" },
+]
+
+const REGIONAL_WORKFLOW_STEPS: LeaveWorkflowStep[] = [
+  { key: "submitted", label: "Submitted" },
+  { key: "regional_hr_review", label: "Regional HR Office Review" },
+  { key: "regional_manager_approval", label: "Regional Manager Approval" },
+]
+
+export function getLeaveWorkflowView(input: {
+  route?: LeaveRoute | string | null
+  workflowRoute?: LeaveRoute | string | null
+  status?: string | null
+  workflowStage?: string | null
+  leaveType?: string | null
+  locationName?: string | null
+}): LeaveWorkflowView {
+  const route = String(input.workflowRoute || input.route || "").toLowerCase() === "regional" ? "regional" : "legacy"
+  const status = String(input.status || input.workflowStage || "pending_hod_review")
+  const currentStage = input.workflowStage || status
+  const statusLabel: Record<string, string> = {
+    pending_hod_review: "Pending HOD Review",
+    pending_regional_hr_review: "Pending Regional HR Office Review",
+    pending_regional_manager_approval: "Pending Regional Manager Approval",
+    pending_hr_leave_processing: "Awaiting HR Leave Office Adjustment",
+    hr_office_forwarded: "Pending HR Approval",
+    hr_approved: "Approved",
+    approved: "Approved",
+    rejected: "Rejected",
+    withdrawn: "Withdrawn",
+  }
+  return {
+    route,
+    currentStage,
+    statusLabel: statusLabel[status] || status.replace(/_/g, " "),
+    steps: route === "regional" ? REGIONAL_WORKFLOW_STEPS : LEGACY_WORKFLOW_STEPS,
+  }
+}
+
+export function isRegionalWorkflowRequest(input: { workflowRoute?: string | null; route?: string | null; locationName?: string | null; leaveType?: string | null }) {
+  if (String(input.workflowRoute || input.route || "").toLowerCase() === "regional") return true
+  return !isRegionalLeaveException(input.leaveType) && !isExcludedLocation(input.locationName)
+}
+
+export function normalizeLocationName(value: string | null | undefined) {
+  return String(value || "").toLowerCase().replace(/[–—]/g, "-").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ")
+}
+
+export function isExcludedLocation(locationName: string | null | undefined) {
+  const normalized = normalizeLocationName(locationName)
+  return NON_REGIONAL_LOCATIONS.some((location) => normalizeLocationName(location) === normalized)
+}
+
+export function isRegionalLeaveException(leaveType: string | null | undefined) {
+  const normalized = normalizeLocationName(leaveType).replace(/ leave$/i, "")
+  return normalized === "manager annual" || normalized === "maternity" || normalized === "paternity"
+}
 
 export function routeLeave(input: { leaveType?: string | null; locationName?: string | null; hasRegionalOffice: boolean }): { route: LeaveRoute; firstStage: string | null; reason?: string } {
-  if (isAnnualLeave(input.leaveType) || isExcludedLocation(input.locationName)) {
-    return { route: "legacy", firstStage: null }
+  if (isRegionalLeaveException(input.leaveType) || isExcludedLocation(input.locationName)) {
+    return { route: "legacy", firstStage: null, reason: "This leave type or location uses its separate non-regional workflow." }
   }
   if (!input.hasRegionalOffice) {
-    return { route: "regional_non_annual", firstStage: REGIONAL_NON_ANNUAL_STAGES.hrRecordsReference, reason: "No active Regional HR Leave Office is assigned for this region; HR Records must reference the memo first." }
+    return { route: "regional", firstStage: REGIONAL_LEAVE_STAGES.regionalHrReview, reason: "Regional HR assignment is required before submission." }
   }
-  return { route: "regional_non_annual", firstStage: REGIONAL_NON_ANNUAL_STAGES.regionalHrReview }
+  return { route: "regional", firstStage: REGIONAL_LEAVE_STAGES.regionalHrReview }
 }
 
 export async function resolveRegionalHrOffice(admin: SupabaseClient, regionId: string | null | undefined) {
