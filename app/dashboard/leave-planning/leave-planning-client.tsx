@@ -3972,7 +3972,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={!((HR_OFFICE_PENDING_STATUSES as string[]).includes(String(req.status || "")))}
+                          disabled={!((hrOfficeShowArchived ? ["archived"] : ["approved", "hr_approved", "regional_manager_approved", "regional_hr_approved"]).includes(String(req.status || "")))}
                           className="ml-2 h-8 text-xs border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
                           onClick={() => handleArchiveRequest(req.id, !hrOfficeShowArchived)}
                         >

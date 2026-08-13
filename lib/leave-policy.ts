@@ -37,7 +37,7 @@ export function getLeaveYearPeriods(baseYear = 2026, years = 10) {
   return periods
 }
 
-export function computeLeaveDays(startDate: string, endDate: string): number {
+export function computeLeaveDays(startDate: string, endDate: string, holidayDates: string[] = []): number {
   const start = new Date(startDate)
   const end = new Date(endDate)
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0
@@ -45,11 +45,13 @@ export function computeLeaveDays(startDate: string, endDate: string): number {
   // Calculate working days (exclude weekends - Saturday=6, Sunday=0)
   let workingDays = 0
   const current = new Date(start)
+  const holidays = new Set(holidayDates.map((value) => String(value).slice(0, 10)))
   
   while (current <= end) {
     const dayOfWeek = current.getDay()
     // Only count Monday (1) to Friday (5)
-    if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+    const isoDate = current.toISOString().slice(0, 10)
+    if (dayOfWeek >= 1 && dayOfWeek <= 5 && !holidays.has(isoDate)) {
       workingDays++
     }
     current.setDate(current.getDate() + 1)
@@ -73,9 +75,12 @@ export function getMaternityDeliveryLabel(deliveryType?: string | null): string 
   return "Normal delivery"
 }
 
-export function computeReturnToWorkDate(endDate: string): string {
+export function computeReturnToWorkDate(endDate: string, holidayDates: string[] = []): string {
   const date = new Date(endDate)
   if (Number.isNaN(date.getTime())) return "N/A"
-  date.setDate(date.getDate() + 1)
+  const holidays = new Set(holidayDates.map((value) => String(value).slice(0, 10)))
+  do {
+    date.setDate(date.getDate() + 1)
+  } while (date.getDay() === 0 || date.getDay() === 6 || holidays.has(date.toISOString().slice(0, 10)))
   return date.toISOString().split("T")[0]
 }
