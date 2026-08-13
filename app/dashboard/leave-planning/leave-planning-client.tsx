@@ -910,7 +910,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
             </p>
           </div>
           <Badge className={`text-xs border ${getStatusColor(req.status)} shrink-0`}>
-            {getStatusLabel(req.status)}
+            {getStatusLabel(req.status, Boolean(req.memo_reference_locked))}
           </Badge>
         </div>
         <WorkflowStages status={req.status} />
@@ -4890,8 +4890,8 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                         const startDate = req.adjusted_start_date || req.preferred_start_date
                         const endDate = req.adjusted_end_date || req.preferred_end_date
                         const days = req.adjusted_days || req.requested_days || "—"
-                        const statusColor = getStatusColor(req.status)
-                        const statusLabel = getStatusLabel(req.status)
+  const statusColor = getStatusColor(req.status)
+  const statusLabel = getStatusLabel(req.status, Boolean(req.memo_reference_locked))
                         return (
                           <tr key={req.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                             <td className="px-4 py-3 font-medium text-slate-900">{staffName}</td>

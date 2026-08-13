@@ -147,7 +147,14 @@ export function summarizeManagerReviewStatus(decisions: LeavePlanReviewDecision[
 }
 
 /** Returns a human-readable label for a leave status */
-export function getStatusLabel(status: string): string {
+export function getStatusLabel(status: string, memoReferenceLocked?: boolean): string {
+  // Once HR Records has referenced a request that is still sitting at "hod_approved" /
+  // "manager_confirmed", it has moved on to the HR Leave Office queue even though the
+  // underlying status value has not changed — reflect that in the label so it doesn't
+  // read as though HR Records still needs to act on it.
+  if (memoReferenceLocked && (status === "hod_approved" || status === "manager_confirmed")) {
+    return "Referenced — With HR Leave Office for Adjustment"
+  }
   const labels: Record<string, string> = {
     pending_hod_review: "Pending HOD Review",
     pending_regional_hr_review: "Pending Regional HR Office Review",
@@ -161,7 +168,7 @@ export function getStatusLabel(status: string): string {
     manager_rejected: "Rejected by Manager",
     hod_approved: "HOD Approved — Awaiting HR Records Reference",
     manager_confirmed: "Manager Confirmed — Awaiting HR Records Reference",
-    hr_office_forwarded: "With HR Leave Office — Pending Adjustment & Memo",
+    hr_office_forwarded: "Forwarded to HR Approver — Pending Final Approval",
     hr_approved: "Approved",
     hr_rejected: "Rejected by HR",
     approved: "Approved by Regional Manager",

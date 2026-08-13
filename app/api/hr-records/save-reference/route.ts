@@ -35,8 +35,24 @@ export async function POST(request: NextRequest) {
   if (duplicate) return NextResponse.json({ error: "That memo reference is already in use." }, { status: 409 })
 
   const now = new Date().toISOString()
-  const nextStatus = entity === "loan" ? "referenced" : "hr_office_forwarded"
-  const nextWorkflowStage = entity === "loan" ? "referenced" : "pending_hr_leave_processing"
+  // The next status must follow the actual next workflow node, not jump straight
+  // to the final HR Approver stage. Requests that came from the HOD (legacy route)
+  // still need to pass through the HR Leave Office before "hr_office_forwarded"
+  // (that transition is HR Leave Office's own action, triggered when it forwards
+  // to the HR Approver). Only the regional route — where HR Records references
+  // ahead of any office review — advances the status itself.
+  const regionalReferenceOrigins = ["pending_hr_records_reference", "regional_manager_approved"]
+  const alreadyDownstream = ["hr_approved", "approved", "hr_rejected", "hr_office_forwarded"].includes(String(row.status || ""))
+  const nextStatus =
+    entity === "loan"
+      ? "referenced"
+      : regionalReferenceOrigins.includes(String(row.status || ""))
+        ? "referenced"
+        : row.status
+  // Only stamp "awaiting HR Leave Office" when the request is genuinely moving into
+  // that queue. Corrections on requests already approved, rejected, or already
+  // forwarded must not be re-stamped into an earlier stage.
+  const nextWorkflowStage = entity === "loan" ? "referenced" : alreadyDownstream ? undefined : "pending_hr_leave_processing"
   const update = isCorrection
     ? { [referenceColumn]: reference, updated_at: now }
     : {
@@ -44,7 +60,7 @@ export async function POST(request: NextRequest) {
         memo_reference_locked: true,
         memo_reference_locked_at: now,
         memo_reference_locked_by: user.id,
-        workflow_stage: nextWorkflowStage,
+        ...(nextWorkflowStage ? { workflow_stage: nextWorkflowStage } : {}),
         status: nextStatus,
         updated_at: now,
       }

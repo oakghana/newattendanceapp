@@ -625,7 +625,7 @@ function HrApprovalCard({
             <div className="flex items-center gap-2 shrink-0">
               <Badge className="bg-blue-100 text-blue-800 border-0 text-xs font-medium whitespace-nowrap">
                 <Shield className="h-3 w-3 mr-1" />
-                {req.status === 'hr_office_forwarded' ? 'With HR Leave Office \u2014 Pending Your Approval' : 'Awaiting HR Leave Office Review'}
+                {req.status === 'hr_office_forwarded' ? 'Forwarded by HR Leave Office \u2014 Pending Your Approval' : 'Awaiting HR Leave Office Review'}
               </Badge>
               {expanded ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
             </div>
