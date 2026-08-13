@@ -27,7 +27,11 @@ export async function POST(request: NextRequest) {
   const { data: row, error: fetchError } = await admin.from(table).select(`id, status, memo_reference_locked, ${referenceColumn}`).eq("id", id).maybeSingle()
   if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 })
   if (!row) return NextResponse.json({ error: "Request not found." }, { status: 404 })
-  const isCorrection = Boolean(row.memo_reference_locked)
+  // Regional HR may already have supplied a reference before HR Records receives
+  // the request. HR Records must be able to correct that value without reopening
+  // or rewinding the workflow stage.
+  const existingReference = normalizeReference(String((row as any)[referenceColumn] || ""))
+  const isCorrection = Boolean(row.memo_reference_locked || existingReference)
   if (!isCorrection && !hrRecordsCanReference(row.status)) return NextResponse.json({ error: `Request is not ready for HR Records reference assignment (${row.status || "unknown"}).` }, { status: 409 })
 
   const { data: duplicate, error: duplicateError } = await admin.from(table).select("id").neq("id", id).ilike(referenceColumn, reference).limit(1).maybeSingle()
