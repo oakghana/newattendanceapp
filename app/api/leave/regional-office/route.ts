@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
         { count: 'exact' }
       )
       .eq('workflow_route', 'regional')
-      .in('status', ['pending_regional_hr_review', 'pending_regional_manager_approval'])
+      .in('status', ['pending_regional_hr_office_review', 'pending_regional_hr_review', 'pending_regional_manager_approval'])
       .eq('user_profiles.assigned_location_id', locationIds[0])
       .order('created_at', { ascending: false });
 

@@ -650,14 +650,16 @@ export function LeaveManagementClient({
   const handleForwardToRegionalManager = async (notificationId: string) => {
     const notification = managerNotifications.find((row) => row.id === notificationId)
     const requestId = String(notification?.leave_plan_request_id || notification?.leave_requests?.id || "")
-    const recommendation = window.prompt("Add an adjustment note before forwarding to the Regional Manager") || ""
-    if (!requestId || !recommendation.trim()) return
+    const adjustedStart = window.prompt("Adjusted start date (YYYY-MM-DD)", String(notification?.leave_requests?.start_date || "")) || ""
+    const adjustedEnd = window.prompt("Adjusted end date (YYYY-MM-DD)", String(notification?.leave_requests?.end_date || "")) || ""
+    const recommendation = window.prompt("Enter the adjustment note to forward this request to the Regional Manager") || ""
+    if (!requestId || !adjustedStart.trim() || !adjustedEnd.trim() || !recommendation.trim()) return
     setProcessingId(notificationId)
     try {
       const response = await fetch("/api/leave/planning/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "forward_to_regional_manager", leave_plan_request_id: requestId, recommendation }),
+        body: JSON.stringify({ action: "forward_to_regional_manager", leave_plan_request_id: requestId, recommendation, adjusted_preferred_start_date: adjustedStart, adjusted_preferred_end_date: adjustedEnd }),
       })
       if (!response.ok) throw new Error((await response.json().catch(() => ({})))?.error || "Could not forward request")
       toast({ title: "Request forwarded", description: "The Regional Manager can now review and approve this request." })
@@ -1396,7 +1398,7 @@ export function LeaveManagementClient({
   className="gap-1 bg-violet-600 hover:bg-violet-700"
   >
   <ArrowUpRight className="h-4 w-4" />
-  Forward to Regional Manager
+  Adjust & forward
   </Button> : <Button
   onClick={() => {
   const rejectReason = window.prompt("Provide rejection reason") || ""
