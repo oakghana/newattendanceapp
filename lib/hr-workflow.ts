@@ -137,7 +137,20 @@ export async function resolveRegionalHrOffice(admin: SupabaseClient, regionId: s
     .limit(1)
     .maybeSingle()
   if (error) throw error
-  return data
+  if (data) return data
+
+  // Legacy installations may not have assignment rows yet. Resolve an active
+  // Regional HR user by region so the request still enters the regional queue.
+  const { data: fallback, error: fallbackError } = await admin
+    .from("user_profiles")
+    .select("id, region_id")
+    .eq("region_id", regionId)
+    .eq("is_active", true)
+    .in("role", ["regional_hr", "regional_hr_leave_office", "regional_leave_office"])
+    .limit(1)
+    .maybeSingle()
+  if (fallbackError) throw fallbackError
+  return fallback ? { user_id: fallback.id, region_id: fallback.region_id, is_override: false } : null
 }
 
 export function hrRecordsCanReference(status: string | null | undefined) {

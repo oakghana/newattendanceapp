@@ -34,11 +34,35 @@ export async function GET(request: NextRequest) {
     }
 
     const locationIds = userProfile.assigned_location_id ? [userProfile.assigned_location_id] : [];
-    if (locationIds.length === 0) {
+    const regionIds = userProfile.region_id ? [userProfile.region_id] : [];
+    let scopedStaffIds: string[] = [];
+    if (locationIds.length > 0 || regionIds.length > 0) {
+      let staffQuery = admin.from('user_profiles').select('id').neq('id', userId);
+      if (locationIds.length > 0) {
+        staffQuery = staffQuery.in('assigned_location_id', locationIds);
+      } else {
+        staffQuery = staffQuery.in('region_id', regionIds);
+      }
+      const { data: scopedStaff, error: scopedStaffError } = await staffQuery;
+      if (scopedStaffError) return NextResponse.json({ error: 'Failed to resolve regional staff scope' }, { status: 500 });
+      scopedStaffIds = (scopedStaff || []).map((row: any) => row.id).filter(Boolean);
+    }
+    if (locationIds.length === 0 && regionIds.length === 0) {
       return NextResponse.json(
         { leaves: [], summary: { total: 0, pending: 0, approved: 0 } },
         { status: 200 }
       );
+    }
+
+    // Repair only requests belonging to this Regional HR user's assigned staff
+    // when the request was saved before location-first routing was enabled.
+    if (scopedStaffIds.length > 0) {
+      await admin
+        .from('leave_plan_requests')
+        .update({ workflow_route: 'regional', status: 'pending_regional_hr_review', workflow_stage: 'regional_hr_review', updated_at: new Date().toISOString() })
+        .in('user_id', scopedStaffIds)
+        .is('workflow_route', null)
+        .in('status', ['pending_hod_review', 'pending', 'pending_hr_leave_processing'])
     }
 
     // Fetch leave requests for assigned locations
@@ -77,7 +101,7 @@ export async function GET(request: NextRequest) {
       )
       .eq('workflow_route', 'regional')
       .in('status', ['pending_regional_hr_office_review', 'pending_regional_hr_review', 'pending_regional_manager_approval'])
-      .eq('user_profiles.assigned_location_id', locationIds[0])
+      .in('user_id', scopedStaffIds.length > 0 ? scopedStaffIds : ['00000000-0000-0000-0000-000000000000'])
       .order('created_at', { ascending: false });
 
     if (leavesError) {

@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest"
 import { REGIONAL_LEAVE_STAGES, routeLeave } from "../lib/hr-workflow"
 
 describe("regional non-annual leave workflow", () => {
+  it("routes a regional staff request to Regional HR before Regional Manager", () => {
+    const route = routeLeave({
+      leaveType: "casual",
+      locationName: "Kumasi Regional Office",
+      hasRegionalOffice: true,
+    })
+    expect(route.route).toBe("regional")
+    expect(route.firstStage).toBe("pending_regional_hr_review")
+  })
+
   it("submits through Regional HR adjustment then Regional Manager approval without HOD or HR Executive stages", () => {
     const route = routeLeave({
       leaveType: "sick",
