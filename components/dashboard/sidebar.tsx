@@ -150,10 +150,10 @@ const navigationItems = [
   },
   // ── Secretary oversight ──────────────────────────────────────────────────
   {
-    title: "HR Records & Memo Audit",
+    title: "HR Records",
     href: "/dashboard/hr-records",
     icon: ScrollText,
-    roles: ["hr_records", "hr_records_officer", "hr_records_manager", "secretary", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "admin"],
+    roles: ["hr_records", "hr_records_officer", "hr_records_manager"],
     category: "admin",
     executive: true,
   },
@@ -462,9 +462,12 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
     if (item.href === "/dashboard/device-violations") {
       return effectiveRole === "admin"
     }
-    if (item.href === "/dashboard/secretary-memos" || item.href === "/dashboard/hr-records") {
-      return canAccessMemoConsole(effectiveRole)
-    }
+  if (item.href === "/dashboard/hr-records") {
+    return HR_RECORDS_SIDEBAR_ROLES.has(effectiveRole)
+  }
+  if (item.href === "/dashboard/secretary-memos") {
+    return canAccessMemoConsole(effectiveRole)
+  }
 
     // Core navigation should remain available to every authenticated staff member.
     // Page-level authorization still protects restricted destinations, but a role
