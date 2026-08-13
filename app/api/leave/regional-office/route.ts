@@ -3,8 +3,8 @@ import { createAdminClient } from '@/lib/supabase/server';
 
 /**
  * GET /api/leave/regional-office/leaves
- * Regional Loan Office can view all leave requests from their assigned region/location
- * Cannot approve/reject, only view and export data
+ * Regional HR can view regional leave requests from the same assigned location.
+ * This queue is the first stage before Regional Manager/HOD review.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -15,10 +15,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user profile to check role and assigned locations
+    // Get the Regional HR user's assigned office.
     const { data: userProfile, error: profileError } = await admin
       .from('user_profiles')
-      .select('id, role, assigned_location_id')
+      .select('id, role, assigned_location_id, region_id')
       .eq('id', userId)
       .single();
 
@@ -26,28 +26,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Only regional_loan_office role can access this endpoint
-    if (userProfile.role !== 'regional_loan_office' && userProfile.role !== 'admin') {
+    const normalizedRole = String(userProfile.role || '').toLowerCase().replace(/[- ]/g, '_');
+    const isRegionalHr = normalizedRole === 'regional_hr';
+    const isRegionalLoanOffice = normalizedRole === 'regional_loan_office';
+    if (!isRegionalHr && !isRegionalLoanOffice && normalizedRole !== 'admin') {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
-    // Get the assigned locations for this regional loan office
-    const { data: assignedLocations, error: locationsError } = await admin
-      .from('regional_loan_office_locations')
-      .select('location_id, region_id')
-      .eq('regional_loan_office_id', userId)
-      .eq('is_active', true);
-
-    if (locationsError) {
-      console.error('[v0] Error fetching assigned locations:', locationsError);
-      return NextResponse.json(
-        { error: 'Failed to fetch assigned locations' },
-        { status: 500 }
-      );
-    }
-
-    const locationIds = assignedLocations?.map(loc => loc.location_id) || [];
-
+    const locationIds = userProfile.assigned_location_id ? [userProfile.assigned_location_id] : [];
     if (locationIds.length === 0) {
       return NextResponse.json(
         { leaves: [], summary: { total: 0, pending: 0, approved: 0 } },
@@ -72,6 +58,13 @@ export async function GET(request: NextRequest) {
         created_at,
         updated_at,
         hod_decision,
+        workflow_route,
+        workflow_stage,
+        adjusted_days,
+        adjusted_start_date,
+        adjusted_end_date,
+        memo_reference,
+        regional_hr_office_user_id,
         user_profiles!leave_plan_requests_user_id_fkey (
           staff_number,
           first_name,
@@ -82,6 +75,9 @@ export async function GET(request: NextRequest) {
         `,
         { count: 'exact' }
       )
+      .eq('workflow_route', 'regional')
+      .in('status', ['pending_regional_hr_review', 'pending_regional_manager_approval'])
+      .eq('user_profiles.assigned_location_id', locationIds[0])
       .order('created_at', { ascending: false });
 
     if (leavesError) {
@@ -95,8 +91,8 @@ export async function GET(request: NextRequest) {
     // Calculate summary statistics
     const summary = {
       total: count || 0,
-      pending: leaves?.filter(l => l.status === 'pending_hod_review').length || 0,
-      approved: leaves?.filter(l => l.status === 'hr_office_approved').length || 0,
+      pending: leaves?.filter(l => l.status === 'pending_regional_hr_review').length || 0,
+      approved: leaves?.filter(l => l.status === 'pending_regional_manager_approval').length || 0,
       rejected: leaves?.filter(l => l.status === 'rejected').length || 0,
       byType: {} as Record<string, number>,
     };
