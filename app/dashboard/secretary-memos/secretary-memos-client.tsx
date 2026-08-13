@@ -466,7 +466,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                           <Badge className={cn("text-xs border font-medium", statusInfo.color)}>
                             {statusInfo.label}
                           </Badge>
-                          {(memo.memo_token || memo.status === "approved") && (
+                          {(memo.memo_token || ["hod_approved", "hr_approved", "approved", "regional_manager_approved"].includes(memo.status)) && (
                             <>
                               <button
                                 onClick={() => {

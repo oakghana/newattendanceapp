@@ -152,5 +152,5 @@ export async function resolveMemoVisibilityScope(
 
 export function regionalSecretaryRoles(role: string | null | undefined) {
   const normalized = normalizeWorkflowRole(role)
-  return ["secretary", "admin", "administrator", "regional_hr_leave_office", "regional_hr", "regional_leave_office"].includes(normalized)
+  return ["secretary", "admin", "administrator", "hr_records", "hr_records_officer", "hr_records_manager", "regional_hr_leave_office", "regional_hr", "regional_leave_office"].includes(normalized)
 }

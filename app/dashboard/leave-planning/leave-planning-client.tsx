@@ -1059,7 +1059,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
   const canManageLeaveTypePolicy = isHrOffice || isAdmin
   const isLoanOffice = normalizedRole === "loan_office" || normalizedRole === "hr_loan_office" || normalizedRole === "accounts_loan_office"
   const canSelfApply = isStaff || isHod || isAdmin || isLoanOffice ||
-    ["hr_officer", "hr_director", "director_hr", "manager_hr", "hr_leave_office", "hr_office", "accounts"].includes(normalizedRole)
+    ["hr_officer", "hr_director", "director_hr", "manager_hr", "hr_leave_office", "hr_office", "hr_records", "hr_records_officer", "hr_records_manager", "accounts"].includes(normalizedRole)
 
   // ── Data ────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false)
