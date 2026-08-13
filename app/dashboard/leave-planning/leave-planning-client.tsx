@@ -293,7 +293,10 @@ function buildMemoTemplateData(req: any): Record<string, string> {
   const effectiveDaysNumber = Number(req.adjusted_days || req.requested_days || 0)
   const approvedMonths = Number(req.approved_months || req.requested_months || Math.max(1, Math.round(effectiveDaysNumber / 30)))
   const entitlementDays = Number(req.entitlement_days || 0)
-  const outstandingLeaveDays = Math.max(0, entitlementDays - effectiveDaysNumber)
+  const outstandingLeaveDays = Math.max(
+    0,
+    Number(req.outstanding_leave_days_added ?? req.outstanding_leave_days ?? 0),
+  )
   const priorLeaveDays = Number(req.prior_leave_days_deducted || 0)
   const travellingDays = Number(req.travelling_days_added || 0)
   const adjustmentLines = [

@@ -167,11 +167,10 @@ export async function POST(request: NextRequest) {
         status: isRegionalWorkflow ? "pending_regional_manager_approval" : "hr_office_forwarded",
         original_requested_days: (leaveRequest as any).requested_days,
         adjusted_days: computedAdjustedDays,
+        outstanding_leave_days_added: requestIsAnnual ? Math.max(0, Number(outstanding_leave_days_added) || 0) : 0,
         adjusted_start_date,
         adjusted_end_date,
         adjustment_reason: trimmedReason,
-        // Note: outstanding_leave_days_added is not a column in leave_plan_requests
-        // It is tracked separately in outstanding_leave_balances table
         holiday_days_deducted: Number(holiday_days_deducted || 0),
         travelling_days_added: Number(travelling_days_added || 0),
         prior_leave_days_deducted: Number(prior_leave_days_deducted || 0),
@@ -204,7 +203,9 @@ export async function POST(request: NextRequest) {
         try {
           const origin = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
           await fetch(`${origin}/api/migrate/memo-reference`, { method: "POST" })
-        } catch (_) {}
+        } catch (_) {
+          // Migration is best-effort; the response below explains the missing column.
+        }
         return NextResponse.json(
           {
             error:
@@ -218,6 +219,37 @@ export async function POST(request: NextRequest) {
         )
       }
       throw updateError
+    }
+
+    // Persist the outstanding days selected by HR so memo generation can add them
+    // to the base entitlement instead of recalculating them from the request size.
+    if (requestIsAnnual && outstanding_leave_days_added != null) {
+      const leaveYearPeriod = String((leaveRequest as any).leave_year_period || `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`)
+      const outstandingDays = Math.max(0, Number(outstanding_leave_days_added) || 0)
+      const { data: existingBalance } = await admin
+        .from("outstanding_leave_balances")
+        .select("id")
+        .eq("user_id", (leaveRequest as any).user_id)
+        .eq("leave_year_period", leaveYearPeriod)
+        .maybeSingle()
+
+      const balancePayload = {
+        user_id: (leaveRequest as any).user_id,
+        leave_year_period: leaveYearPeriod,
+        carryover_to_next_year: outstandingDays,
+        updated_at: new Date().toISOString(),
+      }
+      if (existingBalance?.id) {
+        await admin.from("outstanding_leave_balances").update(balancePayload).eq("id", existingBalance.id)
+      } else {
+        await admin.from("outstanding_leave_balances").insert({
+          ...balancePayload,
+          opening_balance: outstandingDays,
+          entitlement_days: 0,
+          used_this_period: 0,
+          max_carryover_allowed: outstandingDays,
+        })
+      }
     }
 
     // In-app notification to staff

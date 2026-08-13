@@ -1449,8 +1449,9 @@ export async function POST(request: NextRequest) {
         user_signature_hologram_code: buildHologramCode("USR"),
         memo_generated: true,
         memo_generated_at: new Date().toISOString(),
-        // Flag for HR Leave Office if entitlement exceeded
-        adjustment_reason: entitlementWarning,
+        // Do not write a synthetic warning into the HR remarks field. The HR Leave
+        // Office owns this field and its exact text must be preserved in the memo.
+        adjustment_reason: null,
         maternity_delivery_type: leaveTypeKey === "maternity" ? String(maternity_delivery_type) : null,
         delivery_date: leaveTypeKey === "maternity" ? delivery_date : null,
         medical_report_url: leaveTypeKey === "maternity" ? String(medical_report_url) : null,
@@ -1721,8 +1722,9 @@ export async function PUT(request: NextRequest) {
       status: "pending_manager_review",
       manager_recommendation: null,
       updated_at: new Date().toISOString(),
-      // Flag for HR Leave Office if entitlement exceeded
-      adjustment_reason: entitlementWarningOnUpdate,
+  // Keep the HR remarks field reserved for HR Leave Office-entered text.
+  adjustment_reason: null,
+  outstanding_leave_days_added: 0,
       maternity_delivery_type: leaveTypeKey === "maternity" ? String(maternity_delivery_type) : null,
       delivery_date: leaveTypeKey === "maternity" ? delivery_date : null,
       medical_report_url: leaveTypeKey === "maternity" ? String(medical_report_url) : null,

@@ -177,6 +177,20 @@ describe("annual leave calculation", () => {
     expect(result.grantedDays).toBe(40)
   })
 
+  it("adds six outstanding days to a 26-day entitlement for a 32-day request", () => {
+    const baseEntitlement = 26
+    const outstanding = 6
+    const result = calculateAnnualLeaveMemoDates({
+      startDate: "2026-08-03",
+      entitlementDays: baseEntitlement + outstanding,
+      grantedDays: 32,
+      daysAlreadyEnjoyed: 0,
+      travellingDays: 0,
+    })
+    expect(result.entitlementDays).toBe(32)
+    expect(result.grantedDays).toBe(32)
+  })
+
   it("calculates 36 - 4 + 2 = 34", () => {
     const result = calculateAnnualLeaveBreakdown({ staff_category: "senior" }, 4)
     const display = buildAnnualLeaveDisplay(result)

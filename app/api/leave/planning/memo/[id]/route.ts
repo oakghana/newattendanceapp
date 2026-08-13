@@ -200,8 +200,10 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
       const computedWorkingDays = calculateWorkingDays(effectiveStart, effectiveEnd, holidays).workingDays
       // Use the stored adjusted_days if it was explicitly set by HR office (may include travel adjustments),
       // otherwise fall back to the computed working-days figure so the table never shows a stale entitlement.
-      const actualBaseDays = baseLeaveDays > 0 ? baseLeaveDays : computedWorkingDays
-      const entitlementForDisplay = Number(lr.entitlement_days || lr.leave_entitlement_days || actualBaseDays)
+  const actualBaseDays = baseLeaveDays > 0 ? baseLeaveDays : computedWorkingDays
+  const baseEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || actualBaseDays)
+  const outstandingDays = Math.max(0, Number(lr.outstanding_leave_days_added ?? lr.outstanding_leave_days ?? 0))
+  const entitlementForDisplay = baseEntitlement + outstandingDays
       return {
         useTable: true,
         paragraphs: [
@@ -396,6 +398,19 @@ export async function GET(
     }
     if (leaveError || !leaveRequest) {
       return NextResponse.json({ error: "Leave request not found" }, { status: 404 })
+    }
+
+    // Load the latest carryover balance because older requests may not have the
+    // HR-entered outstanding days copied onto leave_plan_requests yet.
+    const { data: outstandingBalance } = await admin
+      .from("outstanding_leave_balances")
+      .select("carryover_to_next_year, leave_year_period, created_at")
+      .eq("user_id", (leaveRequest as any).user_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if ((leaveRequest as any).outstanding_leave_days_added == null && outstandingBalance) {
+      ;(leaveRequest as any).outstanding_leave_days_added = Number(outstandingBalance.carryover_to_next_year || 0)
     }
 
     // CRITICAL: Also fetch the related leave_payment_memo to get the SELECTED SIGNER data
@@ -637,7 +652,7 @@ export async function GET(
         // Annual granted days are recalculated from the resolved entitlement,
         // deductions, and travel days; never trust stale stored 22/24-day totals.
         grantedDays: null,
-        daysAlreadyEnjoyed: explicitDeduction ?? Math.max(0, Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays) - effectiveDays),
+        daysAlreadyEnjoyed: explicitDeduction ?? 0,
         travellingDays: Number(lr.travelling_days_added || 2),
       })
       adjustedEffectiveEnd = annualMemoDates.endDate.toISOString().slice(0, 10)
@@ -697,7 +712,7 @@ export async function GET(
     const marginRight  = 20
     const contentWidth = pageWidth - marginLeft - marginRight
 
-    // ── Letterhead ──────────────────────────────────────────────────
+    // ── Letterhead ───────────────────────────���──────────────────────
     if (logoBase64) {
       try {
         doc.addImage(`data:image/png;base64,${logoBase64}`, "PNG", marginLeft, 10, 26, 26)
