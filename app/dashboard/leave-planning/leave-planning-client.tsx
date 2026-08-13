@@ -2400,7 +2400,12 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     const selectedExec = hrExecutives.find(e => e.id === forwardToHrExecutiveId)
     const execName = selectedExec ? `${selectedExec.name} (${selectedExec.role_label})` : "HR Approvers"
 
-  const refNum = String((data?.requests || []).find((request: any) => request.id === requestId)?.memo_reference || "").trim()
+    const refNum = String(
+      (data?.requests || []).find((request: any) => request.id === requestId)?.memo_reference ||
+      (data?.requests || []).find((request: any) => request.id === requestId)?.reference_number ||
+      officeRefNumber[requestId] ||
+      "",
+    ).trim()
   if (!refNum) {
   toast({ title: "HR Records action required", description: "HR Records must assign and release the official memo reference before HR Leave Office can continue.", variant: "destructive" })
   return
@@ -4221,8 +4226,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                                 submitHrOfficeReview(req.id, "regional-manager")
                                 return
                               }
-                              if (!officeRefNumber[req.id]?.trim()) {
-                                toast({ title: "Reference Number Required", description: "Please enter the memo reference number (Our Ref No.) before forwarding.", variant: "destructive" })
+                              const persistedReference = String(req.memo_reference || req.reference_number || officeRefNumber[req.id] || "").trim()
+                              if (!persistedReference) {
+                                toast({ title: "Reference Number Required", description: "HR Records must assign the official memo reference before forwarding.", variant: "destructive" })
                                 return
                               }
                               if (!selectedHrExecutive[req.id]) {
@@ -4231,7 +4237,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                               }
                               submitHrOfficeReview(req.id, selectedHrExecutive[req.id])
                             }}
-                              disabled={officeSubmitting === req.id || (!isRegionalHr && (!officeRefNumber[req.id]?.trim() || !selectedHrExecutive[req.id]))}
+                              disabled={officeSubmitting === req.id || (!isRegionalHr && (!String(req.memo_reference || req.reference_number || officeRefNumber[req.id] || "").trim() || !selectedHrExecutive[req.id]))}
                               className="w-full bg-blue-700 hover:bg-blue-800 text-white disabled:opacity-60">
                               {officeSubmitting === req.id ? "Forwarding…" : isRegionalHr ? "Adjust & Forward to Regional Manager →" : "Forward to HR Approvers →"}
                             </Button>
