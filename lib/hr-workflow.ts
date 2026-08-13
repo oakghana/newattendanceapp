@@ -79,6 +79,7 @@ export async function resolveRegionalHrOffice(admin: SupabaseClient, regionId: s
 export function hrRecordsCanReference(status: string | null | undefined) {
   return [
     "pending_hr_records_reference",
+    "hr_approved",
     "hod_approved",
     "hr_office_forwarded",
     "regional_manager_approved",
