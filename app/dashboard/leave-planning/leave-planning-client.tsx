@@ -2395,6 +2395,12 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
             adjusted_preferred_start_date: adjStart,
             adjusted_preferred_end_date: adjEnd,
             memo_reference: String(officeRefNumber[requestId] || "").trim(),
+            adjustment_breakdown: {
+              outstanding_days: Number(officeOutstandingDays[requestId] || 0),
+              public_holiday_days: Number(officeHolidayDays[requestId] || 0),
+              prior_leave_days: Number(officePriorDays[requestId] || 0),
+              travelling_days: Number(officeTravelDays[requestId] || 0),
+            },
           }),
         })
         const json = await res.json()

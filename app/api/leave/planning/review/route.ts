@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { leave_plan_request_id, action, recommendation, adjusted_preferred_start_date, adjusted_preferred_end_date, memo_reference } = body
+    const { leave_plan_request_id, action, recommendation, adjusted_preferred_start_date, adjusted_preferred_end_date, memo_reference, adjustment_breakdown } = body
 
     if (!leave_plan_request_id || !action) {
       return NextResponse.json({ error: "leave_plan_request_id and action are required." }, { status: 400 })
@@ -198,10 +198,14 @@ export async function POST(request: NextRequest) {
       }
 
       const entitlementDays = Number(leavePlan.entitlement_days || 0)
-      if (entitlementDays > 0 && nextRequestedDays > entitlementDays) {
+      const outstandingDays = Math.max(0, Number(adjustment_breakdown?.outstanding_days || 0))
+      const effectiveEntitlement = entitlementDays + outstandingDays
+      if (effectiveEntitlement > 0 && nextRequestedDays > effectiveEntitlement) {
         return NextResponse.json(
           {
-            error: `Adjusted request (${nextRequestedDays} day(s)) exceeds entitlement (${entitlementDays} day(s)).`,
+            error: outstandingDays > 0
+              ? `Adjusted request (${nextRequestedDays} day(s)) exceeds entitlement plus outstanding days (${effectiveEntitlement} day(s)).`
+              : `Adjusted request (${nextRequestedDays} day(s)) exceeds entitlement (${entitlementDays} day(s)).`,
           },
           { status: 400 },
         )
