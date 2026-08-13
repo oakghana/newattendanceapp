@@ -4,7 +4,7 @@ import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays 
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { getNextQccReference } from "@/lib/reference-number"
 import { calculateAnnualLeaveBreakdown } from "@/lib/annual-leave-calculator"
-import { isRegionalHrLeaveOfficeRole, resolveRegionalHrOffice, routeLeave } from "@/lib/hr-workflow"
+import { isRegionalHrLeaveOfficeRole, resolveRegionalHrOffice, resolveStaffAssignments, routeLeave } from "@/lib/hr-workflow"
 
 const NON_ANNUAL_REQUIRES_APPROVED_ANNUAL = new Set([
   "sick",
@@ -225,9 +225,10 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle()
 
+    const assignment = await resolveStaffAssignments(admin, user.id)
     const routingProfile = (staffRoutingProfile.data || {}) as any
-    let regionId = routingProfile.region_id || null
-    let locationName: string | null = null
+    let regionId = assignment.regionId || routingProfile.region_id || null
+    let locationName: string | null = assignment.locationName
     if (routingProfile.assigned_location_id) {
       const { data: assignedLocation } = await admin
         .from("geofence_locations")
@@ -270,6 +271,14 @@ export async function POST(request: NextRequest) {
       requested_days: requestedDays,
       maternity_delivery_type: leaveTypeKey === "maternity" ? maternity_delivery_type : null,
       delivery_date: leaveTypeKey === "maternity" ? delivery_date : null,
+      workflow_route: isRegionalWorkflow ? "regional" : "legacy",
+      workflow_stage: initialStatus,
+      assigned_location_id: assignment.assignedLocationId,
+      region_id: assignment.regionId,
+      department_id: assignment.departmentId,
+      hod_id: assignment.hodId,
+      regional_hr_id: assignment.regionalHrId,
+      regional_manager_id: assignment.regionalManagerId,
     }
 
     // Try insert; if column not found (schema mismatch), retry without `leave_type` and return a helpful error
@@ -291,12 +300,20 @@ export async function POST(request: NextRequest) {
         /column ".*" does not exist/i.test(msg)
 
       if (isMissingColumn) {
-        console.warn("leave_type/leave_year_period columns missing in DB schema; retrying without optional columns and advising migration")
+        console.warn("Leave request payload includes unavailable assignment columns; retrying with the established schema")
         // remove optional columns and retry
         const altPayload = { ...payload }
         delete altPayload.leave_type
         delete altPayload.leave_year_period
         delete altPayload.reference_number
+        delete altPayload.workflow_route
+        delete altPayload.workflow_stage
+        delete altPayload.assigned_location_id
+        delete altPayload.region_id
+        delete altPayload.department_id
+        delete altPayload.hod_id
+        delete altPayload.regional_hr_id
+        delete altPayload.regional_manager_id
         try {
           const res2 = await supabase.from("leave_requests").insert(altPayload).select().single()
           leaveRequest = res2.data

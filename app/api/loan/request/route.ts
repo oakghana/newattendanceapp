@@ -4,6 +4,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { isSchemaIssue, normalizeRole, requestIsEditable } from "@/lib/loan-workflow"
 import { getNextQccReference } from "@/lib/reference-number"
+import { resolveStaffAssignments } from "@/lib/hr-workflow"
 
 const LOAN_REQUEST_SUBMISSION_ENABLED = true
 
@@ -263,13 +264,14 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id)
       .single()
 
-    if (profileError || !profile) {
-      return NextResponse.json({ error: "Profile not found" }, { status: 404 })
-    }
+  if (profileError || !profile) {
+  return NextResponse.json({ error: "Profile not found" }, { status: 404 })
+  }
 
-    const role = normalizeRole((profile as any).role)
+  const role = normalizeRole((profile as any).role)
+  const assignment = await resolveStaffAssignments(admin, user.id)
 
-    if (!LOAN_REQUEST_SUBMISSION_ENABLED) {
+  if (!LOAN_REQUEST_SUBMISSION_ENABLED) {
       return loanSubmissionClosedResponse()
     }
 
@@ -344,8 +346,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let locationSnapshot: any = {
-      staff_location_id: (profile as any).assigned_location_id || null,
+  let locationSnapshot: any = {
+  staff_location_id: assignment.assignedLocationId || (profile as any).assigned_location_id || null,
       staff_location_name: null,
       staff_location_address: null,
       staff_district_name: null,
@@ -448,8 +450,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const payload = {
-      request_number: genRequestNumber(),
+  const payload = {
+  request_number: genRequestNumber(),
+  assigned_location_id: assignment.assignedLocationId,
+  region_id: assignment.regionId,
+  hod_id: assignment.hodId,
+  regional_hr_id: assignment.regionalHrId,
+  regional_manager_id: assignment.regionalManagerId,
       reference_number: referenceNumber,
       user_id: user.id,
       department_id: (profile as any).department_id || null,

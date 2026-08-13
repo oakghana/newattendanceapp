@@ -127,6 +127,52 @@ export function routeLeave(input: { leaveType?: string | null; locationName?: st
   return { route: "regional", firstStage: REGIONAL_LEAVE_STAGES.regionalHrReview }
 }
 
+export type StaffAssignmentResolution = {
+  staffId: string
+  assignedLocationId: string | null
+  regionId: string | null
+  departmentId: string | null
+  hodId: string | null
+  regionalHrId: string | null
+  regionalManagerId: string | null
+  locationName: string | null
+  source: "profile" | "location" | "unresolved"
+}
+
+/** Resolve reviewer IDs from stable foreign keys, never display names. */
+export async function resolveStaffAssignments(admin: SupabaseClient, staffId: string): Promise<StaffAssignmentResolution> {
+  const { data: profile, error } = await admin
+    .from("user_profiles")
+    .select("id, assigned_location_id, region_id, department_id, hod_id, regional_hr_id, regional_manager_id, geofence_locations:assigned_location_id (id, name, district_id)")
+    .eq("id", staffId)
+    .maybeSingle()
+  if (error) throw error
+  if (!profile) return { staffId, assignedLocationId: null, regionId: null, departmentId: null, hodId: null, regionalHrId: null, regionalManagerId: null, locationName: null, source: "unresolved" }
+
+  const assignedLocation = Array.isArray(profile.geofence_locations) ? profile.geofence_locations[0] : profile.geofence_locations
+  let regionId = profile.region_id || null
+  if (!regionId && assignedLocation?.district_id) {
+    const { data: district, error: districtError } = await admin.from("districts").select("region_id").eq("id", assignedLocation.district_id).maybeSingle()
+    if (districtError) throw districtError
+    regionId = district?.region_id || null
+  }
+
+  let regionalHrId = profile.regional_hr_id || null
+  if (!regionalHrId && regionId) regionalHrId = (await resolveRegionalHrOffice(admin, regionId))?.user_id || null
+
+  return {
+    staffId,
+    assignedLocationId: profile.assigned_location_id || null,
+    regionId,
+    departmentId: profile.department_id || null,
+    hodId: profile.hod_id || null,
+    regionalHrId,
+    regionalManagerId: profile.regional_manager_id || null,
+    locationName: assignedLocation?.name || null,
+    source: profile.assigned_location_id || regionId ? "profile" : "unresolved",
+  }
+}
+
 export async function resolveRegionalHrOffice(admin: SupabaseClient, regionId: string | null | undefined) {
   if (!regionId) return null
   const { data, error } = await admin
@@ -187,12 +233,12 @@ export async function resolveMemoVisibilityScope(
 
   const [{ data: assignments, error: assignmentError }, { data: actor, error: actorError }] = await Promise.all([
     admin.from("regional_hr_leave_office_assignments").select("region_id").eq("user_id", actorId).eq("is_active", true),
-    admin.from("user_profiles").select("assigned_location_id").eq("id", actorId).maybeSingle(),
+    admin.from("user_profiles").select("assigned_location_id, region_id").eq("id", actorId).maybeSingle(),
   ])
   if (assignmentError) throw assignmentError
   if (actorError) throw actorError
 
-  const regionIds = [...new Set((assignments || []).map((row: any) => row.region_id).filter(Boolean))]
+  const regionIds = [...new Set([...(assignments || []).map((row: any) => row.region_id), actor?.region_id].filter(Boolean))]
   const locationIds = new Set<string>()
   if (actor?.assigned_location_id) locationIds.add(actor.assigned_location_id)
 
