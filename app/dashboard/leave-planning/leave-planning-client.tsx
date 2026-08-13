@@ -652,11 +652,7 @@ async function downloadLeaveAnalyticsPdf(rows: LeaveAnalyticsRecord[], fileName:
 
 // ─── Stage Progress Indicator ────────────────────────────────────────────────
 function WorkflowStages({ status }: { status: string }) {
-  const isRegional =
-    status.startsWith("pending_regional_") ||
-    status === "pending_hr_records_reference" ||
-    status === "pending_hr_leave_processing" ||
-    status === "approved"
+  const isRegional = status.startsWith("pending_regional_")
   const stages = isRegional
     ? [
         { label: "Submitted", Icon: Send },
@@ -677,7 +673,7 @@ function WorkflowStages({ status }: { status: string }) {
       : status === "pending_regional_hr_review" || status === "pending_regional_manager_approval" ? 2
       : 1
     : status === "hr_approved" || hrRejected ? 4
-      : status === "hr_office_forwarded" ? 3
+      : status === "hr_office_forwarded" || status === "pending_hr_leave_processing" ? 3
       : status === "hod_approved" || status === "manager_confirmed" ? 2
       : 1
 

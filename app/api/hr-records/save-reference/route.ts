@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
 
   const now = new Date().toISOString()
   const nextStatus = entity === "loan" ? "referenced" : "hr_office_forwarded"
+  const nextWorkflowStage = entity === "loan" ? "referenced" : "pending_hr_leave_processing"
   const update = isCorrection
     ? { [referenceColumn]: reference, updated_at: now }
     : {
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
         memo_reference_locked: true,
         memo_reference_locked_at: now,
         memo_reference_locked_by: user.id,
-        workflow_stage: entity === "loan" ? "referenced" : "pending_hr_leave_processing",
+        workflow_stage: nextWorkflowStage,
         status: nextStatus,
         updated_at: now,
       }
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
     from_status: row.status,
     to_status: nextStatus,
     actor_user_id: user.id,
-    metadata: { reference_key: referenceKey(reference), workflow_stage: update.workflow_stage },
+    metadata: { reference_key: referenceKey(reference), workflow_stage: nextWorkflowStage, destination_office: entity === "loan" ? "hr_loan_office" : "hr_leave_office" },
     created_at: now,
   })
   return NextResponse.json({ success: true, request: updated })
