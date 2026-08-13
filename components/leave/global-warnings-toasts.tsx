@@ -95,9 +95,13 @@ export function GlobalWarningsToasts() {
           })
         })
 
-        // A check-in changes the employee-facing state to resumed, while
-        // management confirmation remains pending.
-        if (hasCheckedInToday && nonResumptionData?.some((item) => item.confirmation_status === 'pending_hod_rm' || item.first_check_in_date)) {
+        // A normal attendance check-in must not create a resumption notice.
+        // Only show this confirmation when an active non-resumption record
+        // actually exists for the employee and the check-in is linked to it.
+        const linkedResumptionRecord = nonResumptionData?.some((item) =>
+          item.confirmation_status === 'pending_hod_rm' && Boolean(item.first_check_in_date),
+        )
+        if (hasCheckedInToday && linkedResumptionRecord) {
           allWarnings.push({
             id: 'resumption-confirmation-pending',
             type: 'info',
