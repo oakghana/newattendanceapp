@@ -748,7 +748,9 @@ export async function GET(request: NextRequest) {
         officeQuery = officeQuery
           .eq("workflow_route", "regional")
           .in("status", ["pending_regional_hr_review", "pending_regional_manager_approval"])
-          .eq("regional_hr_office_user_id", user.id)
+        if (profile.assigned_location_id) {
+          officeQuery = officeQuery.eq("user.assigned_location_id", profile.assigned_location_id)
+        }
       }
 
       const { data: requests, error: reqError } = await officeQuery
