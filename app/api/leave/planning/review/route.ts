@@ -91,7 +91,6 @@ export async function POST(request: NextRequest) {
     const isRegionalManagerApproval = role === "regional_manager"
     const isRegionalRequest = action === "forward_to_regional_manager"
       || String(body.workflow_route || "").toLowerCase() === "regional"
-      || role === "regional_manager"
     if (isRegionalManagerApproval && isRegionalRequest && decision === "approved" && !isRegionalForward) {
       const profileHasSignature = Boolean(String((profile as any).signature_data_url || "").trim())
 
@@ -172,7 +171,7 @@ export async function POST(request: NextRequest) {
 
     const { data: leavePlan, error: leavePlanError } = await admin
       .from("leave_plan_requests")
-      .select("id, user_id, preferred_start_date, preferred_end_date, entitlement_days, workflow_route, leave_type_key, requested_days")
+      .select("id, user_id, preferred_start_date, preferred_end_date, entitlement_days, workflow_route, leave_type_key, requested_days, user_profiles:user_id(assigned_location_id, region_id)")
       .eq("id", leave_plan_request_id)
       .single()
 
@@ -182,6 +181,16 @@ export async function POST(request: NextRequest) {
 
     if (leavePlanError || !leavePlan) {
       return NextResponse.json({ error: "Leave plan request not found." }, { status: 404 })
+    }
+
+    if (isRegionalManagerApproval && isRegionalRequest) {
+      const staffProfile = Array.isArray((leavePlan as any).user_profiles) ? (leavePlan as any).user_profiles[0] : (leavePlan as any).user_profiles
+      const sameScope =
+        (profile.assigned_location_id && staffProfile?.assigned_location_id === profile.assigned_location_id) ||
+        ((profile as any).region_id && staffProfile?.region_id === (profile as any).region_id)
+      if (!sameScope) {
+        return NextResponse.json({ error: "This regional request is outside your assigned region or location." }, { status: 403 })
+      }
     }
 
     let nextStartDate = leavePlan.preferred_start_date
@@ -238,7 +247,7 @@ export async function POST(request: NextRequest) {
     const mustUseHrRecordsReference = !isRegionalWorkflow && isDepartmentHeadApproval && !isAnnualLeave((leavePlan as any).leave_type_key) && !isExcludedLocation((leavePlan as any).assigned_location_name)
     const requestUpdatePayload: Record<string, any> = {
       status: isRegionalForward ? "pending_regional_manager_approval" : isRegionalManagerApprovalComplete ? "approved" : mustUseHrRecordsReference ? "pending_hr_records_reference" : nextStatus,
-      ...(isRegionalManagerApprovalComplete ? { workflow_stage: "completed", memo_generated: true, memo_generated_at: new Date().toISOString() } : {}),
+      ...(isRegionalManagerApprovalComplete ? { workflow_stage: "completed", memo_generated: true, memo_generated_at: new Date().toISOString(), hr_approver_id: user.id } : {}),
       ...(mustUseHrRecordsReference ? { workflow_stage: "pending_hr_records_reference" } : {}),
       manager_recommendation: mergedRecommendations || null,
       ...(isRegionalForward ? { memo_reference: String(memo_reference).trim() } : {}),

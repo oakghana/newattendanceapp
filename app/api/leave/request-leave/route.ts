@@ -54,10 +54,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: reasonValidation.error }, { status: 400 })
     }
 
-    const requestedDays = requested_days && Number.isInteger(requested_days) && requested_days > 0
+    const leaveTypeKey = String(leave_type || "annual").toLowerCase().trim()
+    const explicitRequestedDays = requested_days_raw !== null && requested_days_raw.trim() !== ""
+    const requestedDays = explicitRequestedDays && Number.isInteger(requested_days) && requested_days > 0
       ? requested_days
       : computeLeaveDays(start_date, end_date)
-    if (requestedDays <= 0) {
+    if (requestedDays <= 0 || (explicitRequestedDays && (!Number.isInteger(requested_days) || requested_days <= 0))) {
       return NextResponse.json({ error: "Invalid leave date range" }, { status: 400 })
     }
 
@@ -77,12 +79,13 @@ export async function POST(request: NextRequest) {
       normalizedRole === "department_head" ||
       normalizedRole.includes("manager")
 
-    const leaveTypeKey = String(leave_type || "annual").toLowerCase().trim()
+    if (leaveTypeKey === "maternity" || leaveTypeKey === "paternity") {
+      if (!document || document.size === 0) {
+        return NextResponse.json({ error: leaveTypeKey === "paternity" ? "Spouse delivery proof is required for paternity leave." : "Maternity evidence is required." }, { status: 400 })
+      }
+    }
 
     if (leaveTypeKey === "maternity") {
-      if (!document || document.size === 0) {
-        return NextResponse.json({ error: "Maternity evidence is required." }, { status: 400 })
-      }
       if (!["normal", "cs", "twins", "regular", "cs_twins"].includes(String(maternity_delivery_type || ""))) {
         return NextResponse.json({ error: "Select normal delivery, Caesarean section, or twins delivery." }, { status: 400 })
       }
@@ -148,7 +151,8 @@ export async function POST(request: NextRequest) {
         }
 
         const allowedEntitlement = annualCalculation?.totalGrantedDays ?? Number(policy.entitlement_days || 0)
-        if (requestedDays > allowedEntitlement && !canSubmitBeyondEntitlementForHrAdjustment) {
+        const zeroEntitlementDecisionRequest = allowedEntitlement === 0 && explicitRequestedDays
+        if (requestedDays > allowedEntitlement && !canSubmitBeyondEntitlementForHrAdjustment && !zeroEntitlementDecisionRequest) {
           return NextResponse.json(
             {
               error: `Requested ${requestedDays} day(s) exceeds the available annual leave total of ${allowedEntitlement} day(s) (including travelling days).`,
