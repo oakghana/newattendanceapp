@@ -19,7 +19,7 @@ import {
   resolveEntitlementFromProfile,
   buildAnnualLeaveEntitlementSummary,
 } from "@/lib/annual-leave-entitlement"
-import { resolveMemoVisibilityScope } from "@/lib/hr-workflow"
+import { resolveMemoVisibilityScope, resolveRegionalHrOffice, routeLeave } from "@/lib/hr-workflow"
 
 function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
   const year = referenceDate.getFullYear()
@@ -1196,10 +1196,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const profile = await getOrCreateProfile(
-      admin, user,
-      "id, role, department_id, staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id, position"
-    )
+  const profile = await getOrCreateProfile(
+  admin, user,
+  "id, role, department_id, region_id, assigned_location_id, staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id, position"
+  )
 
     const role = String((profile as any).role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
     const canSelfApply =
@@ -1407,6 +1407,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Regional staff non-annual leave must enter the Regional HR Leave Office
+    // queue before any Regional Manager review is created. Resolve the office
+    // from the requester's region, not from the manager linkage table.
+    const regionalHrOffice = await resolveRegionalHrOffice(admin, (profile as any).region_id || null)
+    const leaveRoute = routeLeave({
+      leaveType: leaveTypeKey,
+      locationName: null,
+      hasRegionalOffice: Boolean(regionalHrOffice?.user_id),
+    })
+    const isRegionalNonAnnual = leaveRoute.route === "regional_non_annual" && leaveRoute.firstStage === "pending_regional_hr_review"
+
     // Staff signature is optional
     const initialMemo = buildInitialLeaveMemoDraft({
       leaveTypeKey,
@@ -1432,7 +1443,10 @@ export async function POST(request: NextRequest) {
         entitlement_days: entitlementDays,
         requested_days: requestedDays,
         reason: reason || null,
-        status: "pending_hod_review",
+        status: isRegionalNonAnnual ? "pending_regional_hr_review" : "pending_hod_review",
+        workflow_route: isRegionalNonAnnual ? "regional_non_annual" : "legacy",
+        workflow_stage: isRegionalNonAnnual ? "regional_hr_review" : "hod_review",
+        regional_hr_office_user_id: isRegionalNonAnnual ? regionalHrOffice?.user_id : null,
         // Annual leave entitlement snapshot — only columns that exist in the DB
         staff_category: annualLeaveSnapshot.staffCategory || null,
         user_signature_mode: user_signature_mode || "typed",
@@ -1457,19 +1471,23 @@ export async function POST(request: NextRequest) {
       throw requestError
     }
 
-    const nonHrReviewers = await resolveManagerReviewers(admin, user.id, (profile as any).department_id || null)
+    if (!isRegionalNonAnnual) {
+      const nonHrReviewers = await resolveManagerReviewers(admin, user.id, (profile as any).department_id || null)
 
-    if (nonHrReviewers.length === 0) {
-      return NextResponse.json(
-        {
-          error: "No regional manager or department head is configured for this workflow.",
-        },
-        { status: 400 },
-      )
+      if (nonHrReviewers.length === 0) {
+        return NextResponse.json(
+          {
+            error: "No regional manager or department head is configured for this workflow.",
+          },
+          { status: 400 },
+        )
+      }
+
+      await syncManagerReviews(admin, requestRow.id, nonHrReviewers as any)
     }
 
-    await syncManagerReviews(admin, requestRow.id, nonHrReviewers as any)
-
+    // Fire-and-forget email to the first workflow owner. Regional non-annual
+    // requests are owned by Regional HR at intake; legacy requests use HOD.
     // Fire-and-forget email to HOD reviewers
     const staffProfile = await admin
       .from("user_profiles")
