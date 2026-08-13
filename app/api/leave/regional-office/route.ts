@@ -34,8 +34,11 @@ export async function GET(request: NextRequest) {
     }
 
     const locationIds = userProfile.assigned_location_id ? [userProfile.assigned_location_id] : [];
-    const regionIds = userProfile.region_id ? [userProfile.region_id] : [];
-    let scopedStaffIds: string[] = [];
+const regionIds = userProfile.region_id ? [userProfile.region_id] : [];
+ const locationStaffIds = locationIds.length
+   ? (await admin.from('user_profiles').select('id').in('assigned_location_id', locationIds).neq('id', userId)).data?.map((row: any) => row.id).filter(Boolean) || []
+   : [];
+ let scopedStaffIds: string[] = [];
     if (locationIds.length > 0 || regionIds.length > 0) {
       let staffQuery = admin.from('user_profiles').select('id').neq('id', userId);
       if (locationIds.length > 0) {
@@ -45,7 +48,7 @@ export async function GET(request: NextRequest) {
       }
       const { data: scopedStaff, error: scopedStaffError } = await staffQuery;
       if (scopedStaffError) return NextResponse.json({ error: 'Failed to resolve regional staff scope' }, { status: 500 });
-      scopedStaffIds = (scopedStaff || []).map((row: any) => row.id).filter(Boolean);
+      scopedStaffIds = [...new Set([...(scopedStaff || []).map((row: any) => row.id), ...locationStaffIds].filter(Boolean))];
     }
     if (locationIds.length === 0 && regionIds.length === 0) {
       return NextResponse.json(
@@ -59,10 +62,10 @@ export async function GET(request: NextRequest) {
     if (scopedStaffIds.length > 0) {
       await admin
         .from('leave_plan_requests')
-        .update({ workflow_route: 'regional', status: 'pending_regional_hr_review', workflow_stage: 'regional_hr_review', updated_at: new Date().toISOString() })
-        .in('user_id', scopedStaffIds)
-        .is('workflow_route', null)
-        .in('status', ['pending_hod_review', 'pending', 'pending_hr_leave_processing'])
+.update({ workflow_route: 'regional', status: 'pending_regional_hr_review', workflow_stage: 'regional_hr_review', regional_hr_office_user_id: userId, updated_at: new Date().toISOString() })
+  .in('user_id', scopedStaffIds)
+  .not('status', 'in', '(approved,rejected,cancelled,withdrawn)')
+  .or('workflow_route.is.null,workflow_route.eq.legacy,workflow_route.eq.regional')
     }
 
     // Fetch leave requests for assigned locations

@@ -239,7 +239,7 @@ export async function POST(request: NextRequest) {
       regionId = regionId || (assignedLocation?.districts as any)?.region_id || null
     }
 
-    const regionalOffice = await resolveRegionalHrOffice(admin, regionId)
+    const regionalOffice = await resolveRegionalHrOffice(admin, regionId, assignment.assignedLocationId)
     const profileText = [roleProfile?.role, roleProfile?.staff_category, roleProfile?.position, roleProfile?.rank].filter(Boolean).join(" ").toLowerCase()
     const isManagerGrade = /(^|\s|_)(manager|management|director|executive|head)(\s|_|$)/i.test(profileText)
     const leaveRoute = routeLeave({

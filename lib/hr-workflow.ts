@@ -158,7 +158,7 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
   }
 
   let regionalHrId = profile.regional_hr_id || null
-  if (!regionalHrId && regionId) regionalHrId = (await resolveRegionalHrOffice(admin, regionId))?.user_id || null
+  if (!regionalHrId) regionalHrId = (await resolveRegionalHrOffice(admin, regionId, profile.assigned_location_id))?.user_id || null
 
   return {
     staffId,
@@ -173,7 +173,25 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
   }
 }
 
-export async function resolveRegionalHrOffice(admin: SupabaseClient, regionId: string | null | undefined) {
+export async function resolveRegionalHrOffice(
+  admin: SupabaseClient,
+  regionId: string | null | undefined,
+  locationId?: string | null,
+) {
+  // Location is authoritative when regional offices are attached directly to
+  // an office and the location has no district/region row (the Kumasi setup).
+  if (locationId) {
+    const { data: byLocation, error: locationError } = await admin
+      .from("user_profiles")
+      .select("id, region_id, assigned_location_id")
+      .eq("assigned_location_id", locationId)
+      .eq("is_active", true)
+      .in("role", ["regional_hr", "regional_hr_leave_office", "regional_leave_office"])
+      .limit(1)
+      .maybeSingle()
+    if (locationError) throw locationError
+    if (byLocation) return { user_id: byLocation.id, region_id: byLocation.region_id || regionId || null, is_override: false }
+  }
   if (!regionId) return null
   const { data, error } = await admin
     .from("regional_hr_leave_office_assignments")
@@ -185,8 +203,6 @@ export async function resolveRegionalHrOffice(admin: SupabaseClient, regionId: s
   if (error) throw error
   if (data) return data
 
-  // Legacy installations may not have assignment rows yet. Resolve an active
-  // Regional HR user by region so the request still enters the regional queue.
   const { data: fallback, error: fallbackError } = await admin
     .from("user_profiles")
     .select("id, region_id")
