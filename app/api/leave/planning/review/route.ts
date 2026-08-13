@@ -89,12 +89,14 @@ export async function POST(request: NextRequest) {
     }
 
     const isRegionalManagerApproval = role === "regional_manager"
-    if (isRegionalManagerApproval && decision === "approved" && !isRegionalForward) {
-      const profileHasSignature =
-        Boolean(String((profile as any).signature_data_url || "").trim())
+    const isRegionalRequest = action === "forward_to_regional_manager"
+      || String(body.workflow_route || "").toLowerCase() === "regional"
+      || role === "regional_manager"
+    if (isRegionalManagerApproval && isRegionalRequest && decision === "approved" && !isRegionalForward) {
+      const profileHasSignature = Boolean(String((profile as any).signature_data_url || "").trim())
 
       if (!profileHasSignature) {
-        return NextResponse.json({ error: "Save your Regional Manager signature in your profile before approving this leave request." }, { status: 400 })
+        return NextResponse.json({ error: "Save your Regional Manager signature in your profile before approving this regional leave request." }, { status: 400 })
       }
     }
 
