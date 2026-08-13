@@ -429,17 +429,27 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
   const normalizedRole = normalizeAppRole(profile?.role)
   const effectiveRole = normalizedRole === "audit_staff" ? "staff" : normalizedRole
 
+  // A handful of "main" category items are intentionally restricted to specific
+  // roles (e.g. Disbursement Confirmation is only for Accounts/Loan Office staff,
+  // not HR Records or HR Leave Office). The blanket "main" bypass below must not
+  // apply to these — they always need to go through the roles check.
+  const ROLE_RESTRICTED_MAIN_HREFS = new Set([
+    "/dashboard/disbursement-confirmation",
+    "/offpremises-approvals",
+  ])
+
   const filteredNavItems = allNavigationItems.filter((item) => {
-    // Core navigation should remain available to every authenticated staff member.
-    // Page-level authorization still protects restricted destinations, but a role
-    // label from legacy records must not make the sidebar appear empty.
-    if (item.category === "main" && !item.executive) return true
     if (item.href === "/dashboard/device-violations") {
       return effectiveRole === "admin"
     }
     if (item.href === "/dashboard/secretary-memos" || item.href === "/dashboard/hr-records") {
       return canAccessMemoConsole(effectiveRole)
     }
+
+    // Core navigation should remain available to every authenticated staff member.
+    // Page-level authorization still protects restricted destinations, but a role
+    // label from legacy records must not make the sidebar appear empty.
+    if (item.category === "main" && !item.executive && !ROLE_RESTRICTED_MAIN_HREFS.has(item.href)) return true
 
     return item.roles.some((role) => {
       const normalizedAllowedRole = role.toLowerCase().replace(/[\s-]+/g, "_").trim()
@@ -628,6 +638,39 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                 )}
                 {adminGroupDefinitions.map((group) => {
                   if (group.items.length === 0) return null
+
+                  // A group only earns a dropdown when it actually has more than one
+                  // item to disclose. With a single item, show that item directly in
+                  // the group's place — no extra click needed to reach it.
+                  if (group.items.length === 1) {
+                    const onlyItem = group.items[0]
+                    const OnlyItemIcon = onlyItem.icon
+                    const isActive = pathname === onlyItem.href
+                    return (
+                      <Link
+                        key={onlyItem.href}
+                        href={onlyItem.href}
+                        title={isCollapsed ? onlyItem.title : undefined}
+                        className={cn(
+                          "group flex items-center rounded-lg text-sm font-medium transition-all duration-200 relative touch-manipulation min-h-[38px] border",
+                          isCollapsed ? "gap-0 px-0 py-2 justify-center" : "gap-2.5 px-3 py-2",
+                          isActive
+                            ? "bg-primary/12 border-primary/30 text-primary"
+                            : "border-transparent text-sidebar-foreground hover:bg-muted/60 hover:border-border hover:text-foreground",
+                        )}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        <OnlyItemIcon className="h-4.5 w-4.5 flex-shrink-0" />
+                        {!isCollapsed && (
+                          <>
+                            <span className="flex-1">{onlyItem.title}</span>
+                            {isActive && <ChevronRight className="h-4 w-4 opacity-70" />}
+                          </>
+                        )}
+                      </Link>
+                    )
+                  }
+
                   const GroupIcon = group.icon
                   const isOpen = isCollapsed || openAdminGroups.includes(group.title)
                   const hasActiveItem = group.items.some((item) => pathname === item.href)

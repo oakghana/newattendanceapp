@@ -35,24 +35,29 @@ export async function POST(request: NextRequest) {
   if (duplicate) return NextResponse.json({ error: "That memo reference is already in use." }, { status: 409 })
 
   const now = new Date().toISOString()
-  // The next status must follow the actual next workflow node, not jump straight
-  // to the final HR Approver stage. Requests that came from the HOD (legacy route)
-  // still need to pass through the HR Leave Office before "hr_office_forwarded"
-  // (that transition is HR Leave Office's own action, triggered when it forwards
-  // to the HR Approver). Only the regional route — where HR Records references
-  // ahead of any office review — advances the status itself.
-  const regionalReferenceOrigins = ["pending_hr_records_reference", "regional_manager_approved"]
-  const alreadyDownstream = ["hr_approved", "approved", "hr_rejected", "hr_office_forwarded"].includes(String(row.status || ""))
+  const currentStatus = String(row.status || "")
+  // The next status must land on a value the destination office's own queue and
+  // action endpoint actually recognize as pending work — never a made-up
+  // intermediate status. For leave, "pending_hr_records_reference" is the only
+  // status that genuinely needs to move once referenced: it is functionally
+  // equivalent to "hod_approved" (HOD already approved it; it was only held back
+  // for the official memo reference), so referencing it must promote it to
+  // "hod_approved" — the exact status HR_OFFICE_PENDING_STATUSES and the HR
+  // Leave Office action route (app/api/leave/planning/hr-office/route.ts) both
+  // gate on. Requests already sitting at a downstream/final status (hod_approved,
+  // hr_office_forwarded, hr_approved, approved, regional_manager_approved, etc.)
+  // are left untouched — a reference correction must never rewind their stage.
   const nextStatus =
     entity === "loan"
       ? "referenced"
-      : regionalReferenceOrigins.includes(String(row.status || ""))
-        ? "referenced"
-        : row.status
+      : currentStatus === "pending_hr_records_reference"
+        ? "hod_approved"
+        : currentStatus
+  const statusIsAdvancing = nextStatus !== currentStatus
   // Only stamp "awaiting HR Leave Office" when the request is genuinely moving into
-  // that queue. Corrections on requests already approved, rejected, or already
-  // forwarded must not be re-stamped into an earlier stage.
-  const nextWorkflowStage = entity === "loan" ? "referenced" : alreadyDownstream ? undefined : "pending_hr_leave_processing"
+  // that queue for the first time. Corrections on requests already approved,
+  // rejected, or already forwarded must not be re-stamped into an earlier stage.
+  const nextWorkflowStage = entity === "loan" ? "referenced" : statusIsAdvancing ? "pending_hr_leave_processing" : undefined
   const update = isCorrection
     ? { [referenceColumn]: reference, updated_at: now }
     : {
