@@ -43,6 +43,66 @@ export function referenceKey(value: unknown) {
 
 export type LeaveRoute = "regional" | "legacy"
 
+export type LeaveWorkflowStep = {
+  key: string
+  label: string
+}
+
+export type LeaveWorkflowView = {
+  route: LeaveRoute
+  currentStage: string | null
+  statusLabel: string
+  steps: LeaveWorkflowStep[]
+}
+
+const LEGACY_WORKFLOW_STEPS: LeaveWorkflowStep[] = [
+  { key: "submitted", label: "Submitted" },
+  { key: "hod_review", label: "HOD Review" },
+  { key: "hr_leave_office", label: "HR Leave Office" },
+  { key: "hr_approval", label: "HR Approval" },
+]
+
+const REGIONAL_WORKFLOW_STEPS: LeaveWorkflowStep[] = [
+  { key: "submitted", label: "Submitted" },
+  { key: "regional_hr_review", label: "Regional HR Office Review" },
+  { key: "regional_manager_approval", label: "Regional Manager Approval" },
+]
+
+export function getLeaveWorkflowView(input: {
+  route?: LeaveRoute | string | null
+  workflowRoute?: LeaveRoute | string | null
+  status?: string | null
+  workflowStage?: string | null
+  leaveType?: string | null
+  locationName?: string | null
+}): LeaveWorkflowView {
+  const route = String(input.workflowRoute || input.route || "").toLowerCase() === "regional" ? "regional" : "legacy"
+  const status = String(input.status || input.workflowStage || "pending_hod_review")
+  const currentStage = input.workflowStage || status
+  const statusLabel: Record<string, string> = {
+    pending_hod_review: "Pending HOD Review",
+    pending_regional_hr_review: "Pending Regional HR Office Review",
+    pending_regional_manager_approval: "Pending Regional Manager Approval",
+    pending_hr_leave_processing: "Awaiting HR Leave Office Adjustment",
+    hr_office_forwarded: "Pending HR Approval",
+    hr_approved: "Approved",
+    approved: "Approved",
+    rejected: "Rejected",
+    withdrawn: "Withdrawn",
+  }
+  return {
+    route,
+    currentStage,
+    statusLabel: statusLabel[status] || status.replace(/_/g, " "),
+    steps: route === "regional" ? REGIONAL_WORKFLOW_STEPS : LEGACY_WORKFLOW_STEPS,
+  }
+}
+
+export function isRegionalWorkflowRequest(input: { workflowRoute?: string | null; route?: string | null; locationName?: string | null; leaveType?: string | null }) {
+  if (String(input.workflowRoute || input.route || "").toLowerCase() === "regional") return true
+  return !isRegionalLeaveException(input.leaveType) && !isExcludedLocation(input.locationName)
+}
+
 export function normalizeLocationName(value: string | null | undefined) {
   return String(value || "").toLowerCase().replace(/[–—]/g, "-").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ")
 }

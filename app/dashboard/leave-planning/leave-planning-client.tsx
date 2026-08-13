@@ -34,6 +34,7 @@ import {
   getWeekendsAndHolidaysInRange,
   calculateWorkingDays,
 } from "@/lib/leave-planning"
+import { getLeaveWorkflowView } from "@/lib/hr-workflow"
 import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays } from "@/lib/leave-policy"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -2035,11 +2036,18 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     const requests = (data.requests || []).filter((r: any) => {
       const status = String(r?.status || "")
       const leaveType = String(r?.leave_type_key || "").toLowerCase()
-      const isRegionalActionableStatus = ["pending_hod_review", "hod_approved", "manager_confirmed"].includes(status)
-      if (!((HR_OFFICE_PENDING_STATUSES as string[]).includes(status) || (isRegionalHr && isRegionalActionableStatus))) return false
-      // Regional HR must never see annual, completed, or already-forwarded requests,
-      // even if a stale response briefly contains them.
-      if (isRegionalHr && (leaveType === "annual" || !["pending_hod_review", "hod_approved", "manager_confirmed"].includes(status))) return false
+      const workflow = getLeaveWorkflowView({
+        route: r?.workflow_route,
+        workflowRoute: r?.workflow_route,
+        status,
+        workflowStage: r?.workflow_stage,
+        leaveType: r?.leave_type_key,
+        locationName: r?.location_name || r?.user?.location_name,
+      })
+      const isRegionalActionableStatus = ["pending_regional_hr_review", "pending_regional_manager_approval", "pending_hod_review", "hod_approved", "manager_confirmed"].includes(status)
+      if (!((HR_OFFICE_PENDING_STATUSES as string[]).includes(status) || (isRegionalHr && workflow.route === "regional" && isRegionalActionableStatus))) return false
+      // Regional HR must only see requests that are actually routed through the regional workflow.
+      if (isRegionalHr && (workflow.route !== "regional" || !isRegionalActionableStatus)) return false
       return true
     })
     
@@ -2051,8 +2059,16 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     // HR Records owns the reference. Keep the persisted reference on the same
     // row consumed by the Regional HR workspace so Memo Details is populated
     // automatically after HR Records saves it.
-    const normalized = String(r.status || "") === "pending_hod_review"
-      ? { ...r, workflow_status: r.status, status: "pending_regional_hr_review" }
+    const workflow = getLeaveWorkflowView({
+      route: r?.workflow_route,
+      workflowRoute: r?.workflow_route,
+      status: r?.status,
+      workflowStage: r?.workflow_stage,
+      leaveType: r?.leave_type_key,
+      locationName: r?.location_name || r?.user?.location_name,
+    })
+    const normalized = workflow.route === "regional" && String(r.status || "") === "pending_hod_review"
+      ? { ...r, workflow_status: r.status, workflow_route: "regional", workflow_stage: "pending_regional_hr_review", status: "pending_regional_hr_review" }
       : r
     return { ...normalized, memo_reference: normalized.memo_reference || normalized.reference_number || "" }
   })
