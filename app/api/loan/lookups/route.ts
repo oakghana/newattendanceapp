@@ -100,7 +100,7 @@ export async function GET(request: NextRequest) {
 
     const { data: profile } = await admin
       .from("user_profiles")
-      .select("id, role, department_id, assigned_location_id, departments(name, code)")
+      .select("id, role, staff_category, department_id, assigned_location_id, departments(name, code)")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -109,6 +109,7 @@ export async function GET(request: NextRequest) {
     const deptCode = (profile as any)?.departments?.code || null
     const departmentId = String((profile as any)?.department_id || "")
     const assignedLocationId = String((profile as any)?.assigned_location_id || "")
+    const staffCategory = String((profile as any)?.staff_category || "").toLowerCase()
 
     if (!canManageLookups(role, deptName, deptCode)) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
@@ -312,9 +313,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const visibleLoanTypes = ["staff", "nsp", "intern", "contract"].includes(role) && staffCategory
+      ? (resolvedLoanTypesRes.data || []).filter((row: any) => {
+          const label = `${row.loan_key || ""} ${row.loan_label || ""} ${row.category || ""}`.toLowerCase()
+          if (/\bjunior\b|_junior\b|\bjr\b/.test(staffCategory)) return !/\bsenior\b|_senior\b|\bmanager\b|_manager\b/.test(label)
+          if (/\bsenior\b|\bsr\b/.test(staffCategory)) return !/\bjunior\b|_junior\b|\bmanager\b|_manager\b/.test(label)
+          if (/\bmanager\b/.test(staffCategory)) return !/\bjunior\b|_junior\b|\bsenior\b|_senior\b/.test(label)
+          return true
+        })
+      : (resolvedLoanTypesRes.data || [])
+
     const uniqueLoanTypes = Array.from(
       new Map(
-        (resolvedLoanTypesRes.data || []).map((row: any) => {
+        visibleLoanTypes.map((row: any) => {
           const key = `${String(row.loan_key || row.loan_label || "").trim().toLowerCase()}|${String(row.category || "").trim().toLowerCase()}`
           return [key, row]
         }),

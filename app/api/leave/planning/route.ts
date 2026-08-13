@@ -1234,6 +1234,7 @@ export async function POST(request: NextRequest) {
       user_signature_data_url,
       maternity_delivery_type,
       delivery_date,
+      medical_report_url,
     } = body
 
     if (!preferred_start_date || !preferred_end_date) {
@@ -1249,8 +1250,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const requestedDays = calculateRequestedDays(preferred_start_date, preferred_end_date)
     const leaveTypeKey = String(leave_type || "annual").toLowerCase()
+    if (leaveTypeKey === "maternity" && preferred_start_date !== delivery_date) {
+      return NextResponse.json({ error: "For maternity leave, the start date must equal the date of delivery." }, { status: 400 })
+    }
+    if (leaveTypeKey === "maternity" && !String(medical_report_url || "").trim()) {
+      return NextResponse.json({ error: "A medical report is mandatory for maternity leave." }, { status: 400 })
+    }
+    const requestedDays = calculateRequestedDays(preferred_start_date, preferred_end_date)
 
     // ── Annual leave: use per-staff entitlement engine ─────────────────────
     // For all other leave types, fall back to policy catalog as before.
@@ -1439,6 +1446,7 @@ export async function POST(request: NextRequest) {
         adjustment_reason: entitlementWarning,
         maternity_delivery_type: leaveTypeKey === "maternity" ? String(maternity_delivery_type) : null,
         delivery_date: leaveTypeKey === "maternity" ? delivery_date : null,
+        medical_report_url: leaveTypeKey === "maternity" ? String(medical_report_url) : null,
       })
       .select("*")
       .single()
@@ -1546,6 +1554,7 @@ export async function PUT(request: NextRequest) {
       user_signature_data_url,
       maternity_delivery_type,
       delivery_date,
+      medical_report_url,
     } = body
 
     if (!id || !preferred_start_date || !preferred_end_date) {
@@ -1579,6 +1588,13 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "This leave request cannot be edited at its current stage." }, { status: 400 })
     }
 
+    const leaveTypeKey = String(leave_type || "annual").toLowerCase()
+    if (leaveTypeKey === "maternity" && preferred_start_date !== delivery_date) {
+      return NextResponse.json({ error: "For maternity leave, the start date must equal the date of delivery." }, { status: 400 })
+    }
+    if (leaveTypeKey === "maternity" && !String(medical_report_url || "").trim()) {
+      return NextResponse.json({ error: "A medical report is mandatory for maternity leave." }, { status: 400 })
+    }
     const requestedDays = calculateRequestedDays(preferred_start_date, preferred_end_date)
     if (requestedDays <= 0) {
       return NextResponse.json({ error: "Invalid leave date range." }, { status: 400 })
@@ -1603,7 +1619,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const leaveTypeKey = String(leave_type || "annual").toLowerCase()
     let entitlementDays: number | null
     if (leaveTypeKey === "maternity") {
       if (!["normal", "cs", "twins", "regular", "cs_twins"].includes(String(maternity_delivery_type || ""))) {
@@ -1699,6 +1714,7 @@ export async function PUT(request: NextRequest) {
       adjustment_reason: entitlementWarningOnUpdate,
       maternity_delivery_type: leaveTypeKey === "maternity" ? String(maternity_delivery_type) : null,
       delivery_date: leaveTypeKey === "maternity" ? delivery_date : null,
+      medical_report_url: leaveTypeKey === "maternity" ? String(medical_report_url) : null,
     }
 
     if (user_signature_mode !== undefined) updatePayload.user_signature_mode = user_signature_mode || "typed"

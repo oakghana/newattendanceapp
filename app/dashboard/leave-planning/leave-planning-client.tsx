@@ -1131,6 +1131,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
   const [leaveType, setLeaveType] = useState("") // Start empty to show placeholder hint
   const [maternityDeliveryType, setMaternityDeliveryType] = useState<string>("normal")
   const [maternityDeliveryDate, setMaternityDeliveryDate] = useState("")
+  const [maternityMedicalReport, setMaternityMedicalReport] = useState<File | null>(null)
+  const [maternityMedicalReportUrl, setMaternityMedicalReportUrl] = useState<string | null>(null)
+  const [uploadingMaternityReport, setUploadingMaternityReport] = useState(false)
   const [reason, setReason] = useState("")
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
   const [myAnnualEntitlement, setMyAnnualEntitlement] = useState<{
@@ -2200,6 +2203,20 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     setSubmitting(true)
     setError(null)
     try {
+      let reportUrl = maternityMedicalReportUrl
+      if (leaveType === "maternity" && maternityMedicalReport) {
+        setUploadingMaternityReport(true)
+        const uploadBody = new FormData()
+        uploadBody.append("file", maternityMedicalReport)
+        uploadBody.append("folder", "maternity-medical-reports")
+        const uploadRes = await fetch("/api/upload", { method: "POST", body: uploadBody })
+        const uploadJson = await uploadRes.json()
+        if (!uploadRes.ok || !uploadJson.url) throw new Error(uploadJson.error || "Medical report upload failed")
+        reportUrl = uploadJson.url
+        setMaternityMedicalReportUrl(reportUrl)
+        setUploadingMaternityReport(false)
+      }
+      if (leaveType === "maternity" && !reportUrl) throw new Error("A medical report is required before maternity leave can be saved.")
       const autoResumptionDate = computeReturnToWorkDate(endDate)
       const res = await fetch("/api/leave/planning", {
         method: editingId ? "PUT" : "POST",
@@ -2215,6 +2232,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
           part_leave_days: leaveType === "part_leave" ? (computedDays || null) : null,
           maternity_delivery_type: leaveType === "maternity" ? maternityDeliveryType : null,
           delivery_date: leaveType === "maternity" ? maternityDeliveryDate : null,
+          medical_report_url: leaveType === "maternity" ? reportUrl : null,
           user_signature_mode: signatureMode,
           user_signature_text: activeSig.text,
           user_signature_data_url: activeSig.dataUrl,
@@ -2242,7 +2260,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
         description: leaveType === "annual" ? `Return-to-work: ${computeReturnToWorkDate(endDate)}` : "Request submitted for HR approval",
       })
   setStartDate(""); setEndDate(""); setReason(""); setEditingId(null)
-  setMaternityDeliveryType("normal"); setMaternityDeliveryDate("")
+  setMaternityDeliveryType("normal"); setMaternityDeliveryDate(""); setMaternityMedicalReport(null); setMaternityMedicalReportUrl(null)
   setLeaveYearPeriod(getDefaultSelectedLeaveYearPeriod())
       setTypedSignature(""); setUploadedSigUrl(null); setDrawnSigUrl(null)
       setActiveTab("my-leaves")
@@ -2251,6 +2269,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
       setError(e instanceof Error ? e.message : "Submission failed")
     } finally {
       setSubmitting(false)
+      setUploadingMaternityReport(false)
     }
   }
 
@@ -2774,15 +2793,20 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Date of Delivery</Label>
-                      <Input type="date" value={maternityDeliveryDate} onChange={(e) => setMaternityDeliveryDate(e.target.value)} className="h-10 bg-background" />
+                      <Input type="date" value={maternityDeliveryDate} onChange={(e) => { const value = e.target.value; setMaternityDeliveryDate(value); setStartDate(value); setEndDate(""); setCalculationResult(null) }} className="h-10 bg-background" required />
                     </div>
-                    <p className="sm:col-span-2 text-xs text-pink-800">Entitlement is calculated from the delivery type above. The old fixed 90-day entitlement is no longer used.</p>
+                    <div className="sm:col-span-2 space-y-2">
+                      <Label htmlFor="maternity-medical-report" className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Medical Report (required)</Label>
+                      <Input id="maternity-medical-report" type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setMaternityMedicalReport(e.target.files?.[0] || null)} className="h-10 bg-background" required />
+                      {maternityMedicalReportUrl && <p className="text-xs text-green-700">Medical report already attached.</p>}
+                      <p className="text-xs text-pink-800">Delivery date becomes the leave start date. Attach the medical report before submitting.</p>
+                    </div>
                   </div>
                 )}
 
                 <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date</Label>
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" />
+                  <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date (Date of Delivery)</Label>
+                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" readOnly={leaveType === "maternity"} disabled={leaveType === "maternity"} />
                   {calculatingEndDate && (
                     <p className="text-xs text-blue-600">Calculating leave duration...</p>
                   )}
@@ -2887,9 +2911,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                 </div>
 
                 <div className="flex gap-3 pt-2">
-                  <Button onClick={submitPlan} disabled={submitting}
+                  <Button onClick={submitPlan} disabled={submitting || uploadingMaternityReport}
                     className="bg-green-700 hover:bg-green-800 text-white">
-                    {submitting ? "Submitting…" : editingId ? "Update Request" : "Submit Application"}
+                    {submitting ? (uploadingMaternityReport ? "Uploading report…" : "Submitting…") : editingId ? "Update Request" : "Submit Application"}
                   </Button>
                   {editingId && (
                     <Button variant="outline" onClick={() => {
