@@ -36,7 +36,7 @@ export async function GET() {
   if (departmentsError) return NextResponse.json({ error: departmentsError.message }, { status: 500 })
 
   const { data: locations, error: locationsError } = locationIds.length
-    ? await admin.from("geofence_locations").select("id, name, code").in("id", locationIds)
+    ? await admin.from("geofence_locations").select("id, name").in("id", locationIds)
     : { data: [], error: null }
   if (locationsError) return NextResponse.json({ error: locationsError.message }, { status: 500 })
 
@@ -54,7 +54,6 @@ export async function GET() {
       staff_category: profile?.role || "Staff",
       department: department?.name || "Department not assigned",
       location_name: location?.name || "Location not assigned",
-      location_code: location?.code || null,
       request_subject: row.reason || row.leave_type_key || row.request_number || row.reference_number || "Staff request",
     }
   }
