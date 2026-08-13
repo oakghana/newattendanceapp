@@ -127,7 +127,7 @@ const navigationItems = [
     title: "Excuse Duty Review",
     href: "/dashboard/excuse-duty-review",
     icon: FileText,
-    roles: ["admin", "regional_manager", "department_head", "director_hr", "manager_hr"],
+    roles: ["admin", "it-admin", "regional_manager", "department_head", "director_hr", "manager_hr"],
     category: "admin",
   },
 
@@ -177,14 +177,14 @@ const navigationItems = [
     title: "Reports & Trends",
     href: "/dashboard/reports",
     icon: BarChart3,
-    roles: ["admin", "regional_manager", "department_head", "director_hr", "manager_hr"],
+    roles: ["admin", "it-admin", "regional_manager", "department_head", "director_hr", "manager_hr"],
     category: "admin",
   },
   {
     title: "Locations",
     href: "/dashboard/locations",
     icon: MapPin,
-    roles: ["admin"],
+    roles: ["admin", "it-admin"],
     category: "admin",
   },
 
@@ -199,21 +199,21 @@ const navigationItems = [
     title: "Warnings Archive",
     href: "/dashboard/warnings-archive",
     icon: Archive,
-    roles: ["admin", "regional_manager", "department_head", "director_hr", "manager_hr"],
+    roles: ["admin", "it-admin", "regional_manager", "department_head", "director_hr", "manager_hr"],
     category: "admin",
   },
   {
     title: "Department Summaries",
     href: "/dashboard/department-summaries",
     icon: TrendingUp,
-    roles: ["admin", "regional_manager", "department_head", "director_hr", "manager_hr"],
+    roles: ["admin", "it-admin", "regional_manager", "department_head", "director_hr", "manager_hr"],
     category: "admin",
   },
   {
     title: "Device Monitoring",
     href: "/dashboard/device-violations",
     icon: ShieldAlert,
-    roles: ["admin"],
+    roles: ["admin", "it-admin"],
     category: "admin",
     subItems: [
       {
@@ -234,7 +234,7 @@ const navigationItems = [
     title: "Weekly Device Sharing",
     href: "/dashboard/weekly-device-sharing",
     icon: ShieldAlert,
-    roles: ["admin"],
+    roles: ["admin", "it-admin"],
     category: "admin",
   },
   {
@@ -255,7 +255,7 @@ const navigationItems = [
     title: "Data Management",
     href: "/dashboard/data-management",
     icon: Upload,
-    roles: ["admin"],
+    roles: ["admin", "it-admin"],
     category: "admin",
   },
   {
@@ -269,21 +269,21 @@ const navigationItems = [
     title: "Check-In Failures",
     href: "/dashboard/checkin-failures",
     icon: AlertTriangle,
-    roles: ["admin"],
+    roles: ["admin", "it-admin"],
     category: "admin",
   },
   {
     title: "Emergency Admin",
     href: "/dashboard/emergency-admin",
     icon: AlertTriangle,
-    roles: ["admin"],
+    roles: ["admin", "it-admin"],
     category: "admin",
   },
   {
     title: "Diagnostics",
     href: "/dashboard/diagnostics",
     icon: Settings,
-    roles: ["admin"],
+    roles: ["admin", "it-admin"],
     category: "admin",
   },
   {
