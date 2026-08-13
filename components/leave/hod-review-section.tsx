@@ -30,6 +30,8 @@ interface LeaveRequest {
   hod_review_status?: string
   created_at?: string
   daysPending?: number
+  staff_location?: { name?: string; code?: string; region_id?: string } | null
+  hod_linkages?: Array<{ id: string; name?: string; employee_id?: string; position?: string; role?: string; email?: string }>
 }
 
 export function HODReviewSection({ userDepartmentId }: HODReviewSectionProps) {
@@ -98,7 +100,7 @@ export function HODReviewSection({ userDepartmentId }: HODReviewSectionProps) {
     }
   }
 
-  const handleReject = async (requestId: string) => {
+  const handleDeny = async (requestId: string) => {
     try {
       const res = await fetch(`/api/leave/requests/${requestId}`, {
         method: 'PATCH',
@@ -106,12 +108,12 @@ export function HODReviewSection({ userDepartmentId }: HODReviewSectionProps) {
         body: JSON.stringify({ status: 'rejected', hod_review_status: 'rejected' }),
       })
 
-      if (!res.ok) throw new Error('Failed to reject')
+      if (!res.ok) throw new Error('Failed to deny')
 
       toast({ title: 'Success', description: 'Leave request rejected' })
       fetchDepartmentRequests()
     } catch (err) {
-      toast({ title: 'Error', description: 'Failed to reject request', variant: 'destructive' })
+      toast({ title: 'Error', description: 'Failed to deny request', variant: 'destructive' })
     }
   }
 
@@ -206,6 +208,24 @@ export function HODReviewSection({ userDepartmentId }: HODReviewSectionProps) {
                 </div>
               </div>
 
+              <div className="mt-4 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm md:grid-cols-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Staff location</p>
+                  <p className="font-medium text-slate-800">
+                    {req.staff_location?.name || 'Location not assigned'}{req.staff_location?.code ? ` (${req.staff_location.code})` : ''}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">HOD linkage</p>
+                  {req.hod_linkages?.length ? req.hod_linkages.map((hod) => (
+                    <p key={hod.id} className="font-medium text-slate-800">
+                      {hod.name || 'Unnamed HOD'}{hod.employee_id ? ` · ${hod.employee_id}` : ''}
+                      {hod.position ? ` · ${hod.position}` : ''}
+                    </p>
+                  )) : <p className="font-medium text-amber-700">No HOD linkage found</p>}
+                </div>
+              </div>
+
               <div className="mt-4 flex gap-2">
                 <Button
                   size="sm"
@@ -219,10 +239,10 @@ export function HODReviewSection({ userDepartmentId }: HODReviewSectionProps) {
                 <Button
                   size="sm"
                   variant="destructive"
-                  onClick={() => handleReject(req.id)}
+                  onClick={() => handleDeny(req.id)}
                 >
                   <XCircle className="h-4 w-4 mr-1" />
-                  Reject
+                  Deny
                 </Button>
               </div>
             </CardContent>

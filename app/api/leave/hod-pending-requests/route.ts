@@ -1,7 +1,7 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     // Initialize Supabase server client
     const supabase = await createClient()
@@ -32,10 +32,11 @@ export async function GET(request: NextRequest) {
     }
 
     const planRequests = requests || []
+    const admin = await createAdminClient()
 
-    // Enrich with user details from unified_user_management
+    // Enrich with user details, staff location, and HOD linkage details.
     const userIds = [...new Set(planRequests.map((r: any) => r.user_id).filter(Boolean))]
-    let userMap: Record<string, any> = {}
+    const userMap: Record<string, any> = {}
     if (userIds.length > 0) {
       const { data: users } = await supabase
         .from('unified_user_management')
@@ -44,6 +45,33 @@ export async function GET(request: NextRequest) {
       if (users) {
         users.forEach((u: any) => { userMap[u.user_id] = u })
       }
+    }
+
+    const profileIds = [...new Set(userIds)]
+    const { data: profiles } = profileIds.length
+      ? await admin.from('user_profiles').select('id, assigned_location_id, region_id').in('id', profileIds)
+      : { data: [] as any[] }
+    const profileMap = new Map((profiles || []).map((profile: any) => [profile.id, profile]))
+    const locationIds = [...new Set((profiles || []).map((profile: any) => profile.assigned_location_id).filter(Boolean))]
+    const { data: locations } = locationIds.length
+      ? await admin.from('locations').select('id, name, code, region_id').in('id', locationIds)
+      : { data: [] as any[] }
+    const locationMap = new Map((locations || []).map((location: any) => [location.id, location]))
+    const { data: linkages } = profileIds.length
+      ? await admin.from('loan_hod_linkages').select('staff_user_id, hod_user_id').in('staff_user_id', profileIds)
+      : { data: [] as any[] }
+    const hodIds = [...new Set((linkages || []).map((link: any) => link.hod_user_id).filter(Boolean))]
+    const { data: hodProfiles } = hodIds.length
+      ? await admin.from('user_profiles').select('id, first_name, last_name, employee_id, position, role, email').in('id', hodIds)
+      : { data: [] as any[] }
+    const hodMap = new Map((hodProfiles || []).map((hod: any) => [hod.id, hod]))
+    const linkageMap = new Map<string, any[]>()
+    for (const link of linkages || []) {
+      const hod = hodMap.get(link.hod_user_id)
+      if (!hod) continue
+      const current = linkageMap.get(link.staff_user_id) || []
+      current.push({ id: hod.id, name: `${hod.first_name || ''} ${hod.last_name || ''}`.trim(), employee_id: hod.employee_id, position: hod.position, role: hod.role, email: hod.email })
+      linkageMap.set(link.staff_user_id, current)
     }
 
     // Calculate days pending and enrich with user details
@@ -70,6 +98,8 @@ export async function GET(request: NextRequest) {
         department_name: user.department_name || 'N/A',
         position: user.position || 'N/A',
         employee_id: user.employee_id || 'N/A',
+        staff_location: locationMap.get(profileMap.get(req.user_id)?.assigned_location_id) || null,
+        hod_linkages: linkageMap.get(req.user_id) || [],
         user_profiles: {
           first_name: (user.full_name || '').split(' ')[0] || '',
           last_name: (user.full_name || '').split(' ').slice(1).join(' ') || '',
