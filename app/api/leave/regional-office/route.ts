@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     }
 
     const normalizedRole = String(userProfile.role || '').toLowerCase().replace(/[- ]/g, '_');
-    const isRegionalHr = normalizedRole === 'regional_hr';
+    const isRegionalHr = ['regional_hr', 'regional_hr_leave_office', 'regional_leave_office'].includes(normalizedRole);
     const isRegionalLoanOffice = normalizedRole === 'regional_loan_office';
     if (!isRegionalHr && !isRegionalLoanOffice && normalizedRole !== 'admin') {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
         adjusted_end_date,
         memo_reference,
         regional_hr_office_user_id,
-        user_profiles!leave_plan_requests_user_id_fkey (
+        user_profiles!leave_plan_requests_user_id_fkey!inner (
           staff_number,
           first_name,
           last_name,
