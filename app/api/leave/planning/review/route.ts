@@ -258,10 +258,9 @@ export async function POST(request: NextRequest) {
     // Approval must not fail because optional memo/signature columns are absent.
     const leavePlanColumns = new Set([
       "status", "workflow_stage", "manager_recommendation", "memo_reference", "updated_at",
-      "memo_generated", "memo_generated_at", "hod_reviewer_id", "hod_reviewed_at",
+      "memo_generated", "memo_generated_at", "hr_approver_id", "hod_reviewer_id", "hod_reviewed_at",
       "hod_decision", "preferred_start_date", "preferred_end_date", "requested_days",
-      "hr_approver_name", "hr_approver_position", "hr_approver_signature_data_url",
-      "hr_signature_data_url", "hr_approver_signature_text", "hr_approved_at", "hr_approval_note",
+      "hr_approver_name", "hr_signature_data_url", "hr_approved_at", "hr_approval_note",
     ])
     for (const key of Object.keys(requestUpdatePayload)) {
       if (!leavePlanColumns.has(key)) delete requestUpdatePayload[key]
@@ -279,10 +278,9 @@ export async function POST(request: NextRequest) {
         .maybeSingle()
 
       requestUpdatePayload.hr_approver_name = signerName || "Regional Manager"
-      requestUpdatePayload.hr_approver_position = (profile as any).position || "Regional Manager"
       const savedSignature = signerSignature?.signature_data_url || (profile as any).signature_data_url || null
-      requestUpdatePayload.hr_approver_signature_data_url = savedSignature
       requestUpdatePayload.hr_signature_data_url = savedSignature
+      requestUpdatePayload.hr_approver_id = user.id
       requestUpdatePayload.hr_approved_at = new Date().toISOString()
       requestUpdatePayload.hr_approval_note = "Approved by the Regional Manager under the regional non-annual leave workflow."
     }
