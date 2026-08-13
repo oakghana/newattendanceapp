@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, Filter, RefreshCw, Eye, BarChart3 } from 'lucide-react';
+import { Download, Filter, RefreshCw, Eye, BarChart3, Printer } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface RegionalLoanOfficeData {
@@ -52,6 +52,22 @@ export function RegionalLoanOfficePanel() {
       console.error('[v0] Loan fetch error:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openLoanMemo = async (loanId: string, print = false) => {
+    try {
+      const response = await fetch('/api/loan/memo-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: loanId }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.path) throw new Error(data.error || 'Unable to generate memo');
+      const memoWindow = window.open(data.path, '_blank', 'noopener,noreferrer');
+      if (print && memoWindow) memoWindow.addEventListener('load', () => memoWindow.print(), { once: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to open loan memo');
     }
   };
 
@@ -192,12 +208,13 @@ export function RegionalLoanOfficePanel() {
                     <th className="px-4 py-2 text-left font-medium">Amount</th>
                     <th className="px-4 py-2 text-left font-medium">Status</th>
                     <th className="px-4 py-2 text-left font-medium">Submitted</th>
+                    <th className="px-4 py-2 text-left font-medium">Memo</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loans.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                      <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                         No loan requests found
                       </td>
                     </tr>
@@ -218,6 +235,18 @@ export function RegionalLoanOfficePanel() {
                           </span>
                         </td>
                         <td className="px-4 py-2">{new Date(loan.submitted_at).toLocaleDateString()}</td>
+                        <td className="px-4 py-2">
+                          {['approved', 'hr_office_approved', 'regional_manager_approved', 'disbursed'].includes(loan.status) && (
+                            <div className="flex items-center gap-1">
+                              <Button size="sm" variant="outline" onClick={() => openLoanMemo(loan.id)} aria-label="View loan memo">
+                                <Eye className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => openLoanMemo(loan.id, true)} aria-label="Print loan memo">
+                                <Printer className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     ))
                   )}

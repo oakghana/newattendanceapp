@@ -114,11 +114,11 @@ export function isExcludedLocation(locationName: string | null | undefined) {
 
 export function isRegionalLeaveException(leaveType: string | null | undefined) {
   const normalized = normalizeLocationName(leaveType).replace(/ leave$/i, "")
-  return normalized === "manager annual" || normalized === "maternity" || normalized === "paternity"
+  return ["manager annual", "manager grade annual", "maternity", "paternity", "part", "part time", "part time leave", "part leave"].includes(normalized)
 }
 
-export function routeLeave(input: { leaveType?: string | null; locationName?: string | null; hasRegionalOffice: boolean }): { route: LeaveRoute; firstStage: string | null; reason?: string } {
-  if (isRegionalLeaveException(input.leaveType) || isExcludedLocation(input.locationName)) {
+export function routeLeave(input: { leaveType?: string | null; locationName?: string | null; hasRegionalOffice: boolean; isManagerGrade?: boolean }): { route: LeaveRoute; firstStage: string | null; reason?: string } {
+  if (input.isManagerGrade || isRegionalLeaveException(input.leaveType) || isExcludedLocation(input.locationName)) {
     return { route: "legacy", firstStage: null, reason: "This leave type or location uses its separate non-regional workflow." }
   }
   if (!input.hasRegionalOffice) {

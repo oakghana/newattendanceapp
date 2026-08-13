@@ -4,7 +4,7 @@ import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays 
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { getNextQccReference } from "@/lib/reference-number"
 import { calculateAnnualLeaveBreakdown } from "@/lib/annual-leave-calculator"
-import { REGIONAL_NON_ANNUAL_STAGES, isAnnualLeave, isRegionalHrLeaveOfficeRole, resolveRegionalHrOffice, routeLeave } from "@/lib/hr-workflow"
+import { isRegionalHrLeaveOfficeRole, resolveRegionalHrOffice, routeLeave } from "@/lib/hr-workflow"
 
 const NON_ANNUAL_REQUIRES_APPROVED_ANNUAL = new Set([
   "sick",
@@ -239,14 +239,18 @@ export async function POST(request: NextRequest) {
     }
 
     const regionalOffice = await resolveRegionalHrOffice(admin, regionId)
+    const profileText = [roleProfile?.role, roleProfile?.staff_category, roleProfile?.position, roleProfile?.rank].filter(Boolean).join(" ").toLowerCase()
+    const isManagerGrade = /(^|\s|_)(manager|management|director|executive|head)(\s|_|$)/i.test(profileText)
     const leaveRoute = routeLeave({
       leaveType: leaveTypeKey,
       locationName,
       hasRegionalOffice: Boolean(regionalOffice),
+      isManagerGrade,
     })
+    const isRegionalWorkflow = leaveRoute.route === "regional" && Boolean(leaveRoute.firstStage)
     const initialStatus = shouldAutoApprove
       ? "approved"
-      : leaveRoute.route === "regional_non_annual" && leaveRoute.firstStage
+      : isRegionalWorkflow
         ? leaveRoute.firstStage
         : "pending"
 
@@ -317,11 +321,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Regional non-annual requests start with Regional HR Office adjustment and must not notify HOD.
-    const isRegionalNonAnnual = leaveRoute.route === "regional_non_annual" && Boolean(leaveRoute.firstStage)
+    // Regional requests start with Regional HR Office adjustment and must not notify HOD.
     const isHrLeaveOffice = normalizedRole === "hr_leave_office" || isRegionalHrLeaveOfficeRole(normalizedRole)
 
-    if (!shouldAutoApprove && !isHrLeaveOffice && !isRegionalNonAnnual) {
+    if (!shouldAutoApprove && !isHrLeaveOffice && !isRegionalWorkflow) {
       try {
         const hodIds: string[] = []
 
@@ -345,11 +348,9 @@ export async function POST(request: NextRequest) {
             .eq("id", user.id)
             .maybeSingle()
 
-          // Regional non-annual leave must go to the Regional Manager first.
-          // The Regional HR Office role is the regional leave-office owner, while the
-          // Regional Manager linkage determines the staff population it serves.
-          const isNonAnnualLeave = leaveTypeKey !== "annual" && leaveTypeKey !== "annual_leave"
-          if (isNonAnnualLeave && (staffProfile as any)?.region_id) {
+          // Regional leave, including annual leave, is reviewed by the Regional HR Office first.
+          // Exceptions (manager-grade annual, maternity, paternity, and part leave) stay on the legacy workflow.
+          if (isRegionalWorkflow && (staffProfile as any)?.region_id) {
             const { data: regionalManagers } = await admin
               .from("user_profiles")
               .select("id")
@@ -490,7 +491,7 @@ export async function POST(request: NextRequest) {
         console.warn("HOD leave notification failed:", hodErr)
       }
     }
-    if (!shouldAutoApprove && !isHrLeaveOffice && isRegionalNonAnnual && regionalOffice?.user_id) {
+    if (!shouldAutoApprove && !isHrLeaveOffice && isRegionalWorkflow && regionalOffice?.user_id) {
       const regionalHrId = regionalOffice.user_id
       const message = `Regional leave request requires HR Office adjustment (${start_date} to ${end_date}).`
       await admin.from("leave_notifications").insert({
