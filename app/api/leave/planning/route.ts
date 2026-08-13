@@ -8,8 +8,6 @@ import {
   isHrApproverRole,
   isHrLeaveOfficeRole,
   isRegionalHrOfficerRole,
-  isHrDepartment,
-  isManagerRole,
   isHodRole,
   isStaffRole,
   HR_OFFICE_PENDING_STATUSES,
@@ -19,7 +17,7 @@ import {
   resolveEntitlementFromProfile,
   buildAnnualLeaveEntitlementSummary,
 } from "@/lib/annual-leave-entitlement"
-import { resolveMemoVisibilityScope, resolveRegionalHrOffice, routeLeave } from "@/lib/hr-workflow"
+import { resolveRegionalHrOffice, routeLeave } from "@/lib/hr-workflow"
 
 function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
   const year = referenceDate.getFullYear()
@@ -743,29 +741,21 @@ export async function GET(request: NextRequest) {
         officeQuery = officeQuery.eq("is_archived", false)
       }
 
-      // Regional HR handles only non-annual leave for staff within their own
-      // region/location — annual leave and out-of-region requests stay with
-      // the national HR Leave Office.
+      // Regional HR is the first stage for every regional leave type,
+      // including Annual Leave. The excluded leave types and non-regional
+      // locations are routed separately at submission time.
       if (isRegionalHr) {
         officeQuery = officeQuery
-          .neq("leave_type_key", "annual")
-          .in("status", ["pending_hod_review", "hod_approved", "manager_confirmed"])
+          .eq("workflow_route", "regional")
+          .in("status", ["pending_regional_hr_review", "pending_regional_manager_approval"])
+          .eq("regional_hr_office_user_id", user.id)
       }
 
-      let { data: requests, error: reqError } = await officeQuery
+      const { data: requests, error: reqError } = await officeQuery
 
       if (reqError) {
         if (isSchemaIssue(reqError)) return buildDegradedModeResponse("hr_office", getSchemaIssueMessage(reqError))
         throw reqError
-      }
-
-      if (isRegionalHr) {
-        const visibility = await resolveMemoVisibilityScope(admin, user.id, role)
-        const allowedStaffIds = new Set(visibility.staffIds || [])
-        requests = (requests || []).filter((r: any) => {
-          const staffId = String(r.user_id || r.user?.id || "")
-          return allowedStaffIds.has(staffId)
-        })
       }
 
       const { data: myRequests } = await admin
