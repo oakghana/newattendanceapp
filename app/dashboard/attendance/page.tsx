@@ -9,7 +9,6 @@ import { LocationPreviewCard } from "@/components/attendance/location-preview-ca
 import { LeaveStatusCard } from "@/components/leave/leave-status-card"
 import { StaffStatusBadge } from "@/components/attendance/staff-status-badge"
 import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
-import { GlobalWarningsToasts } from "@/components/leave/global-warnings-toasts"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -133,9 +132,6 @@ export default function AttendancePage() {
 
   return (
     <div className="space-y-8">
-      {/* Global Warning Toasts */}
-      <GlobalWarningsToasts />
-
       {/* Leave Resumption Badge */}
       <div className="px-1">
         <LeaveResumptionBadge />

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
-import { canManageWorkflowMappings, hrRecordsCanReference, isHrRecordsRole, normalizeReference, normalizeWorkflowRole, referenceKey } from "@/lib/hr-workflow"
+import { hrRecordsCanReference, isHrRecordsRole, normalizeReference, normalizeWorkflowRole, referenceKey } from "@/lib/hr-workflow"
 
 const MIN_REFERENCE_LENGTH = 3
 
@@ -11,8 +11,8 @@ export async function POST(request: NextRequest) {
   const admin = await createAdminClient()
   const { data: actor } = await admin.from("user_profiles").select("role").eq("id", user.id).maybeSingle()
   const role = normalizeWorkflowRole(actor?.role)
-  if (!isHrRecordsRole(role) && !canManageWorkflowMappings(role)) {
-    return NextResponse.json({ error: "HR Records access required." }, { status: 403 })
+  if (!isHrRecordsRole(role)) {
+    return NextResponse.json({ error: "Only the HR Records office can manage memo references." }, { status: 403 })
   }
 
   const body = await request.json()
@@ -27,8 +27,8 @@ export async function POST(request: NextRequest) {
   const { data: row, error: fetchError } = await admin.from(table).select(`id, status, memo_reference_locked, ${referenceColumn}`).eq("id", id).maybeSingle()
   if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 })
   if (!row) return NextResponse.json({ error: "Request not found." }, { status: 404 })
-  if (row.memo_reference_locked) return NextResponse.json({ error: "This official memo reference is locked and cannot be edited or removed." }, { status: 409 })
-  if (!hrRecordsCanReference(row.status)) return NextResponse.json({ error: `Request is not ready for HR Records reference assignment (${row.status || "unknown"}).` }, { status: 409 })
+  const isCorrection = Boolean(row.memo_reference_locked)
+  if (!isCorrection && !hrRecordsCanReference(row.status)) return NextResponse.json({ error: `Request is not ready for HR Records reference assignment (${row.status || "unknown"}).` }, { status: 409 })
 
   const { data: duplicate, error: duplicateError } = await admin.from(table).select("id").neq("id", id).ilike(referenceColumn, reference).limit(1).maybeSingle()
   if (duplicateError) return NextResponse.json({ error: duplicateError.message }, { status: 500 })
@@ -36,16 +36,18 @@ export async function POST(request: NextRequest) {
 
   const now = new Date().toISOString()
   const nextStatus = entity === "loan" ? "referenced" : "hr_office_forwarded"
-  const update = {
-    [referenceColumn]: reference,
-    memo_reference_locked: true,
-    memo_reference_locked_at: now,
-    memo_reference_locked_by: user.id,
-    workflow_stage: entity === "loan" ? "referenced" : "pending_hr_leave_processing",
-    status: nextStatus,
-    updated_at: now,
-  }
-  const { data: updated, error: updateError } = await admin.from(table).update(update).eq("id", id).eq("memo_reference_locked", false).select("id, status, workflow_stage, memo_reference_locked").maybeSingle()
+  const update = isCorrection
+    ? { [referenceColumn]: reference, updated_at: now }
+    : {
+        [referenceColumn]: reference,
+        memo_reference_locked: true,
+        memo_reference_locked_at: now,
+        memo_reference_locked_by: user.id,
+        workflow_stage: entity === "loan" ? "referenced" : "pending_hr_leave_processing",
+        status: nextStatus,
+        updated_at: now,
+      }
+  const { data: updated, error: updateError } = await admin.from(table).update(update).eq("id", id).select("id, status, workflow_stage, memo_reference_locked").maybeSingle()
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
   if (!updated) return NextResponse.json({ error: "Reference was locked by another action. Refresh and try again." }, { status: 409 })
 

@@ -2400,11 +2400,11 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     const selectedExec = hrExecutives.find(e => e.id === forwardToHrExecutiveId)
     const execName = selectedExec ? `${selectedExec.name} (${selectedExec.role_label})` : "HR Approvers"
 
-    const refNum = String(officeRefNumber[requestId] || "").trim()
-    if (!refNum) {
-      toast({ title: "Reference Number Required", description: "Please enter a memo reference number (Our Ref No.) before forwarding.", variant: "destructive" })
-      return
-    }
+  const refNum = String((data?.requests || []).find((request: any) => request.id === requestId)?.memo_reference || "").trim()
+  if (!refNum) {
+  toast({ title: "HR Records action required", description: "HR Records must assign and release the official memo reference before HR Leave Office can continue.", variant: "destructive" })
+  return
+  }
 
     const confirmForward = window.confirm(
       `Please confirm the adjusted leave values before forwarding:\n\n` +
@@ -4167,52 +4167,17 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                             {!isRegionalHr && <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
                               <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Details</p>
 
-                              {/* Our Ref No. — required before forwarding */}
-                              <div className="space-y-1">
-                                <div className="flex items-center justify-between">
-                                  <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                                    Our Ref No. <span className="text-red-500">*</span>
-                                  </Label>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      // Auto-generate reference number based on staff category
-                                      fetch(`/api/leave/planning/staff-category-ref-prefixes`, {
-                                        method: "POST",
-                                        headers: { "Content-Type": "application/json" },
-                                        body: JSON.stringify({ staff_category: req.staff_category || "junior" }),
-                                      })
-                                        .then((res) => res.json())
-                                        .then((data) => {
-                                          if (data.reference_number) {
-                                            setOfficeRefNumber((p) => ({ ...p, [req.id]: data.reference_number }))
-                                            toast({ title: "Reference Number Generated", description: `Auto-generated: ${data.reference_number}` })
-                                          } else {
-                                            toast({ title: "Error", description: data.error || "Could not generate reference number", variant: "destructive" })
-                                          }
-                                        })
-                                        .catch((err) => {
-                                          console.error("[v0] Error generating ref:", err)
-                                          toast({ title: "Error", description: "Failed to generate reference number", variant: "destructive" })
-                                        })
-                                    }}
-                                    className="text-[11px] px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded border border-blue-300 font-medium transition-colors"
-                                  >
-                                    Auto-Generate
-                                  </button>
-                                </div>
+                              {/* Official reference is owned by HR Records */}
+                              <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                                <Label className="text-xs font-semibold text-amber-900">Official memo reference</Label>
                                 <Input
-                                  value={officeRefNumber[req.id] || ""}
-                                  onChange={(e) => setOfficeRefNumber((p) => ({ ...p, [req.id]: e.target.value }))}
-                                  placeholder="e.g. QCC/HRD/ANL/2025/2026/01"
-                                  className={`h-9 bg-white font-mono text-sm ${!officeRefNumber[req.id]?.trim() ? "border-red-300 focus:ring-red-300" : "border-green-400"}`}
+                                  value={req.memo_reference || ""}
+                                  readOnly
+                                  disabled
+                                  placeholder="Awaiting HR Records reference"
+                                  className="h-9 bg-muted font-mono text-sm"
                                 />
-                                {!officeRefNumber[req.id]?.trim() && (
-                                  <p className="text-[10px] text-red-600">Required — this reference number will appear on the printed memo. Click Auto-Generate to create from staff category prefix.</p>
-                                )}
-                                {officeRefNumber[req.id]?.trim() && (
-                                  <p className="text-[10px] text-green-600">✓ Reference number set — will appear on memo</p>
-                                )}
+                                <p className="text-[10px] text-amber-800">HR Leave Office cannot enter or generate this number. HR Records must assign and release it first.</p>
                               </div>
 
                               {/* CC List */}

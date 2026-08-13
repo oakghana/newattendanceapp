@@ -72,14 +72,6 @@ export async function POST(request: NextRequest) {
       forwarded_to_hr_approver_id,
     } = body
 
-    // Reference number is mandatory before forwarding to HR Executive
-    if (!memo_reference || String(memo_reference).trim().length < 3) {
-      return NextResponse.json(
-        { error: "A memo reference number (Our Ref No.) is required before forwarding to HR Executive." },
-        { status: 400 },
-      )
-    }
-
     // Resolve the HR executive ID from whichever field was sent
     const resolvedHrApproverId = forwarded_to_hr_approver_id || hr_approver_id || null
 
@@ -103,6 +95,11 @@ export async function POST(request: NextRequest) {
 
     if (fetchError || !leaveRequest) {
       return NextResponse.json({ error: "Leave request not found." }, { status: 404 })
+    }
+
+    const releasedReference = String((leaveRequest as any).memo_reference || "").trim()
+    if (!(leaveRequest as any).memo_reference_locked || releasedReference.length < 3 || String(memo_reference || "").trim() !== releasedReference) {
+      return NextResponse.json({ error: "HR Records must assign and release the official memo reference before HR Leave Office can continue." }, { status: 409 })
     }
 
     const currentStatus = String((leaveRequest as any).status || "")
