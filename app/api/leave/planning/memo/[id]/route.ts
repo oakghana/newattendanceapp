@@ -400,6 +400,12 @@ export async function GET(
       return NextResponse.json({ error: "Leave request not found" }, { status: 404 })
     }
 
+    const leaveWorkflowRoute = String((leaveRequest as any).workflow_route || "").toLowerCase()
+    const isRegionalLeave = leaveWorkflowRoute === "regional" || leaveWorkflowRoute === "regional_hr"
+    if (!isRegionalLeave && !String((leaveRequest as any).memo_reference || "").trim()) {
+      return NextResponse.json({ error: "Memo reference pending HR Records. Preview and download will be available after HR Records assigns the official reference." }, { status: 409 })
+    }
+
     // Load the latest carryover balance because older requests may not have the
     // HR-entered outstanding days copied onto leave_plan_requests yet.
     const { data: outstandingBalance } = await admin
