@@ -10,12 +10,14 @@ function isSchemaIssue(error: any) {
   return code === "PGRST205" || code === "PGRST108" || code === "42P01" || code === "42703" || message.includes("does not exist")
 }
 
-function schemaIssueResponse() {
+function schemaIssueResponse(error?: any) {
+  const code = error?.code || "unknown"
+  const message = String(error?.message || "Database schema error")
   return NextResponse.json(
     {
-      error:
-        "Leave planning tables are not visible in API schema cache. Run scripts 038_leave_planning_2026_2027_workflow.sql and 039_leave_policy_catalog.sql, then reload Supabase API schema cache.",
-      needsMigration: true,
+      error: `Leave approval database error (${code}): ${message}`,
+      databaseCode: code,
+      needsMigration: false,
       needsSchemaCacheRefresh: true,
     },
     { status: 503 },
@@ -179,14 +181,14 @@ export async function POST(request: NextRequest) {
 
     if (updateReviewError) {
       if (isSchemaIssue(updateReviewError)) {
-        return schemaIssueResponse()
+        return schemaIssueResponse(updateReviewError)
       }
       throw updateReviewError
     }
 
     const { data: leavePlan, error: leavePlanError } = await admin
       .from("leave_plan_requests")
-      .select("id, user_id, preferred_start_date, preferred_end_date, entitlement_days")
+      .select("id, user_id, preferred_start_date, preferred_end_date, entitlement_days, workflow_route, leave_type_key, assigned_location_name, requested_days")
       .eq("id", leave_plan_request_id)
       .single()
 
@@ -252,6 +254,19 @@ export async function POST(request: NextRequest) {
       ...(mustUseHrRecordsReference ? { workflow_stage: "pending_hr_records_reference" } : {}),
       manager_recommendation: mergedRecommendations || null,
       updated_at: new Date().toISOString(),
+    }
+
+    // Only send columns that are part of the leave-planning table contract.
+    // Approval must not fail because optional memo/signature columns are absent.
+    const leavePlanColumns = new Set([
+      "status", "workflow_stage", "manager_recommendation", "updated_at",
+      "memo_generated", "memo_generated_at", "hod_reviewer_id", "hod_reviewed_at",
+      "hod_decision", "preferred_start_date", "preferred_end_date", "requested_days",
+      "hr_approver_name", "hr_approver_position", "hr_approver_signature_data_url",
+      "hr_signature_data_url", "hr_approver_signature_text", "hr_approved_at", "hr_approval_note",
+    ])
+    for (const key of Object.keys(requestUpdatePayload)) {
+      if (!leavePlanColumns.has(key)) delete requestUpdatePayload[key]
     }
 
     if (isRegionalManagerApprovalComplete) {
@@ -356,7 +371,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, status: isRegionalManagerApprovalComplete ? "approved" : nextStatus })
   } catch (error) {
     if (isSchemaIssue(error)) {
-      return schemaIssueResponse()
+      return schemaIssueResponse(error)
     }
     console.error("[v0] Leave planning manager review error:", error)
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to review leave planning request." }, { status: 500 })
