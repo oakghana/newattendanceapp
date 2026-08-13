@@ -2367,6 +2367,10 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     const request = hrOfficeQueue.find(r => r.id === requestId)
     const leaveType = String(request?.leave_type_key || "").toLowerCase()
     const isAnnualLeave = leaveType === "annual"
+    const outstandingDays = Number(officeOutstandingDays[requestId] || 0)
+    const annualAdjustmentRemark = isAnnualLeave && outstandingDays > 0
+      ? `${String(rsn || "Annual leave adjustment").trim()} ${outstandingDays} outstanding day(s) added to entitlement.`
+      : String(rsn || "").trim()
 
     if (!adjStart || !adjEnd) { toast({ title: "Adjusted dates required", variant: "destructive" }); return }
     
@@ -2395,10 +2399,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
           body: JSON.stringify({
             leave_plan_request_id: requestId,
             action: "forward_to_regional_manager",
-            recommendation: String(rsn || "Regional HR adjustment completed before final Regional Manager approval.").trim(),
+            recommendation: annualAdjustmentRemark || "Regional HR adjustment completed before final Regional Manager approval.",
             adjusted_preferred_start_date: adjStart,
             adjusted_preferred_end_date: adjEnd,
-            memo_reference: String(officeRefNumber[requestId] || "").trim(),
             adjustment_breakdown: {
               outstanding_days: Number(officeOutstandingDays[requestId] || 0),
               public_holiday_days: Number(officeHolidayDays[requestId] || 0),
@@ -4210,18 +4213,17 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                             <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
                               <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Details</p>
 
-                              <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                              {!isRegionalHr && <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
                                 <Label className="text-xs font-semibold text-emerald-900">Official memo reference</Label>
                                 <Input
-                                  value={isRegionalHr ? (officeRefNumber[req.id] || req.memo_reference || "") : (req.memo_reference || "")}
-                                  onChange={isRegionalHr ? (e) => setOfficeRefNumber((p) => ({ ...p, [req.id]: e.target.value })) : undefined}
-                                  readOnly={!isRegionalHr}
-                                  disabled={!isRegionalHr}
-                                  placeholder={isRegionalHr ? "Enter Regional HR memo reference" : "Awaiting HR Records reference"}
+                                  value={req.memo_reference || ""}
+                                  readOnly
+                                  disabled
+                                  placeholder="Awaiting HR Records reference"
                                   className="h-9 bg-white font-mono text-sm"
                                 />
-                                <p className="text-[10px] text-emerald-800">{isRegionalHr ? "Regional HR owns this reference. Enter it before forwarding to the Regional Manager." : "Automatically assigned by HR Records. HR Office users cannot edit or generate this reference."}</p>
-                              </div>
+                                <p className="text-[10px] text-emerald-800">Automatically assigned by HR Records for non-regional leave.</p>
+                              </div>}
 
                               {/* CC List */}
                               <div className="space-y-1">
@@ -4260,10 +4262,6 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
 
                             <Button onClick={() => {
           if (isRegionalHr) {
-            if (!String(officeRefNumber[req.id] || req.memo_reference || "").trim()) {
-              toast({ title: "Regional memo reference required", description: "Enter the Regional HR memo reference before forwarding.", variant: "destructive" })
-              return
-            }
             submitHrOfficeReview(req.id, "regional-manager")
                                 return
                               }

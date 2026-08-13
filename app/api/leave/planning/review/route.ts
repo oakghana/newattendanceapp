@@ -88,8 +88,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Recommendation is required for change request or rejection." }, { status: 400 })
     }
 
-    if (isRegionalForward && (!adjusted_preferred_start_date || !adjusted_preferred_end_date || !String(memo_reference || "").trim())) {
-      return NextResponse.json({ error: "Adjusted start date, end date, and Regional HR memo reference are required before forwarding to the Regional Manager." }, { status: 400 })
+    if (isRegionalForward && (!adjusted_preferred_start_date || !adjusted_preferred_end_date)) {
+      return NextResponse.json({ error: "Adjusted start date and end date are required before forwarding to the Regional Manager." }, { status: 400 })
     }
 
     const isRegionalManagerApproval = role === "regional_manager"
@@ -208,6 +208,7 @@ export async function POST(request: NextRequest) {
     let nextStartDate = leavePlan.preferred_start_date
     let nextEndDate = leavePlan.preferred_end_date
     let nextRequestedDays = calculateRequestedDays(nextStartDate, nextEndDate)
+    let effectiveEntitlement = Number(leavePlan.entitlement_days || 0)
 
     if (isRegionalForward || decision === "recommend_change") {
       nextStartDate = adjusted_preferred_start_date
@@ -219,8 +220,8 @@ export async function POST(request: NextRequest) {
       }
 
       const entitlementDays = Number(leavePlan.entitlement_days || 0)
-      const outstandingDays = Math.max(0, Number(adjustment_breakdown?.outstanding_days || 0))
-      const effectiveEntitlement = entitlementDays + outstandingDays
+      const outstandingDays = Number(adjustment_breakdown?.outstanding_days || 0)
+      effectiveEntitlement = entitlementDays + outstandingDays
       if (effectiveEntitlement > 0 && nextRequestedDays > effectiveEntitlement) {
         return NextResponse.json(
           {
@@ -261,7 +262,8 @@ export async function POST(request: NextRequest) {
       ...(isRegionalManagerApprovalComplete ? { workflow_stage: "completed", memo_generated: true, memo_generated_at: new Date().toISOString(), hr_approver_id: user.id } : {}),
       ...(mustUseHrRecordsReference ? { workflow_stage: "pending_hr_records_reference" } : {}),
       manager_recommendation: mergedRecommendations || null,
-      ...(isRegionalForward ? { memo_reference: String(memo_reference).trim() } : {}),
+      ...(isRegionalForward && isAnnualLeave((leavePlan as any).leave_type_key) ? { entitlement_days: effectiveEntitlement } : {}),
+      ...(isRegionalForward && String(memo_reference || "").trim() ? { memo_reference: String(memo_reference).trim() } : {}),
       updated_at: new Date().toISOString(),
     }
 
