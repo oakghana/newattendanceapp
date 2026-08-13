@@ -290,7 +290,7 @@ const navigationItems = [
     title: "Settings",
     href: "/dashboard/settings",
     icon: Settings,
-    roles: ["admin", "it-admin", "regional_manager", "department_head", "staff", "hr_leave_office"],
+    roles: ALL_STAFF_ROLES,
     category: "settings",
   },
 ]
@@ -430,15 +430,18 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
   const effectiveRole = normalizedRole === "audit_staff" ? "staff" : normalizedRole
 
   const filteredNavItems = allNavigationItems.filter((item) => {
-    // Defense-in-depth: keep device monitoring strictly admin-only in the UI.
-  if (item.href === "/dashboard/device-violations") {
-  return effectiveRole === "admin"
-  }
-  if (item.href === "/dashboard/secretary-memos" || item.href === "/dashboard/hr-records") {
-  return canAccessMemoConsole(effectiveRole)
-  }
+    // Core navigation should remain available to every authenticated staff member.
+    // Page-level authorization still protects restricted destinations, but a role
+    // label from legacy records must not make the sidebar appear empty.
+    if (item.category === "main" && !item.executive) return true
+    if (item.href === "/dashboard/device-violations") {
+      return effectiveRole === "admin"
+    }
+    if (item.href === "/dashboard/secretary-memos" || item.href === "/dashboard/hr-records") {
+      return canAccessMemoConsole(effectiveRole)
+    }
 
-  return item.roles.some((role) => {
+    return item.roles.some((role) => {
       const normalizedAllowedRole = role.toLowerCase().replace(/[\s-]+/g, "_").trim()
       return normalizedAllowedRole === effectiveRole
     })
