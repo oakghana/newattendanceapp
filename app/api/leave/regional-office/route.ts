@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase/server';
+import { createAdminClient, createClientAndGetUser } from '@/lib/supabase/server';
 
 /**
  * GET /api/leave/regional-office/leaves
@@ -9,7 +9,8 @@ import { createAdminClient } from '@/lib/supabase/server';
 export async function GET(request: NextRequest) {
   try {
     const admin = await createAdminClient();
-    const userId = request.headers.get('x-user-id');
+    const { user: sessionUser } = await createClientAndGetUser();
+    const userId = sessionUser?.id || request.headers.get('x-user-id');
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
