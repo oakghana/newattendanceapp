@@ -58,7 +58,7 @@ export function routeLeave(input: { leaveType?: string | null; locationName?: st
     return { route: "legacy", firstStage: null }
   }
   if (!input.hasRegionalOffice) {
-    return { route: "regional_non_annual", firstStage: null, reason: "No active Regional HR Leave Office is assigned for this region." }
+    return { route: "regional_non_annual", firstStage: REGIONAL_NON_ANNUAL_STAGES.hrRecordsReference, reason: "No active Regional HR Leave Office is assigned for this region; HR Records must reference the memo first." }
   }
   return { route: "regional_non_annual", firstStage: REGIONAL_NON_ANNUAL_STAGES.regionalHrReview }
 }

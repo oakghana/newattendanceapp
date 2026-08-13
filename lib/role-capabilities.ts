@@ -23,7 +23,7 @@ export function isAdminRole(role?: string | null): boolean {
 
 export function canAccessMemoConsole(role?: string | null): boolean {
   const normalized = normalizeAppRole(role)
-  return ["admin", "secretary", "regional_hr", "managing_director"].includes(normalized)
+  return ["admin", "secretary", "hr_records", "hr_records_officer", "hr_records_manager", "regional_hr", "managing_director"].includes(normalized)
 }
 
 export function canEditProfile(role?: string | null): boolean {

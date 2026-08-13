@@ -75,7 +75,7 @@ const ALL_STAFF_ROLES = [
   "admin", "it-admin", "regional_manager", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "department_head",
   "staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "director_hr", "manager_hr",
   "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern",
-  "contract", "managing_director", "secretary",
+  "contract", "managing_director", "secretary", "hr_records", "hr_records_officer", "hr_records_manager",
 ]
 
 const navigationItems = [
@@ -150,10 +150,18 @@ const navigationItems = [
   },
   // ── Secretary oversight ──────────────────────────────────────────────────
   {
+    title: "HR Records & Memo Audit",
+    href: "/dashboard/hr-records",
+    icon: ScrollText,
+    roles: ["hr_records", "hr_records_officer", "hr_records_manager", "secretary", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "admin"],
+    category: "admin",
+    executive: true,
+  },
+  {
     title: "Memo Console",
     href: "/dashboard/secretary-memos",
     icon: ScrollText,
-    roles: ["secretary", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "admin"],
+    roles: ["secretary", "hr_records", "hr_records_officer", "hr_records_manager", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "admin"],
     category: "main",
     executive: true,
   },
@@ -426,7 +434,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
   if (item.href === "/dashboard/device-violations") {
   return effectiveRole === "admin"
   }
-  if (item.href === "/dashboard/secretary-memos") {
+  if (item.href === "/dashboard/secretary-memos" || item.href === "/dashboard/hr-records") {
   return canAccessMemoConsole(effectiveRole)
   }
 
@@ -442,7 +450,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
     {
       title: "Leave & Reviews",
       icon: Calendar,
-      hrefs: ["/dashboard/leave-management", "/dashboard/excuse-duty-review", "/dashboard/hr-excuse-duty"],
+      hrefs: ["/dashboard/leave-management", "/dashboard/excuse-duty-review", "/dashboard/hr-excuse-duty", "/dashboard/hr-records"],
     },
     {
       title: "Reports & Monitoring",
