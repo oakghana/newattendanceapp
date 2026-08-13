@@ -161,7 +161,7 @@ export function getStatusLabel(status: string): string {
     manager_rejected: "Rejected by Manager",
     hod_approved: "HOD Approved — Awaiting HR Records Reference",
     manager_confirmed: "Manager Confirmed — Awaiting HR Records Reference",
-    hr_office_forwarded: "HR Office Reviewed — Awaiting HR Approval",
+    hr_office_forwarded: "With HR Leave Office — Pending Adjustment & Memo",
     hr_approved: "Approved",
     hr_rejected: "Rejected by HR",
     approved: "Approved by Regional Manager",
