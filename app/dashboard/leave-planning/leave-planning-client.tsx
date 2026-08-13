@@ -3822,9 +3822,10 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                   const isExpanded = officeExpanded === req.id
                   const adjStart = officeAdjStart[req.id] || req.preferred_start_date || ""
                   const adjEnd = officeAdjEnd[req.id] || req.preferred_end_date || ""
-                                  const holidayD = Number(officeHolidayDays[req.id] || 0)
-                                  const travelD = Number(officeTravelDays[req.id] || 0)
-                                  const priorD = Number(officePriorDays[req.id] || 0)
+  const holidayD = Number(officeHolidayDays[req.id] || 0)
+  const travelD = Number(officeTravelDays[req.id] || 0)
+  const priorD = Number(officePriorDays[req.id] || 0)
+  const outstandingD = Number(officeOutstandingDays[req.id] || 0)
                                   // Only the dedicated Day Adjustment Breakdown fields affect totals.
                                   // “Reason for Adjustment” is confirmation text, never numeric input.
                                   // Base days = working days (excl. weekends & holidays) from from-date to to-date
@@ -3835,8 +3836,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                                   // Public holidays and prior leave are deductions;
                                   // travelling days are additions.
                                   const finalDays = Math.max(0, baseDays - holidayD - priorD + travelD)
-                                  const generatedReason = [
-                                    holidayD > 0 ? `${holidayD} public holiday day(s) deducted` : "",
+  const generatedReason = [
+  outstandingD > 0 ? `${outstandingD} outstanding leave day(s) added` : "",
+  holidayD > 0 ? `${holidayD} public holiday day(s) deducted` : "",
                                     priorD > 0 ? `${priorD} day(s) given/already enjoyed deducted` : "",
                                     travelD > 0 ? `${travelD} travelling day(s) added` : "",
                                   ].filter(Boolean).join("; ")
