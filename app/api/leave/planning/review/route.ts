@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (profileError && isSchemaIssue(profileError)) {
-      return schemaIssueResponse()
+      return schemaIssueResponse(profileError)
     }
 
     if (profileError || !profile) {
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
         .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle()
-      if (registryError && isSchemaIssue(registryError)) return schemaIssueResponse()
+      if (registryError && isSchemaIssue(registryError)) return schemaIssueResponse(registryError)
 
       const registryHasSignature =
         Boolean(String((registrySignature as any)?.signature_data_url || "").trim()) ||
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
       .eq("reviewer_id", user.id)
 
     if (reviewError && isSchemaIssue(reviewError)) {
-      return schemaIssueResponse()
+      return schemaIssueResponse(reviewError)
     }
 
     if (reviewError || !reviews || reviews.length === 0) {
@@ -161,6 +161,7 @@ export async function POST(request: NextRequest) {
         const { error: assignmentError } = await admin.from("leave_plan_reviews").insert({
           leave_plan_request_id,
           reviewer_id: user.id,
+          reviewer_role: role,
           decision: "pending",
         })
         if (assignmentError) throw assignmentError
@@ -188,12 +189,12 @@ export async function POST(request: NextRequest) {
 
     const { data: leavePlan, error: leavePlanError } = await admin
       .from("leave_plan_requests")
-      .select("id, user_id, preferred_start_date, preferred_end_date, entitlement_days, workflow_route, leave_type_key, assigned_location_name, requested_days")
+      .select("id, user_id, preferred_start_date, preferred_end_date, entitlement_days, workflow_route, leave_type_key, requested_days")
       .eq("id", leave_plan_request_id)
       .single()
 
     if (leavePlanError && isSchemaIssue(leavePlanError)) {
-      return schemaIssueResponse()
+      return schemaIssueResponse(leavePlanError)
     }
 
     if (leavePlanError || !leavePlan) {
@@ -231,7 +232,7 @@ export async function POST(request: NextRequest) {
 
     if (allReviewsError) {
       if (isSchemaIssue(allReviewsError)) {
-        return schemaIssueResponse()
+        return schemaIssueResponse(allReviewsError)
       }
       throw allReviewsError
     }
@@ -314,7 +315,7 @@ export async function POST(request: NextRequest) {
 
     if (requestUpdateError) {
       if (isSchemaIssue(requestUpdateError)) {
-        return schemaIssueResponse()
+        return schemaIssueResponse(requestUpdateError)
       }
       throw requestUpdateError
     }
@@ -374,6 +375,11 @@ export async function POST(request: NextRequest) {
       return schemaIssueResponse(error)
     }
     console.error("[v0] Leave planning manager review error:", error)
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to review leave planning request." }, { status: 500 })
+    return NextResponse.json({
+      error: `Leave approval failed: ${String((error as any)?.message || error || "Unknown database error")}`,
+      databaseCode: (error as any)?.code || null,
+      hint: (error as any)?.hint || null,
+      details: (error as any)?.details || null,
+    }, { status: 500 })
   }
 }
