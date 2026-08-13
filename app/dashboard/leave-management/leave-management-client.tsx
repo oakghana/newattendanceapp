@@ -1395,8 +1395,8 @@ export function LeaveManagementClient({
                             {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                             Approve
                           </Button>}
-                          {regionalHrReviewPending && <p className="mt-1 text-xs text-amber-700">Waiting for Regional HR Office review</p>}
-  {regionalHrMode ? <Button
+                          {regionalHrReviewPending && !regionalHrMode && <p className="mt-1 text-xs text-amber-700">Waiting for Regional HR Office review</p>}
+  {regionalHrMode && regionalHrReviewPending ? <Button
   onClick={() => void handleForwardToRegionalManager(notification.id)}
   disabled={processingId === notification.id}
   size="sm"
