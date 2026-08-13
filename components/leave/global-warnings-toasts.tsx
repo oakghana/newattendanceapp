@@ -184,11 +184,16 @@ export function GlobalWarningsToasts() {
   if (loading || warnings.length === 0) return null
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 max-w-md space-y-3 max-h-96 overflow-y-auto">
+    <div
+      aria-live="polite"
+      aria-atomic="false"
+      className="pointer-events-none fixed inset-x-4 bottom-4 z-[110] flex max-h-[min(28rem,calc(100vh-2rem))] flex-col items-stretch gap-3 overflow-y-auto sm:left-auto sm:right-4 sm:w-[min(32rem,calc(100vw-2rem))]"
+    >
       {warnings.map((warning) => (
         <Alert
           key={warning.id}
-          className={`border-l-4 shadow-lg animate-in slide-in-from-bottom-2 ${
+          role={warning.severity === 'critical' ? 'alert' : 'status'}
+          className={`pointer-events-auto w-full shrink-0 border-l-4 p-4 pr-10 shadow-xl animate-in slide-in-from-bottom-2 ${
             warning.severity === 'critical'
               ? 'bg-red-50 dark:bg-red-950 border-red-500'
               : warning.severity === 'high'
@@ -209,7 +214,7 @@ export function GlobalWarningsToasts() {
               )}
             </div>
             <div className="flex-1">
-              <AlertTitle className={`font-bold ${
+              <AlertTitle className={`text-base font-bold leading-6 ${
                 warning.severity === 'critical'
                   ? 'text-red-900 dark:text-red-100'
                   : warning.severity === 'high'
@@ -218,13 +223,13 @@ export function GlobalWarningsToasts() {
               }`}>
                 {warning.title}
               </AlertTitle>
-              <AlertDescription className={
+              <AlertDescription className={`text-sm leading-6 ${
                 warning.severity === 'critical'
                   ? 'text-red-800 dark:text-red-200 mt-1'
                   : warning.severity === 'high'
                     ? 'text-orange-800 dark:text-orange-200 mt-1'
                     : 'text-amber-800 dark:text-amber-200 mt-1'
-              }>
+              }`}>
                 {warning.message}
               </AlertDescription>
               <div className="flex gap-2 mt-3">
