@@ -321,19 +321,13 @@ async function downloadSingleMemo(req: LeaveRequest) {
 
 // ── Compact list row (approved view) ─────────────────────────────────────────
 
-function ApprovedRow({ req, onView }: { req: LeaveRequest; onView: (r: LeaveRequest) => void }) {
-  const [downloading, setDownloading] = useState(false)
+function ApprovedRow({ req }: { req: LeaveRequest }) {
   const staffName = req.user_profiles?.full_name || req.staff_name || 'N/A'
   const dept = req.user_profiles?.department_name || '—'
   const leaveType = leaveTypeLabel(req.leave_type_key || req.leave_type)
   const startDate = req.adjusted_start_date || req.start_date || req.preferred_start_date
   const endDate = req.adjusted_end_date || req.end_date || req.preferred_end_date
   const approver = req.hr_approver_name || '—'
-
-  const handleDownload = async () => {
-    setDownloading(true)
-    try { await downloadSingleMemo(req) } finally { setDownloading(false) }
-  }
 
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50 transition-colors text-[12.5px]">
@@ -345,29 +339,6 @@ function ApprovedRow({ req, onView }: { req: LeaveRequest; onView: (r: LeaveRequ
       <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">{fmtShort(startDate)}</td>
       <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap hidden sm:table-cell">{fmtShort(endDate)}</td>
       <td className="py-2.5 px-3 text-slate-600 hidden lg:table-cell text-[11.5px]">{approver}</td>
-      <td className="py-2.5 px-3">
-        <div className="flex items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 px-2 text-[11.5px] text-slate-600 hover:text-slate-900"
-            onClick={() => onView(req)}
-          >
-            <FileText className="w-3.5 h-3.5 mr-1" />
-            View
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 px-2 text-[11.5px] border-[#1a6e1a] text-[#1a6e1a] hover:bg-green-50"
-            onClick={handleDownload}
-            disabled={downloading}
-          >
-            <Download className="w-3.5 h-3.5 mr-1" />
-            {downloading ? '...' : 'PDF'}
-          </Button>
-        </div>
-      </td>
     </tr>
   )
 }
@@ -777,12 +748,11 @@ export function RequestDetailsModal({ open, onOpenChange, title, filter }: Reque
                   <th className="py-2.5 px-3">Start</th>
                   <th className="py-2.5 px-3 hidden sm:table-cell">End</th>
                   <th className="py-2.5 px-3 hidden lg:table-cell">Approved By</th>
-                  <th className="py-2.5 px-3">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {requests.map((req, idx) => (
-                  <ApprovedRow key={req.id || idx} req={req} onView={setSelectedReq} />
+                  <ApprovedRow key={req.id || idx} req={req} />
                 ))}
               </tbody>
             </table>
