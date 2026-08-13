@@ -30,6 +30,14 @@ export function GlobalWarningsToasts() {
   const [warnings, setWarnings] = useState<Warning[]>([])
   const [dismissedWarnings, setDismissedWarnings] = useLocalStorage<string[]>('dismissed-warnings', [])
   const [loading, setLoading] = useState(true)
+  const [collapsedWarnings, setCollapsedWarnings] = useState<string[]>([])
+
+  const isCollapsed = (warning: Warning) => collapsedWarnings.includes(warning.id)
+  const toggleCollapsed = (warningId: string) => {
+    setCollapsedWarnings((current) => current.includes(warningId)
+      ? current.filter((id) => id !== warningId)
+      : [...current, warningId])
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -197,7 +205,7 @@ export function GlobalWarningsToasts() {
         <Alert
           key={warning.id}
           role={warning.severity === 'critical' ? 'alert' : 'status'}
-          className={`pointer-events-auto w-full shrink-0 border-l-4 p-4 pr-10 shadow-xl animate-in slide-in-from-bottom-2 ${
+          className={`pointer-events-auto w-full shrink-0 border-l-4 p-3 pr-10 shadow-xl animate-in slide-in-from-bottom-2 ${
             warning.severity === 'critical'
               ? 'bg-red-50 dark:bg-red-950 border-red-500'
               : warning.severity === 'high'
@@ -218,7 +226,8 @@ export function GlobalWarningsToasts() {
               )}
             </div>
             <div className="flex-1">
-              <AlertTitle className={`text-base font-bold leading-6 ${
+              <div className="flex items-start justify-between gap-2">
+                <AlertTitle className={`text-sm font-bold leading-5 ${
                 warning.severity === 'critical'
                   ? 'text-red-900 dark:text-red-100'
                   : warning.severity === 'high'
@@ -226,8 +235,19 @@ export function GlobalWarningsToasts() {
                     : 'text-amber-900 dark:text-amber-100'
               }`}>
                 {warning.title}
-              </AlertTitle>
-              <AlertDescription className={`text-sm leading-6 ${
+                </AlertTitle>
+                <button
+                  type="button"
+                  onClick={() => toggleCollapsed(warning.id)}
+                  aria-expanded={!isCollapsed(warning)}
+                  aria-label={isCollapsed(warning) ? `Expand ${warning.title}` : `Minimize ${warning.title}`}
+                  className="rounded-md px-2 py-1 text-xs font-medium text-foreground/70 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
+                >
+                  {isCollapsed(warning) ? 'Expand' : 'Minimize'}
+                </button>
+              </div>
+              {!isCollapsed(warning) && <div>
+                <AlertDescription className={`text-sm leading-6 ${
                 warning.severity === 'critical'
                   ? 'text-red-800 dark:text-red-200 mt-1'
                   : warning.severity === 'high'
@@ -261,7 +281,8 @@ export function GlobalWarningsToasts() {
                     Dismiss
                   </Button>
                 )}
-              </div>
+                </div>
+              </div>}
             </div>
             {warning.dismissible && (
               <button
