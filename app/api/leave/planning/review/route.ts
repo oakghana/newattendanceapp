@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { leave_plan_request_id, action, recommendation, adjusted_preferred_start_date, adjusted_preferred_end_date } = body
+    const { leave_plan_request_id, action, recommendation, adjusted_preferred_start_date, adjusted_preferred_end_date, memo_reference } = body
 
     if (!leave_plan_request_id || !action) {
       return NextResponse.json({ error: "leave_plan_request_id and action are required." }, { status: 400 })
@@ -84,8 +84,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Recommendation is required for change request or rejection." }, { status: 400 })
     }
 
-    if (isRegionalForward && (!adjusted_preferred_start_date || !adjusted_preferred_end_date)) {
-      return NextResponse.json({ error: "Adjusted start and end dates are required before forwarding to the Regional Manager." }, { status: 400 })
+    if (isRegionalForward && (!adjusted_preferred_start_date || !adjusted_preferred_end_date || !String(memo_reference || "").trim())) {
+      return NextResponse.json({ error: "Adjusted start date, end date, and Regional HR memo reference are required before forwarding to the Regional Manager." }, { status: 400 })
     }
 
     const isRegionalManagerApproval = role === "regional_manager"
@@ -132,10 +132,6 @@ export async function POST(request: NextRequest) {
       if (targetRequestError || !targetRequest) {
         return NextResponse.json({ error: "Leave request not found." }, { status: 404 })
       }
-      if (String(targetRequest.leave_type_key || "annual").toLowerCase() === "annual") {
-        return NextResponse.json({ error: "Regional HR can only process non-annual leave requests." }, { status: 403 })
-      }
-
       const targetProfile = Array.isArray(targetRequest.user_profiles) ? targetRequest.user_profiles[0] : targetRequest.user_profiles
       const sameScope =
         (profile.assigned_location_id && targetProfile?.assigned_location_id === profile.assigned_location_id) ||
@@ -241,13 +237,14 @@ export async function POST(request: NextRequest) {
       ...(isRegionalManagerApprovalComplete ? { workflow_stage: "completed", memo_generated: true, memo_generated_at: new Date().toISOString() } : {}),
       ...(mustUseHrRecordsReference ? { workflow_stage: "pending_hr_records_reference" } : {}),
       manager_recommendation: mergedRecommendations || null,
+      ...(isRegionalForward ? { memo_reference: String(memo_reference).trim() } : {}),
       updated_at: new Date().toISOString(),
     }
 
     // Only send columns that are part of the leave-planning table contract.
     // Approval must not fail because optional memo/signature columns are absent.
     const leavePlanColumns = new Set([
-      "status", "workflow_stage", "manager_recommendation", "updated_at",
+      "status", "workflow_stage", "manager_recommendation", "memo_reference", "updated_at",
       "memo_generated", "memo_generated_at", "hod_reviewer_id", "hod_reviewed_at",
       "hod_decision", "preferred_start_date", "preferred_end_date", "requested_days",
       "hr_approver_name", "hr_approver_position", "hr_approver_signature_data_url",

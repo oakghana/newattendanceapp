@@ -2394,6 +2394,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
             recommendation: String(rsn || "Regional HR adjustment completed before final Regional Manager approval.").trim(),
             adjusted_preferred_start_date: adjStart,
             adjusted_preferred_end_date: adjEnd,
+            memo_reference: String(officeRefNumber[requestId] || "").trim(),
           }),
         })
         const json = await res.json()
@@ -4197,17 +4198,17 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                             <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
                               <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Details</p>
 
-                              {/* Official reference is owned by HR Records and is immutable for every HR Office role. */}
                               <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
                                 <Label className="text-xs font-semibold text-emerald-900">Official memo reference</Label>
                                 <Input
-                                  value={req.memo_reference || ""}
-                                  readOnly
-                                  disabled
-                                  placeholder="Awaiting HR Records reference"
-                                  className="h-9 bg-muted font-mono text-sm"
+                                  value={isRegionalHr ? (officeRefNumber[req.id] || req.memo_reference || "") : (req.memo_reference || "")}
+                                  onChange={isRegionalHr ? (e) => setOfficeRefNumber((p) => ({ ...p, [req.id]: e.target.value })) : undefined}
+                                  readOnly={!isRegionalHr}
+                                  disabled={!isRegionalHr}
+                                  placeholder={isRegionalHr ? "Enter Regional HR memo reference" : "Awaiting HR Records reference"}
+                                  className="h-9 bg-white font-mono text-sm"
                                 />
-                                <p className="text-[10px] text-emerald-800">Automatically assigned by HR Records. HR Office users cannot edit or generate this reference.</p>
+                                <p className="text-[10px] text-emerald-800">{isRegionalHr ? "Regional HR owns this reference. Enter it before forwarding to the Regional Manager." : "Automatically assigned by HR Records. HR Office users cannot edit or generate this reference."}</p>
                               </div>
 
                               {/* CC List */}
@@ -4222,8 +4223,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                                 />
                               </div>
 
-                              {/* Forward To HR Executive */}
-                              <div className="space-y-1">
+                              {!isRegionalHr && <div className="space-y-1">
                                 <Label className="text-xs font-semibold text-blue-700">Forward To (HR Executive) <span className="text-red-500">*</span></Label>
                                 <Select
                                   value={selectedHrExecutive[req.id] || ""}
@@ -4243,12 +4243,16 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                                     ))}
                                   </SelectContent>
                                 </Select>
-                              </div>
+                              </div>}
                             </div>
 
                             <Button onClick={() => {
-                              if (isRegionalHr) {
-                                submitHrOfficeReview(req.id, "regional-manager")
+          if (isRegionalHr) {
+            if (!String(officeRefNumber[req.id] || req.memo_reference || "").trim()) {
+              toast({ title: "Regional memo reference required", description: "Enter the Regional HR memo reference before forwarding.", variant: "destructive" })
+              return
+            }
+            submitHrOfficeReview(req.id, "regional-manager")
                                 return
                               }
                               const persistedReference = String(req.memo_reference || req.reference_number || officeRefNumber[req.id] || "").trim()
