@@ -141,8 +141,10 @@ export function LeaveManagementClient({
   "hr_office_forwarded",
   "pending_regional_hr_office_review",
   "pending_regional_hr_review",
-  "regional_hr_office_review",
-  ])
+      "regional_hr_office_review",
+      "pending_regional_manager_approval",
+      "regional_hr_approved",
+    ])
     const approvedStatuses = new Set(["approved", "hr_approved"])
     const editableStatuses = new Set([
       "pending",

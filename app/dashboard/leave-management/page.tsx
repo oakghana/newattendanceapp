@@ -93,13 +93,12 @@ export default async function LeaveManagementPage() {
           .from("leave_plan_requests")
           .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id, region_id)")
           .in("user_id", regionalStaffIds)
-          .neq("leave_type_key", "annual")
-          .in("status", isRegionalManager ? ["pending_regional_manager_approval"] : ["pending_hod_review", "pending_regional_hr_review", "pending_hr_review", "pending_regional_manager_approval"])
+          .in("status", isRegionalManager ? ["pending_regional_manager_approval"] : ["pending_hod_review", "pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review", "pending_hr_review", "pending_regional_manager_approval"])
           .order("created_at", { ascending: false })
           .limit(100)
         const regionalLocationIds = Array.from(new Set((regionalRequests || []).map((request: any) => request.user_profiles?.assigned_location_id).filter(Boolean)))
         const { data: regionalLocations } = regionalLocationIds.length
-          ? await admin.from("geofence_locations").select("id, name, code").in("id", regionalLocationIds)
+          ? await admin.from("geofence_locations").select("id, name").in("id", regionalLocationIds)
           : { data: [] }
         const regionalLocationMap = new Map((regionalLocations || []).map((location: any) => [location.id, location]))
         const reviewerStaffIds = (regionalRequests || []).map((request: any) => request.user_id).filter(Boolean)
@@ -115,6 +114,8 @@ export default async function LeaveManagementPage() {
         managerNotifications = (regionalRequests || []).map((request: any) => ({
           id: request.id,
           status: request.status,
+          requester_name: `${request.user_profiles?.first_name || ""} ${request.user_profiles?.last_name || ""}`.trim(),
+          requester_role: "staff",
           staff_location_name: regionalLocationMap.get(request.user_profiles?.assigned_location_id)?.name || null,
           staff_location_code: regionalLocationMap.get(request.user_profiles?.assigned_location_id)?.code || null,
           hod_name: (() => { const hod = regionalLinkageMap.get(request.user_id); return hod ? `${hod.first_name || ""} ${hod.last_name || ""}`.trim() : null })(),
