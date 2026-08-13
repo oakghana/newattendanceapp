@@ -47,6 +47,7 @@ interface StaffMember {
   is_active: boolean
   department_id?: string
   assigned_location_id?: string
+  region_id?: string | null
   date_of_appointment?: string | null
   years_of_service?: number | string | null
   contact_number?: string | null
@@ -121,6 +122,10 @@ export function StaffManagement() {
 
   const [currentUserRole, setCurrentUserRole] = useState<string>("staff")
   const [currentUserLocationId, setCurrentUserLocationId] = useState<string | null>(null)
+  const normalizedCurrentUserRole = String(currentUserRole).trim().toLowerCase().replace(/[-\s]+/g, "_")
+  const isAdministrator = ["admin", "administrator"].includes(normalizedCurrentUserRole)
+  const isItAdmin = ["it_admin", "itadmin"].includes(normalizedCurrentUserRole)
+  const canManageStaffLinks = isAdministrator || isItAdmin
 
   // Calculate years of service based on date of appointment
   const calculateYearsOfService = (dateStr: string): number | string => {
@@ -341,7 +346,7 @@ export function StaffManagement() {
         })
         fetchStaff()
         // Only Administrators manage HOD assignments from Staff Management.
-        if (currentUserRole === "admin" && result.data) {
+        if (isAdministrator && result.data) {
           openHodLinkDialog(result.data)
         }
       } else {
@@ -588,16 +593,48 @@ export function StaffManagement() {
         resMHR.json().then((d: any) => d.data || []),
         resDHR.json().then((d: any) => d.data || []),
       ])
-      // Deduplicate by id and sort by name
-      const all = [...dh, ...rm, ...mhr, ...dhr]
+      const normalizeLocation = (value: unknown) =>
+        String(value || "")
+          .toLowerCase()
+          .replace(/[()]/g, "")
+          .replace(/[^a-z0-9]+/g, " ")
+          .trim()
+          .replace(/\s+/g, " ")
+
+      const headOfficeLocations = [
+        "cwc commodity",
+        "qcc head office",
+        "tema port",
+        "tema research",
+        "tema training school",
+        "nsawam archive center",
+        "head office swanzy arcade",
+      ]
+      const staffLocationId = member.assigned_location_id
+      const staffLocationName = normalizeLocation(member.geofence_locations?.name)
+      const isHeadOfficeLocation = headOfficeLocations.some((location) => staffLocationName.includes(location))
+      const isRegionalStaff = member.role === "regional_manager" || !isHeadOfficeLocation
+      const sameLocation = (candidate: StaffMember) =>
+        Boolean(staffLocationId && candidate.assigned_location_id === staffLocationId)
+
+      // Regional staff see same-location Regional Managers first. Department Heads
+      // are only valid for the approved head-office locations.
+      const all = [
+        ...(isRegionalStaff ? rm.filter(sameLocation) : []),
+        ...(isHeadOfficeLocation ? dh : []),
+        ...mhr,
+        ...dhr,
+      ]
       const seen = new Set<string>()
       const unique = all.filter((s) => {
         if (seen.has(s.id)) return false
         seen.add(s.id)
         return true
-      }).sort((a, b) =>
-        `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
-      )
+      }).sort((a, b) => {
+        const regionalPriority = Number(b.role === "regional_manager") - Number(a.role === "regional_manager")
+        if (regionalPriority !== 0) return regionalPriority
+        return `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
+      })
       setHodCandidates(unique)
     } catch {
       setHodCandidates([])
@@ -707,22 +744,24 @@ export function StaffManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="regional_manager">Regional Manager</SelectItem>
-                  <SelectItem value="it-admin">IT-Admin</SelectItem>
-                  <SelectItem value="department_head">Department Head</SelectItem>
-                  <SelectItem value="audit_staff">Audit Staff</SelectItem>
                   <SelectItem value="accounts">Accounts</SelectItem>
-                  <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>
-                  <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>
                   <SelectItem value="accounts_loan_office">Accounts Loan Office</SelectItem>
-                  <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>
-                  <SelectItem value="manager_hr">Manager HR</SelectItem>
-                  <SelectItem value="director_hr">Director HR</SelectItem>
-                  <SelectItem value="staff">Staff</SelectItem>
-                  <SelectItem value="nsp">NSP</SelectItem>
-                  <SelectItem value="intern">Intern</SelectItem>
+                  <SelectItem value="audit_staff">Audit Staff</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="contract">Contract</SelectItem>
+                  <SelectItem value="department_head">Department Head</SelectItem>
+                  <SelectItem value="director_hr">Director HR</SelectItem>
+                  <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>
+                  <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>
+                  <SelectItem value="hr_records">HR Records Office</SelectItem>
+                  <SelectItem value="intern">Intern</SelectItem>
+                  <SelectItem value="it-admin">IT Admin</SelectItem>
+                  <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>
+                  <SelectItem value="manager_hr">Manager HR</SelectItem>
+                  <SelectItem value="nsp">NSP</SelectItem>
+                  <SelectItem value="regional_hr">Regional HR Officer</SelectItem>
+                  <SelectItem value="regional_manager">Regional Manager</SelectItem>
+                  <SelectItem value="staff">Staff</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -893,7 +932,7 @@ export function StaffManagement() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {currentUserRole === "it-admin" ? (
+                            {isItAdmin ? (
                               // IT-Admin may only create limited roles
                               <>
                                 <SelectItem value="staff">Staff</SelectItem>
@@ -903,29 +942,27 @@ export function StaffManagement() {
                               </>
                             ) : (
                               <>
-                                <SelectItem value="staff">Staff</SelectItem>
+                                {isAdministrator && <SelectItem value="accounts">Accounts</SelectItem>}
+                                {isAdministrator && <SelectItem value="accounts_executive">Accounts Executive</SelectItem>}
                                 <SelectItem value="audit_staff">Audit Staff</SelectItem>
-                                <SelectItem value="department_head">Department Head</SelectItem>
-                                {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="accounts_loan_office">Accounts Loan Office</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
-                                {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
-                                  <SelectItem value="it-admin">IT Admin</SelectItem>
-                                )}
-                                {currentUserRole === "admin" && <SelectItem value="admin">Admin</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="managing_director">Managing Director</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="hr_executive">HR Executive</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="accounts_executive">Accounts Executive</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="secretary">Secretary</SelectItem>}
-                                <SelectItem value="nsp">NSP</SelectItem>
-                                <SelectItem value="intern">Intern</SelectItem>
+                                {isAdministrator && <SelectItem value="admin">Admin</SelectItem>}
                                 <SelectItem value="contract">Contract</SelectItem>
+                                <SelectItem value="department_head">Department Head</SelectItem>
+                                {isAdministrator && <SelectItem value="director_hr">Director HR</SelectItem>}
+                                {isAdministrator && <SelectItem value="hr_executive">HR Executive</SelectItem>}
+                                {isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
+                                {isAdministrator && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
+                                {isAdministrator && <SelectItem value="hr_records">HR Records Office</SelectItem>}
+                                <SelectItem value="intern">Intern</SelectItem>
+                                {canManageStaffLinks && <SelectItem value="it-admin">IT Admin</SelectItem>}
+                                {isAdministrator && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
+                                {isAdministrator && <SelectItem value="manager_hr">Manager HR</SelectItem>}
+                                {isAdministrator && <SelectItem value="managing_director">Managing Director</SelectItem>}
+                                <SelectItem value="nsp">NSP</SelectItem>
+                                {isAdministrator && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
+                                {isAdministrator && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
+                                {isAdministrator && <SelectItem value="secretary">Secretary</SelectItem>}
+                                <SelectItem value="staff">Staff</SelectItem>
                               </>
                             )}
                           </SelectContent>
@@ -1163,7 +1200,7 @@ export function StaffManagement() {
                         <SelectValue placeholder={editingStaff.role || "Select Role"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {currentUserRole === "it-admin" ? (
+                        {isItAdmin ? (
                           <>
                             <SelectItem value="staff">Staff</SelectItem>
                             <SelectItem value="nsp">NSP</SelectItem>
@@ -1172,29 +1209,27 @@ export function StaffManagement() {
                           </>
                         ) : (
                           <>
-                            <SelectItem value="staff">Staff</SelectItem>
+                            {isAdministrator && <SelectItem value="accounts">Accounts</SelectItem>}
+                            {isAdministrator && <SelectItem value="accounts_executive">Accounts Executive</SelectItem>}
                             <SelectItem value="audit_staff">Audit Staff</SelectItem>
-                            <SelectItem value="department_head">Department Head</SelectItem>
-                            {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="regional_hr_officer">Regional HR Officer</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="accounts_loan_office">Accounts Loan Office</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
-                            {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
-                              <SelectItem value="it-admin">IT Admin</SelectItem>
-                            )}
-                            {currentUserRole === "admin" && <SelectItem value="admin">Admin</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="managing_director">Managing Director</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="hr_executive">HR Executive</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="accounts_executive">Accounts Executive</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="secretary">Secretary</SelectItem>}
-                            <SelectItem value="nsp">NSP</SelectItem>
-                            <SelectItem value="intern">Intern</SelectItem>
+                            {isAdministrator && <SelectItem value="admin">Admin</SelectItem>}
                             <SelectItem value="contract">Contract</SelectItem>
+                            <SelectItem value="department_head">Department Head</SelectItem>
+                            {isAdministrator && <SelectItem value="director_hr">Director HR</SelectItem>}
+                            {isAdministrator && <SelectItem value="hr_executive">HR Executive</SelectItem>}
+                            {isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
+                            {isAdministrator && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
+                            {isAdministrator && <SelectItem value="hr_records">HR Records Office</SelectItem>}
+                            <SelectItem value="intern">Intern</SelectItem>
+                            {canManageStaffLinks && <SelectItem value="it-admin">IT Admin</SelectItem>}
+                            {isAdministrator && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
+                            {isAdministrator && <SelectItem value="manager_hr">Manager HR</SelectItem>}
+                            {isAdministrator && <SelectItem value="managing_director">Managing Director</SelectItem>}
+                            <SelectItem value="nsp">NSP</SelectItem>
+                            {isAdministrator && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
+                            {isAdministrator && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
+                            {isAdministrator && <SelectItem value="secretary">Secretary</SelectItem>}
+                            <SelectItem value="staff">Staff</SelectItem>
                           </>
                         )}
                       </SelectContent>
@@ -1284,7 +1319,7 @@ export function StaffManagement() {
                   <Button variant="outline" onClick={() => setEditingStaff(null)}>
                     Cancel
                   </Button>
-                  {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
+                  {canManageStaffLinks && (
                     <Button
                       variant="outline"
                       onClick={() => {
@@ -1423,7 +1458,7 @@ export function StaffManagement() {
                             onClick={() => setEditingStaff({ ...member, role: displayRole(member.role) })}
                             className="h-8 w-8 p-0 hover:bg-primary/10 hover:border-primary/20"
                             disabled={
-                              currentUserRole === "it-admin" && (displayRole(member.role) === "admin" || displayRole(member.role) === "it-admin")
+                              isItAdmin && (displayRole(member.role) === "admin" || displayRole(member.role) === "it-admin")
                             }
                           >
                             <Edit className="h-3 w-3" />
@@ -1442,12 +1477,12 @@ export function StaffManagement() {
                             onClick={() => handleDeactivateStaff(member.id)}
                             className="h-8 w-8 p-0 hover:bg-destructive/10 hover:border-destructive/20"
                             disabled={
-                              currentUserRole === "it-admin" && (member.role === "admin" || member.role === "it-admin")
+                              isItAdmin && (member.role === "admin" || member.role === "it-admin")
                             }
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>
-                          {currentUserRole === "admin" && (
+                          {canManageStaffLinks && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -1495,7 +1530,11 @@ export function StaffManagement() {
           <DialogHeader>
             <DialogTitle>Manage Staff HOD Assignments</DialogTitle>
             <DialogDescription>
-              Select one or more Department Heads or Regional Managers for <strong>{hodLinkStaff?.first_name} {hodLinkStaff?.last_name}</strong>. Uncheck a selected HOD to remove that assignment.
+              {hodLinkStaff && (hodLinkStaff.geofence_locations?.name ? `Location: ${hodLinkStaff.geofence_locations.name}. ` : "")}
+              {hodLinkStaff && hodCandidates.some((candidate) => candidate.role === "regional_manager")
+                ? "Regional Managers in the staff member’s location are shown first. "
+                : "Department Heads are shown only for approved head-office locations. "}
+              Select one or more HODs for <strong>{hodLinkStaff?.first_name} {hodLinkStaff?.last_name}</strong>. Uncheck a selected HOD to remove that assignment.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">

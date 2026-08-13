@@ -1,8 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params
     const supabase = await createAdminClient()
     const { leave_type_label, entitlement_days, is_active } = await req.json()
 
@@ -37,7 +38,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         entitlement_days,
         is_active,
       })
-      .eq("id", params.id)
+      .eq("id", id)
       .select()
       .single()
 
@@ -52,8 +53,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params
     const supabase = await createAdminClient()
 
     // Check authorization
@@ -83,7 +85,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     const { error } = await supabase
       .from("leave_types")
       .delete()
-      .eq("id", params.id)
+      .eq("id", id)
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 })

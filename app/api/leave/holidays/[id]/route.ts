@@ -1,8 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params
     const admin = await createAdminClient()
     const { holiday_date, holiday_name } = await req.json()
 
@@ -19,7 +20,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         holiday_name,
         updated_at: new Date().toISOString()
       })
-      .eq("id", params.id)
+      .eq("id", id)
       .select()
       .single()
 
@@ -35,15 +36,16 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params
     const admin = await createAdminClient()
 
     // Delete holiday
     const { error } = await admin
       .from("ghana_public_holidays")
       .delete()
-      .eq("id", params.id)
+      .eq("id", id)
 
     if (error) {
       console.error("[v0] Error deleting holiday:", error)

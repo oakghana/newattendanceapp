@@ -7,17 +7,19 @@ import {
   isHrPlanningRole,
   isHrApproverRole,
   isHrLeaveOfficeRole,
+  isRegionalHrOfficerRole,
   isHrDepartment,
   isManagerRole,
   isHodRole,
   isStaffRole,
   HR_OFFICE_PENDING_STATUSES,
 } from "@/lib/leave-planning"
-import { DEFAULT_LEAVE_TYPES } from "@/lib/leave-policy"
+import { DEFAULT_LEAVE_TYPES, getMaternityEntitlementDays } from "@/lib/leave-policy"
 import {
   resolveEntitlementFromProfile,
   buildAnnualLeaveEntitlementSummary,
 } from "@/lib/annual-leave-entitlement"
+import { resolveMemoVisibilityScope } from "@/lib/hr-workflow"
 
 function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
   const year = referenceDate.getFullYear()
@@ -78,7 +80,7 @@ const DUPLICATE_BLOCKING_STATUSES = OVERLAP_BLOCKING_STATUSES
  * a pre-seeded user_profiles row. This helper ensures they always get a row.
  */
 async function getOrCreateProfile(admin: any, user: any, selectCols: string) {
-  let { data: profile, error } = await admin
+  const { data: profile, error } = await admin
     .from("user_profiles")
     .select(selectCols)
     .eq("id", user.id)
@@ -701,12 +703,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const profile = await getOrCreateProfile(admin, user, "id, role, department_id, departments(name, code)")
+    const profile = await getOrCreateProfile(admin, user, "id, role, department_id, departments(name, code), assigned_location_id, region_id")
 
     const role = normalizeRoleValue(profile.role)
     const departmentName = (profile as any)?.departments?.name || null
     const departmentCode = (profile as any)?.departments?.code || null
-    const isHrOffice = isHrLeaveOfficeRole(role)
+    const isRegionalHr = isRegionalHrOfficerRole(role)
+    const isHrOffice = isHrLeaveOfficeRole(role) || isRegionalHr
     const isHrApprover = isHrApproverRole(role, departmentName, departmentCode)
     const isHr = isHrOffice || isHrApprover || isHrPlanningRole(role, departmentName, departmentCode)
 
@@ -730,6 +733,7 @@ export async function GET(request: NextRequest) {
           user:user_profiles!leave_plan_requests_user_id_fkey (
             id, first_name, last_name, employee_id,
             departments(name, code),
+            assigned_location_id, region_id,
             geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
           )
         `)
@@ -739,11 +743,29 @@ export async function GET(request: NextRequest) {
         officeQuery = officeQuery.eq("is_archived", false)
       }
 
-      const { data: requests, error: reqError } = await officeQuery
+      // Regional HR handles only non-annual leave for staff within their own
+      // region/location — annual leave and out-of-region requests stay with
+      // the national HR Leave Office.
+      if (isRegionalHr) {
+        officeQuery = officeQuery
+          .neq("leave_type_key", "annual")
+          .in("status", ["pending_hod_review", "hod_approved", "manager_confirmed"])
+      }
+
+      let { data: requests, error: reqError } = await officeQuery
 
       if (reqError) {
         if (isSchemaIssue(reqError)) return buildDegradedModeResponse("hr_office", getSchemaIssueMessage(reqError))
         throw reqError
+      }
+
+      if (isRegionalHr) {
+        const visibility = await resolveMemoVisibilityScope(admin, user.id, role)
+        const allowedStaffIds = new Set(visibility.staffIds || [])
+        requests = (requests || []).filter((r: any) => {
+          const staffId = String(r.user_id || r.user?.id || "")
+          return allowedStaffIds.has(staffId)
+        })
       }
 
       const { data: myRequests } = await admin
@@ -770,7 +792,6 @@ export async function GET(request: NextRequest) {
       const currentYearPeriod = policyData?.leave_year_period || "2026/2027"
       const staffIds = Array.from(new Set((requests || []).map((r: any) => r.user_id).filter(Boolean)))
       
-      console.log("[v0] API: Current leave year:", currentYearPeriod, "Fetching outstanding for staff IDs:", staffIds.slice(0, 5))
       
       // Fetch outstanding balances for current AND previous year (in case staff data is from different periods)
       const { data: outstandingRecords, error: outstandingError } = await admin
@@ -779,7 +800,6 @@ export async function GET(request: NextRequest) {
         .in("user_id", staffIds)
         .order("created_at", { ascending: false })
       
-      console.log("[v0] API: Outstanding records fetched:", { count: outstandingRecords?.length, error: outstandingError })
       
       // Build map using most recent record for each user
       const outstandingLeaveMap = new Map<string, number>()
@@ -1212,6 +1232,9 @@ export async function POST(request: NextRequest) {
       user_signature_text,
       user_signature_image_url,
       user_signature_data_url,
+      maternity_delivery_type,
+      delivery_date,
+      medical_report_url,
     } = body
 
     if (!preferred_start_date || !preferred_end_date) {
@@ -1227,8 +1250,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const requestedDays = calculateRequestedDays(preferred_start_date, preferred_end_date)
     const leaveTypeKey = String(leave_type || "annual").toLowerCase()
+    if (leaveTypeKey === "maternity" && preferred_start_date !== delivery_date) {
+      return NextResponse.json({ error: "For maternity leave, the start date must equal the date of delivery." }, { status: 400 })
+    }
+    if (leaveTypeKey === "maternity" && !String(medical_report_url || "").trim()) {
+      return NextResponse.json({ error: "A medical report is mandatory for maternity leave." }, { status: 400 })
+    }
+    const requestedDays = calculateRequestedDays(preferred_start_date, preferred_end_date)
 
     // ── Annual leave: use per-staff entitlement engine ─────────────────────
     // For all other leave types, fall back to policy catalog as before.
@@ -1278,6 +1307,16 @@ export async function POST(request: NextRequest) {
         tierLabel: perStaffEntitlement.tierLabel,
         validationStatus,
       }
+    } else if (leaveTypeKey === "maternity") {
+      // Maternity entitlement is delivery-specific (normal, CS, or twins), never the
+      // legacy fixed policy-catalog value. This overrides any stale catalog entry.
+      if (!["normal", "cs", "twins", "regular", "cs_twins"].includes(String(maternity_delivery_type || ""))) {
+        return NextResponse.json({ error: "Select normal delivery, Caesarean section, or twins delivery for maternity leave." }, { status: 400 })
+      }
+      if (!delivery_date) {
+        return NextResponse.json({ error: "Delivery date is required for maternity leave." }, { status: 400 })
+      }
+      entitlementDays = getMaternityEntitlementDays(maternity_delivery_type)
     } else {
       const entitlementResult = await resolveEntitlementDays(admin, leaveTypeKey, selectedLeaveYearPeriod)
       if (entitlementResult.error) {
@@ -1405,6 +1444,9 @@ export async function POST(request: NextRequest) {
         memo_generated_at: new Date().toISOString(),
         // Flag for HR Leave Office if entitlement exceeded
         adjustment_reason: entitlementWarning,
+        maternity_delivery_type: leaveTypeKey === "maternity" ? String(maternity_delivery_type) : null,
+        delivery_date: leaveTypeKey === "maternity" ? delivery_date : null,
+        medical_report_url: leaveTypeKey === "maternity" ? String(medical_report_url) : null,
       })
       .select("*")
       .single()
@@ -1510,6 +1552,9 @@ export async function PUT(request: NextRequest) {
       user_signature_text,
       user_signature_image_url,
       user_signature_data_url,
+      maternity_delivery_type,
+      delivery_date,
+      medical_report_url,
     } = body
 
     if (!id || !preferred_start_date || !preferred_end_date) {
@@ -1543,6 +1588,13 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "This leave request cannot be edited at its current stage." }, { status: 400 })
     }
 
+    const leaveTypeKey = String(leave_type || "annual").toLowerCase()
+    if (leaveTypeKey === "maternity" && preferred_start_date !== delivery_date) {
+      return NextResponse.json({ error: "For maternity leave, the start date must equal the date of delivery." }, { status: 400 })
+    }
+    if (leaveTypeKey === "maternity" && !String(medical_report_url || "").trim()) {
+      return NextResponse.json({ error: "A medical report is mandatory for maternity leave." }, { status: 400 })
+    }
     const requestedDays = calculateRequestedDays(preferred_start_date, preferred_end_date)
     if (requestedDays <= 0) {
       return NextResponse.json({ error: "Invalid leave date range." }, { status: 400 })
@@ -1567,12 +1619,22 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const leaveTypeKey = String(leave_type || "annual").toLowerCase()
-    const entitlementResult = await resolveEntitlementDays(admin, leaveTypeKey, selectedLeaveYearPeriod)
-    if (entitlementResult.error) {
-      return NextResponse.json({ error: entitlementResult.error }, { status: 400 })
+    let entitlementDays: number | null
+    if (leaveTypeKey === "maternity") {
+      if (!["normal", "cs", "twins", "regular", "cs_twins"].includes(String(maternity_delivery_type || ""))) {
+        return NextResponse.json({ error: "Select normal delivery, Caesarean section, or twins delivery for maternity leave." }, { status: 400 })
+      }
+      if (!delivery_date) {
+        return NextResponse.json({ error: "Delivery date is required for maternity leave." }, { status: 400 })
+      }
+      entitlementDays = getMaternityEntitlementDays(maternity_delivery_type)
+    } else {
+      const entitlementResult = await resolveEntitlementDays(admin, leaveTypeKey, selectedLeaveYearPeriod)
+      if (entitlementResult.error) {
+        return NextResponse.json({ error: entitlementResult.error }, { status: 400 })
+      }
+      entitlementDays = entitlementResult.entitlementDays
     }
-    const entitlementDays = entitlementResult.entitlementDays
 
     // Track if entitlement is exceeded - still allow save but flag for HR review
     const entitlementExceededOnUpdate = entitlementDays !== null && requestedDays > entitlementDays
@@ -1650,6 +1712,9 @@ export async function PUT(request: NextRequest) {
       updated_at: new Date().toISOString(),
       // Flag for HR Leave Office if entitlement exceeded
       adjustment_reason: entitlementWarningOnUpdate,
+      maternity_delivery_type: leaveTypeKey === "maternity" ? String(maternity_delivery_type) : null,
+      delivery_date: leaveTypeKey === "maternity" ? delivery_date : null,
+      medical_report_url: leaveTypeKey === "maternity" ? String(medical_report_url) : null,
     }
 
     if (user_signature_mode !== undefined) updatePayload.user_signature_mode = user_signature_mode || "typed"

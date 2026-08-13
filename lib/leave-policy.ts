@@ -15,6 +15,7 @@ export interface LeavePolicyPayload {
 export const DEFAULT_LEAVE_TYPES: LeaveTypePolicy[] = [
   { leaveTypeKey: "annual", leaveTypeLabel: "Annual Leave", entitlementDays: 30, leaveYearPeriod: "2026/2027", isEnabled: true },
   { leaveTypeKey: "sick", leaveTypeLabel: "Sick Leave", entitlementDays: 30, leaveYearPeriod: "2026/2027", isEnabled: true },
+  // Maternity is governed by delivery type: 12 weeks regular or 14 weeks for CS/twins.
   { leaveTypeKey: "maternity", leaveTypeLabel: "Maternity Leave", entitlementDays: 84, leaveYearPeriod: "2026/2027", isEnabled: true },
   { leaveTypeKey: "paternity", leaveTypeLabel: "Paternity Leave", entitlementDays: 5, leaveYearPeriod: "2026/2027", isEnabled: true },
   { leaveTypeKey: "study_with_pay", leaveTypeLabel: "Study Leave (With Pay)", entitlementDays: 30, leaveYearPeriod: "2026/2027", isEnabled: true },
@@ -55,6 +56,21 @@ export function computeLeaveDays(startDate: string, endDate: string): number {
   }
   
   return workingDays
+}
+
+export type MaternityDeliveryType = "normal" | "cs" | "twins" | "regular" | "cs_twins"
+
+/** Maternity entitlement is delivery-specific, not the legacy fixed 90 days. */
+export function getMaternityEntitlementDays(deliveryType?: string | null): number {
+  const normalized = String(deliveryType || "normal").toLowerCase().trim()
+  return normalized === "cs" || normalized === "twins" || normalized === "cs_twins" ? 98 : 84
+}
+
+export function getMaternityDeliveryLabel(deliveryType?: string | null): string {
+  const normalized = String(deliveryType || "normal").toLowerCase().trim()
+  if (normalized === "cs" || normalized === "cs_twins") return "Caesarean section"
+  if (normalized === "twins") return "Twins delivery"
+  return "Normal delivery"
 }
 
 export function computeReturnToWorkDate(endDate: string): string {

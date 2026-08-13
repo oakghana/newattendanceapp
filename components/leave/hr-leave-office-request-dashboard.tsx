@@ -48,6 +48,8 @@ interface LeaveRequest {
   leave_type_key: string
   preferred_start_date: string
   preferred_end_date: string
+  requested_days?: number | null
+  reason?: string | null
   status: string
   hod_approved_at?: string | null
   created_at: string
@@ -535,7 +537,8 @@ export function HRLeaveOfficeRequestDashboard() {
 
 function LeaveRequestRow({ req, status, onRefresh }: { req: LeaveRequest; status: string; onRefresh?: () => void }) {
   const staffName = req.staff ? `${req.staff.first_name} ${req.staff.last_name}` : 'Unknown Staff'
-  const days = daysBetween(req.preferred_start_date, req.preferred_end_date)
+  const calculatedDays = daysBetween(req.preferred_start_date, req.preferred_end_date)
+  const requestedDays = Number(req.requested_days) > 0 ? Number(req.requested_days) : calculatedDays
   const isHodPending = status === 'hod-pending'
 
   const statusBadge = isHodPending
@@ -565,8 +568,13 @@ function LeaveRequestRow({ req, status, onRefresh }: { req: LeaveRequest; status
                   <Calendar className="h-3 w-3" />
                   {fmt(req.preferred_start_date)} — {fmt(req.preferred_end_date)}
                 </span>
-                <span className="text-xs font-medium text-slate-700">{days} day{days !== 1 ? 's' : ''}</span>
-              </div>
+  <span className="text-xs font-medium text-slate-700">{requestedDays} day{requestedDays !== 1 ? 's' : ''} requested</span>
+  </div>
+  <div className="mt-3 grid gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs sm:grid-cols-[auto_1fr] sm:items-start">
+    <span className="font-semibold uppercase tracking-wide text-slate-500">Purpose / remarks</span>
+    <span className="leading-5 text-slate-700">{req.reason?.trim() || 'No purpose provided'}</span>
+  </div>
+
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">

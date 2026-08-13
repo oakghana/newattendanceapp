@@ -1,6 +1,7 @@
 import { createClientAndGetUser, createAdminClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { SecretaryMemosClient } from "./secretary-memos-client"
+import { regionalSecretaryRoles, resolveMemoVisibilityScope } from "@/lib/hr-workflow"
 
 export default async function SecretaryMemosPage() {
   const { user, authError } = await createClientAndGetUser()
@@ -17,9 +18,12 @@ export default async function SecretaryMemosPage() {
   // The proxy has already validated the role. Administrators and secretaries
   // may use the memo console without being sent back to the login screen.
   const normalizedRole = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-  if (!profile || !["secretary", "admin", "administrator"].includes(normalizedRole)) {
+  if (!profile || !regionalSecretaryRoles(normalizedRole)) {
     redirect("/dashboard/attendance")
   }
+
+  const visibility = await resolveMemoVisibilityScope(admin, user.id, normalizedRole)
+  const scopedStaffIds = visibility.staffIds
 
   // Fetch approved loan memos (HR Executive approved stage and above)
   // Includes: awaiting_director_hr (HR signed, awaiting MD), approved_director (MD approved), staff_receiving_funds, partially_recovered
@@ -51,6 +55,10 @@ export default async function SecretaryMemosPage() {
     .order("created_at", { ascending: false })
     .limit(300)
 
+  const visibleLoanMemos = scopedStaffIds
+    ? (loanMemos || []).filter((memo: any) => memo.user_id && scopedStaffIds.includes(memo.user_id))
+    : loanMemos || []
+
   // Fetch approved leave memos from leave_plan_requests (the correct table)
   const { data: rawLeaveMemos } = await admin
     .from("leave_plan_requests")
@@ -59,8 +67,12 @@ export default async function SecretaryMemosPage() {
     .order("created_at", { ascending: false })
     .limit(300)
 
+  const visibleRawLeaveMemos = scopedStaffIds
+    ? (rawLeaveMemos || []).filter((memo: any) => memo.user_id && scopedStaffIds.includes(memo.user_id))
+    : rawLeaveMemos || []
+
   // Fetch user profiles for those leave memos separately
-  const leaveUserIds = [...new Set((rawLeaveMemos || []).map((l: any) => l.user_id).filter(Boolean))]
+  const leaveUserIds = [...new Set(visibleRawLeaveMemos.map((l: any) => l.user_id).filter(Boolean))]
   const { data: leaveProfiles } = leaveUserIds.length > 0
     ? await admin
         .from("user_profiles")
@@ -71,7 +83,7 @@ export default async function SecretaryMemosPage() {
   const leaveProfileMap = new Map((leaveProfiles || []).map((p: any) => [p.id, p]))
 
   // Normalise to the shape the client expects
-  const leaveMemos = (rawLeaveMemos || []).map((leave: any) => ({
+  const leaveMemos = visibleRawLeaveMemos.map((leave: any) => ({
     id: leave.id,
     leave_type: leave.leave_type_key,
     status: leave.status,
@@ -113,10 +125,14 @@ export default async function SecretaryMemosPage() {
     .order("md_approved_at", { ascending: false })
     .limit(300)
 
+  const visibleApprovedLoanMemos = scopedStaffIds
+    ? (approvedLoanMemos || []).filter((memo: any) => memo.user_id && scopedStaffIds.includes(memo.user_id))
+    : approvedLoanMemos || []
+
   // MD Approved tab: ONLY loans that the MD has actually stamped (md_approved_at set)
   // and leave payment advice that the MD has approved (md_approved payment_advice_memos)
   // Do NOT include regular leave memos here — those belong in the Leave Memos tab only
-  const approvedMemos = (approvedLoanMemos || []).map((loan: any) => {
+  const approvedMemos = visibleApprovedLoanMemos.map((loan: any) => {
     const profile = loan.user_profiles
     const resolvedName =
       loan.staff_full_name?.trim() ||
@@ -139,9 +155,10 @@ export default async function SecretaryMemosPage() {
   return (
     <SecretaryMemosClient
       profile={profile}
-      loanMemos={loanMemos || []}
+      loanMemos={visibleLoanMemos}
       leaveMemos={leaveMemos || []}
       approvedMemos={approvedMemos}
+      regionalScope={visibility.isRegional}
     />
   )
 }

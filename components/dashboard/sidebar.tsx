@@ -49,6 +49,7 @@ import {
   ScrollText,
 } from "lucide-react"
 import Image from "next/image"
+import { canAccessMemoConsole, normalizeAppRole } from "@/lib/role-capabilities"
 
 interface SidebarProps {
   user: {
@@ -71,7 +72,7 @@ interface SidebarProps {
 
 const EXEC_ROLES = ["managing_director", "secretary"] as const
 const ALL_STAFF_ROLES = [
-  "admin", "it-admin", "regional_manager", "department_head",
+  "admin", "it-admin", "regional_manager", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "department_head",
   "staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "director_hr", "manager_hr",
   "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern",
   "contract", "managing_director", "secretary",
@@ -152,7 +153,7 @@ const navigationItems = [
     title: "Memo Console",
     href: "/dashboard/secretary-memos",
     icon: ScrollText,
-    roles: ["secretary", "admin"],
+    roles: ["secretary", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "admin"],
     category: "main",
     executive: true,
   },
@@ -417,20 +418,19 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
   // Normalize both the profile role and each menu item's allowed roles so the
   // UI accepts the role values used by existing records, such as IT-ADMIN.
   // Support role hierarchy by treating audit_staff like staff for base menus.
-  const normalizedRole = (profile?.role || "staff").toLowerCase().replace(/[\s-]+/g, "_").trim()
-  const effectiveRole = normalizedRole === "administrator"
-    ? "admin"
-    : normalizedRole === "audit_staff"
-      ? "staff"
-      : normalizedRole
+  const normalizedRole = normalizeAppRole(profile?.role)
+  const effectiveRole = normalizedRole === "audit_staff" ? "staff" : normalizedRole
 
   const filteredNavItems = allNavigationItems.filter((item) => {
     // Defense-in-depth: keep device monitoring strictly admin-only in the UI.
-    if (item.href === "/dashboard/device-violations") {
-      return effectiveRole === "admin"
-    }
+  if (item.href === "/dashboard/device-violations") {
+  return effectiveRole === "admin"
+  }
+  if (item.href === "/dashboard/secretary-memos") {
+  return canAccessMemoConsole(effectiveRole)
+  }
 
-    return item.roles.some((role) => {
+  return item.roles.some((role) => {
       const normalizedAllowedRole = role.toLowerCase().replace(/[\s-]+/g, "_").trim()
       return normalizedAllowedRole === effectiveRole
     })

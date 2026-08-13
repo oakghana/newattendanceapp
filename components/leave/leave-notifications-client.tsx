@@ -45,12 +45,18 @@ export function LeaveNotificationsClient() {
   const allowedRequestRoles = ["staff", "nsp", "intern", "it-admin", "regional_manager"]
 
   const handleLeaveSubmit = async (data: LeaveRequestData) => {
-    const m = new FormData()
+  if (data.leaveType === "maternity" && !data.documentFile) {
+    throw new Error("Maternity evidence is required before submitting this request")
+  }
+  const m = new FormData()
     m.append('start_date', data.startDate.toISOString().split('T')[0])
     m.append('end_date', data.endDate.toISOString().split('T')[0])
     m.append('reason', data.reason)
+    m.append('requested_days', String(data.requestedDays))
     m.append('leave_type', data.leaveType)
     if (data.documentFile) m.append('document', data.documentFile)
+    if (data.deliveryDate) m.append('delivery_date', data.deliveryDate.toISOString().split('T')[0])
+    if (data.maternityDeliveryType) m.append('maternity_delivery_type', data.maternityDeliveryType)
     if (data.isHalfDay) m.append('is_half_day', 'true')
     if (data.halfDayPeriod) m.append('half_day_period', data.halfDayPeriod)
     const resp = await fetch('/api/leave/request-leave', { method: 'POST', body: m })

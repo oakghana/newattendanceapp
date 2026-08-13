@@ -355,16 +355,27 @@ export async function POST(request: NextRequest) {
     }
 
     const { data: profile } = await adminSupabase.from("user_profiles").select("role").eq("id", user.id).single()
+    const normalizedProfileRole = String(profile?.role || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[-\s]+/g, "_")
+    const isAdministrator = ["admin", "administrator"].includes(normalizedProfileRole)
+    const isItAdmin = ["it_admin", "itadmin"].includes(normalizedProfileRole)
 
-    if (!profile || (profile.role !== "admin" && profile.role !== "it-admin" && profile.role !== "regional_manager" && profile.role !== "manager_hr")) {
-      return createJsonResponse({ success: false, error: "Admin, IT-Admin, or Regional Manageror Regional Manager access required" }, 403)
+    if (!profile || (!isAdministrator && !isItAdmin && !["regional_manager", "manager_hr"].includes(normalizedProfileRole))) {
+      return createJsonResponse({ success: false, error: "Administrator, IT Admin, Regional Manager, or HR Manager access required" }, 403)
     }
 
     const body = await request.json()
   const { email, first_name, last_name, employee_id, department_id, position, staff_category, role, assigned_location_id, password, date_of_appointment, years_of_service, contact_number } =
   body
 
-    if (profile.role === "it-admin") {
+    // Regional HR Leave Office is an administrator-only role.
+    if (["hr_leave_office", "hr_records", "hr_records_office", "regional_hr", "regional_hr_leave_office", "regional_hr_office", "regional_hr_officer"].includes(String(role).trim().toLowerCase()) && !isAdministrator) {
+      return createJsonResponse({ success: false, error: "Only administrators can assign the Regional HR Leave Office role" }, 403)
+    }
+
+    if (isItAdmin) {
       const allowedForItAdmin = ["staff", "nsp", "contract", "department_head"]
       if (!allowedForItAdmin.includes(role)) {
         console.error("[v0] Staff API - IT-Admin attempted to create disallowed role:", role)
@@ -379,7 +390,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if ((role === "admin" || role === "regional_manager") && profile.role !== "admin") {
+    if ((role === "admin" || role === "regional_manager") && !isAdministrator) {
       console.error("[v0] Staff API - Non-admin tried to create admin or regional_manager user")
       return createJsonResponse(
         {
@@ -392,7 +403,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Managing Director and Secretary can only be created by an Administrator
-    if ((role === "managing_director" || role === "secretary") && profile.role !== "admin") {
+    if ((role === "managing_director" || role === "secretary") && !isAdministrator) {
       console.error("[v0] Staff API - Non-admin tried to create managing_director or secretary user")
       return createJsonResponse(
         {

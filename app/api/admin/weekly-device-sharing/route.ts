@@ -38,7 +38,7 @@ async function getAuthorizedProfile() {
 export async function GET(request: NextRequest) {
   try {
     const { supabase, profile, error } = await getAuthorizedProfile()
-    if (error || !profile) return error
+    if (error || !profile) return error ?? NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     // Get filter parameters from query string
     const { searchParams } = new URL(request.url)
@@ -213,7 +213,7 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const { supabase, profile, error } = await getAuthorizedProfile()
-    if (error || !profile) return error
+    if (error || !profile) return error ?? NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     if (profile.role !== "admin") {
       return NextResponse.json({ error: "Only admins can clear user device flags" }, { status: 403 })
@@ -267,7 +267,7 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE() {
   try {
     const { supabase, profile, error } = await getAuthorizedProfile()
-    if (error || !profile) return error
+    if (error || !profile) return error ?? NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     if (profile.role !== "admin") {
       return NextResponse.json({ error: "Only admins can reset device sharing defaulters" }, { status: 403 })

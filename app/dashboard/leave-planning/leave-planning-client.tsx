@@ -2,7 +2,8 @@
 
 // ============================================================
 // Leave Planning Client — V2 Redesign (4-stage workflow)
-// Staff → HOD Review → HR Leave Office → HR Approval + Memo
+// Standard: Staff → HOD Review → HR Leave Office → HR Approval + Memo
+// Regional non-annual: Staff → Regional HR Office → Regional Manager → HR Processing
 // ============================================================
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
@@ -33,7 +34,7 @@ import {
   getWeekendsAndHolidaysInRange,
   calculateWorkingDays,
 } from "@/lib/leave-planning"
-import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
+import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays } from "@/lib/leave-policy"
 import { useToast } from "@/hooks/use-toast"
 import {
   CheckCircle2,
@@ -134,6 +135,7 @@ interface LeavePlanningClientProps {
     departmentCode: string | null
   }
   initialHolidays?: Array<{ holiday_date: string; holiday_name: string }>
+  initialActiveTab?: string
 }
 
 async function readAsDataUrl(file: File): Promise<string> {
@@ -291,11 +293,10 @@ function buildMemoTemplateData(req: any): Record<string, string> {
   const approvedMonths = Number(req.approved_months || req.requested_months || Math.max(1, Math.round(effectiveDaysNumber / 30)))
   const entitlementDays = Number(req.entitlement_days || 0)
   const outstandingLeaveDays = Math.max(0, entitlementDays - effectiveDaysNumber)
-  const holidayDays = Number(req.holiday_days_deducted || 0)
   const priorLeaveDays = Number(req.prior_leave_days_deducted || 0)
   const travellingDays = Number(req.travelling_days_added || 0)
   const adjustmentLines = [
-    holidayDays > 0 ? `Public holidays added: ${holidayDays} day(s).` : "",
+    outstandingLeaveDays > 0 ? `${outstandingLeaveDays} outstanding leave day(s) added to entitlement.` : "",
     priorLeaveDays > 0 ? `Less prior leave enjoyed: ${priorLeaveDays} day(s).` : "",
     travellingDays > 0 ? `Travelling days added: ${travellingDays} day(s).` : "",
   ].filter(Boolean)
@@ -651,19 +652,34 @@ async function downloadLeaveAnalyticsPdf(rows: LeaveAnalyticsRecord[], fileName:
 
 // ─── Stage Progress Indicator ────────────────────────────────────────────────
 function WorkflowStages({ status }: { status: string }) {
-  const stages = [
-    { label: "Submitted", Icon: Send },
-    { label: "HOD Review", Icon: UserCheck },
-    { label: "HR Leave Office", Icon: ClipboardList },
-    { label: "HR Approval", Icon: ShieldCheck },
-  ]
+  const isRegional =
+    status.startsWith("pending_regional_") ||
+    status === "pending_hr_records_reference" ||
+    status === "pending_hr_leave_processing" ||
+    status === "approved"
+  const stages = isRegional
+    ? [
+        { label: "Submitted", Icon: Send },
+        { label: "Regional HR Office Review", Icon: ClipboardList },
+        { label: "Regional Manager Approval", Icon: UserCheck },
+      ]
+    : [
+        { label: "Submitted", Icon: Send },
+        { label: "HOD Review", Icon: UserCheck },
+        { label: "HR Leave Office", Icon: ClipboardList },
+        { label: "HR Approval", Icon: ShieldCheck },
+      ]
   const rejected = status === "hod_rejected" || status === "manager_rejected"
   const hrRejected = status === "hr_rejected"
-  const stageIndex =
-    status === "hr_approved" || hrRejected ? 4
-    : status === "hr_office_forwarded" ? 3
-    : status === "hod_approved" || status === "manager_confirmed" ? 2
-    : 1
+  const stageIndex = isRegional
+    ? status === "approved" ? 4
+      : status === "pending_hr_leave_processing" || status === "pending_hr_records_reference" ? 3
+      : status === "pending_regional_hr_review" || status === "pending_regional_manager_approval" ? 2
+      : 1
+    : status === "hr_approved" || hrRejected ? 4
+      : status === "hr_office_forwarded" ? 3
+      : status === "hod_approved" || status === "manager_confirmed" ? 2
+      : 1
 
   return (
     <div className="flex items-center w-full py-2">
@@ -955,7 +971,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
           </div>
         )}
         <div className="flex gap-2 mt-3 justify-end flex-wrap">
-          {req.status === "hr_approved" && req.memo_token && onViewMemo && (
+          {((req.status === "hr_approved" && req.memo_token) || ((req.status === "approved" || req.status === "regional_manager_approved") && String(req.leave_type_key || "annual").toLowerCase() !== "annual")) && onViewMemo && (
             <Button size="sm" variant="outline"
               className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
               onClick={onViewMemo}>
@@ -1028,13 +1044,14 @@ function HrExecRejectForm({
 }
 
 // ─── Main Component ──────────���────────────────────────────────────────────────
-export function LeavePlanningClient({ profile, annualEntitlement, initialHolidays = [] }: LeavePlanningClientProps) {
+export function LeavePlanningClient({ profile, annualEntitlement, initialHolidays = [], initialActiveTab }: LeavePlanningClientProps) {
   const { toast } = useToast()
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
 
   const isStaff = isStaffRole(normalizedRole)
   const isHod = isHodRole(normalizedRole) && !isHrLeaveOfficeRole(normalizedRole)
-  const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
+  const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole) || (normalizedRole.includes("regional") && normalizedRole.includes("hr"))
+  const isHrOffice = isHrLeaveOfficeRole(normalizedRole) || isRegionalHr
   const isHrApprover = isHrApproverRole(normalizedRole, profile.departmentName, profile.departmentCode) && !isHrOffice
   const isAdmin = normalizedRole === "admin"
   const canViewLeaveAnalytics = isHrApprover || isHrOffice || isAdmin
@@ -1049,7 +1066,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<any>(null)
-  const [activeTab, setActiveTab] = useState("my-leaves")
+  const [activeTab, setActiveTab] = useState(initialActiveTab || "my-leaves")
   const [hrOfficeShowArchived, setHrOfficeShowArchived] = useState(false)
   const [hrOfficePageSize, setHrOfficePageSize] = useState(100)
   const [isArchivingAllLeaves, setIsArchivingAllLeaves] = useState(false)
@@ -1075,7 +1092,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [analyticsData, setAnalyticsData] = useState<LeaveAnalyticsPayload | null>(null)
 
-  // ── HR Executive HOD Review ────────────────────────────────���─────────
+  // ── HR Executive HOD Review ─────────────────────────────���──���─��───────
   const [hodReviewRequests, setHodReviewRequests] = useState<any[]>([])
   const [hodReviewLoading, setHodReviewLoading] = useState(false)
   const [hrExecHodLocationFilter, setHrExecHodLocationFilter] = useState("all")
@@ -1112,6 +1129,11 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     holidaysInPeriod?: Array<{ date: string; name: string }>;
   } | null>(null)
   const [leaveType, setLeaveType] = useState("") // Start empty to show placeholder hint
+  const [maternityDeliveryType, setMaternityDeliveryType] = useState<string>("normal")
+  const [maternityDeliveryDate, setMaternityDeliveryDate] = useState("")
+  const [maternityMedicalReport, setMaternityMedicalReport] = useState<File | null>(null)
+  const [maternityMedicalReportUrl, setMaternityMedicalReportUrl] = useState<string | null>(null)
+  const [uploadingMaternityReport, setUploadingMaternityReport] = useState(false)
   const [reason, setReason] = useState("")
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
   const [myAnnualEntitlement, setMyAnnualEntitlement] = useState<{
@@ -1205,8 +1227,13 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
   // Travel days are tracked separately; Annual Leave entitlement is the annual leave days only.
   return { ...base, entitlementDays: myAnnualEntitlement.annualLeaveDays }
   }
+  // Maternity entitlement is delivery-specific (normal/CS/twins), never the stale
+  // fixed policy-catalog value (previously a flat 90 days) — override it here too.
+  if (leaveType === "maternity") {
+  return { ...base, entitlementDays: getMaternityEntitlementDays(maternityDeliveryType) }
+  }
   return base
-  }, [leaveTypes, leaveType, myAnnualEntitlement])
+  }, [leaveTypes, leaveType, myAnnualEntitlement, maternityDeliveryType])
   
   // Filter for active leave types only (for the application dropdown)
   const activeLeaveTypes = useMemo(
@@ -1310,7 +1337,6 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
       const query = hrOfficeShowArchived ? "?includeArchived=true" : ""
       const res = await fetch(`/api/leave/planning${query}`, { cache: "no-store" })
       const json = await res.json()
-      console.log("[v0] Planning API response:", { mode: json.mode, hasOutstandingMap: !!json.outstandingLeaveMap, outstandingMap: json.outstandingLeaveMap })
       if (!res.ok) throw new Error(json.error || "Failed to load data")
       setData(json)
       setHrOfficeLastRefresh(new Date().toISOString())
@@ -2010,17 +2036,34 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
 
   const hrOfficeQueue: any[] = useMemo(() => {
     if (!data) return []
-    const requests = (data.requests || []).filter((r: any) =>
-      (HR_OFFICE_PENDING_STATUSES as string[]).includes(String(r?.status || "")),
-    )
+    const requests = (data.requests || []).filter((r: any) => {
+      const status = String(r?.status || "")
+      const leaveType = String(r?.leave_type_key || "").toLowerCase()
+      const isRegionalActionableStatus = ["pending_hod_review", "hod_approved", "manager_confirmed"].includes(status)
+      if (!((HR_OFFICE_PENDING_STATUSES as string[]).includes(status) || (isRegionalHr && isRegionalActionableStatus))) return false
+      // Regional HR must never see annual, completed, or already-forwarded requests,
+      // even if a stale response briefly contains them.
+      if (isRegionalHr && (leaveType === "annual" || !["pending_hod_review", "hod_approved", "manager_confirmed"].includes(status))) return false
+      return true
+    })
     
+  // Regional non-annual requests do not pass through HOD Review. Normalize
+  // the legacy database status for the Regional HR workspace display while
+  // preserving the original status for API actions and audit history.
+  const regionalRequests = isRegionalHr
+    ? requests.map((r: any) =>
+        String(r.status || "") === "pending_hod_review"
+          ? { ...r, workflow_status: r.status, status: "pending_regional_hr_review" }
+          : r,
+      )
+    : requests
+
     // Enhance requests with outstanding leave data if available
-    return requests.map((r: any) => {
+    return regionalRequests.map((r: any) => {
       // For annual leave, try to get outstanding leave from the data
       if (String(r.leave_type_key || "").toLowerCase() === "annual") {
         const outstandingMap = data.outstandingLeaveMap || {}
         const outstanding = outstandingMap[String(r.user_id || "")]
-        console.log("[v0] Request for user", r.user_id, "- Outstanding map:", outstandingMap, "- Found:", outstanding)
         if (outstanding && outstanding > 0) {
           return { ...r, outstanding_leave_days: outstanding }
         }
@@ -2099,10 +2142,15 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
 
   const allRequestsFiltered: any[] = useMemo(() => {
     if (!data) return []
-    let rows = [...(data.requests || [])]
-    if (allRequestsStatusFilter !== "all") {
-      rows = rows.filter((r: any) => String(r?.status || "") === allRequestsStatusFilter)
+  let rows = (data.requests || []).map((r: any) => {
+    if (isRegionalHr && String(r?.status || "") === "pending_hod_review" && String(r?.leave_type_key || "").toLowerCase() !== "annual") {
+      return { ...r, workflow_status: r.status, status: "pending_regional_hr_review" }
     }
+    return r
+  })
+  if (allRequestsStatusFilter !== "all") {
+    rows = rows.filter((r: any) => String(r?.status || "") === allRequestsStatusFilter)
+  }
     const search = allRequestsSearch.trim().toLowerCase()
     if (search) {
       rows = rows.filter((r: any) => {
@@ -2134,7 +2182,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     return data.analytics
   }, [analyticsData, data])
 
-  // ── Actions ─────────────────────────────────────────���───────────────���
+  // ── Actions ─────────────────────────────────────────���────────���──────���
 
   const submitPlan = async () => {
     if (!leaveType) {
@@ -2145,12 +2193,30 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
       toast({ title: "Missing date", description: "Please select a start date.", variant: "destructive" })
       return
     }
+    if (leaveType === "maternity" && !maternityDeliveryDate) {
+      toast({ title: "Missing delivery date", description: "Please provide the date of delivery.", variant: "destructive" })
+      return
+    }
     // End date is now auto-calculated, no manual validation needed
     // part_leave_days is auto-derived from computedDays, no manual input required
     // Staff signature is optional
     setSubmitting(true)
     setError(null)
     try {
+      let reportUrl = maternityMedicalReportUrl
+      if (leaveType === "maternity" && maternityMedicalReport) {
+        setUploadingMaternityReport(true)
+        const uploadBody = new FormData()
+        uploadBody.append("file", maternityMedicalReport)
+        uploadBody.append("folder", "maternity-medical-reports")
+        const uploadRes = await fetch("/api/upload", { method: "POST", body: uploadBody })
+        const uploadJson = await uploadRes.json()
+        if (!uploadRes.ok || !uploadJson.url) throw new Error(uploadJson.error || "Medical report upload failed")
+        reportUrl = uploadJson.url
+        setMaternityMedicalReportUrl(reportUrl)
+        setUploadingMaternityReport(false)
+      }
+      if (leaveType === "maternity" && !reportUrl) throw new Error("A medical report is required before maternity leave can be saved.")
       const autoResumptionDate = computeReturnToWorkDate(endDate)
       const res = await fetch("/api/leave/planning", {
         method: editingId ? "PUT" : "POST",
@@ -2164,6 +2230,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
           reason,
           resumption_date: autoResumptionDate,
           part_leave_days: leaveType === "part_leave" ? (computedDays || null) : null,
+          maternity_delivery_type: leaveType === "maternity" ? maternityDeliveryType : null,
+          delivery_date: leaveType === "maternity" ? maternityDeliveryDate : null,
+          medical_report_url: leaveType === "maternity" ? reportUrl : null,
           user_signature_mode: signatureMode,
           user_signature_text: activeSig.text,
           user_signature_data_url: activeSig.dataUrl,
@@ -2190,8 +2259,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
         title: editingId ? "Leave request updated" : "Leave request submitted",
         description: leaveType === "annual" ? `Return-to-work: ${computeReturnToWorkDate(endDate)}` : "Request submitted for HR approval",
       })
-      setStartDate(""); setEndDate(""); setReason(""); setEditingId(null)
-      setLeaveYearPeriod(getDefaultSelectedLeaveYearPeriod())
+  setStartDate(""); setEndDate(""); setReason(""); setEditingId(null)
+  setMaternityDeliveryType("normal"); setMaternityDeliveryDate(""); setMaternityMedicalReport(null); setMaternityMedicalReportUrl(null)
+  setLeaveYearPeriod(getDefaultSelectedLeaveYearPeriod())
       setTypedSignature(""); setUploadedSigUrl(null); setDrawnSigUrl(null)
       setActiveTab("my-leaves")
       await loadData()
@@ -2199,6 +2269,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
       setError(e instanceof Error ? e.message : "Submission failed")
     } finally {
       setSubmitting(false)
+      setUploadingMaternityReport(false)
     }
   }
 
@@ -2227,6 +2298,14 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     }
     if (action === "recommend_change" && (!hodAdjStart[reviewId] || !hodAdjEnd[reviewId])) {
       toast({ title: "Adjusted dates required", variant: "destructive" }); return
+    }
+    if (action === "approve" && normalizedRole === "regional_manager") {
+      const signatureCheck = await fetch(`/api/user/signature-check/${profile.id}`, { cache: "no-store" })
+      const signatureStatus = await signatureCheck.json()
+      if (!signatureCheck.ok || !signatureStatus.hasSignature) {
+        toast({ title: "Signature required", description: "Save your Regional Manager signature in your profile before approving.", variant: "destructive" })
+        return
+      }
     }
     setHodSubmitting(reviewId)
     try {
@@ -2271,9 +2350,38 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     // For non-annual leave, warn if no reason is provided but still allow submission
     if (!isAnnualLeave && (!rsn || String(rsn).trim().length < 5)) {
       const continueWithoutReason = window.confirm(
-        "No reason for adjustment provided. Continue forwarding to HR Approvers without a reason?"
+        isRegionalHr
+          ? "No adjustment note provided. Continue forwarding this non-annual request to the Regional Manager?"
+          : "No reason for adjustment provided. Continue forwarding to HR Approvers without a reason?"
       )
       if (!continueWithoutReason) return
+    }
+
+    if (isRegionalHr) {
+      setOfficeSubmitting(requestId)
+      try {
+        const res = await fetch("/api/leave/planning/review", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            leave_plan_request_id: requestId,
+            action: "forward_to_regional_manager",
+            recommendation: String(rsn || "Regional HR adjustment completed before final Regional Manager approval.").trim(),
+            adjusted_preferred_start_date: adjStart,
+            adjusted_preferred_end_date: adjEnd,
+          }),
+        })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error || "Could not forward request")
+        toast({ title: "Request forwarded to Regional Manager", description: "The adjusted non-annual request is ready for final approval." })
+        setOfficeExpanded(null)
+        await loadData()
+      } catch (e) {
+        toast({ title: "Regional forwarding failed", description: e instanceof Error ? e.message : "Review failed", variant: "destructive" })
+      } finally {
+        setOfficeSubmitting(null)
+      }
+      return
     }
 
     const holidayDeducted = Number(officeHolidayDays[requestId] || 0)
@@ -2396,8 +2504,10 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     }
   }
 
-  const openMemo = (requestId: string, token: string) =>
-    window.open(`/api/leave/planning/memo/${requestId}?token=${encodeURIComponent(token)}`, "_blank")
+  const openMemo = (requestId: string, token: string) => {
+    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : ""
+    window.open(`/api/leave/planning/memo/${requestId}${tokenQuery}`, "_blank")
+  }
 
   const handleArchiveRequest = async (requestId: string, archive: boolean) => {
     const reason = archive ? (window.prompt("Optional archive reason for records:") || "") : ""
@@ -2429,15 +2539,15 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     }
   }
 
-  // ── Tab config ────────────────────────────────────────────────────────
+  // ── Tab config ───────────���────────────────────────────────────────────
   const tabs = useMemo(() => {
     const t: { value: string; label: string; Icon: any; count?: number }[] = []
     if (canSelfApply) t.push({ value: "my-leaves", label: "Request", Icon: CalendarDays, count: myRequests.length })
     if (canSelfApply) t.push({ value: "apply", label: editingId ? "Edit Request" : "Apply", Icon: Plus })
     if (isHod || isAdmin) t.push({ value: "hod-review", label: "HOD Review", Icon: UserCheck, count: hodAssignedReviews.length })
     // HR Executive HOD Review tab: for HR managers (manager_hr, director_hr) who are NOT also HODs
-    if (isHrOffice && !isHod && !isAdmin) t.push({ value: "hr-exec-hod-review", label: "HOD Review", Icon: UserCheck, count: hodReviewRequests.length })
-    if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
+  if (isHrOffice && !isRegionalHr && !isHod && !isAdmin) t.push({ value: "hr-exec-hod-review", label: "HOD Review", Icon: UserCheck, count: hodReviewRequests.length })
+  if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
     if (isHrApprover || isAdmin) {
       const deferRecallPending = [...hrExecDeferRecallData.deferments, ...hrExecDeferRecallData.recalls]
         .filter((r: any) => !r.hr_office_decision && !r.hr_decision).length
@@ -2543,13 +2653,17 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                     canEdit={(STAFF_EDITABLE_STATUSES as string[]).includes(req.status)}
                     onEdit={() => {
                       setEditingId(req.id)
-                      setStartDate(req.preferred_start_date || "")
-                      setEndDate(req.preferred_end_date || "")
-                      setLeaveType(req.leave_type_key || "annual")
-                      setLeaveYearPeriod(req.leave_year_period || activeLeaveYearPeriod)
-                      setReason(req.reason || "")
-                      setActiveTab("apply")
-                    }}
+  setStartDate(req.leave_type_key === "maternity" ? (req.delivery_date || req.preferred_start_date || "") : (req.preferred_start_date || ""))
+  setEndDate(req.preferred_end_date || "")
+  setLeaveType(req.leave_type_key || "annual")
+  setLeaveYearPeriod(req.leave_year_period || activeLeaveYearPeriod)
+  setReason(req.reason || "")
+  setMaternityDeliveryType(req.maternity_delivery_type || "normal")
+  setMaternityDeliveryDate(req.delivery_date || "")
+  setMaternityMedicalReport(null)
+  setMaternityMedicalReportUrl(req.medical_report_url || null)
+  setActiveTab("apply")
+  }}
                     onDelete={() => deletePlan(req.id)}
                     onViewMemo={() => openMemo(req.id, req.memo_token || "")}
                   />
@@ -2664,9 +2778,37 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                   </div>
                 </div>
 
+                {leaveType === "maternity" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-lg border border-pink-200 bg-pink-50 p-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Delivery Type</Label>
+                      <Select value={maternityDeliveryType} onValueChange={setMaternityDeliveryType}>
+                        <SelectTrigger className="h-10 bg-background">
+                          <SelectValue placeholder="Select delivery type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="normal">Normal delivery — 84 days</SelectItem>
+                          <SelectItem value="cs">Caesarean section — 98 days</SelectItem>
+                          <SelectItem value="twins">Twins delivery — 98 days</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Date of Delivery</Label>
+                      <Input type="date" value={maternityDeliveryDate} onChange={(e) => { const value = e.target.value; setMaternityDeliveryDate(value); setStartDate(value); setEndDate(""); setCalculationResult(null) }} className="h-10 bg-background" required />
+                    </div>
+                    <div className="sm:col-span-2 space-y-2">
+                      <Label htmlFor="maternity-medical-report" className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Medical Report (required)</Label>
+                      <Input id="maternity-medical-report" type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setMaternityMedicalReport(e.target.files?.[0] || null)} className="h-10 bg-background" required />
+                      {maternityMedicalReportUrl && <p className="text-xs text-green-700">Medical report already attached.</p>}
+                      <p className="text-xs text-pink-800">Delivery date becomes the leave start date. Attach the medical report before submitting.</p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date</Label>
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" />
+                  <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date (Date of Delivery)</Label>
+                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" readOnly={leaveType === "maternity"} disabled={leaveType === "maternity"} />
                   {calculatingEndDate && (
                     <p className="text-xs text-blue-600">Calculating leave duration...</p>
                   )}
@@ -2771,14 +2913,15 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                 </div>
 
                 <div className="flex gap-3 pt-2">
-                  <Button onClick={submitPlan} disabled={submitting}
+                  <Button onClick={submitPlan} disabled={submitting || uploadingMaternityReport}
                     className="bg-green-700 hover:bg-green-800 text-white">
-                    {submitting ? "Submitting…" : editingId ? "Update Request" : "Submit Application"}
+                    {submitting ? (uploadingMaternityReport ? "Uploading report…" : "Submitting…") : editingId ? "Update Request" : "Submit Application"}
                   </Button>
                   {editingId && (
                     <Button variant="outline" onClick={() => {
-                      setEditingId(null); setStartDate(""); setEndDate(""); setReason("")
-                    }}>Cancel</Button>
+  setEditingId(null); setStartDate(""); setEndDate(""); setReason("")
+  setMaternityDeliveryType("normal"); setMaternityDeliveryDate("")
+  }}>Cancel</Button>
                   )}
                 </div>
               </CardContent>
@@ -3053,13 +3196,13 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
               <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                 <TabsList className="flex h-auto flex-wrap justify-start gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1.5">
                   <TabsTrigger value="operations" className="rounded-lg data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm px-3 sm:px-4 py-1.5">Operations</TabsTrigger>
-                  {canManageLeaveTypePolicy && (
+                  {canManageLeaveTypePolicy && !isRegionalHr && (
                     <TabsTrigger value="leave-policy" className="rounded-lg data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm px-3 sm:px-4 py-1.5">Leave Policy</TabsTrigger>
                   )}
-                  {canManageLeaveTypePolicy && (
+                  {canManageLeaveTypePolicy && !isRegionalHr && (
                     <TabsTrigger value="holidays" className="rounded-lg data-[state=active]:bg-amber-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm px-3 sm:px-4 py-1.5">Holidays</TabsTrigger>
                   )}
-                  {canViewLeaveAnalytics && (
+                  {canViewLeaveAnalytics && !isRegionalHr && (
                     <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm px-3 sm:px-4 py-1.5">Analytics</TabsTrigger>
                   )}
                 </TabsList>
@@ -3822,6 +3965,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                               }
                             }
                           }}
+                          disabled={!isRegionalHr && !((HR_OFFICE_PENDING_STATUSES as string[]).includes(String(req.status || "")))}
                           className="text-xs h-8 border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed">
                           {isExpanded ? "▲ Collapse" : "▼ Adjust & Forward"}
                         </Button>
@@ -4020,7 +4164,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                               />
                             </div>
 
-                            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
+                            {!isRegionalHr && <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
                               <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Details</p>
 
                               {/* Our Ref No. — required before forwarding */}
@@ -4105,9 +4249,13 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                                   </SelectContent>
                                 </Select>
                               </div>
-                            </div>
+                            </div>}
 
                             <Button onClick={() => {
+                              if (isRegionalHr) {
+                                submitHrOfficeReview(req.id, "regional-manager")
+                                return
+                              }
                               if (!officeRefNumber[req.id]?.trim()) {
                                 toast({ title: "Reference Number Required", description: "Please enter the memo reference number (Our Ref No.) before forwarding.", variant: "destructive" })
                                 return
@@ -4118,9 +4266,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                               }
                               submitHrOfficeReview(req.id, selectedHrExecutive[req.id])
                             }}
-                              disabled={officeSubmitting === req.id || !officeRefNumber[req.id]?.trim() || !selectedHrExecutive[req.id]}
+                              disabled={officeSubmitting === req.id || (!isRegionalHr && (!officeRefNumber[req.id]?.trim() || !selectedHrExecutive[req.id]))}
                               className="w-full bg-blue-700 hover:bg-blue-800 text-white disabled:opacity-60">
-                              {officeSubmitting === req.id ? "Forwarding…" : "Forward to HR Approvers →"}
+                              {officeSubmitting === req.id ? "Forwarding…" : isRegionalHr ? "Adjust & Forward to Regional Manager →" : "Forward to HR Approvers →"}
                             </Button>
                           </div>
                         )}
@@ -4844,8 +4992,8 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All statuses</SelectItem>
-                        <SelectItem value="pending_manager_review">Pending HOD Review</SelectItem>
-                        <SelectItem value="hod_approved">HOD Approved</SelectItem>
+                        <SelectItem value={isRegionalHr ? "pending_regional_hr_review" : "pending_manager_review"}>{isRegionalHr ? "Pending Regional HR Review" : "Pending HOD Review"}</SelectItem>
+                        <SelectItem value="hod_approved">{isRegionalHr ? "Regional HR Review Complete" : "HOD Approved"}</SelectItem>
                         <SelectItem value="manager_confirmed">Manager Confirmed</SelectItem>
                         <SelectItem value="hod_changes_requested">HOD Changes Requested</SelectItem>
                         <SelectItem value="hod_rejected">HOD Rejected</SelectItem>

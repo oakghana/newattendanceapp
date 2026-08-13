@@ -8,7 +8,6 @@ import { LeaveBalanceWidget } from "@/components/leave/leave-balance-widget"
 import { TeamCalendarView } from "@/components/leave/team-calendar-view"
 import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
 import { OutstandingLeavePanel } from "./outstanding-leave-panel"
-import { LeaveCenterInfo } from "./leave-center-info"
 import { CarryoverApprovalDashboard } from "./carryover-approval-dashboard"
 import { AuditComplianceDashboard } from "./audit-compliance-dashboard"
 import { AllLeaveRequestsDashboard } from "@/components/leave/all-leave-requests-dashboard"
@@ -64,7 +63,7 @@ export function LeaveManagementModuleClient({
   const showAnalytics = isHrAnalyticsRole(userRole)
   const normalizedRole = normalizeRole(userRole)
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
-  const isRegionalHR = isRegionalHrOfficerRole(normalizedRole)
+  const isRegionalHR = isRegionalHrOfficerRole(normalizedRole) || (normalizedRole.includes("regional") && normalizedRole.includes("hr"))
   const isHrExecutive = ['hr_executive', 'hr_director', 'director_hr', 'manager_hr'].includes(normalizedRole)
   const isLoanOffice = normalizedRole === 'loan_office' || normalizedRole === 'hr_loan_office' || normalizedRole === 'accounts_loan_office'
 
@@ -112,25 +111,23 @@ export function LeaveManagementModuleClient({
 
   return (
     <div className="space-y-6 w-full">
-      <Tabs defaultValue="leave-management" className="space-y-4 w-full">
+      <Tabs defaultValue={isRegionalHR ? "leave-planning" : "leave-management"} className="space-y-4 w-full">
         <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-3xl border border-slate-200 bg-slate-100/80 p-2 shadow-sm overflow-x-auto sm:overflow-visible">
-          {/* Info Tab (renamed from Leave Center) */}
-          <TabsTrigger value="leave-management" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-emerald-300 transition-all duration-300 ease-out data-[state=active]:border-emerald-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-emerald-500 data-[state=active]:to-emerald-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(16,185,129,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
+          {/* Regional HR uses this as the operational queue; other roles see the overview. */}
+          {!isRegionalHR && <TabsTrigger value="leave-management" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-emerald-300 transition-all duration-300 ease-out data-[state=active]:border-emerald-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-emerald-500 data-[state=active]:to-emerald-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(16,185,129,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
             <Info className="h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-300 group-data-[state=active]:animate-pulse" /> 
-            <span className="hidden sm:inline">Info</span>
-            <span className="sm:hidden">Info</span>
+            <span className="hidden sm:inline">{isRegionalHR ? "Operations" : "Info"}</span>
+            <span className="sm:hidden">{isRegionalHR ? "Operations" : "Info"}</span>
             <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-0 h-1 bg-emerald-500 rounded-full transition-all duration-300 group-data-[state=active]:w-3/4" />
-          </TabsTrigger>
+          </TabsTrigger>}
 
-          {/* Regional HR Officers have view-only access to Leave Center tabs */}
-          {!isRegionalHR && (
-            <TabsTrigger value="leave-planning" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-blue-300 transition-all duration-300 ease-out data-[state=active]:border-blue-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-blue-500 data-[state=active]:to-blue-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(59,130,246,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
+          {/* Regional HR can view Leave Center, but not edit annual policy settings. */}
+          <TabsTrigger value="leave-planning" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-blue-300 transition-all duration-300 ease-out data-[state=active]:border-blue-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-blue-500 data-[state=active]:to-blue-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(59,130,246,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
               <CalendarRange className="h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-300 group-data-[state=active]:animate-pulse" /> 
               <span className="hidden sm:inline">Leave Center</span>
               <span className="sm:hidden">Planning</span>
               <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-0 h-1 bg-blue-500 rounded-full transition-all duration-300 group-data-[state=active]:w-3/4" />
             </TabsTrigger>
-          )}
 
           {isHrLeaveOfficeRole(userRole) && !isRegionalHR && (
             <TabsTrigger value="outstanding-leave" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-green-300 transition-all duration-300 ease-out data-[state=active]:border-green-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-green-500 data-[state=active]:to-green-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(34,197,94,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
@@ -153,7 +150,7 @@ export function LeaveManagementModuleClient({
 
 
           {/* All Requests Tab - HR Leave Office only */}
-          {isHrLeaveOfficeRole(userRole) && !isRegionalHR && (
+          {(isHrLeaveOfficeRole(userRole) || isRegionalHR) && (
             <TabsTrigger value="all-requests" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-teal-300 transition-all duration-300 ease-out data-[state=active]:border-teal-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-teal-500 data-[state=active]:to-teal-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(20,184,166,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
               <List className="h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-300 group-data-[state=active]:animate-pulse" />
               <span className="hidden sm:inline">All Requests</span>
@@ -194,10 +191,7 @@ export function LeaveManagementModuleClient({
 
         {/* Info Tab — shows Leave Management overview */}
         <TabsContent value="leave-management" className="space-y-4 sm:space-y-6 w-full">
-          {isRegionalHR ? (
-            <LeaveCenterInfo userRole={userRole} userDepartmentName={userDepartmentName} />
-          ) : (
-            <LeaveManagementClient
+          <LeaveManagementClient
               userId={userId}
               userRole={userRole}
               userDepartment={userDepartment}
@@ -210,11 +204,22 @@ export function LeaveManagementModuleClient({
               initialManagerNotifications={initialManagerNotifications}
               initialApprovedStaffRequests={initialApprovedStaffRequests}
             />
-          )}
         </TabsContent>
 
-        {/* Leave Planning Tab */}
-        {!isRegionalHR && (
+        {/* Regional HR works the scoped queue from Leave Center; other roles use planning. */}
+        {isRegionalHR ? (
+          <TabsContent value="leave-planning" className="space-y-4 sm:space-y-6 w-full">
+            <LeavePlanningClient
+              profile={{
+                id: userId,
+                role: userRole || "regional_hr_leave_office",
+                departmentName: userDepartmentName,
+                departmentCode: userDepartmentCode,
+              }}
+              initialActiveTab="hr-office"
+            />
+          </TabsContent>
+        ) : (
           <TabsContent value="leave-planning" className="space-y-4 sm:space-y-6 w-full">
             <LeavePlanningClient
               profile={{
@@ -243,7 +248,7 @@ export function LeaveManagementModuleClient({
 
 
         {/* All Requests Tab - HR Leave Office only */}
-        {isHrLeaveOfficeRole(userRole) && !isRegionalHR && (
+        {(isHrLeaveOfficeRole(userRole) || isRegionalHR) && (
           <TabsContent value="all-requests" className="space-y-4 sm:space-y-6 w-full">
             <div className="space-y-4">
               <div>

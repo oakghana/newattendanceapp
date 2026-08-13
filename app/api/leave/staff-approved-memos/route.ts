@@ -27,10 +27,11 @@ export async function GET(request: NextRequest) {
     }
 
     const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
-    const isHodOrRm = ["department_head", "regional_manager"].includes(normalizedRole)
-    const isHrExecutive = ["director_hr", "manager_hr", "admin", "hr_leave_office", "hr_office"].includes(normalizedRole)
+  const isHodOrRm = ["department_head", "regional_manager", "regional_manager_officer"].includes(normalizedRole)
+  const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
+  const isHrExecutive = ["director_hr", "manager_hr", "admin", "hr_leave_office", "hr_office"].includes(normalizedRole)
 
-    if (!isHodOrRm && !isHrExecutive) {
+  if (!isHodOrRm && !isRegionalHr && !isHrExecutive) {
       return NextResponse.json(
         { error: "Only HOD/RM or HR Executives can view approved memos" },
         { status: 403 }
@@ -63,6 +64,8 @@ export async function GET(request: NextRequest) {
           hr_office_reviewed_at,
           hr_signature_image_url,
           hr_signature_data_url,
+          hr_approver_signature_data_url,
+          hr_approver_position,
           hr_approval_note,
           memo_token
         `)
@@ -117,6 +120,9 @@ export async function GET(request: NextRequest) {
           hr_office_reviewer_name: req.hr_office_reviewer_name,
           hr_office_reviewed_at: req.hr_office_reviewed_at,
           hr_signature_image_url: req.hr_signature_image_url,
+          hr_signature_data_url: req.hr_signature_data_url,
+          hr_approver_signature_data_url: req.hr_approver_signature_data_url,
+          hr_approver_position: req.hr_approver_position,
           memo_token: req.memo_token || null,
         }
       })
@@ -137,8 +143,9 @@ export async function GET(request: NextRequest) {
       }
 
       staffIds = (staffProfiles || []).map((p: any) => p.id)
-    } else if (normalizedRole === "regional_manager") {
-      // Get staff assigned to this regional manager's locations
+    } else if (["regional_manager", "regional_manager_officer"].includes(normalizedRole) || isRegionalHr) {
+      // Regional managers and Regional HR Office users get memos for staff in their assigned location.
+      // Get staff assigned to this regional manager/Regional HR user's location
       const { data: rmLocations, error: locError } = await supabase
         .from("user_profiles")
         .select("assigned_location_id")
@@ -185,6 +192,9 @@ export async function GET(request: NextRequest) {
         hr_office_reviewer_name,
         hr_office_reviewed_at,
         hr_signature_image_url,
+        hr_signature_data_url,
+        hr_approver_signature_data_url,
+        hr_approver_position,
         hr_approval_note,
         memo_token
       `)
@@ -232,6 +242,9 @@ export async function GET(request: NextRequest) {
         hr_approver_name: req.hr_approver_name,
         hr_approved_at: req.hr_approved_at,
         hr_signature_image_url: req.hr_signature_image_url,
+        hr_signature_data_url: req.hr_signature_data_url,
+        hr_approver_signature_data_url: req.hr_approver_signature_data_url,
+        hr_approver_position: req.hr_approver_position,
         memo_token: req.memo_token || null,
       }
     })

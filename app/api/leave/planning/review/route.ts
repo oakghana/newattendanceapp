@@ -23,6 +23,7 @@ function schemaIssueResponse() {
 
 function normalizeDecision(action: string): LeavePlanReviewDecision | null {
   if (action === "approve") return "approved"
+  if (action === "forward_to_regional_manager") return "recommend_change"
   if (action === "recommend_change") return "recommend_change"
   if (action === "reject") return "rejected"
   return null
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, role")
+      .select("id, role, assigned_location_id, region_id, first_name, last_name, position, signature_data_url")
       .eq("id", user.id)
       .single()
 
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
       .trim()
       .replace(/[-\s]+/g, "_")
 
-    if (!["regional_manager", "department_head"].includes(role)) {
+    if (!["regional_manager", "department_head", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(role)) {
       return NextResponse.json({ error: "Only regional managers and department heads can review this request." }, { status: 403 })
     }
 
@@ -70,7 +71,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "leave_plan_request_id and action are required." }, { status: 400 })
     }
 
-    const decision = normalizeDecision(action)
+    const isRegionalForward = action === "forward_to_regional_manager"
+    const decision = isRegionalForward ? "approved" : normalizeDecision(action)
     if (!decision) {
       return NextResponse.json({ error: "Invalid action. Use approve, recommend_change, or reject." }, { status: 400 })
     }
@@ -79,7 +81,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Recommendation is required for change request or rejection." }, { status: 400 })
     }
 
-    if (decision === "recommend_change" && (!adjusted_preferred_start_date || !adjusted_preferred_end_date)) {
+    if (isRegionalForward && (!adjusted_preferred_start_date || !adjusted_preferred_end_date)) {
+      return NextResponse.json({ error: "Adjusted start and end dates are required before forwarding to the Regional Manager." }, { status: 400 })
+    }
+
+    const isRegionalManagerApproval = role === "regional_manager"
+    if (isRegionalManagerApproval && decision === "approved" && !isRegionalForward) {
+      const { data: registrySignature, error: registryError } = await admin
+        .from("approval_signature_registry")
+        .select("signature_data_url")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .maybeSingle()
+      if (registryError && isSchemaIssue(registryError)) return schemaIssueResponse()
+      if (!registrySignature?.signature_data_url) {
+        const { data: profileSignature } = await admin
+          .from("user_profiles")
+          .select("signature_data_url")
+          .eq("id", user.id)
+          .maybeSingle()
+        if (!profileSignature?.signature_data_url) {
+          return NextResponse.json({ error: "Save your Regional Manager signature in your profile before approving this leave request." }, { status: 400 })
+        }
+      }
+    }
+
+    if (decision === "recommend_change" && !isRegionalForward && (!adjusted_preferred_start_date || !adjusted_preferred_end_date)) {
       return NextResponse.json(
         { error: "Adjusted start and end dates are required when recommending changes." },
         { status: 400 },
@@ -97,7 +124,40 @@ export async function POST(request: NextRequest) {
     }
 
     if (reviewError || !reviews || reviews.length === 0) {
-      return NextResponse.json({ error: "Review assignment not found for this manager." }, { status: 404 })
+      const isRegionalHr = ["regional_hr", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(role)
+      if (!isRegionalHr) {
+        return NextResponse.json({ error: "Review assignment not found for this manager." }, { status: 404 })
+      }
+
+      const { data: targetRequest, error: targetRequestError } = await admin
+        .from("leave_plan_requests")
+        .select("id, user_id, leave_type_key, user_profiles:user_id(assigned_location_id, region_id)")
+        .eq("id", leave_plan_request_id)
+        .maybeSingle()
+
+      if (targetRequestError || !targetRequest) {
+        return NextResponse.json({ error: "Leave request not found." }, { status: 404 })
+      }
+      if (String(targetRequest.leave_type_key || "annual").toLowerCase() === "annual") {
+        return NextResponse.json({ error: "Regional HR can only process non-annual leave requests." }, { status: 403 })
+      }
+
+      const targetProfile = Array.isArray(targetRequest.user_profiles) ? targetRequest.user_profiles[0] : targetRequest.user_profiles
+      const sameScope =
+        (profile.assigned_location_id && targetProfile?.assigned_location_id === profile.assigned_location_id) ||
+        ((profile as any).region_id && targetProfile?.region_id === (profile as any).region_id)
+      if (!sameScope) {
+        return NextResponse.json({ error: "This request is outside your assigned location or region." }, { status: 403 })
+      }
+
+      if (!isRegionalForward) {
+        const { error: assignmentError } = await admin.from("leave_plan_reviews").insert({
+          leave_plan_request_id,
+          reviewer_id: user.id,
+          decision: "pending",
+        })
+        if (assignmentError) throw assignmentError
+      }
     }
 
     // Update all review records for this manager for this request
@@ -137,7 +197,7 @@ export async function POST(request: NextRequest) {
     let nextEndDate = leavePlan.preferred_end_date
     let nextRequestedDays = calculateRequestedDays(nextStartDate, nextEndDate)
 
-    if (decision === "recommend_change") {
+    if (isRegionalForward || decision === "recommend_change") {
       nextStartDate = adjusted_preferred_start_date
       nextEndDate = adjusted_preferred_end_date
       nextRequestedDays = calculateRequestedDays(nextStartDate, nextEndDate)
@@ -177,10 +237,29 @@ export async function POST(request: NextRequest) {
       .filter((r: string | null) => !!r)
       .join("\n\n")
 
+    const isRegionalNonAnnualApproval = isRegionalManagerApproval && decision === "approved" && !isRegionalForward
     const requestUpdatePayload: Record<string, any> = {
-      status: nextStatus,
+      status: isRegionalForward ? "pending_regional_manager_approval" : isRegionalNonAnnualApproval ? "approved" : nextStatus,
       manager_recommendation: mergedRecommendations || null,
       updated_at: new Date().toISOString(),
+    }
+
+    if (isRegionalNonAnnualApproval) {
+      const signerName = `${String((profile as any).first_name || "").trim()} ${String((profile as any).last_name || "").trim()}`.trim()
+      const { data: signerSignature } = await admin
+        .from("approval_signature_registry")
+        .select("signature_data_url")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .maybeSingle()
+
+      requestUpdatePayload.hr_approver_name = signerName || "Regional Manager"
+      requestUpdatePayload.hr_approver_position = (profile as any).position || "Regional Manager"
+      const savedSignature = signerSignature?.signature_data_url || (profile as any).signature_data_url || null
+      requestUpdatePayload.hr_approver_signature_data_url = savedSignature
+      requestUpdatePayload.hr_signature_data_url = savedSignature
+      requestUpdatePayload.hr_approved_at = new Date().toISOString()
+      requestUpdatePayload.hr_approval_note = "Approved by the Regional Manager under the regional non-annual leave workflow."
     }
 
     if (decision === "approved" && (nextStatus === "hod_approved" || nextStatus === "manager_confirmed")) {
@@ -193,7 +272,7 @@ export async function POST(request: NextRequest) {
       requestUpdatePayload.hod_decision = "changes_requested"
     }
 
-    if (decision === "recommend_change") {
+    if (isRegionalForward || decision === "recommend_change") {
       requestUpdatePayload.preferred_start_date = nextStartDate
       requestUpdatePayload.preferred_end_date = nextEndDate
       requestUpdatePayload.requested_days = nextRequestedDays
@@ -211,7 +290,7 @@ export async function POST(request: NextRequest) {
       throw requestUpdateError
     }
 
-    if (decision === "recommend_change" || decision === "rejected") {
+    if ((decision === "recommend_change" || decision === "rejected") && !isRegionalForward) {
       const title = decision === "recommend_change" ? "Leave Plan Changes Requested" : "Leave Plan Rejected"
       const message =
         decision === "recommend_change"
@@ -247,7 +326,7 @@ export async function POST(request: NextRequest) {
     }
 
     // If fully approved by all HODs → notify HR Leave Office
-    if (nextStatus === "hod_approved" || nextStatus === "manager_confirmed") {
+    if (!isRegionalNonAnnualApproval && (nextStatus === "hod_approved" || nextStatus === "manager_confirmed")) {
       const hodName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "HOD"
       notifyLeaveHodApproved(admin, {
         leavePlanRequestId: leave_plan_request_id,
@@ -260,12 +339,12 @@ export async function POST(request: NextRequest) {
       }).catch(() => {})
     }
 
-    return NextResponse.json({ success: true, status: nextStatus })
+    return NextResponse.json({ success: true, status: isRegionalNonAnnualApproval ? "approved" : nextStatus })
   } catch (error) {
     if (isSchemaIssue(error)) {
       return schemaIssueResponse()
     }
     console.error("[v0] Leave planning manager review error:", error)
-    return NextResponse.json({ error: "Failed to review leave planning request." }, { status: 500 })
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to review leave planning request." }, { status: 500 })
   }
 }

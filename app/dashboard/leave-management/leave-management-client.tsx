@@ -88,6 +88,7 @@ interface LeaveManagementClientProps {
   initialStaffRequests: LeaveRequest[]
   initialManagerNotifications: LeaveNotification[]
   initialApprovedStaffRequests?: LeaveRequest[]
+  initialSelectedTab?: string
 }
 
 interface HrMemoTemplate {
@@ -115,6 +116,7 @@ export function LeaveManagementClient({
   initialStaffRequests,
   initialManagerNotifications,
   initialApprovedStaffRequests = [],
+  initialSelectedTab = "my-requests",
 }: LeaveManagementClientProps) {
     const formatDateSafe = (value?: string | null) => {
       if (!value) return "-"
@@ -154,7 +156,7 @@ export function LeaveManagementClient({
   const [editEndDate, setEditEndDate] = useState("")
   const [editReason, setEditReason] = useState("")
   const [editLeaveType, setEditLeaveType] = useState("")
-  const [selectedTab, setSelectedTab] = useState("my-requests")
+  const [selectedTab, setSelectedTab] = useState(initialSelectedTab)
   // Sub-tabs for the Deferment and Recall sections: "tracking" | "approvals" | "submit"
   const [defermentSubTab, setDefermentSubTab] = useState<"tracking" | "approvals" | "submit">("tracking")
   const [recallSubTab, setRecallSubTab] = useState<"tracking" | "approvals" | "submit">("tracking")
@@ -427,7 +429,7 @@ export function LeaveManagementClient({
   const fetchStaffApprovedMemos = async () => {
     try {
       const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
-      const isAuthorized = ["department_head", "regional_manager", "admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office"].includes(normalizedRole)
+      const isAuthorized = ["department_head", "regional_manager", "regional_manager_officer", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office", "admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office"].includes(normalizedRole)
 
       if (!isAuthorized) return
 
@@ -640,9 +642,29 @@ export function LeaveManagementClient({
     closeEditDialog()
   }
 
+  const handleForwardToRegionalManager = async (notificationId: string) => {
+    const notification = managerNotifications.find((row) => row.id === notificationId)
+    const requestId = String(notification?.leave_plan_request_id || notification?.leave_requests?.id || "")
+    const recommendation = window.prompt("Add an adjustment note before forwarding to the Regional Manager") || ""
+    if (!requestId || !recommendation.trim()) return
+    setProcessingId(notificationId)
+    try {
+      const response = await fetch("/api/leave/planning/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "forward_to_regional_manager", leave_plan_request_id: requestId, recommendation }),
+      })
+      if (!response.ok) throw new Error((await response.json().catch(() => ({})))?.error || "Could not forward request")
+      toast({ title: "Request forwarded", description: "The Regional Manager can now review and approve this request." })
+      window.location.reload()
+    } catch (error) {
+      toast({ title: "Forwarding failed", description: error instanceof Error ? error.message : "Could not forward request.", variant: "destructive" })
+    } finally { setProcessingId(null) }
+  }
+
   const handleApprove = async (notificationId: string) => {
     const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office"].includes(normalized)
+    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
       return
@@ -687,7 +709,7 @@ export function LeaveManagementClient({
 
   const handleDismiss = async (notificationId: string, reason: string) => {
     const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office"].includes(normalized)
+    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
       return
@@ -768,13 +790,15 @@ export function LeaveManagementClient({
 
   const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
   const isAdmin = normalizedRole === "admin"
-  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "hr", "audit_staff", "contract", "loan_committee", "committee", "secretary", "managing_director"].includes(normalizedRole)
-  const isManagerView = ["admin", "regional_manager", "department_head", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office", "hr"].includes(normalizedRole)
+  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office", "hr", "audit_staff", "contract", "loan_committee", "committee", "secretary", "managing_director"].includes(normalizedRole)
+  const isManagerView = ["admin", "regional_manager", "regional_manager_officer", "department_head", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office", "hr", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
+  const isRegionalManager = normalizedRole === "regional_manager" || normalizedRole === "regional_manager_officer"
   const isAdminView = isAdmin
   const canViewHrTemplates = isAdmin || ["hr_director", "hr_leave_office"].includes(normalizedRole)
   const canEditHrTemplates = isAdmin || ["hr_director", "hr_leave_office"].includes(normalizedRole)
-  const isHrLeaveOfficeRole = normalizedRole === "hr_leave_office"
-  const isLeaveOfficeRole = ["hr_leave_office", "hr_office", "hr"].includes(normalizedRole)
+  const isHrLeaveOfficeRole = ["hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
+  const isLeaveOfficeRole = ["hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr"].includes(normalizedRole)
+  const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isHrExecutive = isAdmin || ["director_hr", "manager_hr", "hr_director"].includes(normalizedRole)
   const canAccessPaymentAdvice = isAdmin || isHrLeaveOfficeRole || isHrExecutive
 
@@ -1288,7 +1312,7 @@ export function LeaveManagementClient({
     }
   }
 
-  const renderManagerNotifications = (rows: LeaveNotification[], emptyMessage: string) => {
+  const renderManagerNotifications = (rows: LeaveNotification[], emptyMessage: string, regionalHrMode = false) => {
     if (rows.length === 0) {
       return (
         <Card className="border border-dashed border-slate-300 bg-slate-50/80">
@@ -1340,18 +1364,26 @@ export function LeaveManagementClient({
                       <td className="max-w-[320px] px-4 py-3 text-xs text-slate-600">{String(leave.reason || "-")}</td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
-                          <Button
-                            onClick={() => handleApprove(notification.id)}
-                            disabled={processingId === notification.id}
+  {!regionalHrMode && <Button
+  onClick={() => handleApprove(notification.id)}
+  disabled={processingId === notification.id}
                             size="sm"
                             className="gap-1 bg-emerald-600 hover:bg-emerald-700"
                           >
                             {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                             Approve
-                          </Button>
-                          <Button
-                            onClick={() => {
-                              const rejectReason = window.prompt("Provide rejection reason") || ""
+  </Button>}
+  {regionalHrMode ? <Button
+  onClick={() => void handleForwardToRegionalManager(notification.id)}
+  disabled={processingId === notification.id}
+  size="sm"
+  className="gap-1 bg-violet-600 hover:bg-violet-700"
+  >
+  <ArrowUpRight className="h-4 w-4" />
+  Forward to Regional Manager
+  </Button> : <Button
+  onClick={() => {
+  const rejectReason = window.prompt("Provide rejection reason") || ""
                               if (!rejectReason.trim()) return
                               void handleDismiss(notification.id, rejectReason)
                             }}
@@ -1361,9 +1393,9 @@ export function LeaveManagementClient({
                             className="gap-1"
                           >
                             {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
-                            Reject
-                          </Button>
-                        </div>
+  Reject
+  </Button>}
+  </div>
                       </td>
                     </tr>
                   )
@@ -1637,7 +1669,7 @@ export function LeaveManagementClient({
       )}
 
       {/* Export Annual Leave Card - HOD/RM/HR Only */}
-      {["department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "hr_office", "hr", "admin"].includes(String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")) && (
+      {["department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr", "admin"].includes(String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")) && (
         <Card className="border border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50/50">
           <CardHeader className="pb-4">
             <CardTitle className="text-lg font-bold text-purple-900 flex items-center gap-2">
@@ -1759,6 +1791,20 @@ export function LeaveManagementClient({
                 <ArrowUpRight className="h-4 w-4" />
                 Recalls
               </Button>
+              {(isRegionalHr || isRegionalManager) && (
+                <Button
+                  onClick={() => setSelectedTab("pending-approvals")}
+                  className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                    selectedTab === "pending-approvals"
+                      ? "bg-violet-600 text-white shadow-md hover:bg-violet-700"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                  }`}
+                  variant={selectedTab === "pending-approvals" ? "default" : "outline"}
+                >
+                  <ClipboardList className="h-4 w-4" />
+                  {isRegionalManager ? "Regional Manager Review" : "Regional Non-Annual Queue"} ({pendingNotifications.length})
+                </Button>
+              )}
               {isManagerView && (
                 <Button
                   onClick={() => setSelectedTab("approved-memos")}
@@ -3068,14 +3114,14 @@ export function LeaveManagementClient({
             </PaymentAdviceErrorBoundary>
           )}
 
-        {isManagerView && selectedTab === "pending-approvals" && (
-          <>
-            <Alert className="border-blue-200 bg-blue-50">
+  {(isManagerView && selectedTab === "pending-approvals") && (
+  <>
+  <Alert className="border-blue-200 bg-blue-50">
               <AlertDescription>
-                Requests pending for {inactivityDays} days or more are marked as delayed and should be actioned immediately to avoid automatic supervisor timeout approvals.
+                {isRegionalManager ? "Regional non-annual requests forwarded by Regional HR are ready for your review and approval." : `Requests pending for ${inactivityDays} days or more are marked as delayed and should be actioned immediately to avoid automatic supervisor timeout approvals.`}
               </AlertDescription>
             </Alert>
-            {renderManagerNotifications(adminAllPending, "No pending leave requests to approve")}
+            {renderManagerNotifications(isRegionalManager ? pendingNotifications.filter((n) => String(n.status || n.leave_requests?.status || "") === "pending_regional_manager_approval") : adminAllPending, isRegionalManager ? "No regional non-annual requests pending" : "No pending leave requests to approve", isRegionalHr)}
           </>
         )}
 
@@ -3418,13 +3464,14 @@ function LeaveRequestCard({
         )}
 
         {/* Download Memo button — shown when leave is hr_approved and a memo token is available */}
-        {["approved", "hr_approved"].includes(normalizedStatus) && request.memo_token && (
+        {["approved", "hr_approved"].includes(normalizedStatus) && (normalizedStatus === "approved" || request.memo_token) && (
           <Button
             variant="outline"
             size="sm"
             className="w-full border-emerald-300 text-emerald-700 hover:bg-emerald-50"
             onClick={() => {
-              const url = `/api/leave/planning/memo/${request.id}?token=${encodeURIComponent(request.memo_token || "")}`
+              const tokenQuery = request.memo_token ? `?token=${encodeURIComponent(request.memo_token)}` : ""
+              const url = `/api/leave/planning/memo/${request.id}${tokenQuery}`
               window.open(url, "_blank")
             }}
           >

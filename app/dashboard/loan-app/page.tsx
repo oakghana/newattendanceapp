@@ -398,28 +398,26 @@ function getLoanTypeBaseKey(loanType: LoanType) {
 function getExplicitLoanTypeTier(loanType: LoanType): "junior" | "senior" | "manager" | null {
   const key = String(loanType.loan_key || "").toLowerCase()
   const label = String(loanType.loan_label || "").toLowerCase()
+  const category = String(loanType.category || "").toLowerCase()
 
-  if (key.includes("_manager") || /\bmanager\b/i.test(label)) return "manager"
-  if (key.includes("_senior") || /\bsenior\b|\bsr\b|sr\./i.test(label)) return "senior"
-  if (key.includes("_junior") || /\bjunior\b|\bjr\b/i.test(label)) return "junior"
+  if (key.includes("_manager") || /\bmanager\b/i.test(label) || /\bmanager\b/i.test(category)) return "manager"
+  if (key.includes("_senior") || /\bsenior\b|\bsr\b|sr\./i.test(label) || /\bsenior\b/i.test(category)) return "senior"
+  if (key.includes("_junior") || /\bjunior\b|\bjr\b/i.test(label) || /\bjunior\b/i.test(category)) return "junior"
   return null
 }
 
-function resolveLoanTypeTier(loanType: LoanType, allTypes: LoanType[]) {
-  const explicit = getExplicitLoanTypeTier(loanType)
-  if (explicit) return explicit
-
-  const baseKey = getLoanTypeBaseKey(loanType)
-  const sameGroup = allTypes.filter((type) => getLoanTypeBaseKey(type) === baseKey)
-  const hasHigherTier = sameGroup.some((type) => {
-    const tier = getExplicitLoanTypeTier(type)
-    return tier === "senior" || tier === "manager"
-  })
-
-  return hasHigherTier ? "junior" : null
+function resolveLoanTypeTier(loanType: LoanType, _allTypes: LoanType[]) {
+  // Only explicit loan category metadata/key/label restricts visibility.
+  // A loan without a category is shared across all staff categories.
+  return getExplicitLoanTypeTier(loanType)
 }
 
-function getUserLoanTier(position?: string | null, role?: string | null): "junior" | "senior" | "manager" | null {
+function getUserLoanTier(position?: string | null, role?: string | null, staffCategory?: string | null): "junior" | "senior" | "manager" | null {
+  const normalizedCategory = String(staffCategory || "").toLowerCase().trim()
+  if (/\bjunior\b/.test(normalizedCategory)) return "junior"
+  if (/\bsenior\b/.test(normalizedCategory)) return "senior"
+  if (/\bmanager\b/.test(normalizedCategory)) return "manager"
+
   const normalizedPosition = String(position || "").toLowerCase()
   const normalizedRole = String(role || "").toLowerCase()
 
@@ -435,7 +433,8 @@ function getUserLoanTier(position?: string | null, role?: string | null): "junio
     return "senior"
   }
   
-  // Junior tier: junior, jr., clerk, assistant, artisan, apprentice, trainee
+  // Junior tier: junior, jr., clerk, assistant, artisan, apprentice, trainee,
+  // technician, and other explicitly junior operational roles.
   if (/junior|\bjr\b|clerk|assistant|artisan|apprentice|trainee|technician/.test(normalizedPosition) || 
       /junior|\bjr\b/.test(normalizedRole)) {
     return "junior"
@@ -459,11 +458,10 @@ function loanTypeGroupKey(loanType: LoanType) {
 function shouldIncludeLoanTypeForUser(loanType: LoanType, userTier: string | null, allTypes: LoanType[]) {
   const loanTier = resolveLoanTypeTier(loanType, allTypes)
   
-  // If no user tier or no loan tier restriction, include it
-  if (!userTier || !loanTier) {
-    return true
-  }
-  
+  // Shared/uncategorized loans are available to every staff category, but
+  // explicitly senior/manager products must never leak to junior staff.
+  if (userTier === "junior" && loanTier !== null) return loanTier === "junior"
+  if (!userTier || !loanTier) return true
   return loanTier === userTier
 }
 
@@ -1176,17 +1174,28 @@ export default function LoanAppPage() {
 
   const filteredLoanTypes = useMemo(() => {
     const rawTypes = data?.loanTypes || []
-    const userTier = getUserLoanTier(data?.profile?.position, data?.profile?.role)
+    const userTier = getUserLoanTier(data?.profile?.position, data?.profile?.role, data?.profile?.staffCategory)
 
-    const normalizedTypes = rawTypes.map((type) => ({
-      ...type,
-      loan_label: normalizeLoanTypeLabel(type, rawTypes),
-    }))
+  const normalizedTypes = rawTypes.map((type) => ({
+  ...type,
+  loan_label: normalizeLoanTypeLabel(type, rawTypes),
+  }))
+  const uniqueTypes = Array.from(
+  new Map(normalizedTypes.map((type) => [
+  `${String(type.loan_key || type.loan_label || "").trim().toLowerCase()}|${String(type.category || "").trim().toLowerCase()}`,
+  type,
+  ])).values(),
+  )
 
-    return normalizedTypes.filter((type) => shouldIncludeLoanTypeForUser(type, userTier, normalizedTypes))
+  return uniqueTypes.filter((type) => shouldIncludeLoanTypeForUser(type, userTier, uniqueTypes))
   }, [data])
 
   const selectedType = useMemo(() => filteredLoanTypes.find((t) => t.loan_key === loanTypeKey), [filteredLoanTypes, loanTypeKey])
+
+  useEffect(() => {
+    if (loanTypeKey && !selectedType) setLoanTypeKey("")
+  }, [loanTypeKey, selectedType])
+
   const needsAttachment = useMemo(
     () => requiresProofAttachment(loanTypeKey, selectedType?.loan_label, selectedType?.category),
     [loanTypeKey, selectedType],
@@ -1196,6 +1205,7 @@ export default function LoanAppPage() {
     const label = String(selectedType?.loan_label || "").toLowerCase()
     return key === "salary_advance" || label.includes("salary advance")
   }, [selectedType])
+  const salaryAdvanceMonthOptions = [12, 15, 18, 21, 24]
 
   useEffect(() => {
     if (!isSalaryAdvanceRequest) {
@@ -2237,10 +2247,10 @@ export default function LoanAppPage() {
       return
     }
 
-    if (isSalaryAdvanceRequest && !salaryAdvanceMonths) {
-      toast({
-        title: "Select repayment months",
-        description: "Salary advance requests require a 1-3 month recovery period.",
+  if (isSalaryAdvanceRequest && (!salaryAdvanceMonths || salaryAdvanceMonths < 12 || salaryAdvanceMonths > 24)) {
+  toast({
+  title: "Invalid repayment period",
+  description: "Salary advance repayment must be between 12 and 24 months.",
         variant: "destructive",
       })
       return
@@ -3122,11 +3132,14 @@ export default function LoanAppPage() {
 
 
               {isSalaryAdvanceRequest && (
-                <div className="grid grid-cols-3 gap-3">
-                  {[1, 2, 3].map((months) => (
-                    <label key={months} className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm hover:border-emerald-300">
+                <div className="space-y-2">
+                  <Label>Repayment duration (12–24 months)</Label>
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                  {salaryAdvanceMonthOptions.map((months) => (
+                    <label key={months} className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-900 hover:border-emerald-300">
                       <input
-                        type="checkbox"
+                        type="radio"
+                        name="salary-advance-repayment"
                         checked={salaryAdvanceMonths === months}
                         onChange={() => setSalaryAdvanceMonths(salaryAdvanceMonths === months ? null : months)}
                         className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
@@ -3134,6 +3147,7 @@ export default function LoanAppPage() {
                       <span>{months} month{months > 1 ? "s" : ""}</span>
                     </label>
                   ))}
+                  </div>
                 </div>
               )}
 
@@ -5225,7 +5239,7 @@ export default function LoanAppPage() {
           </div>
         </TabsContent>
 
-        {/* ── Payment Approvals Tab (HR Executive) ── */}
+        {/* ── Payment Approvals Tab (HR Executive) ���─ */}
         <TabsContent value="payment-approvals" className="space-y-4">
           <Card>
             <CardHeader>

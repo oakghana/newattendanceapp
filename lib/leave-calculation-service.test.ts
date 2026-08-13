@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest"
 import { calculateLeaveDuration, generateCalculationSummary } from "./leave-calculation-service"
+import { getMaternityEntitlementDays } from "./leave-policy"
 
 const date = (value: string) => new Date(`${value}T00:00:00Z`)
+
+describe("maternity entitlement policy", () => {
+  it("uses 84 days for normal delivery and 98 days for CS or twins", () => {
+    expect(getMaternityEntitlementDays("normal")).toBe(84)
+    expect(getMaternityEntitlementDays("cs")).toBe(98)
+    expect(getMaternityEntitlementDays("twins")).toBe(98)
+    expect(getMaternityEntitlementDays("cs_twins")).toBe(98)
+  })
+})
 
 describe("leave calculation service", () => {
   it("counts working days, travel days, and exact holiday dates consistently", () => {

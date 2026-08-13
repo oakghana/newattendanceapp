@@ -81,7 +81,7 @@ export function isManagerRole(role: string | null | undefined): boolean {
 /** Regional HR Officer role — view-only access to regional leave data */
 export function isRegionalHrOfficerRole(role: string | null | undefined): boolean {
   const normalized = (role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
-  return normalized === "regional_hr_officer"
+  return ["regional_hr_officer", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalized)
 }
 
 export function isHrLeaveOfficeRole(role: string | null | undefined): boolean {
@@ -145,6 +145,10 @@ export function summarizeManagerReviewStatus(decisions: LeavePlanReviewDecision[
 export function getStatusLabel(status: string): string {
   const labels: Record<string, string> = {
     pending_hod_review: "Pending HOD Review",
+    pending_regional_hr_review: "Pending Regional HR Office Review",
+    pending_regional_manager_approval: "Pending Regional Manager Approval",
+    pending_hr_records_reference: "Pending HR Records Reference",
+    pending_hr_leave_processing: "Pending HR Leave Office Processing",
     pending_manager_review: "Pending Manager Review",
     hod_changes_requested: "Changes Requested by HOD",
     manager_changes_requested: "Changes Requested",
@@ -155,13 +159,14 @@ export function getStatusLabel(status: string): string {
     hr_office_forwarded: "HR Office Reviewed — Awaiting HR Approval",
     hr_approved: "Approved",
     hr_rejected: "Rejected by HR",
+    approved: "Approved by Regional Manager",
   }
   return labels[status] || status
 }
 
 /** Returns color class for a leave status badge */
 export function getStatusColor(status: string): string {
-  if (status === "hr_approved") return "bg-emerald-100 text-emerald-800 border-emerald-200"
+  if (status === "hr_approved" || status === "approved") return "bg-emerald-100 text-emerald-800 border-emerald-200"
   if (status.includes("rejected")) return "bg-red-100 text-red-800 border-red-200"
   if (status.includes("changes_requested")) return "bg-amber-100 text-amber-800 border-amber-200"
   if (status === "hr_office_forwarded") return "bg-blue-100 text-blue-800 border-blue-200"
@@ -174,7 +179,7 @@ export function getWorkflowStage(status: string): number {
   if (HOD_PENDING_STATUSES.includes(status as LeavePlanStatus)) return 2
   if (status === "hod_approved" || status === "manager_confirmed") return 3
   if (status === "hr_office_forwarded") return 4
-  if (status === "hr_approved" || status === "hr_rejected") return 4
+  if (status === "hr_approved" || status === "hr_rejected" || status === "approved") return 4
   return 1
 }
 

@@ -589,11 +589,11 @@ function RequestCard({ req, idx }: { req: LeaveRequest; idx: number }) {
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div className="flex items-center gap-2 text-muted-foreground">
               <Calendar className="h-4 w-4" />
-              <span>{req.start_date ? new Date(req.start_date).toLocaleDateString() : 'N/A'}</span>
+              <span>{req.start_date ? fmtShort(req.start_date) : 'N/A'}</span>
             </div>
             <div className="flex items-center gap-2 text-muted-foreground">
               <Calendar className="h-4 w-4" />
-              <span>{req.end_date ? new Date(req.end_date).toLocaleDateString() : 'N/A'}</span>
+              <span>{req.end_date ? fmtShort(req.end_date) : 'N/A'}</span>
             </div>
           </div>
           {req.status && <Badge variant="outline" className="text-xs">{req.status}</Badge>}

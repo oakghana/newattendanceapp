@@ -40,8 +40,23 @@ function isInsuranceOrFuneralLoan(loanTypeKey: string): boolean {
   return isInsuranceOrFuneralText(loanTypeKey)
 }
 
-function isQualifiedForLoan(loanTypeKey: string, staffRank?: string | null): boolean {
+function getLoanTier(loanType: { loan_key?: string | null; loan_label?: string | null; category?: string | null }): "junior" | "senior" | "manager" | null {
+  const key = String(loanType.loan_key || "").toLowerCase()
+  const label = String(loanType.loan_label || "").toLowerCase()
+  const category = String(loanType.category || "").toLowerCase()
+  if (key.includes("_manager") || /\bmanager\b/.test(label) || /\bmanager\b/.test(category)) return "manager"
+  if (key.includes("_senior") || /\bsenior\b|\bsr\b|sr\./.test(label) || /\bsenior\b/.test(category)) return "senior"
+  if (key.includes("_junior") || /\bjunior\b|\bjr\b/.test(label) || /\bjunior\b/.test(category)) return "junior"
+  return null
+}
+
+function isQualifiedForLoan(loanTypeKey: string, staffRank?: string | null, staffCategory?: string | null, loanType?: { loan_label?: string | null; category?: string | null }): boolean {
   const key = String(loanTypeKey || "").toLowerCase()
+  const explicitCategory = String(staffCategory || "").toLowerCase()
+  const staffTier = /\bjunior\b/.test(explicitCategory) ? "junior" : /\bsenior\b/.test(explicitCategory) ? "senior" : /\bmanager\b/.test(explicitCategory) ? "manager" : null
+  const loanTier = getLoanTier({ loan_key: key, ...loanType })
+  if (staffTier && loanTier) return staffTier === loanTier
+
   const rank = String(staffRank || "").toLowerCase()
 
   // Officer rank and above qualifies for Senior loans
@@ -168,8 +183,8 @@ async function loadLoanType(admin: any, loanTypeKey: string) {
 function clampSalaryAdvanceRecoveryMonths(loanTypeKey: string, months?: number | null): number | null {
   const normalizedKey = String(loanTypeKey || "").toLowerCase()
   if (normalizedKey !== "salary_advance") return months ?? null
-  if (!Number.isFinite(months) || months < 1) return null
-  return Math.min(3, Math.trunc(months))
+  if (!Number.isFinite(months) || months < 12 || months > 24) return null
+  return Math.trunc(months)
 }
 
 function shouldRetryWithoutLocationColumns(error: any): boolean {
@@ -244,7 +259,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id")
+      .select("id, first_name, last_name, employee_id, email, role, position, staff_category, department_id, assigned_location_id")
       .eq("id", user.id)
       .single()
 
@@ -260,11 +275,15 @@ export async function POST(request: NextRequest) {
 
     const { data: loanType, error: typeError } = await loadLoanType(admin, loan_type_key)
 
-    if (typeError || !loanType) {
-      return NextResponse.json({ error: "Loan type not found or inactive" }, { status: 404 })
-    }
+  if (typeError || !loanType) {
+  return NextResponse.json({ error: "Loan type not found or inactive" }, { status: 404 })
+  }
 
-    if (role !== "admin") {
+  if (loanType.loan_key === "salary_advance" && (initialDurationMonths < 12 || initialDurationMonths > 24)) {
+    return NextResponse.json({ error: "Salary advance repayment must be between 12 and 24 months." }, { status: 400 })
+  }
+
+  if (role !== "admin") {
       // Check for active loan of the SAME type (allow different loan types while one is active)
       const activeLoanCheck = await checkForActiveLoanOfSameType(admin, user.id, loanType.loan_key)
       if (activeLoanCheck) {
@@ -278,7 +297,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (!isQualifiedForLoan(loanType.loan_key, (profile as any).position) && role !== "admin") {
+    if (!isQualifiedForLoan(loanType.loan_key, (profile as any).position, (profile as any).staff_category, loanType) && role !== "admin") {
       return NextResponse.json(
         { error: "You are not qualified for this loan type based on current rank." },
         { status: 403 },
@@ -638,7 +657,7 @@ export async function PUT(request: NextRequest) {
         )
         if (loanType.loan_key === "salary_advance" && chosenMonths === null) {
           return NextResponse.json(
-            { error: "Salary advance requests require recovery months between 1 and 3." },
+{ error: "Salary advance requests require repayment between 12 and 24 months." },
             { status: 400 },
           )
         }

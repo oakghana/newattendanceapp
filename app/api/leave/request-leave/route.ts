@@ -1,9 +1,10 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
-import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
+import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays } from "@/lib/leave-policy"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { getNextQccReference } from "@/lib/reference-number"
 import { calculateAnnualLeaveBreakdown } from "@/lib/annual-leave-calculator"
+import { REGIONAL_NON_ANNUAL_STAGES, isAnnualLeave, isRegionalHrLeaveOfficeRole, resolveRegionalHrOffice, routeLeave } from "@/lib/hr-workflow"
 
 const NON_ANNUAL_REQUIRES_APPROVED_ANNUAL = new Set([
   "sick",
@@ -33,9 +34,13 @@ export async function POST(request: NextRequest) {
     const start_date = formData.get("start_date") as string
     const end_date = formData.get("end_date") as string
     const reason = formData.get("reason") as string
+    const requested_days_raw = formData.get("requested_days") as string | null
+    const requested_days = requested_days_raw ? Number(requested_days_raw) : null
     const leave_type = formData.get("leave_type") as string
     const leave_year_period = (formData.get("leave_year_period") as string) || "2026/2027"
     const document = formData.get("document") as File | null
+    const maternity_delivery_type = formData.get("maternity_delivery_type") as string | null
+    const delivery_date = formData.get("delivery_date") as string | null
 
     if (!start_date || !end_date || !reason) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -49,7 +54,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: reasonValidation.error }, { status: 400 })
     }
 
-    const requestedDays = computeLeaveDays(start_date, end_date)
+    const requestedDays = requested_days && Number.isInteger(requested_days) && requested_days > 0
+      ? requested_days
+      : computeLeaveDays(start_date, end_date)
     if (requestedDays <= 0) {
       return NextResponse.json({ error: "Invalid leave date range" }, { status: 400 })
     }
@@ -71,6 +78,25 @@ export async function POST(request: NextRequest) {
       normalizedRole.includes("manager")
 
     const leaveTypeKey = String(leave_type || "annual").toLowerCase().trim()
+
+    if (leaveTypeKey === "maternity") {
+      if (!document || document.size === 0) {
+        return NextResponse.json({ error: "Maternity evidence is required." }, { status: 400 })
+      }
+      if (!["normal", "cs", "twins", "regular", "cs_twins"].includes(String(maternity_delivery_type || ""))) {
+        return NextResponse.json({ error: "Select normal delivery, Caesarean section, or twins delivery." }, { status: 400 })
+      }
+      if (!delivery_date) {
+        return NextResponse.json({ error: "Delivery date is required for maternity leave." }, { status: 400 })
+      }
+      const maternityDays = getMaternityEntitlementDays(maternity_delivery_type)
+      const expectedEnd = new Date(start_date)
+      expectedEnd.setDate(expectedEnd.getDate() + maternityDays - 1)
+      const expectedEndDate = expectedEnd.toISOString().split("T")[0]
+      if (end_date !== expectedEndDate || requestedDays !== maternityDays) {
+        return NextResponse.json({ error: `Maternity leave must be ${maternityDays} days for the selected delivery type.` }, { status: 400 })
+      }
+    }
 
     if (NON_ANNUAL_REQUIRES_APPROVED_ANNUAL.has(leaveTypeKey)) {
       try {
@@ -189,8 +215,38 @@ export async function POST(request: NextRequest) {
 
     const autoApproveRoles = ["admin"]
     const shouldAutoApprove = normalizedRole ? autoApproveRoles.includes(normalizedRole) : false
+    const staffRoutingProfile = await admin
+      .from("user_profiles")
+      .select("region_id, assigned_location_id")
+      .eq("id", user.id)
+      .maybeSingle()
 
-    // Create leave request (status depends on role)
+    const routingProfile = (staffRoutingProfile.data || {}) as any
+    let regionId = routingProfile.region_id || null
+    let locationName: string | null = null
+    if (routingProfile.assigned_location_id) {
+      const { data: assignedLocation } = await admin
+        .from("geofence_locations")
+        .select("name, address, districts (region_id)")
+        .eq("id", routingProfile.assigned_location_id)
+        .maybeSingle()
+      locationName = assignedLocation?.name || assignedLocation?.address || null
+      regionId = regionId || (assignedLocation?.districts as any)?.region_id || null
+    }
+
+    const regionalOffice = await resolveRegionalHrOffice(admin, regionId)
+    const leaveRoute = routeLeave({
+      leaveType: leaveTypeKey,
+      locationName,
+      hasRegionalOffice: Boolean(regionalOffice),
+    })
+    const initialStatus = shouldAutoApprove
+      ? "approved"
+      : leaveRoute.route === "regional_non_annual" && leaveRoute.firstStage
+        ? leaveRoute.firstStage
+        : "pending"
+
+    // Create leave request (status depends on role and route)
     const payload: any = {
       user_id: user.id,
       reference_number: referenceNumber,
@@ -199,10 +255,13 @@ export async function POST(request: NextRequest) {
       reason: reasonValidation.normalized,
       leave_type: leaveTypeKey,
       leave_year_period,
-      status: shouldAutoApprove ? "approved" : "pending",
+      status: initialStatus,
       approved_by: shouldAutoApprove ? user.id : null,
       approved_at: shouldAutoApprove ? new Date().toISOString() : null,
       document_url,
+      requested_days: requestedDays,
+      maternity_delivery_type: leaveTypeKey === "maternity" ? maternity_delivery_type : null,
+      delivery_date: leaveTypeKey === "maternity" ? delivery_date : null,
     }
 
     // Try insert; if column not found (schema mismatch), retry without `leave_type` and return a helpful error
@@ -254,13 +313,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── HOD notification via loan_hod_linkages ──────────────────────────────
-    // Resolve the staff's HOD using the same linkage table as the loan system,
-    // then notify them so they can approve in the leave management queue.
-    // SKIP for HR Leave Office staff — they have full permissions and don't need HOD approval
-    const isHrLeaveOffice = normalizedRole === "hr_leave_office"
+    // Regional non-annual requests start with Regional HR Office adjustment and must not notify HOD.
+    const isRegionalNonAnnual = leaveRoute.route === "regional_non_annual" && Boolean(leaveRoute.firstStage)
+    const isHrLeaveOffice = normalizedRole === "hr_leave_office" || isRegionalHrLeaveOfficeRole(normalizedRole)
 
-    if (!shouldAutoApprove && !isHrLeaveOffice) {
+    if (!shouldAutoApprove && !isHrLeaveOffice && !isRegionalNonAnnual) {
       try {
         const hodIds: string[] = []
 
@@ -280,11 +337,30 @@ export async function POST(request: NextRequest) {
         if (hodIds.length === 0) {
           const { data: staffProfile } = await admin
             .from("user_profiles")
-            .select("department_id, first_name, last_name, assigned_location_id")
+            .select("department_id, region_id, first_name, last_name, assigned_location_id")
             .eq("id", user.id)
             .maybeSingle()
 
-          if ((staffProfile as any)?.department_id) {
+          // Regional non-annual leave must go to the Regional Manager first.
+          // The Regional HR Office role is the regional leave-office owner, while the
+          // Regional Manager linkage determines the staff population it serves.
+          const isNonAnnualLeave = leaveTypeKey !== "annual" && leaveTypeKey !== "annual_leave"
+          if (isNonAnnualLeave && (staffProfile as any)?.region_id) {
+            const { data: regionalManagers } = await admin
+              .from("user_profiles")
+              .select("id")
+              .eq("region_id", (staffProfile as any).region_id)
+              .eq("role", "regional_manager")
+              .eq("is_active", true)
+              .limit(5)
+
+            for (const manager of regionalManagers || []) {
+              const id = (manager as any)?.id
+              if (id && !hodIds.includes(id)) hodIds.push(id)
+            }
+          }
+
+          if (hodIds.length === 0 && (staffProfile as any)?.department_id) {
             // Fetch all possible HOD roles (department_head, manager_hr, director_hr)
             const { data: deptHods } = await admin
               .from("user_profiles")
@@ -300,7 +376,7 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // 3. Further fallback: regional_manager at same location
+          // Fallback: regional_manager at the same location
           if (hodIds.length === 0 && (staffProfile as any)?.assigned_location_id) {
             const { data: rmList } = await admin
               .from("user_profiles")
@@ -410,7 +486,27 @@ export async function POST(request: NextRequest) {
         console.warn("HOD leave notification failed:", hodErr)
       }
     }
-    // ── end HOD notification ────────────────────────────────────────────────
+    if (!shouldAutoApprove && !isHrLeaveOffice && isRegionalNonAnnual && regionalOffice?.user_id) {
+      const regionalHrId = regionalOffice.user_id
+      const message = `Regional leave request requires HR Office adjustment (${start_date} to ${end_date}).`
+      await admin.from("leave_notifications").insert({
+        leave_request_id: leaveRequest.id,
+        recipient_id: regionalHrId,
+        sender_id: user.id,
+        notification_type: "leave_request_regional_hr",
+        message,
+        status: "pending_regional_hr_review",
+      })
+      await admin.from("staff_notifications").insert({
+        recipient_id: regionalHrId,
+        title: "Regional Leave Request",
+        message,
+        type: "leave_request_regional_hr",
+        data: { leave_request_id: leaveRequest.id, staff_user_id: user.id },
+        is_read: false,
+      })
+    }
+    // ── end leave notification ────────────────────────────────────────────────
 
     if (shouldAutoApprove) {
       const { error: notificationError } = await supabase
