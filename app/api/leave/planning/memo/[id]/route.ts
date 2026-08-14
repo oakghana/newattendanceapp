@@ -201,8 +201,13 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
       // Use the stored adjusted_days if it was explicitly set by HR office (may include travel adjustments),
       // otherwise fall back to the computed working-days figure so the table never shows a stale entitlement.
   const actualBaseDays = baseLeaveDays > 0 ? baseLeaveDays : computedWorkingDays
-  const baseEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || actualBaseDays)
-  const outstandingDays = Math.max(0, Number(lr.outstanding_leave_days_added ?? lr.outstanding_leave_days ?? 0))
+      const baseEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || actualBaseDays)
+      const outstandingDays = Math.max(0, Number(
+        lr.outstanding_leave_days_added
+          ?? lr.outstanding_leave_days
+          ?? (lr.adjustment_breakdown as any)?.outstanding_days
+          ?? 0,
+      ))
   const entitlementForDisplay = baseEntitlement + outstandingDays
       return {
         useTable: true,
@@ -663,9 +668,15 @@ export async function GET(
       const explicitDeduction = (lr.prior_leave_days_deducted != null || lr.holiday_days_deducted != null)
         ? Number(lr.prior_leave_days_deducted || 0) + Number(lr.holiday_days_deducted || 0)
         : extractAlreadyEnjoyedDays(lr.adjustment_reason || lr.memo_draft_body)
+      const memoOutstandingDays = Math.max(0, Number(
+        lr.outstanding_leave_days_added
+          ?? lr.outstanding_leave_days
+          ?? (lr.adjustment_breakdown as any)?.outstanding_days
+          ?? 0,
+      ))
       annualMemoDates = calculateAnnualLeaveMemoDates({
         startDate: effectiveStart,
-        entitlementDays: Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays),
+        entitlementDays: Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays) + memoOutstandingDays,
         // Annual granted days are recalculated from the resolved entitlement,
         // deductions, and travel days; never trust stale stored 22/24-day totals.
         grantedDays: null,

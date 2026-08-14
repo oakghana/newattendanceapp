@@ -27,6 +27,7 @@ export interface MemoData {
     outstanding_used_days?: number
     used_this_period?: number
     prior_leave_days_deducted?: number
+    holiday_days_deducted?: number
     travelling_days_added?: number
     leave_period_start?: string
     leave_period_end?: string
@@ -57,8 +58,16 @@ export function buildMemoRemarks({
   const unique = (items: string[]) => Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)))
   // Keep HR's explanation, but remove repeated semicolon-delimited clauses and
   // never append the same calculated detail a second time.
-  if (reason) return unique(reason.split(/\s*;\s*/)).join("; ")
-  return unique(calculatedRemarks).join("; ") || "—"
+  const reasonParts = reason
+    ? reason.split(/\s*;\s*/).filter((part) => {
+        const normalized = part.toLowerCase()
+        return !normalized.includes("outstanding leave")
+          && !normalized.includes("travelling day")
+          && !normalized.includes("prior leave")
+          && !normalized.includes("public holiday")
+      })
+    : []
+  return unique([...reasonParts, ...calculatedRemarks]).join("; ") || "—"
 }
 
 export interface GeneratedMemo {
@@ -435,7 +444,13 @@ async function generateMainMemo(
     const publicHolidayDays = Number(firstStaff?.holiday_days_deducted ?? 0)
     const enjoyedDays = Number(firstStaff?.prior_leave_days_deducted ?? 0)
     const travellingDays = Number(firstStaff?.travelling_days_added ?? 0)
-    const outstandingLeaveDays = Math.max(0, Number(firstStaff?.outstanding_leave_days ?? 0))
+    const adjustmentBreakdown = (memoData as any).adjustment_breakdown
+    const outstandingLeaveDays = Math.max(0, Number(
+      firstStaff?.outstanding_leave_days
+        ?? (memoData as any).outstanding_leave_days_added
+        ?? adjustmentBreakdown?.outstanding_days
+        ?? 0,
+    ))
     const storedEntitlementDays = Number(
       firstStaff?.adjusted_entitlement_days
         ?? firstStaff?.outstanding_entitlement_days
