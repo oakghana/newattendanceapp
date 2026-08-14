@@ -102,7 +102,9 @@ export function getLeaveWorkflowView(input: {
 
 export function isRegionalWorkflowRequest(input: { workflowRoute?: string | null; route?: string | null; locationName?: string | null; leaveType?: string | null }) {
   if (String(input.workflowRoute || input.route || "").toLowerCase() === "regional") return true
-  return !isRegionalLeaveException(input.leaveType) && !isExcludedLocation(input.locationName)
+  // Route is determined solely by the staff member's assigned location — leave
+  // type and manager grade no longer carve out exceptions from this rule.
+  return !isExcludedLocation(input.locationName)
 }
 
 export function normalizeLocationName(value: string | null | undefined) {
@@ -123,9 +125,17 @@ export function isRegionalLeaveException(leaveType: string | null | undefined) {
   return ["manager annual", "manager grade annual", "maternity", "paternity", "part", "part time", "part time leave", "part leave"].includes(normalized)
 }
 
-export function routeLeave(input: { leaveType?: string | null; locationName?: string | null; hasRegionalOffice: boolean; isManagerGrade?: boolean }): { route: LeaveRoute; firstStage: string | null; reason?: string } {
-  if (input.isManagerGrade || isRegionalLeaveException(input.leaveType) || isExcludedLocation(input.locationName)) {
-    return { route: "legacy", firstStage: null, reason: "This leave type or location uses its separate non-regional workflow." }
+/**
+ * Route by the staff member's assigned location only. Non-regional/head-office
+ * locations (Awutu Stores, Nsawam Archive Center, QCC Head Office, Head Office
+ * Swanzy Arcade) always use the HOD -> HR Leave Office -> HR Executive -> HR
+ * Records pipeline. Every other location uses the Regional HR Office ->
+ * Regional Manager pipeline. Leave type and manager grade no longer affect
+ * routing.
+ */
+export function routeLeave(input: { locationName?: string | null; hasRegionalOffice: boolean }): { route: LeaveRoute; firstStage: string | null; reason?: string } {
+  if (isExcludedLocation(input.locationName)) {
+    return { route: "legacy", firstStage: null, reason: "This location uses the non-regional/head-office workflow." }
   }
   if (!input.hasRegionalOffice) {
     return { route: "regional", firstStage: REGIONAL_LEAVE_STAGES.regionalHrReview, reason: "Regional HR assignment is required before submission." }
