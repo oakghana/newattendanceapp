@@ -1169,6 +1169,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
   const [hodNote, setHodNote] = useState<Record<string, string>>({})
   const [hodAdjStart, setHodAdjStart] = useState<Record<string, string>>({})
   const [hodAdjEnd, setHodAdjEnd] = useState<Record<string, string>>({})
+  const [hodMemoReference, setHodMemoReference] = useState<Record<string, string>>({})
   const [hodSubmitting, setHodSubmitting] = useState<string | null>(null)
 
   // ── HR Leave Office ─────────────────────────���──────────────����────────
@@ -2325,6 +2326,12 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     if (action === "recommend_change" && (!hodAdjStart[reviewId] || !hodAdjEnd[reviewId])) {
       toast({ title: "Adjusted dates required", variant: "destructive" }); return
     }
+    const requestForReview = (data?.requests || []).find((request: any) => request.id === requestId)
+    const isRegionalManagerReview = normalizedRole === "regional_manager" && String(requestForReview?.workflow_route || "").toLowerCase() === "regional"
+    const reviewMemoReference = String(hodMemoReference[reviewId] || requestForReview?.memo_reference || requestForReview?.reference_number || "").trim()
+    if (isRegionalManagerReview && action === "approve" && !reviewMemoReference) {
+      toast({ title: "Official memo reference required", description: "Regional HR Office should enter the reference first. If it was omitted, the Regional Manager may enter it here before approval.", variant: "destructive" }); return
+    }
     // Only pre-check the signature client-side when we actually have a user id
     // to check. Without it, the request would 404/undefined and incorrectly
     // block approval even when a signature is saved. The API route performs
@@ -2352,8 +2359,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
           action,
           recommendation: hodNote[reviewId] || null,
           adjusted_preferred_start_date: hodAdjStart[reviewId] || null,
-          adjusted_preferred_end_date: hodAdjEnd[reviewId] || null,
-        }),
+  adjusted_preferred_end_date: hodAdjEnd[reviewId] || null,
+  memo_reference: reviewMemoReference || null,
+  }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || "Review failed")
@@ -2377,6 +2385,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     const annualAdjustmentRemark = isAnnualLeave && outstandingDays > 0
       ? `${String(rsn || "Annual leave adjustment").trim()} ${outstandingDays} outstanding day(s) added to entitlement.`
       : String(rsn || "").trim()
+    const regionalMemoReference = String(
+      officeRefNumber[requestId] || request?.memo_reference || request?.reference_number || "",
+    ).trim()
 
     if (!adjStart || !adjEnd) { toast({ title: "Adjusted dates required", variant: "destructive" }); return }
     
@@ -2397,6 +2408,10 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     }
 
     if (isRegionalHr) {
+      if (!regionalMemoReference) {
+        toast({ title: "Official memo reference required", description: "Regional HR Office must enter the leave request memo number before forwarding it to the Regional Manager.", variant: "destructive" })
+        return
+      }
       setOfficeSubmitting(requestId)
       try {
         const res = await fetch("/api/leave/planning/review", {
@@ -2408,6 +2423,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
             recommendation: annualAdjustmentRemark || "Regional HR adjustment completed before final Regional Manager approval.",
             adjusted_preferred_start_date: adjStart,
             adjusted_preferred_end_date: adjEnd,
+            memo_reference: regionalMemoReference,
             adjustment_breakdown: {
               outstanding_days: Number(officeOutstandingDays[requestId] || 0),
               public_holiday_days: Number(officeHolidayDays[requestId] || 0),
@@ -2608,7 +2624,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     return t
   }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hodReviewRequests.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests, normalizedRole])
 
-  // ── Render ────��──────��───────────────────────────────────────────��──
+  // ── Render ────��──────��───────────────────────���───────────────────��──
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
       {/* ─��� Header Banner ──────�����──────────��──────��─────────────────── */}
@@ -3049,6 +3065,18 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                           <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-200 mb-4">
                             <strong>Reason:</strong> {req.reason}
                           </p>
+                        )}
+                        {normalizedRole === "regional_manager" && String(req.workflow_route || "").toLowerCase() === "regional" && (
+                          <div className="mb-4 space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                            <Label className="text-xs font-semibold text-amber-900">Official leave memo reference</Label>
+                            <Input
+                              value={hodMemoReference[rId] || req.memo_reference || req.reference_number || ""}
+                              onChange={(e) => setHodMemoReference((p) => ({ ...p, [rId]: e.target.value }))}
+                              placeholder="Regional HR reference required before approval"
+                              className="h-9 bg-white font-mono text-sm"
+                            />
+                            <p className="text-[10px] text-amber-800">Regional HR Office is expected to enter this before forwarding. Use this field only to correct a missing reference before approval.</p>
+                          </div>
                         )}
                         <StaffHistoryPanel
                           history={staffHistoryByUser[String(req.user?.id || "")] || []}
@@ -4223,7 +4251,16 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                             <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
                               <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Details</p>
 
-                              {!isRegionalHr && <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                              {isRegionalHr ? <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                                <Label className="text-xs font-semibold text-amber-900">Official leave memo reference <span className="text-red-600">*</span></Label>
+                                <Input
+                                  value={officeRefNumber[req.id] || req.memo_reference || req.reference_number || ""}
+                                  onChange={(e) => setOfficeRefNumber((p) => ({ ...p, [req.id]: e.target.value }))}
+                                  placeholder="Enter the official leave memo number"
+                                  className="h-9 bg-white font-mono text-sm"
+                                />
+                                <p className="text-[10px] text-amber-800">Regional HR Office must enter this reference before the request can reach the Regional Manager leave center.</p>
+                              </div> : <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
                                 <Label className="text-xs font-semibold text-emerald-900">Official memo reference</Label>
                                 <Input
                                   value={req.memo_reference || ""}

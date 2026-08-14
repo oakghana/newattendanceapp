@@ -92,15 +92,39 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Adjusted start date and end date are required before forwarding to the Regional Manager." }, { status: 400 })
     }
 
+    const suppliedMemoReference = String(memo_reference || "").trim()
+    if (isRegionalForward && !suppliedMemoReference) {
+      return NextResponse.json({
+        error: "Regional HR Office must enter the official leave memo reference before forwarding this request to the Regional Manager.",
+        code: "REGIONAL_MEMO_REFERENCE_REQUIRED",
+      }, { status: 400 })
+    }
+
     const isRegionalManagerApproval = role === "regional_manager"
     const isRegionalRequest = action === "forward_to_regional_manager"
       || String(body.workflow_route || "").toLowerCase() === "regional"
     if (isRegionalManagerApproval && isRegionalRequest && decision === "approved" && !isRegionalForward) {
       const profileHasSignature = Boolean(String((profile as any).signature_data_url || "").trim())
+      const { data: registeredSignature } = await admin
+        .from("approval_signature_registry")
+        .select("signature_data_url, signature_text")
+        .eq("user_id", user.id)
+        .eq("workflow_domain", "leave")
+        .eq("is_active", true)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
 
-      if (!profileHasSignature) {
+      if (!profileHasSignature && !String(registeredSignature?.signature_data_url || "").trim()) {
         return NextResponse.json({ error: "Save your Regional Manager signature in your profile before approving this regional leave request." }, { status: 400 })
       }
+    }
+
+    if (isRegionalManagerApproval && isRegionalRequest && decision === "approved" && !isRegionalForward && !String(memo_reference || "").trim()) {
+      return NextResponse.json({
+        error: "This regional leave request cannot be approved until Regional HR Office enters the official memo reference.",
+        code: "REGIONAL_MEMO_REFERENCE_REQUIRED",
+      }, { status: 400 })
     }
 
     if (decision === "recommend_change" && !isRegionalForward && (!adjusted_preferred_start_date || !adjusted_preferred_end_date)) {
@@ -178,7 +202,7 @@ export async function POST(request: NextRequest) {
 
     const { data: leavePlan, error: leavePlanError } = await admin
       .from("leave_plan_requests")
-      .select("id, user_id, preferred_start_date, preferred_end_date, entitlement_days, workflow_route, leave_type_key, requested_days, user_profiles:user_id(assigned_location_id, region_id)")
+      .select("id, user_id, preferred_start_date, preferred_end_date, entitlement_days, workflow_route, leave_type_key, requested_days, memo_reference, user_profiles:user_id(assigned_location_id, region_id)")
       .eq("id", leave_plan_request_id)
       .single()
 
@@ -280,7 +304,13 @@ export async function POST(request: NextRequest) {
         adjustment_breakdown: adjustment_breakdown || {},
         adjustment_reason: String(recommendation || "").trim() || null,
       } : {}),
-      ...(isRegionalForward && String(memo_reference || "").trim() ? { memo_reference: String(memo_reference).trim() } : {}),
+      ...((isRegionalForward || isRegionalManagerApprovalComplete) && suppliedMemoReference ? { memo_reference: suppliedMemoReference } : {}),
+      ...(isRegionalManagerApprovalComplete ? {
+        regional_manager_id: user.id,
+        regional_manager_name: `${String((profile as any).first_name || "").trim()} ${String((profile as any).last_name || "").trim()}`.trim() || "Regional Manager",
+        regional_manager_approved_at: new Date().toISOString(),
+        regional_manager_approval_note: String(recommendation || "Approved by the Regional Manager.").trim(),
+      } : {}),
       updated_at: new Date().toISOString(),
     }
 
@@ -291,6 +321,7 @@ export async function POST(request: NextRequest) {
       "memo_generated", "memo_generated_at", "hr_approver_id", "hod_reviewer_id", "hod_reviewed_at",
       "hod_decision", "preferred_start_date", "preferred_end_date", "requested_days",
       "hr_approver_name", "hr_signature_data_url", "hr_approved_at", "hr_approval_note",
+      "regional_manager_id", "regional_manager_name", "regional_manager_signature_data_url", "regional_manager_signature_text", "regional_manager_approved_at", "regional_manager_approval_note",
     ])
     for (const key of Object.keys(requestUpdatePayload)) {
       if (!leavePlanColumns.has(key)) delete requestUpdatePayload[key]
@@ -310,6 +341,8 @@ export async function POST(request: NextRequest) {
       requestUpdatePayload.hr_approver_name = signerName || "Regional Manager"
       const savedSignature = signerSignature?.signature_data_url || (profile as any).signature_data_url || null
       requestUpdatePayload.hr_signature_data_url = savedSignature
+      requestUpdatePayload.regional_manager_signature_data_url = savedSignature
+      requestUpdatePayload.regional_manager_signature_text = signerSignature?.signature_text || null
       requestUpdatePayload.hr_approver_id = user.id
       requestUpdatePayload.hr_approved_at = new Date().toISOString()
       requestUpdatePayload.hr_approval_note = "Approved by the Regional Manager under the regional non-annual leave workflow."

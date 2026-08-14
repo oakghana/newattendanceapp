@@ -568,8 +568,17 @@ export async function GET(
     }
     // For leave approval memos: use hr_approver_id from leave_plan_requests
     else if (!paymentMemo) {
+      const regionalManagerId = String((leaveRequest as any).regional_manager_id || "")
       const hrApproverId = String((leaveRequest as any).hr_approver_id || "")
-      if (hrApproverId) {
+      if (regionalManagerId) {
+        signerToUse = {
+          id: regionalManagerId,
+          name: (leaveRequest as any).regional_manager_name,
+          signature_data_url: (leaveRequest as any).regional_manager_signature_data_url,
+          signature_text: (leaveRequest as any).regional_manager_signature_text,
+          position: "REGIONAL MANAGER",
+        }
+      } else if (hrApproverId) {
         signerToUse = { id: hrApproverId }
       }
     }
