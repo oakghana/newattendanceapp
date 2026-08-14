@@ -656,7 +656,7 @@ async function downloadLeaveAnalyticsPdf(rows: LeaveAnalyticsRecord[], fileName:
 
 // ─── Stage Progress Indicator ────────────────────────────────────────────────
 function WorkflowStages({ status }: { status: string }) {
-  const isRegional = status.startsWith("pending_regional_")
+  const isRegional = status.startsWith("pending_regional_") || status === "regional_hr_office_review" || status === "regional_hr_approved"
   const stages = isRegional
     ? [
         { label: "Submitted", Icon: Send },
