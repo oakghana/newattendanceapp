@@ -42,7 +42,7 @@ describe("regional non-annual leave workflow", () => {
     expect(route).toEqual({
       route: "legacy",
       firstStage: null,
-      reason: "This leave type or location uses its separate non-regional workflow.",
+      reason: "This location uses the non-regional/head-office workflow.",
     })
   })
 

@@ -148,12 +148,12 @@ export function summarizeManagerReviewStatus(decisions: LeavePlanReviewDecision[
 
 /** Returns a human-readable label for a leave status */
 export function getStatusLabel(status: string, memoReferenceLocked?: boolean): string {
-  // Once HR Records has referenced a request that is still sitting at "hod_approved" /
-  // "manager_confirmed", it has moved on to the HR Leave Office queue even though the
-  // underlying status value has not changed — reflect that in the label so it doesn't
-  // read as though HR Records still needs to act on it.
-  if (memoReferenceLocked && (status === "hod_approved" || status === "manager_confirmed")) {
-    return "HR Records Reviewed — Awaiting HR Leave Office Review"
+  // The non-regional pipeline runs HOD Review -> HR Leave Office -> HR
+  // Executive -> HR Records (last). Once HR Executive approves, the request
+  // is "hr_approved" but the memo stays locked until HR Records adds the
+  // official reference — reflect that instead of implying it's fully done.
+  if (status === "hr_approved" && !memoReferenceLocked) {
+    return "Approved — Awaiting HR Records Reference for Memo"
   }
   const labels: Record<string, string> = {
     pending_hod_review: "Pending HOD Review",
@@ -166,9 +166,9 @@ export function getStatusLabel(status: string, memoReferenceLocked?: boolean): s
     manager_changes_requested: "Changes Requested",
     hod_rejected: "Rejected by HOD",
     manager_rejected: "Rejected by Manager",
-    hod_approved: "HOD Approved — Awaiting HR Records Reference",
-    manager_confirmed: "Manager Confirmed — Awaiting HR Records Reference",
-    hr_office_forwarded: "Forwarded to HR Approver — Pending Final Approval",
+    hod_approved: "HOD Approved — Awaiting HR Leave Office",
+    manager_confirmed: "Manager Confirmed — Awaiting HR Leave Office",
+    hr_office_forwarded: "Forwarded to HR Executive — Pending Final Approval",
     hr_approved: "Approved",
     hr_rejected: "Rejected by HR",
     approved: "Approved by Regional Manager",

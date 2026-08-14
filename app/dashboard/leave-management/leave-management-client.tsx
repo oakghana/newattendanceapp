@@ -1809,7 +1809,7 @@ export function LeaveManagementClient({
                 asChild
                 className="gap-2 rounded-xl px-6 py-2 font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-md hover:shadow-lg hover:from-emerald-600 hover:to-emerald-700 transition-all"
               >
-                <Link href="/dashboard/leave-planning">
+                <Link href="/dashboard/leave-management?tab=leave-planning">
                   <Plus className="h-4 w-4" />
                   Apply for Leave
                 </Link>

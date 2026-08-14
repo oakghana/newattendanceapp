@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { notifyLeaveHodApproved, notifyLeaveHodDecision } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { calculateRequestedDays, summarizeManagerReviewStatus, type LeavePlanReviewDecision } from "@/lib/leave-planning"
-import { isAnnualLeave, isExcludedLocation } from "@/lib/hr-workflow"
+import { isAnnualLeave, canNonRegionalPipelineAct, canRegionalPipelineAct } from "@/lib/hr-workflow"
 
 function isSchemaIssue(error: any) {
   const code = error?.code || ""
@@ -194,6 +194,15 @@ export async function POST(request: NextRequest) {
     if (isRegionalForward && !isRegionalWorkflow) {
       return NextResponse.json({ error: "This leave request is not marked for the regional workflow." }, { status: 400 })
     }
+    // Cross-route guard: HOD Review, HR Leave Office, and HR Executive never
+    // touch regional requests, and Regional HR/Regional Manager actions never
+    // touch non-regional requests. Each route runs its own separate pipeline.
+    if (role === "department_head" && !canNonRegionalPipelineAct((leavePlan as any).workflow_route)) {
+      return NextResponse.json({ error: "Regional leave requests do not go through HOD Review." }, { status: 403 })
+    }
+    if ((isRegionalForward || isRegionalManagerApproval) && !canRegionalPipelineAct((leavePlan as any).workflow_route)) {
+      return NextResponse.json({ error: "Regional HR Office and Regional Manager actions only apply to regional leave requests." }, { status: 403 })
+    }
 
     if (isRegionalManagerApproval && isRegionalRequest) {
       const staffProfile = Array.isArray((leavePlan as any).user_profiles) ? (leavePlan as any).user_profiles[0] : (leavePlan as any).user_profiles
@@ -256,11 +265,13 @@ export async function POST(request: NextRequest) {
 
     const isRegionalManagerApprovalComplete = isRegionalWorkflow && isRegionalManagerApproval && decision === "approved" && !isRegionalForward
     const isDepartmentHeadApproval = decision === "approved" && !isRegionalForward && !isRegionalManagerApproval
-    const mustUseHrRecordsReference = !isRegionalWorkflow && isDepartmentHeadApproval && !isAnnualLeave((leavePlan as any).leave_type_key) && !isExcludedLocation((leavePlan as any).assigned_location_name)
+    // HR Records only steps in at the end of the non-regional pipeline, after
+    // HR Executive approval — HOD approval must never hold a request for an
+    // early reference. It always proceeds straight to nextStatus (hod_approved),
+    // handing off to HR Leave Office immediately.
     const requestUpdatePayload: Record<string, any> = {
-      status: isRegionalForward ? "pending_regional_manager_approval" : isRegionalManagerApprovalComplete ? "approved" : mustUseHrRecordsReference ? "pending_hr_records_reference" : nextStatus,
+      status: isRegionalForward ? "pending_regional_manager_approval" : isRegionalManagerApprovalComplete ? "approved" : nextStatus,
       ...(isRegionalManagerApprovalComplete ? { workflow_stage: "completed", memo_generated: true, memo_generated_at: new Date().toISOString(), hr_approver_id: user.id } : {}),
-      ...(mustUseHrRecordsReference ? { workflow_stage: "pending_hr_records_reference" } : {}),
       manager_recommendation: mergedRecommendations || null,
       ...(isRegionalForward && isAnnualLeave((leavePlan as any).leave_type_key) ? {
         entitlement_days: effectiveEntitlement,

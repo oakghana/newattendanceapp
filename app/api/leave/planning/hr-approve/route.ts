@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { notifyLeaveHrApproved, notifyLeaveHrRejected } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrApproverRole, buildHologramCode } from "@/lib/leave-planning"
+import { canNonRegionalPipelineAct } from "@/lib/hr-workflow"
 import { renderTemplate } from "@/lib/leave-templates"
 import { createLeaveResumptionTrackingForLeaveRequest } from "@/lib/leave-resumption-service"
 import crypto from "crypto"
@@ -314,6 +315,11 @@ export async function POST(request: NextRequest) {
     }
 
     const currentStatus = String((leaveRequest as any).status || "")
+    // HR Executive approval is exclusive to the non-regional pipeline — the
+    // Regional Manager finalizes regional requests through /api/leave/planning/review.
+    if (!canNonRegionalPipelineAct((leaveRequest as any).workflow_route)) {
+      return NextResponse.json({ error: "Regional leave requests are finalized by the Regional Manager, not HR Executive." }, { status: 403 })
+    }
     const TERMINAL_STATUSES = ["hr_approved", "hr_rejected", "cancelled"]
     
     // Block duplicate processing

@@ -239,22 +239,24 @@ export default async function LeaveManagementPage() {
     return (
       <LeaveManagementPageWrapper>
       <div className="leave-theme">
-        <LeaveManagementModuleClient
-          userId={user.id}
-          userRole={effectiveRole}
-          userDepartment={(profile as any)?.department_id || null}
-          userLocationId={(profile as any)?.assigned_location_id || null}
-          userFirstName={(profile as any)?.first_name || null}
-          userLastName={(profile as any)?.last_name || null}
-          inactivityDays={Math.max(1, inactivityDays)}
-          userDepartmentName={(profile as any)?.departments?.name || null}
-          userDepartmentCode={(profile as any)?.departments?.code || null}
-          userLocationName={userLocationName}
-          hasHodLinkage={hasHodLinkage}
-          initialStaffRequests={staffRequests}
-          initialManagerNotifications={managerNotifications}
-          initialApprovedStaffRequests={approvedStaffRequests}
-        />
+        <Suspense fallback={<div className="p-8 text-center text-slate-500">Loading leave management...</div>}>
+          <LeaveManagementModuleClient
+            userId={user.id}
+            userRole={effectiveRole}
+            userDepartment={(profile as any)?.department_id || null}
+            userLocationId={(profile as any)?.assigned_location_id || null}
+            userFirstName={(profile as any)?.first_name || null}
+            userLastName={(profile as any)?.last_name || null}
+            inactivityDays={Math.max(1, inactivityDays)}
+            userDepartmentName={(profile as any)?.departments?.name || null}
+            userDepartmentCode={(profile as any)?.departments?.code || null}
+            userLocationName={userLocationName}
+            hasHodLinkage={hasHodLinkage}
+            initialStaffRequests={staffRequests}
+            initialManagerNotifications={managerNotifications}
+            initialApprovedStaffRequests={approvedStaffRequests}
+          />
+        </Suspense>
       </div>
       </LeaveManagementPageWrapper>
     )

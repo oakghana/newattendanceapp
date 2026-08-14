@@ -2634,13 +2634,14 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                 { label: "Staff Applies", step: 1 },
                 { label: "HOD Reviews", step: 2 },
                 { label: "HR Leave Office Adjusts", step: 3 },
-                { label: "HR Issues Memo", step: 4 },
+                { label: "HR Executive Approves", step: 4 },
+                { label: "HR Records Adds Reference & Unlocks Memo", step: 5 },
               ]
-          ).map((s) => (
+          ).map((s, idx, arr) => (
             <div key={s.step} className="flex items-center gap-1.5 bg-white/10 rounded-full px-3 py-1 text-xs font-medium">
               <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold">{s.step}</span>
               {s.label}
-              {s.step < 4 && <ChevronRight className="w-3 h-3 opacity-60" />}
+              {idx < arr.length - 1 && <ChevronRight className="w-3 h-3 opacity-60" />}
             </div>
           ))}
         </div>

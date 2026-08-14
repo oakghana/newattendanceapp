@@ -143,6 +143,27 @@ export function routeLeave(input: { locationName?: string | null; hasRegionalOff
   return { route: "regional", firstStage: REGIONAL_LEAVE_STAGES.regionalHrReview }
 }
 
+/**
+ * Cross-route pipeline guards. The two pipelines never share a stage:
+ * non-regional runs HOD Review -> HR Leave Office -> HR Executive -> HR
+ * Records; regional runs Regional HR Office -> Regional Manager. Each
+ * guard below is what the corresponding API route checks before acting,
+ * kept here as pure functions so the boundary is unit-testable.
+ */
+export function isRegionalWorkflowRoute(workflowRoute: string | null | undefined) {
+  return String(workflowRoute || "").toLowerCase() === "regional"
+}
+
+/** HOD Review, HR Leave Office, and HR Executive act only on non-regional requests. */
+export function canNonRegionalPipelineAct(workflowRoute: string | null | undefined) {
+  return !isRegionalWorkflowRoute(workflowRoute)
+}
+
+/** Regional HR Office forwarding and Regional Manager approval act only on regional requests. */
+export function canRegionalPipelineAct(workflowRoute: string | null | undefined) {
+  return isRegionalWorkflowRoute(workflowRoute)
+}
+
 export type StaffAssignmentResolution = {
   staffId: string
   assignedLocationId: string | null
@@ -274,15 +295,17 @@ export async function resolveRegionalHrOffice(
   return fallback ? { user_id: fallback.id, region_id: fallback.region_id, is_override: false } : null
 }
 
+/**
+ * HR Records is the last stop on the non-regional pipeline (HOD Review -> HR
+ * Leave Office memo step -> HR Executive approval -> HR Records reference),
+ * and the memo download stays blocked until it acts. A fresh (non-correction)
+ * reference is therefore only accepted once HR Executive has approved the
+ * request ("hr_approved"). Corrections to an already-locked reference bypass
+ * this check entirely (see save-reference/route.ts), so this only gates the
+ * first-time assignment.
+ */
 export function hrRecordsCanReference(status: string | null | undefined) {
-  return [
-    "pending_hr_records_reference",
-    "hr_approved",
-    "hod_approved",
-    "hr_office_forwarded",
-    "regional_manager_approved",
-    "approved",
-  ].includes(String(status || ""))
+  return ["hr_approved", "pending_hr_records_reference"].includes(String(status || ""))
 }
 
 export function lockedReferenceMutationError(locked: boolean) {

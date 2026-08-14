@@ -1,5 +1,7 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { BarChart3, CalendarRange, TrendingUp, Gift, Info, FileText, CheckCircle, List } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { LeaveManagementClient } from "./leave-management-client"
@@ -109,9 +111,22 @@ export function LeaveManagementModuleClient({
     )
   }
 
+  const searchParams = useSearchParams()
+  const defaultTab = isRegionalHR ? "leave-planning" : "leave-management"
+  const [activeTab, setActiveTab] = useState(() => searchParams.get("tab") || defaultTab)
+
+  // Links elsewhere in the app (e.g. the "Apply for Leave" button) point here
+  // with ?tab=leave-planning so they land directly on the Leave Center tab
+  // that contains the actual apply/review workflow, instead of bouncing back
+  // to the overview tab.
+  useEffect(() => {
+    const requestedTab = searchParams.get("tab")
+    if (requestedTab) setActiveTab(requestedTab)
+  }, [searchParams])
+
   return (
     <div className="space-y-6 w-full">
-      <Tabs defaultValue={isRegionalHR ? "leave-planning" : "leave-management"} className="space-y-4 w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 w-full">
         <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-3xl border border-slate-200 bg-slate-100/80 p-2 shadow-sm overflow-x-auto sm:overflow-visible">
           {/* Regional HR uses this as the operational queue; other roles see the overview. */}
           {!isRegionalHR && <TabsTrigger value="leave-management" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-emerald-300 transition-all duration-300 ease-out data-[state=active]:border-emerald-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-emerald-500 data-[state=active]:to-emerald-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(16,185,129,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
