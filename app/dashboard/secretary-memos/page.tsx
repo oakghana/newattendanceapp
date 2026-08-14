@@ -50,7 +50,7 @@ export default async function SecretaryMemosPage() {
         employee_id,
         profile_image_url,
         departments(name),
-        geofence_locations(name)
+        geofence_locations!user_profiles_assigned_location_id_fkey(name)
       )
     `)
     .in("status", ["awaiting_director_hr", "approved_director", "staff_receiving_funds", "partially_recovered", "fully_recovered"])

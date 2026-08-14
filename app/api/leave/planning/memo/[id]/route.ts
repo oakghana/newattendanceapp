@@ -201,8 +201,13 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
       // Use the stored adjusted_days if it was explicitly set by HR office (may include travel adjustments),
       // otherwise fall back to the computed working-days figure so the table never shows a stale entitlement.
   const actualBaseDays = baseLeaveDays > 0 ? baseLeaveDays : computedWorkingDays
-  const baseEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || actualBaseDays)
-  const outstandingDays = Math.max(0, Number(lr.outstanding_leave_days_added ?? lr.outstanding_leave_days ?? 0))
+      const baseEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || actualBaseDays)
+      const outstandingDays = Math.max(0, Number(
+        lr.outstanding_leave_days_added
+          ?? lr.outstanding_leave_days
+          ?? (lr.adjustment_breakdown as any)?.outstanding_days
+          ?? 0,
+      ))
   const entitlementForDisplay = baseEntitlement + outstandingDays
       return {
         useTable: true,
@@ -400,13 +405,13 @@ export async function GET(
       return NextResponse.json({ error: "Leave request not found" }, { status: 404 })
     }
 
-    const leaveWorkflowRoute = String((leaveRequest as any).workflow_route || "").toLowerCase()
-    const isRegionalLeave = leaveWorkflowRoute === "regional" || leaveWorkflowRoute === "regional_hr"
-    if (!isRegionalLeave && !String((leaveRequest as any).memo_reference || "").trim()) {
-      return NextResponse.json({ error: "Memo reference pending HR Records. Preview and download will be available after HR Records assigns the official reference." }, { status: 409 })
-    }
+  const leaveWorkflowRoute = String((leaveRequest as any).workflow_route || "").toLowerCase()
+  const isRegionalLeave = leaveWorkflowRoute === "regional" || leaveWorkflowRoute === "regional_hr"
 
-    // Load the latest carryover balance because older requests may not have the
+  // HR Records may assign the official memo reference after approval. Generate
+  // the memo now using the deterministic fallback reference when it is absent.
+  
+  // Load the latest carryover balance because older requests may not have the
     // HR-entered outstanding days copied onto leave_plan_requests yet.
     const { data: outstandingBalance } = await admin
       .from("outstanding_leave_balances")
@@ -568,8 +573,17 @@ export async function GET(
     }
     // For leave approval memos: use hr_approver_id from leave_plan_requests
     else if (!paymentMemo) {
+      const regionalManagerId = String((leaveRequest as any).regional_manager_id || "")
       const hrApproverId = String((leaveRequest as any).hr_approver_id || "")
-      if (hrApproverId) {
+      if (regionalManagerId) {
+        signerToUse = {
+          id: regionalManagerId,
+          name: (leaveRequest as any).regional_manager_name,
+          signature_data_url: (leaveRequest as any).regional_manager_signature_data_url,
+          signature_text: (leaveRequest as any).regional_manager_signature_text,
+          position: "REGIONAL MANAGER",
+        }
+      } else if (hrApproverId) {
         signerToUse = { id: hrApproverId }
       }
     }
@@ -654,9 +668,15 @@ export async function GET(
       const explicitDeduction = (lr.prior_leave_days_deducted != null || lr.holiday_days_deducted != null)
         ? Number(lr.prior_leave_days_deducted || 0) + Number(lr.holiday_days_deducted || 0)
         : extractAlreadyEnjoyedDays(lr.adjustment_reason || lr.memo_draft_body)
+      const memoOutstandingDays = Math.max(0, Number(
+        lr.outstanding_leave_days_added
+          ?? lr.outstanding_leave_days
+          ?? (lr.adjustment_breakdown as any)?.outstanding_days
+          ?? 0,
+      ))
       annualMemoDates = calculateAnnualLeaveMemoDates({
         startDate: effectiveStart,
-        entitlementDays: Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays),
+        entitlementDays: Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays) + memoOutstandingDays,
         // Annual granted days are recalculated from the resolved entitlement,
         // deductions, and travel days; never trust stale stored 22/24-day totals.
         grantedDays: null,
@@ -855,19 +875,27 @@ export async function GET(
   const profileEntitlement = isAnnualMemo && applicantProfile
     ? resolveEntitlementFromProfile(applicantProfile as any).annualLeaveDays
     : 0
-  const rawEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || 0)
-  const grossEntitlement = isAnnualMemo
-    ? Math.max(0, profileEntitlement || Number(tableEntitlement || 0) || rawEntitlement)
-    : Math.max(0, rawEntitlement || Number(tableEntitlement || 0))
+      const rawEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || 0)
+      const breakdown = (lr.adjustment_breakdown && typeof lr.adjustment_breakdown === "object") ? lr.adjustment_breakdown : {}
+      const outstandingDays = Math.max(0, Number(
+        lr.outstanding_leave_days_added
+          ?? lr.outstanding_leave_days
+          ?? (breakdown as any).outstanding_days
+          ?? 0,
+      ))
+      const baseEntitlement = isAnnualMemo
+        ? Math.max(0, profileEntitlement || rawEntitlement || Number(tableEntitlement || 0) || effectiveDays)
+        : Math.max(0, rawEntitlement || Number(tableEntitlement || 0) || effectiveDays)
+      const grossEntitlement = isAnnualMemo ? baseEntitlement + outstandingDays : baseEntitlement
       const entitlementLabel = travelDays > 0
-        ? `${grossEntitlement || effectiveDays} plus ${travelDays} travelling day${travelDays !== 1 ? "s" : ""}`
-        : String(grossEntitlement || effectiveDays)
+        ? `${grossEntitlement} plus ${travelDays} travelling day${travelDays !== 1 ? "s" : ""}`
+        : String(grossEntitlement)
 
-      // Granted total uses only the dedicated numeric adjustment fields.
-      // Example: 36 entitlement - 4 prior/given - 0 holidays + 2 travel = 34.
+      // Outstanding days increase entitlement. They are not added to the
+      // granted leave period unless the approved leave dates include them.
       const totalDeductions = publicHolidayDaysDeducted + priorLeaveDaysDeducted
-      const annualDaysRemaining = Math.max(0, (grossEntitlement || effectiveDays) - totalDeductions)
-      const totalGranted = Math.max(0, annualDaysRemaining + travelDays)
+      const annualDaysRemaining = Math.max(0, grossEntitlement - totalDeductions)
+      const totalGranted = Math.max(0, Math.min(effectiveDays || annualDaysRemaining, annualDaysRemaining) + travelDays)
 
       const originalRequested = Number(
         lr.original_requested_days != null ? lr.original_requested_days : (lr.requested_days || 0),
@@ -880,19 +908,12 @@ export async function GET(
       if (publicHolidayDaysDeducted > 0) remarksParts.push(`${publicHolidayDaysDeducted} public holiday day(s) deducted`)
       if (priorLeaveDaysDeducted > 0) remarksParts.push(`${priorLeaveDaysDeducted} day(s) given/already enjoyed deducted`)
       if (travelDays > 0) remarksParts.push(`${travelDays} travelling day(s) added`)
-      const remarksText = String(lr.adjustment_reason || "").trim()
-      const breakdown = (lr.adjustment_breakdown && typeof lr.adjustment_breakdown === "object") ? lr.adjustment_breakdown : {}
-      const outstandingDays = Number(lr.outstanding_leave_days_added ?? lr.outstanding_leave_days ?? breakdown.outstanding_days ?? 0)
-      const breakdownTravellingDays = Number(breakdown.travelling_days ?? 0)
+      const breakdownTravellingDays = Number((breakdown as any).travelling_days ?? 0)
       if (outstandingDays > 0) remarksParts.push(`${outstandingDays} outstanding day(s) added to entitlement`)
       if (breakdownTravellingDays > 0 && travelDays === 0) remarksParts.push(`${breakdownTravellingDays} travelling day(s) added`)
-      const calculationConfirmation = remarksParts.length > 0
-        ? remarksParts.join("; ")
-        : "No day adjustment applied"
-      const remarksSummary = [remarksText, calculationConfirmation]
-        .filter(Boolean)
-        .filter((value, index, values) => values.indexOf(value) === index)
-        .join("; ")
+      // Use one canonical calculation summary. Do not append the free-text
+      // adjustment reason because it already contains these same clauses.
+      const remarksSummary = Array.from(new Set(remarksParts)).join("; ") || "No day adjustment applied"
 
       autoTable(doc, {
         startY: y,
@@ -1065,10 +1086,13 @@ export async function GET(
     doc.setFontSize(8.5)
     doc.text("cc:", marginLeft, y)
     doc.setFont("times", "normal")
-    const ccRaw = String(lr.memo_draft_cc || "").trim()
-    const ccList: string[] = ccRaw
-      ? ccRaw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-      : []
+  const ccSource = lr.memo_draft_cc ?? lr.cc_recipients ?? lr.cc_list ?? ""
+  const ccList: string[] = Array.isArray(ccSource)
+    ? ccSource.map((value: unknown) => String(value).trim()).filter(Boolean)
+    : String(ccSource)
+      .split(/[\r\n,]+/)
+      .map((line) => line.trim())
+      .filter(Boolean)
     const ccIndent = marginLeft + 10
     for (const cc of ccList) {
       doc.text(cc, ccIndent, y)

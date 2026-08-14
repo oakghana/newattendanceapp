@@ -816,7 +816,7 @@ export function LeaveManagementClient({
   const canEditHrTemplates = isAdmin || ["hr_director", "hr_leave_office"].includes(normalizedRole)
   const isHrLeaveOfficeRole = ["hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isLeaveOfficeRole = ["hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr"].includes(normalizedRole)
-  const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
+  const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isHrExecutive = isAdmin || ["director_hr", "manager_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const canAccessPaymentAdvice = isAdmin || isHrLeaveOfficeRole || isHrExecutive
 
@@ -1809,7 +1809,7 @@ export function LeaveManagementClient({
                 asChild
                 className="gap-2 rounded-xl px-6 py-2 font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-md hover:shadow-lg hover:from-emerald-600 hover:to-emerald-700 transition-all"
               >
-                <Link href="/dashboard/leave-planning">
+                <Link href="/dashboard/leave-management?tab=leave-planning">
                   <Plus className="h-4 w-4" />
                   Apply for Leave
                 </Link>

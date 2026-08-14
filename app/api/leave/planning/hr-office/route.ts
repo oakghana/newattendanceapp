@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { notifyLeaveHrOfficeForwarded } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrLeaveOfficeRole, isHrApproverRole, HR_OFFICE_PENDING_STATUSES } from "@/lib/leave-planning"
+import { canNonRegionalPipelineAct } from "@/lib/hr-workflow"
 import {
   resolveEntitlementFromProfile,
   buildAnnualLeaveEntitlementSummary,
@@ -98,11 +99,12 @@ export async function POST(request: NextRequest) {
     }
 
     const currentStatus = String((leaveRequest as any).status || "")
-    const isRegionalWorkflow = String((leaveRequest as any).workflow_route || "") === "regional"
-    if (!isRegionalWorkflow && currentStatus === "pending_hr_records_reference" && (!String(memo_reference || "").trim() || String(memo_reference).trim().length < 3)) {
-      return NextResponse.json({ error: "An official memo reference is required before this non-regional workflow can continue." }, { status: 409 })
+    // HR Leave Office is exclusive to the non-regional pipeline — Regional HR
+    // Office forwards regional requests through /api/leave/planning/review instead.
+    if (!canNonRegionalPipelineAct((leaveRequest as any).workflow_route)) {
+      return NextResponse.json({ error: "Regional leave requests do not go through HR Leave Office. Use the Regional HR Office forward action." }, { status: 403 })
     }
-    if (!isRegionalWorkflow && !(HR_OFFICE_PENDING_STATUSES as string[]).includes(currentStatus) && currentStatus !== "pending_hr_leave_processing" && currentStatus !== "hr_office_forwarded") {
+    if (!(HR_OFFICE_PENDING_STATUSES as string[]).includes(currentStatus) && currentStatus !== "pending_hr_leave_processing" && currentStatus !== "hr_office_forwarded") {
       return NextResponse.json(
         {
           error: `This request cannot be processed in its current state (${currentStatus}). It must be HOD-approved or have HOD changes requested first.`,
@@ -164,7 +166,7 @@ export async function POST(request: NextRequest) {
     const { error: updateError } = await admin
       .from("leave_plan_requests")
       .update({
-        status: isRegionalWorkflow ? "pending_regional_manager_approval" : "hr_office_forwarded",
+        status: "hr_office_forwarded",
         original_requested_days: (leaveRequest as any).requested_days,
         adjusted_days: computedAdjustedDays,
         outstanding_leave_days_added: requestIsAnnual ? Math.max(0, Number(outstanding_leave_days_added) || 0) : 0,
@@ -177,10 +179,14 @@ export async function POST(request: NextRequest) {
         hr_office_reviewer_id: user.id,
         hr_office_reviewer_name: reviewerName,
         hr_office_reviewed_at: new Date().toISOString(),
-        memo_reference: String(memo_reference).trim(),
+        // The official memo reference is HR Records' job alone, entered only
+        // after HR Executive approves — HR Leave Office never writes it.
         memo_draft_subject: memo_draft_subject ? String(memo_draft_subject).trim() : null,
         memo_draft_body: memo_draft_body ? String(memo_draft_body).trim() : null,
-        memo_draft_cc: memo_draft_cc ? String(memo_draft_cc).trim() : null,
+        // Do not erase CC recipients when HR Office leaves the field unchanged.
+        memo_draft_cc: memo_draft_cc
+          ? String(memo_draft_cc).trim()
+          : String((leaveRequest as any).memo_draft_cc || "").trim() || null,
         memo_draft_last_edited_by: user.id,
         memo_draft_last_edited_role: "hr_leave_office",
         memo_draft_last_edited_at: new Date().toISOString(),

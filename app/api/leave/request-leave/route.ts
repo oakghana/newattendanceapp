@@ -56,10 +56,10 @@ export async function POST(request: NextRequest) {
 
     const leaveTypeKey = String(leave_type || "annual").toLowerCase().trim()
     const explicitRequestedDays = requested_days_raw !== null && requested_days_raw.trim() !== ""
-    const requestedDays = explicitRequestedDays && Number.isInteger(requested_days) && requested_days > 0
-      ? requested_days
+    const requestedDays = explicitRequestedDays && Number.isInteger(requested_days) && Number(requested_days) > 0
+      ? Number(requested_days)
       : computeLeaveDays(start_date, end_date)
-    if (requestedDays <= 0 || (explicitRequestedDays && (!Number.isInteger(requested_days) || requested_days <= 0))) {
+    if (requestedDays <= 0 || (explicitRequestedDays && (!Number.isInteger(requested_days) || Number(requested_days) <= 0))) {
       return NextResponse.json({ error: "Invalid leave date range" }, { status: 400 })
     }
 
@@ -308,7 +308,7 @@ export async function POST(request: NextRequest) {
       workflow_route: isRegionalWorkflow ? "regional" : "legacy",
       workflow_stage: initialStatus,
       assigned_location_id: assignment.assignedLocationId,
-      region_id: assignment.regionId,
+      region_id: regionId,
       department_id: assignment.departmentId,
       hod_id: assignment.hodId,
       regional_hr_id: assignment.regionalHrId,

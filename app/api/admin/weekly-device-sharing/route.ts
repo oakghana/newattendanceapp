@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
     let userProfilesQuery = supabase
       .from("user_profiles")
       .select(
-        "id, first_name, last_name, email, department_id, assigned_location_id, departments(name), geofence_locations(name)",
+        "id, first_name, last_name, email, department_id, assigned_location_id, departments(name), geofence_locations!user_profiles_assigned_location_id_fkey(name)",
       )
       .in("id", userIds)
 

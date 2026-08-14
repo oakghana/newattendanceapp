@@ -80,6 +80,8 @@ export function getLeaveWorkflowView(input: {
   const status = String(input.status || input.workflowStage || "pending_hod_review")
   const currentStage = input.workflowStage || status
   const statusLabel: Record<string, string> = {
+    pending: "Pending HOD Review",
+    pending_hod: "Pending HOD Review",
     pending_hod_review: "Pending HOD Review",
     pending_regional_hr_review: "Pending Regional HR Office Review",
     pending_regional_manager_approval: "Pending Regional Manager Approval",
@@ -100,7 +102,9 @@ export function getLeaveWorkflowView(input: {
 
 export function isRegionalWorkflowRequest(input: { workflowRoute?: string | null; route?: string | null; locationName?: string | null; leaveType?: string | null }) {
   if (String(input.workflowRoute || input.route || "").toLowerCase() === "regional") return true
-  return !isRegionalLeaveException(input.leaveType) && !isExcludedLocation(input.locationName)
+  // Route is determined solely by the staff member's assigned location — leave
+  // type and manager grade no longer carve out exceptions from this rule.
+  return !isExcludedLocation(input.locationName)
 }
 
 export function normalizeLocationName(value: string | null | undefined) {
@@ -109,7 +113,11 @@ export function normalizeLocationName(value: string | null | undefined) {
 
 export function isExcludedLocation(locationName: string | null | undefined) {
   const normalized = normalizeLocationName(locationName)
-  return NON_REGIONAL_LOCATIONS.some((location) => normalizeLocationName(location) === normalized)
+  if (!normalized) return false
+  return NON_REGIONAL_LOCATIONS.some((location) => {
+    const candidate = normalizeLocationName(location)
+    return normalized === candidate || normalized.includes(candidate) || candidate.includes(normalized)
+  }) || /(^| )qcc head office( |$)|(^| )head office( |$)|swanzy arcade|awutu stores|nsawam archive/.test(normalized)
 }
 
 export function isRegionalLeaveException(leaveType: string | null | undefined) {
@@ -117,14 +125,43 @@ export function isRegionalLeaveException(leaveType: string | null | undefined) {
   return ["manager annual", "manager grade annual", "maternity", "paternity", "part", "part time", "part time leave", "part leave"].includes(normalized)
 }
 
-export function routeLeave(input: { leaveType?: string | null; locationName?: string | null; hasRegionalOffice: boolean; isManagerGrade?: boolean }): { route: LeaveRoute; firstStage: string | null; reason?: string } {
-  if (input.isManagerGrade || isRegionalLeaveException(input.leaveType) || isExcludedLocation(input.locationName)) {
-    return { route: "legacy", firstStage: null, reason: "This leave type or location uses its separate non-regional workflow." }
+/**
+ * Route by the staff member's assigned location only. Non-regional/head-office
+ * locations (Awutu Stores, Nsawam Archive Center, QCC Head Office, Head Office
+ * Swanzy Arcade) always use the HOD -> HR Leave Office -> HR Executive -> HR
+ * Records pipeline. Every other location uses the Regional HR Office ->
+ * Regional Manager pipeline. Leave type and manager grade no longer affect
+ * routing.
+ */
+export function routeLeave(input: { locationName?: string | null; hasRegionalOffice: boolean }): { route: LeaveRoute; firstStage: string | null; reason?: string } {
+  if (isExcludedLocation(input.locationName)) {
+    return { route: "legacy", firstStage: null, reason: "This location uses the non-regional/head-office workflow." }
   }
   if (!input.hasRegionalOffice) {
     return { route: "regional", firstStage: REGIONAL_LEAVE_STAGES.regionalHrReview, reason: "Regional HR assignment is required before submission." }
   }
   return { route: "regional", firstStage: REGIONAL_LEAVE_STAGES.regionalHrReview }
+}
+
+/**
+ * Cross-route pipeline guards. The two pipelines never share a stage:
+ * non-regional runs HOD Review -> HR Leave Office -> HR Executive -> HR
+ * Records; regional runs Regional HR Office -> Regional Manager. Each
+ * guard below is what the corresponding API route checks before acting,
+ * kept here as pure functions so the boundary is unit-testable.
+ */
+export function isRegionalWorkflowRoute(workflowRoute: string | null | undefined) {
+  return String(workflowRoute || "").toLowerCase() === "regional"
+}
+
+/** HOD Review, HR Leave Office, and HR Executive act only on non-regional requests. */
+export function canNonRegionalPipelineAct(workflowRoute: string | null | undefined) {
+  return !isRegionalWorkflowRoute(workflowRoute)
+}
+
+/** Regional HR Office forwarding and Regional Manager approval act only on regional requests. */
+export function canRegionalPipelineAct(workflowRoute: string | null | undefined) {
+  return isRegionalWorkflowRoute(workflowRoute)
 }
 
 export type StaffAssignmentResolution = {
@@ -143,7 +180,7 @@ export type StaffAssignmentResolution = {
 export async function resolveStaffAssignments(admin: SupabaseClient, staffId: string): Promise<StaffAssignmentResolution> {
   const { data: profile, error } = await admin
     .from("user_profiles")
-    .select("id, assigned_location_id, region_id, department_id, hod_id, regional_hr_id, regional_manager_id, geofence_locations:assigned_location_id (id, name, district_id)")
+    .select("id, assigned_location_id, region_id, department_id, geofence_locations:assigned_location_id (id, name, district_id)")
     .eq("id", staffId)
     .maybeSingle()
   if (error) throw error
@@ -157,8 +194,28 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
     regionId = district?.region_id || null
   }
 
-  let regionalHrId = profile.regional_hr_id || null
-  let regionalManagerId = profile.regional_manager_id || null
+  let hodId: string | null = null
+  const { data: linkage } = await admin
+    .from("loan_hod_linkages")
+    .select("hod_user_id")
+    .eq("staff_user_id", staffId)
+    .limit(1)
+    .maybeSingle()
+  hodId = linkage?.hod_user_id || null
+  if (!hodId && profile.department_id) {
+    const { data: departmentHod } = await admin
+      .from("user_profiles")
+      .select("id")
+      .eq("department_id", profile.department_id)
+      .in("role", ["department_head", "manager_hr", "director_hr"])
+      .eq("is_active", true)
+      .limit(1)
+      .maybeSingle()
+    hodId = departmentHod?.id || null
+  }
+
+  let regionalHrId: string | null = null
+  let regionalManagerId: string | null = null
   if (profile.assigned_location_id) {
     const { data: canonicalAlignment, error: alignmentError } = await admin
       .from("regional_hr_office_locations")
@@ -174,13 +231,14 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
     }
   }
   if (!regionalHrId) regionalHrId = (await resolveRegionalHrOffice(admin, regionId, profile.assigned_location_id))?.user_id || null
+  if (!regionalManagerId) regionalManagerId = await resolveRegionalManager(admin, regionId, profile.assigned_location_id)
 
   return {
     staffId,
     assignedLocationId: profile.assigned_location_id || null,
     regionId,
     departmentId: profile.department_id || null,
-    hodId: profile.hod_id || null,
+    hodId,
     regionalHrId,
     regionalManagerId,
     locationName: assignedLocation?.name || null,
@@ -238,15 +296,55 @@ export async function resolveRegionalHrOffice(
   return fallback ? { user_id: fallback.id, region_id: fallback.region_id, is_override: false } : null
 }
 
+/**
+ * Resolve the single accountable Regional Manager for a location/region.
+ * The admin-managed regional_hr_office_locations.regional_manager_user_id
+ * mapping is authoritative and is checked first by the caller. This fallback
+ * exists because that mapping table is frequently unpopulated in practice —
+ * without it, Regional HR could forward a request to no one and it would
+ * silently disappear from every queue.
+ */
+export async function resolveRegionalManager(
+  admin: SupabaseClient,
+  regionId: string | null | undefined,
+  locationId?: string | null,
+): Promise<string | null> {
+  if (locationId) {
+    const { data: locationProfiles, error: locationError } = await admin
+      .from("user_profiles")
+      .select("id, role, created_at")
+      .eq("assigned_location_id", locationId)
+      .eq("role", "regional_manager")
+      .eq("is_active", true)
+      .order("created_at", { ascending: true })
+      .limit(1)
+    if (locationError) throw locationError
+    if (locationProfiles && locationProfiles.length > 0) return locationProfiles[0].id
+  }
+  if (!regionId) return null
+  const { data: regionalProfiles, error: regionError } = await admin
+    .from("user_profiles")
+    .select("id, role, created_at")
+    .eq("region_id", regionId)
+    .eq("role", "regional_manager")
+    .eq("is_active", true)
+    .order("created_at", { ascending: true })
+    .limit(1)
+  if (regionError) throw regionError
+  return regionalProfiles && regionalProfiles.length > 0 ? regionalProfiles[0].id : null
+}
+
+/**
+ * HR Records is the last stop on the non-regional pipeline (HOD Review -> HR
+ * Leave Office memo step -> HR Executive approval -> HR Records reference),
+ * and the memo download stays blocked until it acts. A fresh (non-correction)
+ * reference is therefore only accepted once HR Executive has approved the
+ * request ("hr_approved"). Corrections to an already-locked reference bypass
+ * this check entirely (see save-reference/route.ts), so this only gates the
+ * first-time assignment.
+ */
 export function hrRecordsCanReference(status: string | null | undefined) {
-  return [
-    "pending_hr_records_reference",
-    "hr_approved",
-    "hod_approved",
-    "hr_office_forwarded",
-    "regional_manager_approved",
-    "approved",
-  ].includes(String(status || ""))
+  return ["hr_approved", "pending_hr_records_reference"].includes(String(status || ""))
 }
 
 export function lockedReferenceMutationError(locked: boolean) {

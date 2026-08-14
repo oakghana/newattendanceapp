@@ -5,8 +5,11 @@ export async function GET(_request: NextRequest) {
   try {
     // Initialize Supabase server client
     const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const admin = await createAdminClient()
     // Query leave_plan_requests where HOD decision is pending (null or 'pending')
-    const { data: requests, error } = await supabase
+    const { data: requests, error } = await admin
       .from('leave_plan_requests')
       .select(`
         id,
@@ -18,12 +21,14 @@ export async function GET(_request: NextRequest) {
         adjusted_days,
         status,
         hod_decision,
+        hod_user_id,
+        workflow_route,
         staff_category,
         created_at,
         submitted_at
       `)
       .or('hod_decision.is.null,hod_decision.eq.pending')
-      .neq('status', 'rejected')
+      .in('status', ['pending_hod_review', 'pending_hod', 'pending', 'submitted', 'pending_review'])
       .order('created_at', { ascending: true })
 
     if (error) {
@@ -31,8 +36,7 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const planRequests = requests || []
-    const admin = await createAdminClient()
+    const planRequests = (requests || []).filter((request: any) => request.workflow_route !== "regional")
 
     // Enrich with user details, staff location, and HOD linkage details.
     const userIds = [...new Set(planRequests.map((r: any) => r.user_id).filter(Boolean))]
@@ -60,13 +64,14 @@ export async function GET(_request: NextRequest) {
     const { data: linkages } = profileIds.length
       ? await admin.from('loan_hod_linkages').select('staff_user_id, hod_user_id').in('staff_user_id', profileIds)
       : { data: [] as any[] }
-    const hodIds = [...new Set((linkages || []).map((link: any) => link.hod_user_id).filter(Boolean))]
+    const allLinkages = [...(linkages || [])]
+    const hodIds = [...new Set(allLinkages.map((link: any) => link.hod_user_id).filter(Boolean))]
     const { data: hodProfiles } = hodIds.length
       ? await admin.from('user_profiles').select('id, first_name, last_name, employee_id, position, role, email').in('id', hodIds)
       : { data: [] as any[] }
     const hodMap = new Map((hodProfiles || []).map((hod: any) => [hod.id, hod]))
     const linkageMap = new Map<string, any[]>()
-    for (const link of linkages || []) {
+    for (const link of allLinkages) {
       const hod = hodMap.get(link.hod_user_id)
       if (!hod) continue
       const current = linkageMap.get(link.staff_user_id) || []
@@ -76,7 +81,12 @@ export async function GET(_request: NextRequest) {
 
     // Calculate days pending and enrich with user details
     const now = new Date()
-    const enrichedRequests = planRequests.map((req: any) => {
+    const currentHodStaffIds = new Set(
+      allLinkages.filter((link: any) => String(link.hod_user_id) === String(user.id)).map((link: any) => String(link.staff_user_id)),
+    )
+    const enrichedRequests = planRequests.filter((req: any) =>
+      String(req.hod_user_id || "") === String(user.id) || currentHodStaffIds.has(String(req.user_id)),
+    ).map((req: any) => {
       const createdDate = new Date(req.submitted_at || req.created_at)
       const daysPending = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
 

@@ -33,7 +33,26 @@ describe("regional non-annual leave workflow", () => {
     expect(route.reason).toContain("Regional HR assignment is required")
   })
 
-  it("submits through Regional HR adjustment then Regional Manager approval without HOD or HR Executive stages", () => {
+  it("routes Head Office requests to HOD and keeps them out of Regional HR", () => {
+    const route = routeLeave({
+      leaveType: "casual",
+      locationName: "HEAD OFFICE SWANZY ARCADE",
+      hasRegionalOffice: true,
+    })
+    expect(route).toEqual({
+      route: "legacy",
+      firstStage: null,
+      reason: "This location uses the non-regional/head-office workflow.",
+    })
+  })
+
+  it("recognizes common non-regional location variants", () => {
+    for (const locationName of ["QCC Head Office", "Head Office, Accra", "Nsawam Archive Center", "Awutu Stores"]) {
+      expect(routeLeave({ leaveType: "casual", locationName, hasRegionalOffice: true }).route).toBe("legacy")
+    }
+  })
+
+  it("keeps the regional route on Regional HR then Regional Manager", () => {
     const route = routeLeave({
       leaveType: "sick",
       locationName: "Kumasi Regional Office",

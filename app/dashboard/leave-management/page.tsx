@@ -1,6 +1,7 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { LeaveManagementModuleClient } from "./leave-management-module-client"
 import { LeaveManagementPageWrapper } from "@/components/leave/leave-management-page-wrapper"
+import { isExcludedLocation } from "@/lib/hr-workflow"
 import { Suspense } from "react"
 
 
@@ -45,10 +46,10 @@ export default async function LeaveManagementPage() {
   try {
     // Build parallel queries — include location lookup when user has an assigned location
     const locationId = (profile as any)?.assigned_location_id
-    const queries: Promise<any>[] = [
+    const queries: any[] = [
       admin
         .from("leave_plan_requests")
-        .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, adjusted_start_date, adjusted_end_date, hod_decision, memo_token")
+        .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, workflow_route, workflow_stage, created_at, adjusted_start_date, adjusted_end_date, hod_decision, memo_token")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(50),
@@ -76,20 +77,31 @@ export default async function LeaveManagementPage() {
     if (!isRegionalHr && !isRegionalManager && !isItAdmin) {
       // Legacy/non-regional workflow: HODs receive only requests explicitly
       // linked to them. Regional requests never enter this queue.
-      const { data: hodLinks } = await admin
-        .from("loan_hod_linkages")
-        .select("staff_user_id")
-        .eq("hod_user_id", user.id)
-      const staffIds = Array.from(new Set((hodLinks || []).map((row: any) => row.staff_user_id).filter(Boolean)))
-      if (staffIds.length > 0) {
-        const { data: hodRequests } = await admin
-          .from("leave_plan_requests")
-          .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, hod_decision, memo_token, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id)")
-          .in("user_id", staffIds)
-          .in("status", ["pending_hod_review", "pending"])
+        const { data: hodLinks } = await admin
+          .from("loan_hod_linkages")
+          .select("staff_user_id")
+          .eq("hod_user_id", user.id)
+        const staffIds = Array.from(new Set((hodLinks || []).map((row: any) => row.staff_user_id).filter(Boolean)))
+      // Query direct request assignment even when legacy linkage tables are empty.
+      if (staffIds.length >= 0) {
+        const requestSelect = "id, user_id, hod_user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, workflow_route, workflow_stage, created_at, hod_decision, memo_token, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id)"
+        const baseHodQuery = (query: any) => query
+          .or("workflow_route.is.null,workflow_route.eq.legacy")
+          .in("status", ["pending_hod_review", "pending_hod", "pending", "submitted", "pending_review"])
           .or("hod_decision.is.null,hod_decision.eq.pending")
           .order("created_at", { ascending: true })
           .limit(100)
+        const [{ data: linkedRequests }, { data: directlyAssignedRequests }] = await Promise.all([
+          baseHodQuery(
+            admin.from("leave_plan_requests").select(requestSelect).in("user_id", staffIds),
+          ),
+          baseHodQuery(
+            admin.from("leave_plan_requests").select(requestSelect).eq("hod_user_id", user.id),
+          ),
+        ])
+        const hodRequests = Array.from(new Map(
+          [...(linkedRequests || []), ...(directlyAssignedRequests || [])].map((request: any) => [request.id, request]),
+        ).values())
         const hodLocationIds = Array.from(new Set((hodRequests || []).map((request: any) => request.user_profiles?.assigned_location_id).filter(Boolean)))
         const { data: hodLocations } = hodLocationIds.length
           ? await admin.from("geofence_locations").select("id, name, code").in("id", hodLocationIds)
@@ -142,9 +154,10 @@ export default async function LeaveManagementPage() {
       if (regionalStaffIds.length > 0) {
         const { data: regionalRequests } = await admin
           .from("leave_plan_requests")
-          .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, memo_token, memo_reference, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id, region_id)")
+          .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, workflow_route, workflow_stage, created_at, memo_token, memo_reference, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id, region_id)")
           .in("user_id", regionalStaffIds)
-          .in("status", isRegionalManager ? ["pending_regional_manager_approval", "approved", "regional_manager_approved"] : ["pending_hod_review", "pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review", "pending_hr_review", "pending_regional_manager_approval"])
+          .eq("workflow_route", "regional")
+          .in("status", isRegionalManager ? ["pending_regional_manager_approval", "approved", "regional_manager_approved"] : ["pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review", "pending_regional_manager_approval"])
           .order("created_at", { ascending: false })
           .limit(100)
         const regionalLocationIds = Array.from(new Set((regionalRequests || []).map((request: any) => request.user_profiles?.assigned_location_id).filter(Boolean)))
@@ -165,6 +178,8 @@ export default async function LeaveManagementPage() {
         managerNotifications = (regionalRequests || []).map((request: any) => ({
           id: request.id,
           status: request.status,
+          workflow_route: request.workflow_route,
+          workflow_stage: request.workflow_stage,
           requester_name: `${request.user_profiles?.first_name || ""} ${request.user_profiles?.last_name || ""}`.trim(),
           requester_role: "staff",
           staff_location_name: regionalLocationMap.get(request.user_profiles?.assigned_location_id)?.name || null,
@@ -196,7 +211,9 @@ export default async function LeaveManagementPage() {
       end_date: request.preferred_end_date,
       reason: request.reason || "",
       leave_type: request.leave_type_key || "annual",
-      status: request.status,
+      status: (request.workflow_route === "regional" && isExcludedLocation(userLocationName)) ? "pending_hod_review" : request.status,
+      workflow_route: isExcludedLocation(userLocationName) ? "legacy" : request.workflow_route,
+      workflow_stage: request.workflow_stage,
       created_at: request.created_at,
       adjusted_start_date: request.adjusted_start_date,
       adjusted_end_date: request.adjusted_end_date,
@@ -222,22 +239,24 @@ export default async function LeaveManagementPage() {
     return (
       <LeaveManagementPageWrapper>
       <div className="leave-theme">
-        <LeaveManagementModuleClient
-          userId={user.id}
-          userRole={effectiveRole}
-          userDepartment={(profile as any)?.department_id || null}
-          userLocationId={(profile as any)?.assigned_location_id || null}
-          userFirstName={(profile as any)?.first_name || null}
-          userLastName={(profile as any)?.last_name || null}
-          inactivityDays={Math.max(1, inactivityDays)}
-          userDepartmentName={(profile as any)?.departments?.name || null}
-          userDepartmentCode={(profile as any)?.departments?.code || null}
-          userLocationName={userLocationName}
-          hasHodLinkage={hasHodLinkage}
-          initialStaffRequests={staffRequests}
-          initialManagerNotifications={managerNotifications}
-          initialApprovedStaffRequests={approvedStaffRequests}
-        />
+        <Suspense fallback={<div className="p-8 text-center text-slate-500">Loading leave management...</div>}>
+          <LeaveManagementModuleClient
+            userId={user.id}
+            userRole={effectiveRole}
+            userDepartment={(profile as any)?.department_id || null}
+            userLocationId={(profile as any)?.assigned_location_id || null}
+            userFirstName={(profile as any)?.first_name || null}
+            userLastName={(profile as any)?.last_name || null}
+            inactivityDays={Math.max(1, inactivityDays)}
+            userDepartmentName={(profile as any)?.departments?.name || null}
+            userDepartmentCode={(profile as any)?.departments?.code || null}
+            userLocationName={userLocationName}
+            hasHodLinkage={hasHodLinkage}
+            initialStaffRequests={staffRequests}
+            initialManagerNotifications={managerNotifications}
+            initialApprovedStaffRequests={approvedStaffRequests}
+          />
+        </Suspense>
       </div>
       </LeaveManagementPageWrapper>
     )
