@@ -778,12 +778,14 @@ export async function GET(
     doc.setFont("times", "normal")
     doc.setFontSize(9)
     const approvalDate = lr.hr_approved_at || lr.created_at
-    const refYear  = new Date(approvalDate).getFullYear()
-    const refCode  = leaveReferenceCode(leaveTypeKey)
-    // Prefer the HR-leave-office-entered reference number; fall back to auto-generated
-    const refNum   = (lr.memo_reference && String(lr.memo_reference).trim())
-      ? String(lr.memo_reference).trim()
-      : `QCC/HRD/${refCode}/${refYear}/${String(lr.id || "").slice(-6).toUpperCase()}`
+    // The memo is not unlocked until HR Records enters the official reference.
+    const refNum = String(lr.memo_reference || "").trim()
+    if (!refNum) {
+      return NextResponse.json({
+        error: "Memo reference pending HR Records. Preview and download will be available after HR Records assigns the official reference.",
+        code: "MEMO_REFERENCE_REQUIRED",
+      }, { status: 409 })
+    }
     doc.text(`Our Ref No:  ${refNum}`, marginLeft, y)
     doc.text(`Date:  ${fmtFormalDate(approvalDate)}`, pageWidth - marginRight, y, { align: "right" })
     y += 10

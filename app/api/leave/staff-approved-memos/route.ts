@@ -65,9 +65,12 @@ export async function GET(request: NextRequest) {
           hr_signature_image_url,
           hr_signature_data_url,
           hr_approval_note,
-          memo_token
+          memo_token,
+          memo_reference
         `)
         .in("status", ["approved", "hr_approved", "regional_manager_approved"])
+        .not("memo_reference", "is", null)
+        .neq("memo_reference", "")
         .order("hr_approved_at", { ascending: false, nullsFirst: false })
         .limit(200)
 
@@ -121,6 +124,7 @@ export async function GET(request: NextRequest) {
           hr_signature_image_url: req.hr_signature_image_url,
           hr_signature_data_url: req.hr_signature_data_url,
           memo_token: req.memo_token || null,
+          memo_reference: req.memo_reference || null,
         }
       })
 
@@ -191,10 +195,13 @@ export async function GET(request: NextRequest) {
         hr_signature_image_url,
         hr_signature_data_url,
         hr_approval_note,
-        memo_token
+        memo_token,
+        memo_reference
       `)
       .in("user_id", staffIds)
       .in("status", ["approved", "hr_approved", "regional_manager_approved"])
+      .not("memo_reference", "is", null)
+        .neq("memo_reference", "")
       .order("created_at", { ascending: false })
 
     if (requestError) {
@@ -240,6 +247,7 @@ export async function GET(request: NextRequest) {
         hr_signature_image_url: req.hr_signature_image_url,
         hr_signature_data_url: req.hr_signature_data_url,
         memo_token: req.memo_token || null,
+        memo_reference: req.memo_reference || null,
       }
     })
 

@@ -3070,8 +3070,9 @@ export function LeaveManagementClient({
                         paginatedMemos.map((memo: any) => {
                           // All memos from the API are already approved (filtered by status at API level)
                           // Check if they have been signed/approved by HR
-                          const hasHrApproval = memo.hr_approved_at || memo.hr_approver_name || memo.hr_signature_image_url
-                          const approvalStatus = hasHrApproval ? "Signed" : "Approved"
+                          const hasOfficialReference = Boolean(String(memo.memo_reference || "").trim())
+                          const hasHrApproval = hasOfficialReference && Boolean(memo.hr_approved_at || memo.hr_approver_name || memo.hr_signature_image_url)
+                          const approvalStatus = hasOfficialReference ? (hasHrApproval ? "Signed" : "Approved") : "Awaiting HR Records Reference"
                           
                           return (
                           <div key={memo.id} className="border border-teal-200 rounded-lg p-4 hover:bg-teal-50/50 transition-colors">
