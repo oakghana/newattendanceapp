@@ -2213,8 +2213,12 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
       toast({ title: "Missing date", description: "Please select a start date.", variant: "destructive" })
       return
     }
-    if (leaveType === "maternity" && !maternityDeliveryDate) {
-      toast({ title: "Missing delivery date", description: "Please provide the date of delivery.", variant: "destructive" })
+    if ((leaveType === "maternity" || leaveType === "paternity") && !maternityDeliveryDate) {
+      toast({ title: "Missing delivery date", description: "Please provide the child delivery date.", variant: "destructive" })
+      return
+    }
+    if ((leaveType === "maternity" || leaveType === "paternity") && !maternityMedicalReport && !maternityMedicalReportUrl) {
+      toast({ title: "Proof required", description: leaveType === "paternity" ? "Please attach proof of the child delivery." : "Please attach the medical report.", variant: "destructive" })
       return
     }
     // End date is now auto-calculated, no manual validation needed
@@ -2224,11 +2228,11 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     setError(null)
     try {
       let reportUrl = maternityMedicalReportUrl
-      if (leaveType === "maternity" && maternityMedicalReport) {
+      if ((leaveType === "maternity" || leaveType === "paternity") && maternityMedicalReport) {
         setUploadingMaternityReport(true)
         const uploadBody = new FormData()
         uploadBody.append("file", maternityMedicalReport)
-        uploadBody.append("folder", "maternity-medical-reports")
+        uploadBody.append("folder", leaveType === "paternity" ? "paternity-delivery-proof" : "maternity-medical-reports")
         const uploadRes = await fetch("/api/upload", { method: "POST", body: uploadBody })
         const uploadJson = await uploadRes.json()
         if (!uploadRes.ok || !uploadJson.url) throw new Error(uploadJson.error || "Medical report upload failed")
@@ -2236,7 +2240,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
         setMaternityMedicalReportUrl(reportUrl)
         setUploadingMaternityReport(false)
       }
-      if (leaveType === "maternity" && !reportUrl) throw new Error("A medical report is required before maternity leave can be saved.")
+      if ((leaveType === "maternity" || leaveType === "paternity") && !reportUrl) {
+        throw new Error(leaveType === "paternity" ? "Proof of child delivery is required before paternity leave can be saved." : "A medical report is required before maternity leave can be saved.")
+      }
       const autoResumptionDate = computeReturnToWorkDate(endDate)
       const res = await fetch("/api/leave/planning", {
         method: editingId ? "PUT" : "POST",
@@ -2251,8 +2257,8 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
           resumption_date: autoResumptionDate,
           part_leave_days: leaveType === "part_leave" ? (computedDays || null) : null,
           maternity_delivery_type: leaveType === "maternity" ? maternityDeliveryType : null,
-          delivery_date: leaveType === "maternity" ? maternityDeliveryDate : null,
-          medical_report_url: leaveType === "maternity" ? reportUrl : null,
+          delivery_date: (leaveType === "maternity" || leaveType === "paternity") ? maternityDeliveryDate : null,
+          medical_report_url: (leaveType === "maternity" || leaveType === "paternity") ? reportUrl : null,
           user_signature_mode: signatureMode,
           user_signature_text: activeSig.text,
           user_signature_data_url: activeSig.dataUrl,
@@ -2822,37 +2828,41 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                   </div>
                 </div>
 
-                {leaveType === "maternity" && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-lg border border-pink-200 bg-pink-50 p-4">
+                {(leaveType === "maternity" || leaveType === "paternity") && (
+                  <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-lg border p-4 ${leaveType === "paternity" ? "border-blue-200 bg-blue-50" : "border-pink-200 bg-pink-50"}`}>
                     <div className="space-y-2">
-                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Delivery Type</Label>
-                      <Select value={maternityDeliveryType} onValueChange={setMaternityDeliveryType}>
-                        <SelectTrigger className="h-10 bg-background">
-                          <SelectValue placeholder="Select delivery type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="normal">Normal delivery — 84 days</SelectItem>
-                          <SelectItem value="cs">Caesarean section — 98 days</SelectItem>
-                          <SelectItem value="twins">Twins delivery — 98 days</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      {leaveType === "maternity" ? <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Delivery Type</Label> : <div className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Child Delivery Details</div>}
+                      {leaveType === "maternity" ? (
+                        <Select value={maternityDeliveryType} onValueChange={setMaternityDeliveryType}>
+                          <SelectTrigger className="h-10 bg-background">
+                            <SelectValue placeholder="Select delivery type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="normal">Normal delivery — 84 days</SelectItem>
+                            <SelectItem value="cs">Caesarean section — 98 days</SelectItem>
+                            <SelectItem value="twins">Twins delivery — 98 days</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <p className="text-sm text-blue-800">Enter the child&apos;s delivery date and attach proof below.</p>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Date of Delivery</Label>
                       <Input type="date" value={maternityDeliveryDate} onChange={(e) => { const value = e.target.value; setMaternityDeliveryDate(value); setStartDate(value); setEndDate(""); setCalculationResult(null) }} className="h-10 bg-background" required />
                     </div>
                     <div className="sm:col-span-2 space-y-2">
-                      <Label htmlFor="maternity-medical-report" className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Medical Report (required)</Label>
-                      <Input id="maternity-medical-report" type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setMaternityMedicalReport(e.target.files?.[0] || null)} className="h-10 bg-background" required />
-                      {maternityMedicalReportUrl && <p className="text-xs text-green-700">Medical report already attached.</p>}
-                      <p className="text-xs text-pink-800">Delivery date becomes the leave start date. Attach the medical report before submitting.</p>
+                      <Label htmlFor="leave-delivery-proof" className="text-xs font-semibold text-slate-700 uppercase tracking-wide">{leaveType === "paternity" ? "Proof of Child Delivery (required)" : "Medical Report (required)"}</Label>
+                      <Input id="leave-delivery-proof" type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setMaternityMedicalReport(e.target.files?.[0] || null)} className="h-10 bg-background" required={!maternityMedicalReportUrl} />
+                      {maternityMedicalReportUrl && <p className="text-xs text-green-700">Supporting document already attached.</p>}
+                      <p className={leaveType === "paternity" ? "text-xs text-blue-800" : "text-xs text-pink-800"}>Delivery date becomes the leave start date. Attach proof before submitting.</p>
                     </div>
                   </div>
                 )}
 
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date (Date of Delivery)</Label>
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" readOnly={leaveType === "maternity"} disabled={leaveType === "maternity"} />
+                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" readOnly={leaveType === "maternity" || leaveType === "paternity"} disabled={leaveType === "maternity" || leaveType === "paternity"} />
                   {calculatingEndDate && (
                     <p className="text-xs text-blue-600">Calculating leave duration...</p>
                   )}

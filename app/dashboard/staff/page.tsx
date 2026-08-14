@@ -1,6 +1,7 @@
 import { StaffManagement } from "@/components/admin/staff-management"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { normalizeAppRole } from "@/lib/role-capabilities"
 
 export default async function StaffPage() {
   const supabase = await createClient()
@@ -12,7 +13,8 @@ export default async function StaffPage() {
 
   const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
 
-  if (!profile || (profile.role !== "admin" && profile.role !== "it-admin")) {
+  const role = normalizeAppRole(profile?.role)
+  if (!profile || (role !== "admin" && role !== "it-admin")) {
     redirect("/dashboard")
   }
 

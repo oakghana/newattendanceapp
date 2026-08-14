@@ -460,6 +460,9 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
     ) {
       return false
     }
+    if (isItAdmin && item.category === "admin") {
+      return ["/dashboard/leave-management", "/dashboard/staff"].includes(item.href)
+    }
     if (item.href === "/dashboard/device-violations") {
       return effectiveRole === "admin"
     }
