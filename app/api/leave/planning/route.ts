@@ -1424,7 +1424,17 @@ export async function POST(request: NextRequest) {
       locationName = String(assignedLocation?.name || assignedLocation?.address || "")
       resolvedRegionId = resolvedRegionId || (assignedLocation?.districts as any)?.region_id || null
     }
-    const regionalHrOffice = await resolveRegionalHrOffice(admin, resolvedRegionId, assignedLocationId)
+    let regionalHrOffice = await resolveRegionalHrOffice(admin, resolvedRegionId, assignedLocationId)
+    if (!regionalHrOffice?.user_id) {
+      const { data: fallbackRegionalHr } = await admin
+        .from("user_profiles")
+        .select("id, region_id")
+        .eq("is_active", true)
+        .in("role", ["regional_hr", "regional hr", "regional_hr_office", "regional hr office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"])
+        .limit(1)
+        .maybeSingle()
+      if (fallbackRegionalHr?.id) regionalHrOffice = { user_id: fallbackRegionalHr.id, region_id: fallbackRegionalHr.region_id || resolvedRegionId || null, is_override: false }
+    }
     const leaveRoute = routeLeave({
       leaveType: leaveTypeKey,
       locationName,

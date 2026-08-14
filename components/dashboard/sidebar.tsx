@@ -120,7 +120,7 @@ const navigationItems = [
     title: "Leave Administration",
     href: "/dashboard/leave-management",
     icon: Calendar,
-    roles: ["admin", "it-admin", "it_admin", "it admin", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "hr_leave_office", "hr_office", "director_hr", "manager_hr"],
+    roles: ALL_STAFF_ROLES,
     category: "admin",
   },
   {

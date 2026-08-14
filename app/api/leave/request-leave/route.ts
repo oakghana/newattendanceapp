@@ -239,7 +239,22 @@ export async function POST(request: NextRequest) {
       regionId = regionId || (assignedLocation?.districts as any)?.region_id || null
     }
 
-    const regionalOffice = await resolveRegionalHrOffice(admin, regionId, assignment.assignedLocationId)
+    let regionalOffice = await resolveRegionalHrOffice(admin, regionId, assignment.assignedLocationId)
+    // A Regional HR Office reviewer is required for every regional request.
+    // If the location mapping is incomplete, use an active Regional HR Office
+    // account as the final safety-net reviewer rather than blocking staff.
+    if (!regionalOffice?.user_id) {
+      const { data: fallbackRegionalHr } = await admin
+        .from("user_profiles")
+        .select("id, region_id")
+        .eq("is_active", true)
+        .in("role", ["regional_hr", "regional hr", "regional_hr_office", "regional hr office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"])
+        .limit(1)
+        .maybeSingle()
+      if (fallbackRegionalHr?.id) {
+        regionalOffice = { user_id: fallbackRegionalHr.id, region_id: fallbackRegionalHr.region_id || regionId || null, is_override: false }
+      }
+    }
     const profileText = [roleProfile?.role, roleProfile?.staff_category, roleProfile?.position, roleProfile?.rank].filter(Boolean).join(" ").toLowerCase()
     const isManagerGrade = /(^|\s|_)(manager|management|director|executive|head)(\s|_|$)/i.test(profileText)
     const leaveRoute = routeLeave({
