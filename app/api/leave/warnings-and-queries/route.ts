@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
 
     const userRole = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const isHrOrLeaveOffice = ["admin", "hr", "hr_office", "hr_officer", "hr_leave_office", "manager_hr", "director_hr"].includes(userRole)
+    const isHrOrLeaveOffice = ["admin", "it_admin", "hr", "hr_office", "hr_officer", "hr_leave_office", "manager_hr", "director_hr"].includes(userRole)
 
     let query = supabase
       .from("staff_warnings")
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     const userRole = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    if (!["admin", "hr", "hr_office", "hr_officer", "hr_leave_office", "manager_hr", "director_hr"].includes(userRole)) {
+    if (!["admin", "it_admin", "hr", "hr_office", "hr_officer", "hr_leave_office", "manager_hr", "director_hr"].includes(userRole)) {
       return NextResponse.json({ error: "Only HR staff can issue warnings" }, { status: 403 })
     }
 

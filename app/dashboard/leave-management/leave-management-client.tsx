@@ -1369,9 +1369,10 @@ export function LeaveManagementClient({
                     reason: "",
                   }
                   const normalizedStatus = String(notification.status || leave.status || "").toLowerCase().replace(/[\s_-]+/g, "_")
-  const regionalHrReviewPending = normalizedStatus === "pending_regional_hr_office_review" || normalizedStatus === "pending_regional_hr_review"
+  const regionalHrReviewPending = normalizedStatus === "pending_regional_hr_office_review" || normalizedStatus === "pending_regional_hr_review" || normalizedStatus === "regional_hr_office_review"
   const regionalManagerReviewPending = normalizedStatus === "pending_regional_manager_approval"
-  const approvalLocked = processingId === notification.id || regionalHrReviewPending
+  const regionalHrActionAvailable = regionalHrMode && regionalHrReviewPending && String((notification as any).workflow_route || (leave as any).workflow_route || "regional").toLowerCase() === "regional"
+  const approvalLocked = processingId === notification.id || (regionalHrReviewPending && !regionalHrActionAvailable)
   const regionalManagerMode = isRegionalManager && regionalManagerReviewPending
                   return (
                     <tr key={notification.id} className="border-t border-slate-100 align-top">
@@ -1421,7 +1422,7 @@ export function LeaveManagementClient({
   {regionalManagerMode && <Button
     onClick={() => {
       const changeReason = window.prompt("Describe the changes required") || ""
-      if (changeReason.trim()) void handleDismiss(notification.id, changeReason, "recommend_change")
+      if (changeReason.trim()) void handleDismiss(notification.id, changeReason)
     }}
     disabled={processingId === notification.id}
     size="sm"
@@ -1431,7 +1432,7 @@ export function LeaveManagementClient({
     <Pencil className="h-4 w-4" />
     Changes
   </Button>}
-  {regionalHrMode && regionalHrReviewPending ? <Button
+  {regionalHrActionAvailable ? <Button
   onClick={() => void handleForwardToRegionalManager(notification.id)}
   disabled={processingId === notification.id}
   size="sm"

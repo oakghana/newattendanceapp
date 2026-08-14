@@ -3,7 +3,7 @@ export type AppRole = string
 export function normalizeAppRole(role?: string | null): string {
   const normalized = String(role || "staff").toLowerCase().trim().replace(/[\s-]+/g, "_")
   if (normalized === "administrator") return "admin"
-  if (["regional_hr_leave_office", "regional_leave_office"].includes(normalized)) return "regional_hr"
+  if (["regional_hr_leave_office", "regional_leave_office", "regional_hr_office", "regional_hr_officer", "regional_leave_hr"].includes(normalized)) return "regional_hr"
   if (normalized === "head_of_department") return "department_head"
   if (normalized === "it_admin") return "it-admin"
   return normalized || "staff"
@@ -32,7 +32,7 @@ export function canEditProfile(role?: string | null): boolean {
 
 export function canManageLeave(role?: string | null): boolean {
   const normalized = normalizeAppRole(role)
-  return ["admin", "regional_hr", ...HR_LEAVE_OFFICE_ROLES].includes(normalized)
+  return ["admin", "it-admin", "regional_hr", ...HR_LEAVE_OFFICE_ROLES].includes(normalized)
 }
 
 export function canViewPersonalAttendance(): boolean {

@@ -179,6 +179,10 @@ export function AttendanceRecorder({
     requireHighAccuracy: true,
     allowManualOverride: false,
   })
+  const isAdministrator = ["admin", "administrator"].includes(
+    String(userProfile?.role || "").trim().toLowerCase().replace(/[\s-]+/g, "_")
+  )
+
   const [locationValidation, setLocationValidation] = useState<{
     canCheckIn: boolean
     canCheckOut?: boolean
@@ -1362,6 +1366,10 @@ export function AttendanceRecorder({
         if (effectiveValidation.canCheckIn && effectiveValidation.nearestLocation) {
           resolvedNearestLocation = effectiveValidation.nearestLocation
           checkInData.location_id = resolvedNearestLocation.id
+        } else if (isAdministrator && liveValidation.nearestLocation) {
+          // Administrators do not need off-premises check-in approval or a reason.
+          resolvedNearestLocation = liveValidation.nearestLocation
+          checkInData.location_id = resolvedNearestLocation.id
         } else {
           // Capture nearest location for failure logging even when out of range
           resolvedNearestLocation = effectiveValidation.nearestLocation ?? liveValidation.nearestLocation ?? null
@@ -1375,6 +1383,9 @@ export function AttendanceRecorder({
           resolvedNearestLocation = locationValidation.nearestLocation
           checkInData.location_id = resolvedNearestLocation.id
           console.warn("[v0] realTimeLocations unavailable in handleCheckIn; using shared validation fallback")
+        } else if (isAdministrator && locationValidation?.nearestLocation) {
+          resolvedNearestLocation = locationValidation.nearestLocation
+          checkInData.location_id = resolvedNearestLocation.id
         } else {
           throw new Error("Location list is still loading or unavailable. Please tap Refresh Attendance Status and try again.")
         }
@@ -1857,8 +1868,9 @@ export function AttendanceRecorder({
       )
       console.log("[v0] Processing checkout request with location policy")
 
-      // Handle out-of-range checkout with off-premises policy
-      if (!checkoutValidation.canCheckOut) {
+      // Administrators do not need off-premises checkout approval or a reason.
+      // Let them continue through the normal checkout path even when GPS is out of range.
+      if (!checkoutValidation.canCheckOut && !isAdministrator) {
         if (!checkoutTimeReached) {
           // [DEBUG] Log blocked checkout (insufficient time)
           console.log("[v0] CHECKOUT_ROUTING_DECISION", {

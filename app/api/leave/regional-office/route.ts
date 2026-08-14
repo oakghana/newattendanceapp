@@ -27,8 +27,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const normalizedRole = String(userProfile.role || '').toLowerCase().replace(/[- ]/g, '_');
-    const isRegionalHr = ['hr', 'hr_office', 'regional_hr', 'regional_hr_office', 'regional_hr_leave_office', 'regional_leave_office'].includes(normalizedRole);
+    const normalizedRole = String(userProfile.role || '').toLowerCase().trim().replace(/[-\s]+/g, '_');
+    const isRegionalHr = ['regional_hr', 'regional_hr_office', 'regional_hr_officer', 'regional_hr_leave_office', 'regional_leave_office'].includes(normalizedRole);
     const isRegionalLoanOffice = normalizedRole === 'regional_loan_office';
     if (!isRegionalHr && !isRegionalLoanOffice && normalizedRole !== 'admin') {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
@@ -61,12 +61,15 @@ const regionIds = userProfile.region_id ? [userProfile.region_id] : [];
     // Repair only requests belonging to this Regional HR user's assigned staff
     // when the request was saved before location-first routing was enabled.
     if (scopedStaffIds.length > 0) {
+      // Repair only records that are explicitly regional. Never convert a
+      // non-regional/HOD request merely because it shares a location.
       await admin
         .from('leave_plan_requests')
-.update({ workflow_route: 'regional', status: 'pending_regional_hr_review', workflow_stage: 'regional_hr_review', regional_hr_office_user_id: userId, updated_at: new Date().toISOString() })
-  .in('user_id', scopedStaffIds)
-  .not('status', 'in', '(approved,rejected,cancelled,withdrawn)')
-  .or('workflow_route.is.null,workflow_route.eq.legacy')
+        .update({ regional_hr_office_user_id: userId, updated_at: new Date().toISOString() })
+        .eq('workflow_route', 'regional')
+        .in('user_id', scopedStaffIds)
+        .in('status', ['pending_regional_hr_office_review', 'pending_regional_hr_review'])
+        .or(`regional_hr_office_user_id.is.null,regional_hr_office_user_id.eq.${userId}`)
     }
 
     // Fetch leave requests for assigned locations

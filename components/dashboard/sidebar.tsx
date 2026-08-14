@@ -72,7 +72,7 @@ interface SidebarProps {
 
 const EXEC_ROLES = ["managing_director", "secretary"] as const
 const ALL_STAFF_ROLES = [
-  "admin", "it-admin", "regional_manager", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "department_head",
+  "admin", "it-admin", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "department_head",
   "staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "director_hr", "manager_hr",
   "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern",
   "contract", "managing_director", "secretary", "hr_records", "hr_records_officer", "hr_records_manager",
@@ -122,6 +122,13 @@ const navigationItems = [
     icon: Calendar,
     roles: ALL_STAFF_ROLES,
     category: "admin",
+  },
+  {
+    title: "Leave Planning",
+    href: "/dashboard/leave-planning",
+    icon: Calendar,
+    roles: ALL_STAFF_ROLES,
+    category: "main",
   },
   {
     title: "Excuse Duty Review",
@@ -423,11 +430,12 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
       ]
     : navigationItems
 
-  // Normalize both the profile role and each menu item's allowed roles so the
-  // UI accepts the role values used by existing records, such as IT-ADMIN.
-  // Support role hierarchy by treating audit_staff like staff for base menus.
+  // Normalize both the profile role and each menu item's allowed roles through
+  // the shared helper so values such as "it admin", "IT-ADMIN", and "it_admin"
+  // resolve to the same effective role.
   const normalizedRole = normalizeAppRole(profile?.role)
   const effectiveRole = normalizedRole === "audit_staff" ? "staff" : normalizedRole
+  const isItAdmin = effectiveRole === "it-admin"
 
   // A handful of "main" category items are intentionally restricted to specific
   // roles (e.g. Disbursement Confirmation is only for Accounts/Loan Office staff,
@@ -459,6 +467,9 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
     ) {
       return false
     }
+    if (isItAdmin && item.category === "admin") {
+      return ["/dashboard/leave-management", "/dashboard/staff"].includes(item.href)
+    }
     if (item.href === "/dashboard/device-violations") {
       return effectiveRole === "admin"
     }
@@ -474,10 +485,11 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
     // label from legacy records must not make the sidebar appear empty.
     if (item.category === "main" && !item.executive && !ROLE_RESTRICTED_MAIN_HREFS.has(item.href)) return true
 
-    return item.roles.some((role) => {
-      const normalizedAllowedRole = role.toLowerCase().replace(/[\s-]+/g, "_").trim()
-      return normalizedAllowedRole === effectiveRole
-    })
+    if (isItAdmin && ["/dashboard/leave-management", "/dashboard/staff"].includes(item.href)) {
+      return true
+    }
+
+    return item.roles.some((role) => normalizeAppRole(role) === effectiveRole)
   })
 
   const mainItems = filteredNavItems.filter((item) => item.category === "main")
