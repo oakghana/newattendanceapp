@@ -1480,8 +1480,8 @@ export async function POST(request: NextRequest) {
         // Office owns this field and its exact text must be preserved in the memo.
         adjustment_reason: null,
         maternity_delivery_type: leaveTypeKey === "maternity" ? String(maternity_delivery_type) : null,
-delivery_date: ["maternity", "paternity"].includes(leaveTypeKey) ? delivery_date : null,
-      medical_report_url: ["maternity", "paternity"].includes(leaveTypeKey) ? String(medical_report_url) : null,
+        delivery_date: ["maternity", "paternity"].includes(leaveTypeKey) ? delivery_date : null,
+        medical_report_url: ["maternity", "paternity"].includes(leaveTypeKey) ? String(medical_report_url) : null,
       })
       .select("*")
       .single()

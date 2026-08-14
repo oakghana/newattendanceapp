@@ -167,8 +167,8 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
       .eq("is_active", true)
       .maybeSingle()
     if (alignmentError) throw alignmentError
-    if (canonicalAlignment) {
-      regionalHrId = canonicalAlignment.regional_hr_user_id || regionalHrId
+    if (canonicalAlignment?.regional_hr_user_id) {
+      regionalHrId = canonicalAlignment.regional_hr_user_id
       regionalManagerId = canonicalAlignment.regional_manager_user_id || regionalManagerId
     }
   }
@@ -201,7 +201,7 @@ export async function resolveRegionalHrOffice(
       .eq("is_active", true)
       .maybeSingle()
     if (mappingError) throw mappingError
-    if (mapped) return { user_id: mapped.regional_hr_user_id, region_id: mapped.region_id || regionId || null, is_override: true }
+    if (mapped?.regional_hr_user_id) return { user_id: mapped.regional_hr_user_id, region_id: mapped.region_id || regionId || null, is_override: true }
   }
 
   // Backwards-compatible profile-based location lookup.
@@ -211,7 +211,7 @@ export async function resolveRegionalHrOffice(
       .select("id, region_id, assigned_location_id")
       .eq("assigned_location_id", locationId)
       .eq("is_active", true)
-      .in("role", ["hr", "hr_office", "regional_hr", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"])
+      .in("role", ["hr", "hr_office", "regional_hr", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office", "regional hr", "regional hr office", "regional hr leave office"])
       .limit(1)
       .maybeSingle()
     if (locationError) throw locationError
