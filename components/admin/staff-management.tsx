@@ -584,7 +584,7 @@ export function StaffManagement() {
       // Fetch all roles that act as head of department in parallel
       const [resDH, resRM, resMHR, resDHR] = await Promise.all([
         authenticatedFetch("/api/admin/staff?role=department_head&limit=200"),
-        authenticatedFetch("/api/admin/staff?role=regional_manager&limit=200"),
+        authenticatedFetch("/api/admin/staff?role=regional_manager&limit=1000"),
         authenticatedFetch("/api/admin/staff?role=manager_hr&limit=200"),
         authenticatedFetch("/api/admin/staff?role=director_hr&limit=200"),
       ])
@@ -594,24 +594,27 @@ export function StaffManagement() {
         resMHR.json().then((d: any) => d.data || []),
         resDHR.json().then((d: any) => d.data || []),
       ])
-      const staffLocationId = member.assigned_location_id
+      const staffLocationId = String(member.assigned_location_id || "")
       const staffLocationName = normalizeLocationName(member.geofence_locations?.name)
       const isNonRegionalStaff = isNonRegionalLocation(staffLocationName)
-      const sameLocation = (candidate: StaffMember) =>
-        Boolean(staffLocationId && candidate.assigned_location_id === staffLocationId)
+      const roleKey = (candidate: StaffMember) => normalizeLocationName(candidate.role).replace(/_/g, " ")
+      const candidateLocationId = (candidate: StaffMember) => String(candidate.assigned_location_id || "")
+      const sameLocation = (candidate: StaffMember) => Boolean(staffLocationId && candidateLocationId(candidate) === staffLocationId)
+      const isRegionalManager = (candidate: StaffMember) => ["regional manager", "regional manager office", "regionalmanager"].includes(roleKey(candidate))
+      const isDepartmentHead = (candidate: StaffMember) => roleKey(candidate) === "department head"
 
       // Non-regional locations use same-location Department Heads only.
-      // Every other location is regional and uses its same-location Regional Manager only.
+      // Every other location uses every eligible same-location Regional Manager.
       const all = isNonRegionalStaff
-        ? dh.filter((candidate) => sameLocation(candidate) && normalizeLocationName(candidate.role) === "department_head")
-        : rm.filter((candidate) => sameLocation(candidate) && normalizeLocationName(candidate.role) === "regional_manager")
+        ? dh.filter((candidate) => sameLocation(candidate) && isDepartmentHead(candidate))
+        : rm.filter((candidate) => sameLocation(candidate) && isRegionalManager(candidate))
       const seen = new Set<string>()
       const unique = all.filter((s) => {
         if (seen.has(s.id)) return false
         seen.add(s.id)
         return true
       }).sort((a, b) => {
-        const regionalPriority = Number(b.role === "regional_manager") - Number(a.role === "regional_manager")
+        const regionalPriority = Number(isRegionalManager(b)) - Number(isRegionalManager(a))
         if (regionalPriority !== 0) return regionalPriority
         return `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
       })
@@ -1537,7 +1540,7 @@ export function StaffManagement() {
                       (h.employee_id && h.employee_id.includes(hodSearchQuery)) ||
                       (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
                     ).length} of ${hodCandidates.length} HODs`
-                  : "No HODs available"}
+                  : `No eligible ${hodLinkStaff && isNonRegionalLocation(hodLinkStaff.geofence_locations?.name) ? "Department Heads" : "Regional Managers"} found for this exact location.`}
               </p>
             </div>
             <div className="space-y-2">
@@ -1550,7 +1553,7 @@ export function StaffManagement() {
                   (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
                 ).length === 0 ? (
                   <p className="text-sm text-muted-foreground italic py-4 text-center">
-                    {hodSearchQuery ? "No matching HODs found" : "No HODs available"}
+                    {hodSearchQuery ? "No matching eligible candidates found" : `No eligible ${hodLinkStaff && isNonRegionalLocation(hodLinkStaff.geofence_locations?.name) ? "Department Heads" : "Regional Managers"} found for this exact location.`}
                   </p>
                 ) : (
                   hodCandidates.filter((h) =>
