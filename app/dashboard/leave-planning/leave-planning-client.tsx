@@ -2467,14 +2467,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
       officeRefNumber[requestId] ||
       "",
     ).trim()
-  if (!refNum) {
-  toast({ title: "HR Records action required", description: "HR Records must assign and release the official memo reference before HR Leave Office can continue.", variant: "destructive" })
-  return
-  }
-
     const confirmForward = window.confirm(
       `Please confirm the adjusted leave values before forwarding:\n\n` +
-      `Reference No: ${refNum}\n` +
+      `Reference No: ${refNum || "Assigned after approval by HR Records"}\n` +
       `Adjusted Dates: ${adjStart} to ${adjEnd}\n` +
       `Base Days: ${baseDays}\n` +
       `${outstandingAdded > 0 ? `+ Outstanding Days: ${outstandingAdded}\n` : ""}` +
@@ -4316,18 +4311,13 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
             submitHrOfficeReview(req.id, "regional-manager")
                                 return
                               }
-                              const persistedReference = String(req.memo_reference || req.reference_number || officeRefNumber[req.id] || "").trim()
-                              if (!persistedReference) {
-                                toast({ title: "Reference Number Required", description: "HR Records must assign the official memo reference before forwarding.", variant: "destructive" })
-                                return
-                              }
                               if (!selectedHrExecutive[req.id]) {
                                 toast({ title: "HR Executive Required", description: "Please select an HR Executive to forward this request to.", variant: "destructive" })
                                 return
                               }
                               submitHrOfficeReview(req.id, selectedHrExecutive[req.id])
                             }}
-                              disabled={officeSubmitting === req.id || (!isRegionalHr && (!String(req.memo_reference || req.reference_number || officeRefNumber[req.id] || "").trim() || !selectedHrExecutive[req.id]))}
+                              disabled={officeSubmitting === req.id || (!isRegionalHr && !selectedHrExecutive[req.id])}
                               className="w-full bg-blue-700 hover:bg-blue-800 text-white disabled:opacity-60">
                               {officeSubmitting === req.id ? "Forwarding…" : isRegionalHr ? "Adjust & Forward to Regional Manager →" : "Forward to HR Approvers →"}
                             </Button>
