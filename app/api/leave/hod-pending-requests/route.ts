@@ -21,6 +21,7 @@ export async function GET(_request: NextRequest) {
         adjusted_days,
         status,
         hod_decision,
+        hod_id,
         workflow_route,
         staff_category,
         created_at,
@@ -91,7 +92,9 @@ export async function GET(_request: NextRequest) {
     const currentHodStaffIds = new Set(
       allLinkages.filter((link: any) => String(link.hod_user_id) === String(user.id)).map((link: any) => String(link.staff_user_id)),
     )
-    const enrichedRequests = planRequests.filter((req: any) => currentHodStaffIds.has(String(req.user_id))).map((req: any) => {
+    const enrichedRequests = planRequests.filter((req: any) =>
+      String(req.hod_id || "") === String(user.id) || currentHodStaffIds.has(String(req.user_id)),
+    ).map((req: any) => {
       const createdDate = new Date(req.submitted_at || req.created_at)
       const daysPending = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
 

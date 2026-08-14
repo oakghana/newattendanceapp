@@ -91,16 +91,26 @@ export default async function LeaveManagementPage() {
         ...(hodLinks || []).map((row: any) => row.staff_user_id),
         ...(profileLinkedStaff || []).map((row: any) => row.id),
       ].filter(Boolean)))
-      if (staffIds.length > 0) {
-        const { data: hodRequests } = await admin
-          .from("leave_plan_requests")
-          .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, hod_decision, memo_token, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id)")
-          .in("user_id", staffIds)
+      // Query direct request assignment even when legacy linkage tables are empty.
+      if (staffIds.length >= 0) {
+        const requestSelect = "id, user_id, hod_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, workflow_route, workflow_stage, created_at, hod_decision, memo_token, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id)"
+        const baseHodQuery = (query: any) => query
           .or("workflow_route.is.null,workflow_route.eq.legacy")
           .in("status", ["pending_hod_review", "pending_hod", "pending", "submitted", "pending_review"])
           .or("hod_decision.is.null,hod_decision.eq.pending")
           .order("created_at", { ascending: true })
           .limit(100)
+        const [{ data: linkedRequests }, { data: directlyAssignedRequests }] = await Promise.all([
+          baseHodQuery(
+            admin.from("leave_plan_requests").select(requestSelect).in("user_id", staffIds),
+          ),
+          baseHodQuery(
+            admin.from("leave_plan_requests").select(requestSelect).eq("hod_id", user.id),
+          ),
+        ])
+        const hodRequests = Array.from(new Map(
+          [...(linkedRequests || []), ...(directlyAssignedRequests || [])].map((request: any) => [request.id, request]),
+        ).values())
         const hodLocationIds = Array.from(new Set((hodRequests || []).map((request: any) => request.user_profiles?.assigned_location_id).filter(Boolean)))
         const { data: hodLocations } = hodLocationIds.length
           ? await admin.from("geofence_locations").select("id, name, code").in("id", hodLocationIds)
