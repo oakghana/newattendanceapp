@@ -603,17 +603,22 @@ export function StaffManagement() {
       const isRegionalManager = (candidate: StaffMember) => ["regional manager", "regional manager office", "regionalmanager"].includes(roleKey(candidate))
       const isDepartmentHead = (candidate: StaffMember) => roleKey(candidate) === "department head"
 
-      // Non-regional locations use same-location Department Heads only.
-      // Every other location uses every eligible same-location Regional Manager.
+      // Non-regional staff use same-location Department Heads only.
+      // Regional staff may link to any Regional Manager; same-location managers
+      // are sorted first for quick selection.
       const all = isNonRegionalStaff
         ? dh.filter((candidate) => sameLocation(candidate) && isDepartmentHead(candidate))
-        : rm.filter((candidate) => sameLocation(candidate) && isRegionalManager(candidate))
+        : rm.filter((candidate) => isRegionalManager(candidate))
       const seen = new Set<string>()
       const unique = all.filter((s) => {
         if (seen.has(s.id)) return false
         seen.add(s.id)
         return true
       }).sort((a, b) => {
+        if (!isNonRegionalStaff) {
+          const localPriority = Number(sameLocation(b)) - Number(sameLocation(a))
+          if (localPriority !== 0) return localPriority
+        }
         const regionalPriority = Number(isRegionalManager(b)) - Number(isRegionalManager(a))
         if (regionalPriority !== 0) return regionalPriority
         return `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)

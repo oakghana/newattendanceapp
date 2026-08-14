@@ -48,8 +48,8 @@ function validateStaffHodRule(staff: any, hod: any): { ok: boolean; reason?: str
     return { ok: true }
   }
 
-  if (hodRole !== "regional_manager" || !staffLoc || staffLoc !== hodLoc) {
-    return { ok: false, reason: "Regional staff can only be linked to the Regional Manager in the same location." }
+  if (hodRole !== "regional_manager" || !staffLoc) {
+    return { ok: false, reason: "Regional staff can only be linked to Regional Managers." }
   }
   return { ok: true }
 }
@@ -177,7 +177,7 @@ export async function GET(request: NextRequest) {
     if (role === "regional_manager") {
       if (assignedLocationId) {
         staffRows = staffRows.filter((row: any) => String(row.assigned_location_id || "") === assignedLocationId)
-        hodRows = hodRows.filter((row: any) => String(row.assigned_location_id || "") === assignedLocationId || row.id === user.id)
+        hodRows = hodRows.filter((row: any) => String(row.assigned_location_id || "") === assignedLocationId || normalizeRole(String(row.role || "")) === "regional_manager" || row.id === user.id)
       } else {
         staffRows = []
       }
