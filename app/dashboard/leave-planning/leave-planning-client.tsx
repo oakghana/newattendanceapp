@@ -2381,7 +2381,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     const request = hrOfficeQueue.find(r => r.id === requestId)
     const leaveType = String(request?.leave_type_key || "").toLowerCase()
     const isAnnualLeave = leaveType === "annual"
-    const outstandingDays = Number(officeOutstandingDays[requestId] || 0)
+    const outstandingDays = isAnnualLeave ? Math.max(0, Number(officeOutstandingDays[requestId] || 0)) : 0
     const annualAdjustmentRemark = isAnnualLeave && outstandingDays > 0
       ? `${String(rsn || "Annual leave adjustment").trim()} ${outstandingDays} outstanding day(s) added to entitlement.`
       : String(rsn || "").trim()
