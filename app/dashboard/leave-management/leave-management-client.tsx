@@ -816,7 +816,7 @@ export function LeaveManagementClient({
   const canEditHrTemplates = isAdmin || ["hr_director", "hr_leave_office"].includes(normalizedRole)
   const isHrLeaveOfficeRole = ["hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isLeaveOfficeRole = ["hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr"].includes(normalizedRole)
-  const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
+  const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isHrExecutive = isAdmin || ["director_hr", "manager_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const canAccessPaymentAdvice = isAdmin || isHrLeaveOfficeRole || isHrExecutive
 

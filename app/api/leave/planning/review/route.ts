@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
       .trim()
       .replace(/[-\s]+/g, "_")
 
-    if (!["regional_manager", "department_head", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)) {
+    if (!["regional_manager", "department_head", "hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)) {
       return NextResponse.json({ error: "Only regional managers and department heads can review this request." }, { status: 403 })
     }
 
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "leave_plan_request_id and action are required." }, { status: 400 })
     }
 
-    const isRegionalHr = ["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
+    const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
     const isRegionalForward = action === "forward_to_regional_manager"
     if (isRegionalForward && !isRegionalHr) {
       return NextResponse.json({ error: "Only the assigned Regional HR Office can forward a regional leave request to the Regional Manager." }, { status: 403 })
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (reviewError || !reviews || reviews.length === 0) {
-      const isRegionalHr = ["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
+      const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
       if (!isRegionalHr) {
         return NextResponse.json({ error: "Review assignment not found for this manager." }, { status: 404 })
       }

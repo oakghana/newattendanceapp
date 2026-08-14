@@ -85,8 +85,7 @@ export default async function LeaveManagementPage() {
         admin
           .from("user_profiles")
           .select("id")
-          .eq("hod_id", user.id)
-          .eq("is_active", true),
+          .eq("hod_id", user.id),
       ])
       const staffIds = Array.from(new Set([
         ...(hodLinks || []).map((row: any) => row.staff_user_id),
@@ -98,7 +97,7 @@ export default async function LeaveManagementPage() {
           .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, hod_decision, memo_token, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id)")
           .in("user_id", staffIds)
           .or("workflow_route.is.null,workflow_route.eq.legacy")
-          .in("status", ["pending_hod_review", "pending"])
+          .in("status", ["pending_hod_review", "pending_hod", "pending", "submitted", "pending_review"])
           .or("hod_decision.is.null,hod_decision.eq.pending")
           .order("created_at", { ascending: true })
           .limit(100)
@@ -154,7 +153,7 @@ export default async function LeaveManagementPage() {
       if (regionalStaffIds.length > 0) {
         const { data: regionalRequests } = await admin
           .from("leave_plan_requests")
-          .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, memo_token, memo_reference, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id, region_id)")
+          .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, workflow_route, workflow_stage, created_at, memo_token, memo_reference, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id, region_id)")
           .in("user_id", regionalStaffIds)
           .eq("workflow_route", "regional")
           .in("status", isRegionalManager ? ["pending_regional_manager_approval", "approved", "regional_manager_approved"] : ["pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review", "pending_regional_manager_approval"])
@@ -178,6 +177,8 @@ export default async function LeaveManagementPage() {
         managerNotifications = (regionalRequests || []).map((request: any) => ({
           id: request.id,
           status: request.status,
+          workflow_route: request.workflow_route,
+          workflow_stage: request.workflow_stage,
           requester_name: `${request.user_profiles?.first_name || ""} ${request.user_profiles?.last_name || ""}`.trim(),
           requester_role: "staff",
           staff_location_name: regionalLocationMap.get(request.user_profiles?.assigned_location_id)?.name || null,

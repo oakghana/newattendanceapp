@@ -7,8 +7,9 @@ export async function GET(_request: NextRequest) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const admin = await createAdminClient()
     // Query leave_plan_requests where HOD decision is pending (null or 'pending')
-    const { data: requests, error } = await supabase
+    const { data: requests, error } = await admin
       .from('leave_plan_requests')
       .select(`
         id,
@@ -26,7 +27,7 @@ export async function GET(_request: NextRequest) {
         submitted_at
       `)
       .or('hod_decision.is.null,hod_decision.eq.pending')
-      .neq('status', 'rejected')
+      .in('status', ['pending_hod_review', 'pending_hod', 'pending', 'submitted', 'pending_review'])
       .order('created_at', { ascending: true })
 
     if (error) {
@@ -35,7 +36,6 @@ export async function GET(_request: NextRequest) {
     }
 
     const planRequests = (requests || []).filter((request: any) => request.workflow_route !== "regional")
-    const admin = await createAdminClient()
 
     // Enrich with user details, staff location, and HOD linkage details.
     const userIds = [...new Set(planRequests.map((r: any) => r.user_id).filter(Boolean))]
