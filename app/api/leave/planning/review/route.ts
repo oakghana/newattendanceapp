@@ -68,13 +68,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { leave_plan_request_id, action, recommendation, adjusted_preferred_start_date, adjusted_preferred_end_date } = body
+    const { leave_plan_request_id, action, recommendation, adjusted_preferred_start_date, adjusted_preferred_end_date, memo_reference, adjustment_breakdown } = body
 
     if (!leave_plan_request_id || !action) {
       return NextResponse.json({ error: "leave_plan_request_id and action are required." }, { status: 400 })
     }
 
+    const isRegionalHr = ["regional_hr", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(role)
     const isRegionalForward = action === "forward_to_regional_manager"
+    if (isRegionalForward && !isRegionalHr) {
+      return NextResponse.json({ error: "Only the assigned Regional HR Office can forward a regional leave request to the Regional Manager." }, { status: 403 })
+    }
     const decision = isRegionalForward ? "approved" : normalizeDecision(action)
     if (!decision) {
       return NextResponse.json({ error: "Invalid action. Use approve, recommend_change, or reject." }, { status: 400 })
@@ -85,13 +89,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (isRegionalForward && (!adjusted_preferred_start_date || !adjusted_preferred_end_date)) {
-      return NextResponse.json({ error: "Adjusted start and end dates are required before forwarding to the Regional Manager." }, { status: 400 })
+      return NextResponse.json({ error: "Adjusted start date and end date are required before forwarding to the Regional Manager." }, { status: 400 })
     }
 
     const isRegionalManagerApproval = role === "regional_manager"
     const isRegionalRequest = action === "forward_to_regional_manager"
       || String(body.workflow_route || "").toLowerCase() === "regional"
-      || role === "regional_manager"
     if (isRegionalManagerApproval && isRegionalRequest && decision === "approved" && !isRegionalForward) {
       const profileHasSignature = Boolean(String((profile as any).signature_data_url || "").trim())
 
@@ -125,17 +128,16 @@ export async function POST(request: NextRequest) {
 
       const { data: targetRequest, error: targetRequestError } = await admin
         .from("leave_plan_requests")
-        .select("id, user_id, leave_type_key, user_profiles:user_id(assigned_location_id, region_id)")
+        .select("id, user_id, leave_type_key, workflow_route, workflow_stage, status, regional_hr_office_user_id, user_profiles:user_id(assigned_location_id, region_id)")
         .eq("id", leave_plan_request_id)
         .maybeSingle()
 
       if (targetRequestError || !targetRequest) {
         return NextResponse.json({ error: "Leave request not found." }, { status: 404 })
       }
-      if (String(targetRequest.leave_type_key || "annual").toLowerCase() === "annual") {
-        return NextResponse.json({ error: "Regional HR can only process non-annual leave requests." }, { status: 403 })
+      if (isRegionalForward && (targetRequest as any).regional_hr_office_user_id && (targetRequest as any).regional_hr_office_user_id !== user.id) {
+        return NextResponse.json({ error: "This request is assigned to another Regional HR Office." }, { status: 403 })
       }
-
       const targetProfile = Array.isArray(targetRequest.user_profiles) ? targetRequest.user_profiles[0] : targetRequest.user_profiles
       const sameScope =
         (profile.assigned_location_id && targetProfile?.assigned_location_id === profile.assigned_location_id) ||
@@ -176,7 +178,7 @@ export async function POST(request: NextRequest) {
 
     const { data: leavePlan, error: leavePlanError } = await admin
       .from("leave_plan_requests")
-      .select("id, user_id, preferred_start_date, preferred_end_date, entitlement_days, workflow_route, leave_type_key, requested_days")
+      .select("id, user_id, preferred_start_date, preferred_end_date, entitlement_days, workflow_route, leave_type_key, requested_days, user_profiles:user_id(assigned_location_id, region_id)")
       .eq("id", leave_plan_request_id)
       .single()
 
@@ -188,9 +190,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Leave plan request not found." }, { status: 404 })
     }
 
+    const isRegionalWorkflow = String((leavePlan as any).workflow_route || "").toLowerCase() === "regional"
+    if (isRegionalForward && !isRegionalWorkflow) {
+      return NextResponse.json({ error: "This leave request is not marked for the regional workflow." }, { status: 400 })
+    }
+
+    if (isRegionalManagerApproval && isRegionalRequest) {
+      const staffProfile = Array.isArray((leavePlan as any).user_profiles) ? (leavePlan as any).user_profiles[0] : (leavePlan as any).user_profiles
+      const sameScope =
+        (profile.assigned_location_id && staffProfile?.assigned_location_id === profile.assigned_location_id) ||
+        ((profile as any).region_id && staffProfile?.region_id === (profile as any).region_id)
+      if (!sameScope) {
+        return NextResponse.json({ error: "This regional request is outside your assigned region or location." }, { status: 403 })
+      }
+    }
+
     let nextStartDate = leavePlan.preferred_start_date
     let nextEndDate = leavePlan.preferred_end_date
     let nextRequestedDays = calculateRequestedDays(nextStartDate, nextEndDate)
+    let effectiveEntitlement = Number(leavePlan.entitlement_days || 0)
 
     if (isRegionalForward || decision === "recommend_change") {
       nextStartDate = adjusted_preferred_start_date
@@ -202,10 +220,14 @@ export async function POST(request: NextRequest) {
       }
 
       const entitlementDays = Number(leavePlan.entitlement_days || 0)
-      if (entitlementDays > 0 && nextRequestedDays > entitlementDays) {
+      const outstandingDays = Number(adjustment_breakdown?.outstanding_days || 0)
+      effectiveEntitlement = entitlementDays + outstandingDays
+      if (effectiveEntitlement > 0 && nextRequestedDays > effectiveEntitlement) {
         return NextResponse.json(
           {
-            error: `Adjusted request (${nextRequestedDays} day(s)) exceeds entitlement (${entitlementDays} day(s)).`,
+            error: outstandingDays > 0
+              ? `Adjusted request (${nextRequestedDays} day(s)) exceeds entitlement plus outstanding days (${effectiveEntitlement} day(s)).`
+              : `Adjusted request (${nextRequestedDays} day(s)) exceeds entitlement (${entitlementDays} day(s)).`,
           },
           { status: 400 },
         )
@@ -232,26 +254,32 @@ export async function POST(request: NextRequest) {
       .filter((r: string | null) => !!r)
       .join("\n\n")
 
-    const isRegionalWorkflow = String((leavePlan as any).workflow_route || "") === "regional"
     const isRegionalManagerApprovalComplete = isRegionalWorkflow && isRegionalManagerApproval && decision === "approved" && !isRegionalForward
     const isDepartmentHeadApproval = decision === "approved" && !isRegionalForward && !isRegionalManagerApproval
     const mustUseHrRecordsReference = !isRegionalWorkflow && isDepartmentHeadApproval && !isAnnualLeave((leavePlan as any).leave_type_key) && !isExcludedLocation((leavePlan as any).assigned_location_name)
     const requestUpdatePayload: Record<string, any> = {
       status: isRegionalForward ? "pending_regional_manager_approval" : isRegionalManagerApprovalComplete ? "approved" : mustUseHrRecordsReference ? "pending_hr_records_reference" : nextStatus,
-      ...(isRegionalManagerApprovalComplete ? { workflow_stage: "completed", memo_generated: true, memo_generated_at: new Date().toISOString() } : {}),
+      ...(isRegionalManagerApprovalComplete ? { workflow_stage: "completed", memo_generated: true, memo_generated_at: new Date().toISOString(), hr_approver_id: user.id } : {}),
       ...(mustUseHrRecordsReference ? { workflow_stage: "pending_hr_records_reference" } : {}),
       manager_recommendation: mergedRecommendations || null,
+      ...(isRegionalForward && isAnnualLeave((leavePlan as any).leave_type_key) ? {
+        entitlement_days: effectiveEntitlement,
+        outstanding_leave_days_added: Number(adjustment_breakdown?.outstanding_days || 0),
+        travelling_days_added: Number(adjustment_breakdown?.travelling_days || 0),
+        adjustment_breakdown: adjustment_breakdown || {},
+        adjustment_reason: String(recommendation || "").trim() || null,
+      } : {}),
+      ...(isRegionalForward && String(memo_reference || "").trim() ? { memo_reference: String(memo_reference).trim() } : {}),
       updated_at: new Date().toISOString(),
     }
 
     // Only send columns that are part of the leave-planning table contract.
     // Approval must not fail because optional memo/signature columns are absent.
     const leavePlanColumns = new Set([
-      "status", "workflow_stage", "manager_recommendation", "updated_at",
-      "memo_generated", "memo_generated_at", "hod_reviewer_id", "hod_reviewed_at",
+      "status", "workflow_stage", "manager_recommendation", "memo_reference", "updated_at", "entitlement_days", "outstanding_leave_days_added", "travelling_days_added", "adjustment_breakdown", "adjustment_reason",
+      "memo_generated", "memo_generated_at", "hr_approver_id", "hod_reviewer_id", "hod_reviewed_at",
       "hod_decision", "preferred_start_date", "preferred_end_date", "requested_days",
-      "hr_approver_name", "hr_approver_position", "hr_approver_signature_data_url",
-      "hr_signature_data_url", "hr_approver_signature_text", "hr_approved_at", "hr_approval_note",
+      "hr_approver_name", "hr_signature_data_url", "hr_approved_at", "hr_approval_note",
     ])
     for (const key of Object.keys(requestUpdatePayload)) {
       if (!leavePlanColumns.has(key)) delete requestUpdatePayload[key]
@@ -269,10 +297,9 @@ export async function POST(request: NextRequest) {
         .maybeSingle()
 
       requestUpdatePayload.hr_approver_name = signerName || "Regional Manager"
-      requestUpdatePayload.hr_approver_position = (profile as any).position || "Regional Manager"
       const savedSignature = signerSignature?.signature_data_url || (profile as any).signature_data_url || null
-      requestUpdatePayload.hr_approver_signature_data_url = savedSignature
       requestUpdatePayload.hr_signature_data_url = savedSignature
+      requestUpdatePayload.hr_approver_id = user.id
       requestUpdatePayload.hr_approved_at = new Date().toISOString()
       requestUpdatePayload.hr_approval_note = "Approved by the Regional Manager under the regional non-annual leave workflow."
     }

@@ -37,7 +37,7 @@ export function RequestLeaveButton() {
   const [open, setOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
-  const [formData, setFormData] = useState({ start_date: "", end_date: "", leave_type: "annual", reason: "", maternity_delivery_type: "normal", delivery_date: "" })
+  const [formData, setFormData] = useState({ start_date: "", end_date: "", leave_type: "annual", reason: "", maternity_delivery_type: "normal", delivery_date: "", requested_days: "" })
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
   const [activePeriod, setActivePeriod] = useState("2026/2027")
   const [annualEntitlement, setAnnualEntitlement] = useState<AnnualEntitlementInfo | null>(null)
@@ -101,15 +101,26 @@ export function RequestLeaveButton() {
       return
     }
 
-    const requestedDays = computeLeaveDays(formData.start_date, formData.end_date)
+    const selectedType = leaveTypes.find((type) => type.leaveTypeKey === formData.leave_type)
+    const annualZeroEntitlement = formData.leave_type === "annual" && annualEntitlement?.totalEntitlement === 0
+    const zeroEntitlement = annualZeroEntitlement || selectedType?.entitlementDays === 0
+    const requestedDays = zeroEntitlement ? Number(formData.requested_days) : computeLeaveDays(formData.start_date, formData.end_date)
+    if (zeroEntitlement && (!Number.isInteger(requestedDays) || requestedDays <= 0)) {
+      alert("Enter the positive number of days you are requesting. The next approver will decide whether to grant it.")
+      return
+    }
     const maternity = formData.leave_type === "maternity"
+    const paternity = formData.leave_type === "paternity"
     const maternityDays = getMaternityEntitlementDays(formData.maternity_delivery_type)
+    if (paternity && !uploadedFile) {
+      alert("Spouse delivery proof is required for paternity leave.")
+      return
+    }
     if (maternity && (!formData.delivery_date || requestedDays !== maternityDays)) {
       alert(`Maternity leave must be ${maternityDays} days for the selected delivery type, with the delivery date provided.`)
       return
     }
-    const selectedType = leaveTypes.find((type) => type.leaveTypeKey === formData.leave_type)
-    if (!maternity && selectedType && requestedDays > selectedType.entitlementDays) {
+    if (!maternity && !zeroEntitlement && selectedType && requestedDays > selectedType.entitlementDays) {
       alert(
         `Requested ${requestedDays} day(s) exceeds ${selectedType.entitlementDays} day entitlement for ${selectedType.leaveTypeLabel}.`,
       )
@@ -124,6 +135,7 @@ export function RequestLeaveButton() {
       m.append("reason", formData.reason)
       m.append("leave_type", formData.leave_type)
       m.append("leave_year_period", activePeriod)
+      if (zeroEntitlement) m.append("requested_days", String(requestedDays))
       if (formData.leave_type === "maternity") {
         m.append("maternity_delivery_type", formData.maternity_delivery_type)
         m.append("delivery_date", formData.delivery_date)
@@ -134,7 +146,7 @@ export function RequestLeaveButton() {
       if (resp.ok) {
         const data = await resp.json()
         const returnToWork = data?.returnToWorkDate || computeReturnToWorkDate(formData.end_date)
-        setFormData({ start_date: "", end_date: "", leave_type: "annual", reason: "" })
+        setFormData({ start_date: "", end_date: "", leave_type: "annual", reason: "", maternity_delivery_type: "normal", delivery_date: "", requested_days: "" })
         setUploadedFile(null)
         setOpen(false)
         alert(`Leave request submitted. Expected return-to-work date: ${returnToWork}`)
@@ -247,13 +259,21 @@ export function RequestLeaveButton() {
             <Input id="end_date" type="date" value={formData.end_date} onChange={(e) => setFormData({ ...formData, end_date: e.target.value })} />
           </div>
 
+          {(formData.leave_type === "annual" && annualEntitlement?.totalEntitlement === 0) || leaveTypes.find((type) => type.leaveTypeKey === formData.leave_type)?.entitlementDays === 0 ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+              <Label htmlFor="requested_days">Requested days</Label>
+              <Input id="requested_days" type="number" min="1" step="1" value={formData.requested_days} onChange={(e) => setFormData({ ...formData, requested_days: e.target.value })} />
+              <p className="text-xs text-amber-800">Your entitlement is currently zero or unavailable. Enter the days you are requesting; the next approver will make the decision.</p>
+            </div>
+          ) : null}
+
           <div>
             <Label htmlFor="reason">Reason</Label>
             <Textarea id="reason" placeholder="Provide a reason for your leave request..." value={formData.reason} onChange={(e) => setFormData({ ...formData, reason: e.target.value })} rows={4} />
           </div>
 
           <div>
-            <Label htmlFor="document">Attachment (Optional)</Label>
+            <Label htmlFor="document">{formData.leave_type === "paternity" ? "Spouse delivery proof (Required)" : formData.leave_type === "maternity" ? "Delivery evidence (Required)" : "Attachment (Optional)"}</Label>
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Input id="document" type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(e) => {

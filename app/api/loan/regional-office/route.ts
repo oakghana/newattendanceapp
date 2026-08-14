@@ -26,8 +26,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Only regional_loan_office role can access this endpoint
-    if (userProfile.role !== 'regional_loan_office' && userProfile.role !== 'admin') {
+    // Regional Managers can view and print loans approved within their assigned location.
+    if (!['regional_loan_office', 'regional_manager', 'admin'].includes(String(userProfile.role || '').toLowerCase())) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
@@ -47,6 +47,9 @@ export async function GET(request: NextRequest) {
     }
 
     const locationIds = assignedLocations?.map(loc => loc.location_id) || [];
+    if (locationIds.length === 0 && userProfile.assigned_location_id) {
+      locationIds.push(userProfile.assigned_location_id)
+    }
 
     if (locationIds.length === 0) {
       return NextResponse.json(

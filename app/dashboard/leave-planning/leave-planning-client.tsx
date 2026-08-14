@@ -293,7 +293,10 @@ function buildMemoTemplateData(req: any): Record<string, string> {
   const effectiveDaysNumber = Number(req.adjusted_days || req.requested_days || 0)
   const approvedMonths = Number(req.approved_months || req.requested_months || Math.max(1, Math.round(effectiveDaysNumber / 30)))
   const entitlementDays = Number(req.entitlement_days || 0)
-  const outstandingLeaveDays = Math.max(0, entitlementDays - effectiveDaysNumber)
+  const outstandingLeaveDays = Math.max(
+    0,
+    Number(req.outstanding_leave_days_added ?? req.outstanding_leave_days ?? 0),
+  )
   const priorLeaveDays = Number(req.prior_leave_days_deducted || 0)
   const travellingDays = Number(req.travelling_days_added || 0)
   const adjustmentLines = [
@@ -2044,10 +2047,11 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
         leaveType: r?.leave_type_key,
         locationName: r?.location_name || r?.user?.location_name,
       })
-      const isRegionalActionableStatus = ["pending_regional_hr_review", "pending_regional_manager_approval", "pending_hod_review", "hod_approved", "manager_confirmed"].includes(status)
-      if (!((HR_OFFICE_PENDING_STATUSES as string[]).includes(status) || (isRegionalHr && workflow.route === "regional" && isRegionalActionableStatus))) return false
-      // Regional HR must only see requests that are actually routed through the regional workflow.
-      if (isRegionalHr && (workflow.route !== "regional" || !isRegionalActionableStatus)) return false
+  const isRegionalActionableStatus = status === "pending_regional_hr_review"
+  if (!((HR_OFFICE_PENDING_STATUSES as string[]).includes(status) || (isRegionalHr && workflow.route === "regional" && isRegionalActionableStatus))) return false
+  // Regional HR owns only the Regional HR review stage. Once forwarded, the
+  // request leaves this actionable queue and belongs to the Regional Manager.
+  if (isRegionalHr && (workflow.route !== "regional" || !isRegionalActionableStatus)) return false
       return true
     })
     
@@ -2363,6 +2367,10 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     const request = hrOfficeQueue.find(r => r.id === requestId)
     const leaveType = String(request?.leave_type_key || "").toLowerCase()
     const isAnnualLeave = leaveType === "annual"
+    const outstandingDays = Number(officeOutstandingDays[requestId] || 0)
+    const annualAdjustmentRemark = isAnnualLeave && outstandingDays > 0
+      ? `${String(rsn || "Annual leave adjustment").trim()} ${outstandingDays} outstanding day(s) added to entitlement.`
+      : String(rsn || "").trim()
 
     if (!adjStart || !adjEnd) { toast({ title: "Adjusted dates required", variant: "destructive" }); return }
     
@@ -2391,9 +2399,15 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
           body: JSON.stringify({
             leave_plan_request_id: requestId,
             action: "forward_to_regional_manager",
-            recommendation: String(rsn || "Regional HR adjustment completed before final Regional Manager approval.").trim(),
+            recommendation: annualAdjustmentRemark || "Regional HR adjustment completed before final Regional Manager approval.",
             adjusted_preferred_start_date: adjStart,
             adjusted_preferred_end_date: adjEnd,
+            adjustment_breakdown: {
+              outstanding_days: Number(officeOutstandingDays[requestId] || 0),
+              public_holiday_days: Number(officeHolidayDays[requestId] || 0),
+              prior_leave_days: Number(officePriorDays[requestId] || 0),
+              travelling_days: Number(officeTravelDays[requestId] || 0),
+            },
           }),
         })
         const json = await res.json()
@@ -2577,7 +2591,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     if (isHod || isAdmin) t.push({ value: "hod-review", label: "HOD Review", Icon: UserCheck, count: hodAssignedReviews.length })
     // HR Executive HOD Review tab: for HR managers (manager_hr, director_hr) who are NOT also HODs
   if (isHrOffice && !isRegionalHr && !isHod && !isAdmin) t.push({ value: "hr-exec-hod-review", label: "HOD Review", Icon: UserCheck, count: hodReviewRequests.length })
-  if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
+  if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: isRegionalHr ? "Regional Leave Office" : "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
     if (isHrApprover || isAdmin) {
       const deferRecallPending = [...hrExecDeferRecallData.deferments, ...hrExecDeferRecallData.recalls]
         .filter((r: any) => !r.hr_office_decision && !r.hr_decision).length
@@ -3821,9 +3835,10 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                   const isExpanded = officeExpanded === req.id
                   const adjStart = officeAdjStart[req.id] || req.preferred_start_date || ""
                   const adjEnd = officeAdjEnd[req.id] || req.preferred_end_date || ""
-                                  const holidayD = Number(officeHolidayDays[req.id] || 0)
-                                  const travelD = Number(officeTravelDays[req.id] || 0)
-                                  const priorD = Number(officePriorDays[req.id] || 0)
+  const holidayD = Number(officeHolidayDays[req.id] || 0)
+  const travelD = Number(officeTravelDays[req.id] || 0)
+  const priorD = Number(officePriorDays[req.id] || 0)
+  const outstandingD = Number(officeOutstandingDays[req.id] || 0)
                                   // Only the dedicated Day Adjustment Breakdown fields affect totals.
                                   // “Reason for Adjustment” is confirmation text, never numeric input.
                                   // Base days = working days (excl. weekends & holidays) from from-date to to-date
@@ -3834,8 +3849,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                                   // Public holidays and prior leave are deductions;
                                   // travelling days are additions.
                                   const finalDays = Math.max(0, baseDays - holidayD - priorD + travelD)
-                                  const generatedReason = [
-                                    holidayD > 0 ? `${holidayD} public holiday day(s) deducted` : "",
+  const generatedReason = [
+  outstandingD > 0 ? `${outstandingD} outstanding leave day(s) added` : "",
+  holidayD > 0 ? `${holidayD} public holiday day(s) deducted` : "",
                                     priorD > 0 ? `${priorD} day(s) given/already enjoyed deducted` : "",
                                     travelD > 0 ? `${travelD} travelling day(s) added` : "",
                                   ].filter(Boolean).join("; ")
@@ -4197,18 +4213,17 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                             <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
                               <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Details</p>
 
-                              {/* Official reference is owned by HR Records and is immutable for every HR Office role. */}
-                              <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                              {!isRegionalHr && <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
                                 <Label className="text-xs font-semibold text-emerald-900">Official memo reference</Label>
                                 <Input
                                   value={req.memo_reference || ""}
                                   readOnly
                                   disabled
                                   placeholder="Awaiting HR Records reference"
-                                  className="h-9 bg-muted font-mono text-sm"
+                                  className="h-9 bg-white font-mono text-sm"
                                 />
-                                <p className="text-[10px] text-emerald-800">Automatically assigned by HR Records. HR Office users cannot edit or generate this reference.</p>
-                              </div>
+                                <p className="text-[10px] text-emerald-800">Automatically assigned by HR Records for non-regional leave.</p>
+                              </div>}
 
                               {/* CC List */}
                               <div className="space-y-1">
@@ -4222,8 +4237,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                                 />
                               </div>
 
-                              {/* Forward To HR Executive */}
-                              <div className="space-y-1">
+                              {!isRegionalHr && <div className="space-y-1">
                                 <Label className="text-xs font-semibold text-blue-700">Forward To (HR Executive) <span className="text-red-500">*</span></Label>
                                 <Select
                                   value={selectedHrExecutive[req.id] || ""}
@@ -4243,12 +4257,12 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                                     ))}
                                   </SelectContent>
                                 </Select>
-                              </div>
+                              </div>}
                             </div>
 
                             <Button onClick={() => {
-                              if (isRegionalHr) {
-                                submitHrOfficeReview(req.id, "regional-manager")
+          if (isRegionalHr) {
+            submitHrOfficeReview(req.id, "regional-manager")
                                 return
                               }
                               const persistedReference = String(req.memo_reference || req.reference_number || officeRefNumber[req.id] || "").trim()

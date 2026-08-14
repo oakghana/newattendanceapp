@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { canDoHrOffice, canDoLoanOffice, normalizeRole } from "@/lib/loan-workflow"
+import { isNonRegionalLocation } from "@/lib/location-mappings"
 
 function isSchemaIssue(error: any): boolean {
   const code = String(error?.code || "")
@@ -30,35 +31,25 @@ function canManageLookups(role: string, deptName?: string | null, deptCode?: str
   )
 }
 
-function isHeadOfficeStaff(staff: any): boolean {
-  const locationName = String(staff?.geofence_locations?.name || "").toLowerCase()
-  if (!staff?.assigned_location_id) return true
-  return locationName.includes("head office")
+function isNonRegionalStaff(staff: any): boolean {
+  if (!staff?.assigned_location_id) return false
+  return isNonRegionalLocation(staff?.geofence_locations?.name)
 }
-
-// Roles that are considered heads of department and can be linked to any staff
-const HOD_ROLES = new Set(["department_head", "manager_hr", "director_hr", "admin", "it_admin"])
 
 function validateStaffHodRule(staff: any, hod: any): { ok: boolean; reason?: string } {
   const staffLoc = String(staff?.assigned_location_id || "")
   const hodLoc = String(hod?.assigned_location_id || "")
   const hodRole = normalizeRole(String(hod?.role || ""))
 
-  // Head-office staff can be linked to any HOD role (department_head, manager_hr, director_hr, admin)
-  if (isHeadOfficeStaff(staff)) {
-    if (!HOD_ROLES.has(hodRole)) {
-      return { ok: false, reason: "Head-office staff can only be linked to a Department Head, HR Manager, or HR Director." }
+  if (isNonRegionalStaff(staff)) {
+    if (hodRole !== "department_head" || !staffLoc || staffLoc !== hodLoc) {
+      return { ok: false, reason: "Non-regional staff can only be linked to Department Heads in the same location." }
     }
     return { ok: true }
   }
 
-  // Regional staff can link to a regional_manager or any HOD role; enforce same location for regional_manager
-  const isValidHodForRegional = HOD_ROLES.has(hodRole) || hodRole === "regional_manager"
-  if (!isValidHodForRegional) {
-    return { ok: false, reason: "Regional staff can only be linked to Regional Managers or Department Heads." }
-  }
-  if (hodRole === "regional_manager" && staffLoc && hodLoc && staffLoc !== hodLoc) {
-    return { ok: false, reason: "Regional staff can only be linked to Regional Managers in the same location." }
+  if (hodRole !== "regional_manager" || !staffLoc || staffLoc !== hodLoc) {
+    return { ok: false, reason: "Regional staff can only be linked to the Regional Manager in the same location." }
   }
   return { ok: true }
 }

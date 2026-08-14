@@ -21,6 +21,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Plus, Search, Users, UserCheck, UserX, Mail, Building, AlertTriangle, Loader2 } from "lucide-react"
 import { useFocusTrap, LiveRegion } from "@/components/ui/accessibility-helpers"
 import { SkipLink } from "@/components/ui/skip-link"
+import { RegionalAlignmentPanel } from "@/components/admin/regional-alignment-panel"
 
 interface User {
   user_id: string
@@ -244,8 +245,9 @@ export default function UserManagementClient({
   }
 
   return (
-    <div className="space-y-6">
-      <LiveRegion message={announceMessage} priority="polite" />
+  <div className="space-y-6">
+  {(currentUserRole === "admin" || currentUserRole === "it-admin" || currentUserRole === "administrator") && <RegionalAlignmentPanel />}
+  <LiveRegion message={announceMessage} priority="polite" />
 
       <SkipLink href="#user-table">Skip to user table</SkipLink>
 

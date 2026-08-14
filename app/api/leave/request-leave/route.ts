@@ -4,7 +4,7 @@ import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays 
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { getNextQccReference } from "@/lib/reference-number"
 import { calculateAnnualLeaveBreakdown } from "@/lib/annual-leave-calculator"
-import { REGIONAL_NON_ANNUAL_STAGES, isAnnualLeave, isRegionalHrLeaveOfficeRole, resolveRegionalHrOffice, routeLeave } from "@/lib/hr-workflow"
+import { isRegionalHrLeaveOfficeRole, resolveRegionalHrOffice, resolveStaffAssignments, routeLeave } from "@/lib/hr-workflow"
 
 const NON_ANNUAL_REQUIRES_APPROVED_ANNUAL = new Set([
   "sick",
@@ -54,10 +54,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: reasonValidation.error }, { status: 400 })
     }
 
-    const requestedDays = requested_days && Number.isInteger(requested_days) && requested_days > 0
+    const leaveTypeKey = String(leave_type || "annual").toLowerCase().trim()
+    const explicitRequestedDays = requested_days_raw !== null && requested_days_raw.trim() !== ""
+    const requestedDays = explicitRequestedDays && Number.isInteger(requested_days) && requested_days > 0
       ? requested_days
       : computeLeaveDays(start_date, end_date)
-    if (requestedDays <= 0) {
+    if (requestedDays <= 0 || (explicitRequestedDays && (!Number.isInteger(requested_days) || requested_days <= 0))) {
       return NextResponse.json({ error: "Invalid leave date range" }, { status: 400 })
     }
 
@@ -77,12 +79,13 @@ export async function POST(request: NextRequest) {
       normalizedRole === "department_head" ||
       normalizedRole.includes("manager")
 
-    const leaveTypeKey = String(leave_type || "annual").toLowerCase().trim()
+    if (leaveTypeKey === "maternity" || leaveTypeKey === "paternity") {
+      if (!document || document.size === 0) {
+        return NextResponse.json({ error: leaveTypeKey === "paternity" ? "Spouse delivery proof is required for paternity leave." : "Maternity evidence is required." }, { status: 400 })
+      }
+    }
 
     if (leaveTypeKey === "maternity") {
-      if (!document || document.size === 0) {
-        return NextResponse.json({ error: "Maternity evidence is required." }, { status: 400 })
-      }
       if (!["normal", "cs", "twins", "regular", "cs_twins"].includes(String(maternity_delivery_type || ""))) {
         return NextResponse.json({ error: "Select normal delivery, Caesarean section, or twins delivery." }, { status: 400 })
       }
@@ -148,7 +151,8 @@ export async function POST(request: NextRequest) {
         }
 
         const allowedEntitlement = annualCalculation?.totalGrantedDays ?? Number(policy.entitlement_days || 0)
-        if (requestedDays > allowedEntitlement && !canSubmitBeyondEntitlementForHrAdjustment) {
+        const zeroEntitlementDecisionRequest = allowedEntitlement === 0 && explicitRequestedDays
+        if (requestedDays > allowedEntitlement && !canSubmitBeyondEntitlementForHrAdjustment && !zeroEntitlementDecisionRequest) {
           return NextResponse.json(
             {
               error: `Requested ${requestedDays} day(s) exceeds the available annual leave total of ${allowedEntitlement} day(s) (including travelling days).`,
@@ -221,9 +225,10 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle()
 
+    const assignment = await resolveStaffAssignments(admin, user.id)
     const routingProfile = (staffRoutingProfile.data || {}) as any
-    let regionId = routingProfile.region_id || null
-    let locationName: string | null = null
+    let regionId = assignment.regionId || routingProfile.region_id || null
+    let locationName: string | null = assignment.locationName
     if (routingProfile.assigned_location_id) {
       const { data: assignedLocation } = await admin
         .from("geofence_locations")
@@ -234,15 +239,25 @@ export async function POST(request: NextRequest) {
       regionId = regionId || (assignedLocation?.districts as any)?.region_id || null
     }
 
-    const regionalOffice = await resolveRegionalHrOffice(admin, regionId)
+    const regionalOffice = await resolveRegionalHrOffice(admin, regionId, assignment.assignedLocationId)
+    const profileText = [roleProfile?.role, roleProfile?.staff_category, roleProfile?.position, roleProfile?.rank].filter(Boolean).join(" ").toLowerCase()
+    const isManagerGrade = /(^|\s|_)(manager|management|director|executive|head)(\s|_|$)/i.test(profileText)
     const leaveRoute = routeLeave({
       leaveType: leaveTypeKey,
       locationName,
       hasRegionalOffice: Boolean(regionalOffice),
+      isManagerGrade,
     })
+    const isRegionalWorkflow = leaveRoute.route === "regional"
+    if (!shouldAutoApprove && isRegionalWorkflow && !regionalOffice?.user_id) {
+      return NextResponse.json(
+        { error: "This regional leave request cannot be submitted until a Regional HR Office is assigned to the staff member's location.", code: "REGIONAL_HR_ASSIGNMENT_REQUIRED" },
+        { status: 409 },
+      )
+    }
     const initialStatus = shouldAutoApprove
       ? "approved"
-      : leaveRoute.route === "regional_non_annual" && leaveRoute.firstStage
+      : isRegionalWorkflow
         ? leaveRoute.firstStage
         : "pending"
 
@@ -262,6 +277,14 @@ export async function POST(request: NextRequest) {
       requested_days: requestedDays,
       maternity_delivery_type: leaveTypeKey === "maternity" ? maternity_delivery_type : null,
       delivery_date: leaveTypeKey === "maternity" ? delivery_date : null,
+      workflow_route: isRegionalWorkflow ? "regional" : "legacy",
+      workflow_stage: initialStatus,
+      assigned_location_id: assignment.assignedLocationId,
+      region_id: assignment.regionId,
+      department_id: assignment.departmentId,
+      hod_id: assignment.hodId,
+      regional_hr_id: assignment.regionalHrId,
+      regional_manager_id: assignment.regionalManagerId,
     }
 
     // Try insert; if column not found (schema mismatch), retry without `leave_type` and return a helpful error
@@ -283,12 +306,20 @@ export async function POST(request: NextRequest) {
         /column ".*" does not exist/i.test(msg)
 
       if (isMissingColumn) {
-        console.warn("leave_type/leave_year_period columns missing in DB schema; retrying without optional columns and advising migration")
+        console.warn("Leave request payload includes unavailable assignment columns; retrying with the established schema")
         // remove optional columns and retry
         const altPayload = { ...payload }
         delete altPayload.leave_type
         delete altPayload.leave_year_period
         delete altPayload.reference_number
+        delete altPayload.workflow_route
+        delete altPayload.workflow_stage
+        delete altPayload.assigned_location_id
+        delete altPayload.region_id
+        delete altPayload.department_id
+        delete altPayload.hod_id
+        delete altPayload.regional_hr_id
+        delete altPayload.regional_manager_id
         try {
           const res2 = await supabase.from("leave_requests").insert(altPayload).select().single()
           leaveRequest = res2.data
@@ -313,11 +344,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Regional non-annual requests start with Regional HR Office adjustment and must not notify HOD.
-    const isRegionalNonAnnual = leaveRoute.route === "regional_non_annual" && Boolean(leaveRoute.firstStage)
+    // Regional requests start with Regional HR Office adjustment and must not notify HOD.
     const isHrLeaveOffice = normalizedRole === "hr_leave_office" || isRegionalHrLeaveOfficeRole(normalizedRole)
 
-    if (!shouldAutoApprove && !isHrLeaveOffice && !isRegionalNonAnnual) {
+    if (!shouldAutoApprove && !isHrLeaveOffice && !isRegionalWorkflow) {
       try {
         const hodIds: string[] = []
 
@@ -341,11 +371,9 @@ export async function POST(request: NextRequest) {
             .eq("id", user.id)
             .maybeSingle()
 
-          // Regional non-annual leave must go to the Regional Manager first.
-          // The Regional HR Office role is the regional leave-office owner, while the
-          // Regional Manager linkage determines the staff population it serves.
-          const isNonAnnualLeave = leaveTypeKey !== "annual" && leaveTypeKey !== "annual_leave"
-          if (isNonAnnualLeave && (staffProfile as any)?.region_id) {
+          // Regional leave, including annual leave, is reviewed by the Regional HR Office first.
+          // Exceptions (manager-grade annual, maternity, paternity, and part leave) stay on the legacy workflow.
+          if (isRegionalWorkflow && (staffProfile as any)?.region_id) {
             const { data: regionalManagers } = await admin
               .from("user_profiles")
               .select("id")
@@ -486,7 +514,7 @@ export async function POST(request: NextRequest) {
         console.warn("HOD leave notification failed:", hodErr)
       }
     }
-    if (!shouldAutoApprove && !isHrLeaveOffice && isRegionalNonAnnual && regionalOffice?.user_id) {
+    if (!shouldAutoApprove && !isHrLeaveOffice && isRegionalWorkflow && regionalOffice?.user_id) {
       const regionalHrId = regionalOffice.user_id
       const message = `Regional leave request requires HR Office adjustment (${start_date} to ${end_date}).`
       await admin.from("leave_notifications").insert({

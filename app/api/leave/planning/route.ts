@@ -742,13 +742,25 @@ export async function GET(request: NextRequest) {
       }
 
       // Regional HR is the first stage for every regional leave type,
-      // including Annual Leave. The excluded leave types and non-regional
-      // locations are routed separately at submission time.
+      // including Annual Leave. Resolve staff IDs first because PostgREST
+      // nested relation predicates can silently return an empty queue.
       if (isRegionalHr) {
         officeQuery = officeQuery
           .eq("workflow_route", "regional")
           .in("status", ["pending_regional_hr_review", "pending_regional_manager_approval"])
-          .eq("regional_hr_office_user_id", user.id)
+
+        let scopedStaffQuery = admin.from("user_profiles").select("id").neq("id", user.id)
+        if (profile.assigned_location_id) {
+          scopedStaffQuery = scopedStaffQuery.eq("assigned_location_id", profile.assigned_location_id)
+        } else if (profile.region_id) {
+          scopedStaffQuery = scopedStaffQuery.eq("region_id", profile.region_id)
+        } else {
+          scopedStaffQuery = scopedStaffQuery.eq("id", "00000000-0000-0000-0000-000000000000")
+        }
+        const { data: scopedStaff, error: scopedStaffError } = await scopedStaffQuery
+        if (scopedStaffError) throw scopedStaffError
+        const staffIds = (scopedStaff || []).map((row: any) => row.id).filter(Boolean)
+        officeQuery = officeQuery.in("user_id", staffIds.length ? staffIds : ["00000000-0000-0000-0000-000000000000"])
       }
 
       const { data: requests, error: reqError } = await officeQuery
@@ -1400,14 +1412,31 @@ export async function POST(request: NextRequest) {
     // Regional staff non-annual leave must enter the Regional HR Leave Office
     // queue before any Regional Manager review is created. Resolve the office
     // from the requester's region, not from the manager linkage table.
-    const regionalHrOffice = await resolveRegionalHrOffice(admin, (profile as any).region_id || null)
-    const locationName = String((profile as any)?.geofence_locations?.name || "")
+    const assignedLocationId = (profile as any)?.assigned_location_id || null
+    let locationName = String((profile as any)?.geofence_locations?.name || "")
+    let resolvedRegionId = (profile as any).region_id || null
+    if (assignedLocationId && !locationName) {
+      const { data: assignedLocation } = await admin
+        .from("geofence_locations")
+        .select("name, address, districts (region_id)")
+        .eq("id", assignedLocationId)
+        .maybeSingle()
+      locationName = String(assignedLocation?.name || assignedLocation?.address || "")
+      resolvedRegionId = resolvedRegionId || (assignedLocation?.districts as any)?.region_id || null
+    }
+    const regionalHrOffice = await resolveRegionalHrOffice(admin, resolvedRegionId, assignedLocationId)
     const leaveRoute = routeLeave({
       leaveType: leaveTypeKey,
       locationName,
       hasRegionalOffice: Boolean(regionalHrOffice?.user_id),
     })
-    const isRegionalWorkflow = leaveRoute.route === "regional" && Boolean(regionalHrOffice?.user_id)
+    const isRegionalWorkflow = leaveRoute.route === "regional"
+    if (isRegionalWorkflow && !regionalHrOffice?.user_id) {
+      return NextResponse.json(
+        { error: "This regional leave request cannot be submitted until a Regional HR Office is assigned to the staff member's location.", code: "REGIONAL_HR_ASSIGNMENT_REQUIRED" },
+        { status: 409 },
+      )
+    }
 
     // Staff signature is optional
     const initialMemo = buildInitialLeaveMemoDraft({
@@ -1447,8 +1476,9 @@ export async function POST(request: NextRequest) {
         user_signature_hologram_code: buildHologramCode("USR"),
         memo_generated: true,
         memo_generated_at: new Date().toISOString(),
-        // Flag for HR Leave Office if entitlement exceeded
-        adjustment_reason: entitlementWarning,
+        // Do not write a synthetic warning into the HR remarks field. The HR Leave
+        // Office owns this field and its exact text must be preserved in the memo.
+        adjustment_reason: null,
         maternity_delivery_type: leaveTypeKey === "maternity" ? String(maternity_delivery_type) : null,
         delivery_date: leaveTypeKey === "maternity" ? delivery_date : null,
         medical_report_url: leaveTypeKey === "maternity" ? String(medical_report_url) : null,
@@ -1719,8 +1749,9 @@ export async function PUT(request: NextRequest) {
       status: "pending_manager_review",
       manager_recommendation: null,
       updated_at: new Date().toISOString(),
-      // Flag for HR Leave Office if entitlement exceeded
-      adjustment_reason: entitlementWarningOnUpdate,
+  // Keep the HR remarks field reserved for HR Leave Office-entered text.
+  adjustment_reason: null,
+  outstanding_leave_days_added: 0,
       maternity_delivery_type: leaveTypeKey === "maternity" ? String(maternity_delivery_type) : null,
       delivery_date: leaveTypeKey === "maternity" ? delivery_date : null,
       medical_report_url: leaveTypeKey === "maternity" ? String(medical_report_url) : null,

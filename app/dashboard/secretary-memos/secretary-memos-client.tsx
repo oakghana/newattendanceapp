@@ -150,6 +150,21 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
     }
   }
 
+  const openLeaveMemo = async (memo: LeaveMemo, print = false) => {
+    const tokenQuery = memo.memo_token ? `?token=${encodeURIComponent(memo.memo_token)}` : ""
+    try {
+      const response = await fetch(`/api/leave/planning/memo/${memo.id}${tokenQuery}`)
+      const contentType = response.headers.get("content-type") || ""
+      if (!response.ok || !contentType.includes("application/pdf")) return
+      const pdfUrl = URL.createObjectURL(await response.blob())
+      const win = window.open(pdfUrl, "_blank", "noopener,noreferrer")
+      if (print && win) win.addEventListener("load", () => win.print(), { once: true })
+      window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000)
+    } catch {
+      // Expected authorization or stale-request responses remain silent in the memo console.
+    }
+  }
+
   // Derive unique departments and locations from loan memos for filter dropdowns
   const uniqueDepts = useMemo(() => {
   const s = new Set<string>()
@@ -469,10 +484,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                           {(memo.memo_token || ["hod_approved", "hr_approved", "approved", "regional_manager_approved"].includes(memo.status)) && (
                             <>
                               <button
-                                onClick={() => {
-                                  const tokenQuery = memo.memo_token ? `?token=${encodeURIComponent(memo.memo_token)}` : ""
-                                  window.open(`/api/leave/planning/memo/${memo.id}${tokenQuery}`, "_blank")
-                                }}
+                                onClick={() => void openLeaveMemo(memo)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold transition-colors"
                                 title="Download leave memo PDF"
                               >
@@ -480,11 +492,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                                 Download
                               </button>
                               <button
-                                onClick={() => {
-                                  const tokenQuery = memo.memo_token ? `?token=${encodeURIComponent(memo.memo_token)}` : ""
-                                  const win = window.open(`/api/leave/planning/memo/${memo.id}${tokenQuery}`, "_blank")
-                                  win?.addEventListener("load", () => win.print())
-                                }}
+                                onClick={() => void openLeaveMemo(memo, true)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"
                                 title="Print leave memo"
                               >

@@ -200,8 +200,10 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
       const computedWorkingDays = calculateWorkingDays(effectiveStart, effectiveEnd, holidays).workingDays
       // Use the stored adjusted_days if it was explicitly set by HR office (may include travel adjustments),
       // otherwise fall back to the computed working-days figure so the table never shows a stale entitlement.
-      const actualBaseDays = baseLeaveDays > 0 ? baseLeaveDays : computedWorkingDays
-      const entitlementForDisplay = Number(lr.entitlement_days || lr.leave_entitlement_days || actualBaseDays)
+  const actualBaseDays = baseLeaveDays > 0 ? baseLeaveDays : computedWorkingDays
+  const baseEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || actualBaseDays)
+  const outstandingDays = Math.max(0, Number(lr.outstanding_leave_days_added ?? lr.outstanding_leave_days ?? 0))
+  const entitlementForDisplay = baseEntitlement + outstandingDays
       return {
         useTable: true,
         paragraphs: [
@@ -398,6 +400,25 @@ export async function GET(
       return NextResponse.json({ error: "Leave request not found" }, { status: 404 })
     }
 
+    const leaveWorkflowRoute = String((leaveRequest as any).workflow_route || "").toLowerCase()
+    const isRegionalLeave = leaveWorkflowRoute === "regional" || leaveWorkflowRoute === "regional_hr"
+    if (!isRegionalLeave && !String((leaveRequest as any).memo_reference || "").trim()) {
+      return NextResponse.json({ error: "Memo reference pending HR Records. Preview and download will be available after HR Records assigns the official reference." }, { status: 409 })
+    }
+
+    // Load the latest carryover balance because older requests may not have the
+    // HR-entered outstanding days copied onto leave_plan_requests yet.
+    const { data: outstandingBalance } = await admin
+      .from("outstanding_leave_balances")
+      .select("carryover_to_next_year, leave_year_period, created_at")
+      .eq("user_id", (leaveRequest as any).user_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if ((leaveRequest as any).outstanding_leave_days_added == null && outstandingBalance) {
+      ;(leaveRequest as any).outstanding_leave_days_added = Number(outstandingBalance.carryover_to_next_year || 0)
+    }
+
     // CRITICAL: Also fetch the related leave_payment_memo to get the SELECTED SIGNER data
     // The selectedSigner is stored in leave_payment_memos.memo_body, NOT leave_plan_requests
     const { data: paymentMemo } = await admin
@@ -482,12 +503,10 @@ export async function GET(
       }
     }
 
-    const isFinalHrApproval = (leaveRequest as any).status === "hr_approved"
-    const isRegionalNonAnnualApproval =
-      (leaveRequest as any).status === "approved" &&
-      String((leaveRequest as any).leave_type_key || "annual").toLowerCase() !== "annual"
+    const finalizedMemoStatuses = new Set(["approved", "hr_approved", "regional_manager_approved"])
+    const isFinalApproval = finalizedMemoStatuses.has(String((leaveRequest as any).status || "").toLowerCase())
 
-    if (!isFinalHrApproval && !isRegionalNonAnnualApproval) {
+    if (!isFinalApproval) {
       return NextResponse.json(
         { error: "Leave memo is only available after final approval." },
         { status: 400 },
@@ -502,10 +521,12 @@ export async function GET(
       .single()
 
     // Annual entitlement is based on the applicant profile; travel days stay separate.
-    if (leaveRequest && String((leaveRequest as any).leave_type_key || "annual").toLowerCase() === "annual" && applicantProfile) {
-      const annualEntitlement = resolveEntitlementFromProfile(applicantProfile as any)
-      ;(leaveRequest as any).entitlement_days = annualEntitlement.annualLeaveDays
-    }
+  if (leaveRequest && String((leaveRequest as any).leave_type_key || "annual").toLowerCase() === "annual" && applicantProfile) {
+  const annualEntitlement = resolveEntitlementFromProfile(applicantProfile as any)
+  const savedEntitlement = Number((leaveRequest as any).entitlement_days || 0)
+  const outstandingDays = Number((leaveRequest as any).outstanding_leave_days_added ?? (leaveRequest as any).outstanding_leave_days ?? 0)
+  ;(leaveRequest as any).entitlement_days = Math.max(annualEntitlement.annualLeaveDays, savedEntitlement) + Math.max(0, outstandingDays)
+  }
 
     // Resolve HOD profile (THRO)
     let hodProfile: any = null
@@ -639,7 +660,7 @@ export async function GET(
         // Annual granted days are recalculated from the resolved entitlement,
         // deductions, and travel days; never trust stale stored 22/24-day totals.
         grantedDays: null,
-        daysAlreadyEnjoyed: explicitDeduction ?? Math.max(0, Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays) - effectiveDays),
+        daysAlreadyEnjoyed: explicitDeduction ?? 0,
         travellingDays: Number(lr.travelling_days_added || 2),
       })
       adjustedEffectiveEnd = annualMemoDates.endDate.toISOString().slice(0, 10)
@@ -699,7 +720,7 @@ export async function GET(
     const marginRight  = 20
     const contentWidth = pageWidth - marginLeft - marginRight
 
-    // ── Letterhead ──────────────────────────────────────────────────
+    // ── Letterhead ───────────────────────────���──────────────────────
     if (logoBase64) {
       try {
         doc.addImage(`data:image/png;base64,${logoBase64}`, "PNG", marginLeft, 10, 26, 26)
@@ -860,12 +881,18 @@ export async function GET(
       if (priorLeaveDaysDeducted > 0) remarksParts.push(`${priorLeaveDaysDeducted} day(s) given/already enjoyed deducted`)
       if (travelDays > 0) remarksParts.push(`${travelDays} travelling day(s) added`)
       const remarksText = String(lr.adjustment_reason || "").trim()
+      const breakdown = (lr.adjustment_breakdown && typeof lr.adjustment_breakdown === "object") ? lr.adjustment_breakdown : {}
+      const outstandingDays = Number(lr.outstanding_leave_days_added ?? lr.outstanding_leave_days ?? breakdown.outstanding_days ?? 0)
+      const breakdownTravellingDays = Number(breakdown.travelling_days ?? 0)
+      if (outstandingDays > 0) remarksParts.push(`${outstandingDays} outstanding day(s) added to entitlement`)
+      if (breakdownTravellingDays > 0 && travelDays === 0) remarksParts.push(`${breakdownTravellingDays} travelling day(s) added`)
       const calculationConfirmation = remarksParts.length > 0
         ? remarksParts.join("; ")
         : "No day adjustment applied"
-      // The HR reason is confirmation text only. Prefer it when supplied so
-      // the memo never prints the same adjustment in two different wordings.
-      const remarksSummary = remarksText || calculationConfirmation
+      const remarksSummary = [remarksText, calculationConfirmation]
+        .filter(Boolean)
+        .filter((value, index, values) => values.indexOf(value) === index)
+        .join("; ")
 
       autoTable(doc, {
         startY: y,

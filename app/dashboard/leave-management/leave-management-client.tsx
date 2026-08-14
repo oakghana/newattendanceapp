@@ -61,6 +61,7 @@ interface LeaveRequest {
   adjusted_end_date?: string
   hod_decision?: string
   memo_token?: string | null
+  memo_reference?: string | null
 }
 
 interface LeaveNotification {
@@ -653,8 +654,8 @@ export function LeaveManagementClient({
   }
 
   const handleForwardToRegionalManager = async (notificationId: string) => {
-    const notification = managerNotifications.find((row) => row.id === notificationId)
-    const requestId = String(notification?.leave_plan_request_id || notification?.leave_requests?.id || "")
+    const notification = managerNotifications.find((row) => row.id === notificationId || row.leave_plan_request_id === notificationId || row.leave_requests?.id === notificationId)
+    const requestId = String(notification?.leave_plan_request_id || notification?.leave_requests?.id || notification?.id || "")
     const adjustedStart = window.prompt("Adjusted start date (YYYY-MM-DD)", String(notification?.leave_requests?.start_date || "")) || ""
     const adjustedEnd = window.prompt("Adjusted end date (YYYY-MM-DD)", String(notification?.leave_requests?.end_date || "")) || ""
     const recommendation = window.prompt("Enter the adjustment note to forward this request to the Regional Manager") || ""
@@ -789,7 +790,12 @@ export function LeaveManagementClient({
     return staffRequests.filter((r) => approvedStatuses.has(String(r.status || "")))
   }, [staffRequests, initialApprovedStaffRequests, userRole])
   
-  const pendingNotifications = useMemo(() => managerNotifications.filter((n) => String(n.review_decision || "pending") === "pending"), [managerNotifications])
+  const pendingNotifications = useMemo(() => managerNotifications.filter((n) => {
+  const status = String(n.status || n.leave_requests?.status || "").toLowerCase().replace(/[\s-]+/g, "_")
+  const isRegionalReview = ["pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review", "pending_regional_manager_approval"].includes(status)
+  return isRegionalReview || String(n.review_decision || "pending") === "pending"
+  }), [managerNotifications])
+  const regionalManagerApproved = useMemo(() => managerNotifications.filter((n) => ["approved", "regional_manager_approved"].includes(String(n.status || n.leave_requests?.status || "").toLowerCase().replace(/[\s-]+/g, "_"))), [managerNotifications])
   const adminAllPending = useMemo(() => pendingNotifications, [pendingNotifications])
   const adminStaffQueue = useMemo(() => 
     pendingNotifications.filter((n) => {
@@ -1363,8 +1369,10 @@ export function LeaveManagementClient({
                     reason: "",
                   }
                   const normalizedStatus = String(notification.status || leave.status || "").toLowerCase().replace(/[\s_-]+/g, "_")
-                  const regionalHrReviewPending = normalizedStatus === "pending_regional_hr_office_review" || normalizedStatus === "pending_regional_hr_review"
-                  const approvalLocked = processingId === notification.id || regionalHrReviewPending
+  const regionalHrReviewPending = normalizedStatus === "pending_regional_hr_office_review" || normalizedStatus === "pending_regional_hr_review"
+  const regionalManagerReviewPending = normalizedStatus === "pending_regional_manager_approval"
+  const approvalLocked = processingId === notification.id || regionalHrReviewPending
+  const regionalManagerMode = isRegionalManager && regionalManagerReviewPending
                   return (
                     <tr key={notification.id} className="border-t border-slate-100 align-top">
                       <td className="px-4 py-3">
@@ -1385,7 +1393,7 @@ export function LeaveManagementClient({
                       <td className="max-w-[320px] px-4 py-3 text-xs text-slate-600">{String(leave.reason || "-")}</td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
-  {!regionalHrMode && <Button
+  {(!regionalHrMode || regionalManagerMode) && <Button
   onClick={() => handleApprove(notification.id)}
   disabled={approvalLocked}
                             title={regionalHrReviewPending ? "Regional HR Office must complete its review first" : undefined}
@@ -1396,6 +1404,33 @@ export function LeaveManagementClient({
                             Approve
                           </Button>}
                           {regionalHrReviewPending && !regionalHrMode && <p className="mt-1 text-xs text-amber-700">Waiting for Regional HR Office review</p>}
+  {isRegionalManager && ["approved", "regional_manager_approved"].includes(normalizedStatus) && <Button
+    onClick={() => {
+      const requestId = String(notification.leave_plan_request_id || leave.id)
+      const token = String(leave.memo_token || "").trim()
+      const query = token ? `memo_token=${encodeURIComponent(token)}` : `leave_plan_request_id=${encodeURIComponent(requestId)}`
+      window.open(`/api/leave/download-memo?${query}`, "_blank", "noopener,noreferrer")
+    }}
+    size="sm"
+    variant="outline"
+    className="gap-1"
+  >
+    <FileText className="h-4 w-4" />
+    View memo
+  </Button>}
+  {regionalManagerMode && <Button
+    onClick={() => {
+      const changeReason = window.prompt("Describe the changes required") || ""
+      if (changeReason.trim()) void handleDismiss(notification.id, changeReason, "recommend_change")
+    }}
+    disabled={processingId === notification.id}
+    size="sm"
+    variant="outline"
+    className="gap-1"
+  >
+    <Pencil className="h-4 w-4" />
+    Changes
+  </Button>}
   {regionalHrMode && regionalHrReviewPending ? <Button
   onClick={() => void handleForwardToRegionalManager(notification.id)}
   disabled={processingId === notification.id}
@@ -3136,6 +3171,18 @@ export function LeaveManagementClient({
               <PaymentAdviceClient userRole={normalizedRole} />
             </PaymentAdviceErrorBoundary>
           )}
+
+  {isRegionalManager && selectedTab === "pending-approvals" && regionalManagerApproved.length > 0 && (
+  <Card className="border border-emerald-200 bg-emerald-50/40">
+    <CardHeader>
+      <CardTitle className="text-emerald-900">Approved regional leave requests</CardTitle>
+      <CardDescription>Open the official memo for requests approved by you.</CardDescription>
+    </CardHeader>
+    <CardContent>
+      {renderManagerNotifications(regionalManagerApproved, "No approved regional requests", false)}
+    </CardContent>
+  </Card>
+  )}
 
   {(isManagerView && selectedTab === "pending-approvals") && (
   <>

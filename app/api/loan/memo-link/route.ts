@@ -27,10 +27,10 @@ export async function POST(request: NextRequest) {
     const [{ data: profile, error: profileError }, { data: loan, error: loanError }] = await Promise.all([
       admin
         .from("user_profiles")
-        .select("id, role, departments(name, code)")
+        .select("id, role, assigned_location_id, departments(name, code)")
         .eq("id", user.id)
         .single(),
-      admin.from("loan_requests").select("id, user_id, status, hod_reviewer_id, committee_reviewer_id, hr_officer_id, director_hr_id").eq("id", loanId).single(),
+      admin.from("loan_requests").select("id, user_id, status, staff_location_id, hod_reviewer_id, committee_reviewer_id, hr_officer_id, director_hr_id").eq("id", loanId).single(),
     ])
 
     if (profileError || !profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
@@ -40,8 +40,14 @@ export async function POST(request: NextRequest) {
     const deptName = (profile as any)?.departments?.name || null
     const deptCode = (profile as any)?.departments?.code || null
 
+    const isRegionalManagerForLoan =
+      role === "regional_manager" &&
+      Boolean((profile as any).assigned_location_id) &&
+      (profile as any).assigned_location_id === (loan as any).staff_location_id
+
     const canAccess =
       loan.user_id === user.id ||
+      isRegionalManagerForLoan ||
       role === "admin" ||
       role === "managing_director" ||
       role === "secretary" ||

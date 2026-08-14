@@ -261,10 +261,13 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
         .single(),
     ])
 
-    if (profileError || !profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
-    if (loanError || !loan) return NextResponse.json({ error: "Loan not found" }, { status: 404 })
-
-    const role = normalizeRole((profile as any).role)
+  if (profileError || !profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
+  if (loanError || !loan) return NextResponse.json({ error: "Loan not found" }, { status: 404 })
+  if (!String((loan as any).reference_number || "").trim()) {
+    return NextResponse.json({ error: "Memo reference pending HR Records. Preview and download will be available after HR Records assigns the official reference." }, { status: 409 })
+  }
+  
+  const role = normalizeRole((profile as any).role)
     const deptName = (profile as any)?.departments?.name || null
     const deptCode = (profile as any)?.departments?.code || null
 
@@ -447,7 +450,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const memoDate = fmtDate(
       loan.director_decision_at || loan.hr_forwarded_at || loan.fd_checked_at || loan.created_at,
     )
-    const refNumber = canonicalReference((loan as any).reference_number, loan.request_number)
+    const refNumber = String((loan as any).reference_number || "").trim()
 
     const doc = new jsPDF({ unit: "mm", format: "a4" })
     const pageWidth = doc.internal.pageSize.getWidth()

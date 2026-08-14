@@ -114,11 +114,11 @@ export function isExcludedLocation(locationName: string | null | undefined) {
 
 export function isRegionalLeaveException(leaveType: string | null | undefined) {
   const normalized = normalizeLocationName(leaveType).replace(/ leave$/i, "")
-  return normalized === "manager annual" || normalized === "maternity" || normalized === "paternity"
+  return ["manager annual", "manager grade annual", "maternity", "paternity", "part", "part time", "part time leave", "part leave"].includes(normalized)
 }
 
-export function routeLeave(input: { leaveType?: string | null; locationName?: string | null; hasRegionalOffice: boolean }): { route: LeaveRoute; firstStage: string | null; reason?: string } {
-  if (isRegionalLeaveException(input.leaveType) || isExcludedLocation(input.locationName)) {
+export function routeLeave(input: { leaveType?: string | null; locationName?: string | null; hasRegionalOffice: boolean; isManagerGrade?: boolean }): { route: LeaveRoute; firstStage: string | null; reason?: string } {
+  if (input.isManagerGrade || isRegionalLeaveException(input.leaveType) || isExcludedLocation(input.locationName)) {
     return { route: "legacy", firstStage: null, reason: "This leave type or location uses its separate non-regional workflow." }
   }
   if (!input.hasRegionalOffice) {
@@ -127,7 +127,96 @@ export function routeLeave(input: { leaveType?: string | null; locationName?: st
   return { route: "regional", firstStage: REGIONAL_LEAVE_STAGES.regionalHrReview }
 }
 
-export async function resolveRegionalHrOffice(admin: SupabaseClient, regionId: string | null | undefined) {
+export type StaffAssignmentResolution = {
+  staffId: string
+  assignedLocationId: string | null
+  regionId: string | null
+  departmentId: string | null
+  hodId: string | null
+  regionalHrId: string | null
+  regionalManagerId: string | null
+  locationName: string | null
+  source: "profile" | "location" | "unresolved"
+}
+
+/** Resolve reviewer IDs from stable foreign keys, never display names. */
+export async function resolveStaffAssignments(admin: SupabaseClient, staffId: string): Promise<StaffAssignmentResolution> {
+  const { data: profile, error } = await admin
+    .from("user_profiles")
+    .select("id, assigned_location_id, region_id, department_id, hod_id, regional_hr_id, regional_manager_id, geofence_locations:assigned_location_id (id, name, district_id)")
+    .eq("id", staffId)
+    .maybeSingle()
+  if (error) throw error
+  if (!profile) return { staffId, assignedLocationId: null, regionId: null, departmentId: null, hodId: null, regionalHrId: null, regionalManagerId: null, locationName: null, source: "unresolved" }
+
+  const assignedLocation = Array.isArray(profile.geofence_locations) ? profile.geofence_locations[0] : profile.geofence_locations
+  let regionId = profile.region_id || null
+  if (!regionId && assignedLocation?.district_id) {
+    const { data: district, error: districtError } = await admin.from("districts").select("region_id").eq("id", assignedLocation.district_id).maybeSingle()
+    if (districtError) throw districtError
+    regionId = district?.region_id || null
+  }
+
+  let regionalHrId = profile.regional_hr_id || null
+  let regionalManagerId = profile.regional_manager_id || null
+  if (profile.assigned_location_id) {
+    const { data: canonicalAlignment, error: alignmentError } = await admin
+      .from("regional_hr_office_locations")
+      .select("regional_hr_user_id, regional_manager_user_id")
+      .eq("location_id", profile.assigned_location_id)
+      .eq("is_active", true)
+      .maybeSingle()
+    if (alignmentError) throw alignmentError
+    if (canonicalAlignment) {
+      regionalHrId = canonicalAlignment.regional_hr_user_id || regionalHrId
+      regionalManagerId = canonicalAlignment.regional_manager_user_id || regionalManagerId
+    }
+  }
+  if (!regionalHrId) regionalHrId = (await resolveRegionalHrOffice(admin, regionId, profile.assigned_location_id))?.user_id || null
+
+  return {
+    staffId,
+    assignedLocationId: profile.assigned_location_id || null,
+    regionId,
+    departmentId: profile.department_id || null,
+    hodId: profile.hod_id || null,
+    regionalHrId,
+    regionalManagerId,
+    locationName: assignedLocation?.name || null,
+    source: profile.assigned_location_id || regionId ? "profile" : "unresolved",
+  }
+}
+
+export async function resolveRegionalHrOffice(
+  admin: SupabaseClient,
+  regionId: string | null | undefined,
+  locationId?: string | null,
+) {
+  // The admin-managed mapping is authoritative for a location.
+  if (locationId) {
+    const { data: mapped, error: mappingError } = await admin
+      .from("regional_hr_office_locations")
+      .select("regional_hr_user_id, region_id")
+      .eq("location_id", locationId)
+      .eq("is_active", true)
+      .maybeSingle()
+    if (mappingError) throw mappingError
+    if (mapped) return { user_id: mapped.regional_hr_user_id, region_id: mapped.region_id || regionId || null, is_override: true }
+  }
+
+  // Backwards-compatible profile-based location lookup.
+  if (locationId) {
+    const { data: byLocation, error: locationError } = await admin
+      .from("user_profiles")
+      .select("id, region_id, assigned_location_id")
+      .eq("assigned_location_id", locationId)
+      .eq("is_active", true)
+      .in("role", ["hr", "hr_office", "regional_hr", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"])
+      .limit(1)
+      .maybeSingle()
+    if (locationError) throw locationError
+    if (byLocation) return { user_id: byLocation.id, region_id: byLocation.region_id || regionId || null, is_override: false }
+  }
   if (!regionId) return null
   const { data, error } = await admin
     .from("regional_hr_leave_office_assignments")
@@ -137,7 +226,18 @@ export async function resolveRegionalHrOffice(admin: SupabaseClient, regionId: s
     .limit(1)
     .maybeSingle()
   if (error) throw error
-  return data
+  if (data) return data
+
+  const { data: fallback, error: fallbackError } = await admin
+    .from("user_profiles")
+    .select("id, region_id")
+    .eq("region_id", regionId)
+    .eq("is_active", true)
+    .in("role", ["hr", "hr_office", "regional_hr", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"])
+    .limit(1)
+    .maybeSingle()
+  if (fallbackError) throw fallbackError
+  return fallback ? { user_id: fallback.id, region_id: fallback.region_id, is_override: false } : null
 }
 
 export function hrRecordsCanReference(status: string | null | undefined) {
@@ -174,12 +274,12 @@ export async function resolveMemoVisibilityScope(
 
   const [{ data: assignments, error: assignmentError }, { data: actor, error: actorError }] = await Promise.all([
     admin.from("regional_hr_leave_office_assignments").select("region_id").eq("user_id", actorId).eq("is_active", true),
-    admin.from("user_profiles").select("assigned_location_id").eq("id", actorId).maybeSingle(),
+    admin.from("user_profiles").select("assigned_location_id, region_id").eq("id", actorId).maybeSingle(),
   ])
   if (assignmentError) throw assignmentError
   if (actorError) throw actorError
 
-  const regionIds = [...new Set((assignments || []).map((row: any) => row.region_id).filter(Boolean))]
+  const regionIds = [...new Set([...(assignments || []).map((row: any) => row.region_id), actor?.region_id].filter(Boolean))]
   const locationIds = new Set<string>()
   if (actor?.assigned_location_id) locationIds.add(actor.assigned_location_id)
 
