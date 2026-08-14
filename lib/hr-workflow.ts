@@ -165,6 +165,7 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
       .select("regional_hr_user_id, regional_manager_user_id")
       .eq("location_id", profile.assigned_location_id)
       .eq("is_active", true)
+      .limit(1)
       .maybeSingle()
     if (alignmentError) throw alignmentError
     if (canonicalAlignment?.regional_hr_user_id) {
@@ -199,6 +200,7 @@ export async function resolveRegionalHrOffice(
       .select("regional_hr_user_id, region_id")
       .eq("location_id", locationId)
       .eq("is_active", true)
+      .limit(1)
       .maybeSingle()
     if (mappingError) throw mappingError
     if (mapped?.regional_hr_user_id) return { user_id: mapped.regional_hr_user_id, region_id: mapped.region_id || regionId || null, is_override: true }
@@ -206,15 +208,13 @@ export async function resolveRegionalHrOffice(
 
   // Backwards-compatible profile-based location lookup.
   if (locationId) {
-    const { data: byLocation, error: locationError } = await admin
+    const { data: locationProfiles, error: locationError } = await admin
       .from("user_profiles")
-      .select("id, region_id, assigned_location_id")
+      .select("id, role, region_id, assigned_location_id")
       .eq("assigned_location_id", locationId)
       .eq("is_active", true)
-      .in("role", ["hr", "hr_office", "regional_hr", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office", "regional hr", "regional hr office", "regional hr leave office"])
-      .limit(1)
-      .maybeSingle()
     if (locationError) throw locationError
+    const byLocation = (locationProfiles || []).find((profile: any) => isRegionalHrLeaveOfficeRole(profile.role) || ["hr", "hr_office"].includes(normalizeWorkflowRole(profile.role)))
     if (byLocation) return { user_id: byLocation.id, region_id: byLocation.region_id || regionId || null, is_override: false }
   }
   if (!regionId) return null
@@ -228,15 +228,13 @@ export async function resolveRegionalHrOffice(
   if (error) throw error
   if (data) return data
 
-  const { data: fallback, error: fallbackError } = await admin
+  const { data: regionalProfiles, error: fallbackError } = await admin
     .from("user_profiles")
-    .select("id, region_id")
+    .select("id, role, region_id")
     .eq("region_id", regionId)
     .eq("is_active", true)
-    .in("role", ["hr", "hr_office", "regional_hr", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"])
-    .limit(1)
-    .maybeSingle()
   if (fallbackError) throw fallbackError
+  const fallback = (regionalProfiles || []).find((profile: any) => isRegionalHrLeaveOfficeRole(profile.role) || ["hr", "hr_office"].includes(normalizeWorkflowRole(profile.role)))
   return fallback ? { user_id: fallback.id, region_id: fallback.region_id, is_override: false } : null
 }
 
