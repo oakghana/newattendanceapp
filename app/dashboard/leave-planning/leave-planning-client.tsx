@@ -4251,26 +4251,30 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                             <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
                               <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Details</p>
 
-                              {isRegionalHr ? <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                                <Label className="text-xs font-semibold text-amber-900">Official leave memo reference <span className="text-red-600">*</span></Label>
-                                <Input
-                                  value={officeRefNumber[req.id] || req.memo_reference || req.reference_number || ""}
-                                  onChange={(e) => setOfficeRefNumber((p) => ({ ...p, [req.id]: e.target.value }))}
-                                  placeholder="Enter the official leave memo number"
-                                  className="h-9 bg-white font-mono text-sm"
-                                />
-                                <p className="text-[10px] text-amber-800">Regional HR Office must enter this reference before the request can reach the Regional Manager leave center.</p>
-                              </div> : <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-                                <Label className="text-xs font-semibold text-emerald-900">Official memo reference</Label>
-                                <Input
-                                  value={req.memo_reference || ""}
-                                  readOnly
-                                  disabled
-                                  placeholder="Awaiting HR Records reference"
-                                  className="h-9 bg-white font-mono text-sm"
-                                />
-                                <p className="text-[10px] text-emerald-800">Automatically assigned by HR Records for non-regional leave.</p>
-                              </div>}
+                              {isRegionalHr && String(req.workflow_route || "").toLowerCase() === "regional" ? (
+                                <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                                  <Label className="text-xs font-semibold text-amber-900">Official leave memo reference <span className="text-red-600">*</span></Label>
+                                  <Input
+                                    value={officeRefNumber[req.id] || req.memo_reference || req.reference_number || ""}
+                                    onChange={(e) => setOfficeRefNumber((p) => ({ ...p, [req.id]: e.target.value }))}
+                                    placeholder="Enter the official leave memo number"
+                                    className="h-9 bg-white font-mono text-sm"
+                                  />
+                                  <p className="text-[10px] text-amber-800">Regional HR Office must enter this reference before the request can reach the Regional Manager leave center.</p>
+                                </div>
+                              ) : (
+                                <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                                  <Label className="text-xs font-semibold text-emerald-900">Official memo reference</Label>
+                                  <Input
+                                    value={req.memo_reference || ""}
+                                    readOnly
+                                    disabled
+                                    placeholder="Awaiting HR Records reference"
+                                    className="h-9 bg-white font-mono text-sm"
+                                  />
+                                  <p className="text-[10px] text-emerald-800">Automatically assigned by HR Records after final approval.</p>
+                                </div>
+                              )}
 
                               {/* CC List */}
                               <div className="space-y-1">
