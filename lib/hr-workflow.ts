@@ -149,7 +149,7 @@ export type StaffAssignmentResolution = {
 export async function resolveStaffAssignments(admin: SupabaseClient, staffId: string): Promise<StaffAssignmentResolution> {
   const { data: profile, error } = await admin
     .from("user_profiles")
-    .select("id, assigned_location_id, region_id, department_id, hod_id, regional_hr_id, regional_manager_id, geofence_locations:assigned_location_id (id, name, district_id)")
+    .select("id, assigned_location_id, region_id, department_id, geofence_locations:assigned_location_id (id, name, district_id)")
     .eq("id", staffId)
     .maybeSingle()
   if (error) throw error
@@ -163,8 +163,28 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
     regionId = district?.region_id || null
   }
 
-  let regionalHrId = profile.regional_hr_id || null
-  let regionalManagerId = profile.regional_manager_id || null
+  let hodId: string | null = null
+  const { data: linkage } = await admin
+    .from("loan_hod_linkages")
+    .select("hod_user_id")
+    .eq("staff_user_id", staffId)
+    .limit(1)
+    .maybeSingle()
+  hodId = linkage?.hod_user_id || null
+  if (!hodId && profile.department_id) {
+    const { data: departmentHod } = await admin
+      .from("user_profiles")
+      .select("id")
+      .eq("department_id", profile.department_id)
+      .in("role", ["department_head", "manager_hr", "director_hr"])
+      .eq("is_active", true)
+      .limit(1)
+      .maybeSingle()
+    hodId = departmentHod?.id || null
+  }
+
+  let regionalHrId: string | null = null
+  let regionalManagerId: string | null = null
   if (profile.assigned_location_id) {
     const { data: canonicalAlignment, error: alignmentError } = await admin
       .from("regional_hr_office_locations")
@@ -186,7 +206,7 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
     assignedLocationId: profile.assigned_location_id || null,
     regionId,
     departmentId: profile.department_id || null,
-    hodId: profile.hod_id || null,
+    hodId,
     regionalHrId,
     regionalManagerId,
     locationName: assignedLocation?.name || null,

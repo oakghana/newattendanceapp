@@ -21,7 +21,7 @@ export async function GET(_request: NextRequest) {
         adjusted_days,
         status,
         hod_decision,
-        hod_id,
+        hod_user_id,
         workflow_route,
         staff_category,
         created_at,
@@ -61,18 +61,10 @@ export async function GET(_request: NextRequest) {
       ? await admin.from('locations').select('id, name, code, region_id').in('id', locationIds)
       : { data: [] as any[] }
     const locationMap = new Map((locations || []).map((location: any) => [location.id, location]))
-    const [{ data: linkages }, { data: profileHodLinks }] = await Promise.all([
-      profileIds.length
-        ? admin.from('loan_hod_linkages').select('staff_user_id, hod_user_id').in('staff_user_id', profileIds)
-        : Promise.resolve({ data: [] as any[] }),
-      profileIds.length
-        ? admin.from('user_profiles').select('id, hod_id').in('id', profileIds).not('hod_id', 'is', null)
-        : Promise.resolve({ data: [] as any[] }),
-    ])
-    const allLinkages = [
-      ...(linkages || []),
-      ...(profileHodLinks || []).map((profile: any) => ({ staff_user_id: profile.id, hod_user_id: profile.hod_id })),
-    ]
+    const { data: linkages } = profileIds.length
+      ? await admin.from('loan_hod_linkages').select('staff_user_id, hod_user_id').in('staff_user_id', profileIds)
+      : { data: [] as any[] }
+    const allLinkages = [...(linkages || [])]
     const hodIds = [...new Set(allLinkages.map((link: any) => link.hod_user_id).filter(Boolean))]
     const { data: hodProfiles } = hodIds.length
       ? await admin.from('user_profiles').select('id, first_name, last_name, employee_id, position, role, email').in('id', hodIds)
@@ -93,7 +85,7 @@ export async function GET(_request: NextRequest) {
       allLinkages.filter((link: any) => String(link.hod_user_id) === String(user.id)).map((link: any) => String(link.staff_user_id)),
     )
     const enrichedRequests = planRequests.filter((req: any) =>
-      String(req.hod_id || "") === String(user.id) || currentHodStaffIds.has(String(req.user_id)),
+      String(req.hod_user_id || "") === String(user.id) || currentHodStaffIds.has(String(req.user_id)),
     ).map((req: any) => {
       const createdDate = new Date(req.submitted_at || req.created_at)
       const daysPending = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
