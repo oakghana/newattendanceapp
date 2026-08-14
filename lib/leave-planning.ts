@@ -35,6 +35,11 @@ export type LeavePlanStatus =
   // Final statuses
   | "hr_approved"
   | "hr_rejected"
+  // Regional pipeline statuses (staff -> Regional HR Office -> Regional Manager)
+  | "pending_regional_hr_review"
+  | "pending_regional_manager_approval"
+  | "regional_changes_requested"
+  | "regional_rejected"
 
 export type LeavePlanReviewDecision = "pending" | "approved" | "recommend_change" | "rejected"
 
@@ -42,6 +47,10 @@ export type LeavePlanReviewDecision = "pending" | "approved" | "recommend_change
 export const HOD_PENDING_STATUSES: LeavePlanStatus[] = [
   "pending_hod_review",
   "pending_manager_review",
+  // Regional Manager review reuses the same HOD-review UI and submitHodReview
+  // flow — this status must be included here or the request renders read-only
+  // under "Worked On Requests" with no Approve/Reject buttons.
+  "pending_regional_manager_approval",
 ]
 
 /** Statuses that require HR Leave Office action */
