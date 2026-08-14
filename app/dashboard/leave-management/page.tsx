@@ -1,6 +1,7 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { LeaveManagementModuleClient } from "./leave-management-module-client"
 import { LeaveManagementPageWrapper } from "@/components/leave/leave-management-page-wrapper"
+import { isExcludedLocation } from "@/lib/hr-workflow"
 import { Suspense } from "react"
 
 
@@ -45,10 +46,10 @@ export default async function LeaveManagementPage() {
   try {
     // Build parallel queries — include location lookup when user has an assigned location
     const locationId = (profile as any)?.assigned_location_id
-    const queries: Promise<any>[] = [
+    const queries: any[] = [
       admin
         .from("leave_plan_requests")
-        .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, adjusted_start_date, adjusted_end_date, hod_decision, memo_token")
+        .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, workflow_route, workflow_stage, created_at, adjusted_start_date, adjusted_end_date, hod_decision, memo_token")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(50),
@@ -144,7 +145,8 @@ export default async function LeaveManagementPage() {
           .from("leave_plan_requests")
           .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, memo_token, memo_reference, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id, region_id)")
           .in("user_id", regionalStaffIds)
-          .in("status", isRegionalManager ? ["pending_regional_manager_approval", "approved", "regional_manager_approved"] : ["pending_hod_review", "pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review", "pending_hr_review", "pending_regional_manager_approval"])
+          .eq("workflow_route", "regional")
+          .in("status", isRegionalManager ? ["pending_regional_manager_approval", "approved", "regional_manager_approved"] : ["pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review", "pending_regional_manager_approval"])
           .order("created_at", { ascending: false })
           .limit(100)
         const regionalLocationIds = Array.from(new Set((regionalRequests || []).map((request: any) => request.user_profiles?.assigned_location_id).filter(Boolean)))
@@ -196,7 +198,9 @@ export default async function LeaveManagementPage() {
       end_date: request.preferred_end_date,
       reason: request.reason || "",
       leave_type: request.leave_type_key || "annual",
-      status: request.status,
+      status: (request.workflow_route === "regional" && isExcludedLocation(userLocationName)) ? "pending_hod_review" : request.status,
+      workflow_route: isExcludedLocation(userLocationName) ? "legacy" : request.workflow_route,
+      workflow_stage: request.workflow_stage,
       created_at: request.created_at,
       adjusted_start_date: request.adjusted_start_date,
       adjusted_end_date: request.adjusted_end_date,

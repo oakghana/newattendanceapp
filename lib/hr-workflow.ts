@@ -80,6 +80,8 @@ export function getLeaveWorkflowView(input: {
   const status = String(input.status || input.workflowStage || "pending_hod_review")
   const currentStage = input.workflowStage || status
   const statusLabel: Record<string, string> = {
+    pending: "Pending HOD Review",
+    pending_hod: "Pending HOD Review",
     pending_hod_review: "Pending HOD Review",
     pending_regional_hr_review: "Pending Regional HR Office Review",
     pending_regional_manager_approval: "Pending Regional Manager Approval",
@@ -109,7 +111,11 @@ export function normalizeLocationName(value: string | null | undefined) {
 
 export function isExcludedLocation(locationName: string | null | undefined) {
   const normalized = normalizeLocationName(locationName)
-  return NON_REGIONAL_LOCATIONS.some((location) => normalizeLocationName(location) === normalized)
+  if (!normalized) return false
+  return NON_REGIONAL_LOCATIONS.some((location) => {
+    const candidate = normalizeLocationName(location)
+    return normalized === candidate || normalized.includes(candidate) || candidate.includes(normalized)
+  }) || /(^| )qcc head office( |$)|(^| )head office( |$)|swanzy arcade|awutu stores|nsawam archive/.test(normalized)
 }
 
 export function isRegionalLeaveException(leaveType: string | null | undefined) {
