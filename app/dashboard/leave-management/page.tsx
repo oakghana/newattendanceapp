@@ -73,6 +73,56 @@ export default async function LeaveManagementPage() {
     const results = await Promise.all(queries)
     const [requestsRes, linkageRes, locationRes] = results
 
+    if (!isRegionalHr && !isRegionalManager && !isItAdmin) {
+      // Legacy/non-regional workflow: HODs receive only requests explicitly
+      // linked to them. Regional requests never enter this queue.
+      const { data: hodLinks } = await admin
+        .from("loan_hod_linkages")
+        .select("staff_user_id")
+        .eq("hod_user_id", user.id)
+      const staffIds = Array.from(new Set((hodLinks || []).map((row: any) => row.staff_user_id).filter(Boolean)))
+      if (staffIds.length > 0) {
+        const { data: hodRequests } = await admin
+          .from("leave_plan_requests")
+          .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, hod_decision, memo_token, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id)")
+          .in("user_id", staffIds)
+          .in("status", ["pending_hod_review", "pending"])
+          .or("hod_decision.is.null,hod_decision.eq.pending")
+          .order("created_at", { ascending: true })
+          .limit(100)
+        const hodLocationIds = Array.from(new Set((hodRequests || []).map((request: any) => request.user_profiles?.assigned_location_id).filter(Boolean)))
+        const { data: hodLocations } = hodLocationIds.length
+          ? await admin.from("geofence_locations").select("id, name, code").in("id", hodLocationIds)
+          : { data: [] }
+        const hodLocationMap = new Map((hodLocations || []).map((location: any) => [location.id, location]))
+        managerNotifications = (hodRequests || []).map((request: any) => {
+          const staff = request.user_profiles || {}
+          const location = hodLocationMap.get(staff.assigned_location_id)
+          return {
+            id: request.id,
+            status: request.status || "pending_hod_review",
+            review_decision: request.hod_decision || "pending",
+            requester_name: `${staff.first_name || ""} ${staff.last_name || ""}`.trim(),
+            requester_role: "staff",
+            staff_location_name: location?.name || null,
+            staff_location_code: location?.code || null,
+            leave_requests: {
+              id: request.id,
+              user_id: request.user_id,
+              start_date: request.preferred_start_date,
+              end_date: request.preferred_end_date,
+              reason: request.reason || "",
+              leave_type: request.leave_type_key || "",
+              status: request.status || "pending_hod_review",
+              created_at: request.created_at,
+              memo_token: request.memo_token || null,
+              user_name: `${staff.first_name || ""} ${staff.last_name || ""}`.trim(),
+            },
+          }
+        })
+      }
+    }
+
     if ((isRegionalHr || isRegionalManager || isItAdmin) && (locationId || (profile as any)?.region_id)) {
       const staffQuery = admin
         .from("user_profiles")

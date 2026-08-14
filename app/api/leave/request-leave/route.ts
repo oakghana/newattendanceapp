@@ -235,8 +235,21 @@ export async function POST(request: NextRequest) {
         .select("name, address, districts (region_id)")
         .eq("id", routingProfile.assigned_location_id)
         .maybeSingle()
-      locationName = assignedLocation?.name || assignedLocation?.address || null
+      locationName = assignedLocation?.name || assignedLocation?.address || locationName
       regionId = regionId || (assignedLocation?.districts as any)?.region_id || null
+
+      // Some older profiles point to the canonical `locations` table rather
+      // than `geofence_locations`. Resolve that name before deciding the route;
+      // otherwise a non-regional head-office request can be misclassified as regional.
+      if (!assignedLocation?.name && !assignedLocation?.address) {
+        const { data: canonicalLocation } = await admin
+          .from("locations")
+          .select("name, region_id")
+          .eq("id", routingProfile.assigned_location_id)
+          .maybeSingle()
+        locationName = canonicalLocation?.name || locationName
+        regionId = regionId || canonicalLocation?.region_id || null
+      }
     }
 
     let regionalOffice = await resolveRegionalHrOffice(admin, regionId, assignment.assignedLocationId)
