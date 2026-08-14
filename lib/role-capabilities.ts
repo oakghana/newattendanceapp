@@ -32,7 +32,7 @@ export function canEditProfile(role?: string | null): boolean {
 
 export function canManageLeave(role?: string | null): boolean {
   const normalized = normalizeAppRole(role)
-  return ["admin", "regional_hr", ...HR_LEAVE_OFFICE_ROLES].includes(normalized)
+  return ["admin", "it-admin", "regional_hr", ...HR_LEAVE_OFFICE_ROLES].includes(normalized)
 }
 
 export function canViewPersonalAttendance(): boolean {

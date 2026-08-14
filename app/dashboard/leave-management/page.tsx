@@ -38,6 +38,7 @@ export default async function LeaveManagementPage() {
   let hasHodLinkage = false
   let userLocationName: string | null = null
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+  const isItAdmin = normalizedRole === "it_admin"
   const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole) || (normalizedRole.includes("regional") && normalizedRole.includes("hr"))
   const isRegionalManager = normalizedRole === "regional_manager" || normalizedRole === "regional_manager_officer"
 
@@ -72,7 +73,7 @@ export default async function LeaveManagementPage() {
     const results = await Promise.all(queries)
     const [requestsRes, linkageRes, locationRes] = results
 
-    if ((isRegionalHr || isRegionalManager) && (locationId || (profile as any)?.region_id)) {
+    if ((isRegionalHr || isRegionalManager || isItAdmin) && (locationId || (profile as any)?.region_id)) {
       const staffQuery = admin
         .from("user_profiles")
         .select("id")
