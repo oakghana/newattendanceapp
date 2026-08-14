@@ -1200,7 +1200,7 @@ export async function POST(request: NextRequest) {
 
   const profile = await getOrCreateProfile(
   admin, user,
-  "id, role, department_id, region_id, assigned_location_id, staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id, position, geofence_locations(name)"
+  "id, role, department_id, region_id, assigned_location_id, staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id, position, geofence_locations!user_profiles_assigned_location_id_fkey(name)"
   )
 
     const role = String((profile as any).role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")

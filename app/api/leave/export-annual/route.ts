@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
 
     const { data: profiles, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, first_name, last_name, employee_id, email, phone, position, department_id, assigned_location_id, departments(name, code), geofence_locations(name, address)")
+      .select("id, first_name, last_name, employee_id, email, phone, position, department_id, assigned_location_id, departments(name, code), geofence_locations!user_profiles_assigned_location_id_fkey(name, address)")
       .in("id", userIds)
     if (profileError) throw profileError
 
