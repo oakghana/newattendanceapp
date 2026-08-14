@@ -346,8 +346,8 @@ export function StaffManagement() {
           contact_number: "",
         })
         fetchStaff()
-        // Only Administrators manage HOD assignments from Staff Management.
-        if (isAdministrator && result.data) {
+        // Administrators and IT Admins can link staff to the correct HOD or Regional Manager.
+        if (canManageStaffLinks && result.data) {
           openHodLinkDialog(result.data)
         }
       } else {
