@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { displayRole } from "@/lib/role-mapping"
+import { isNonRegionalLocation, normalizeLocationName } from "@/lib/location-mappings"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -593,38 +594,17 @@ export function StaffManagement() {
         resMHR.json().then((d: any) => d.data || []),
         resDHR.json().then((d: any) => d.data || []),
       ])
-      const normalizeLocation = (value: unknown) =>
-        String(value || "")
-          .toLowerCase()
-          .replace(/[()]/g, "")
-          .replace(/[^a-z0-9]+/g, " ")
-          .trim()
-          .replace(/\s+/g, " ")
-
-      const headOfficeLocations = [
-        "cwc commodity",
-        "qcc head office",
-        "tema port",
-        "tema research",
-        "tema training school",
-        "nsawam archive center",
-        "head office swanzy arcade",
-      ]
       const staffLocationId = member.assigned_location_id
-      const staffLocationName = normalizeLocation(member.geofence_locations?.name)
-      const isHeadOfficeLocation = headOfficeLocations.some((location) => staffLocationName.includes(location))
-      const isRegionalStaff = member.role === "regional_manager" || !isHeadOfficeLocation
+      const staffLocationName = normalizeLocationName(member.geofence_locations?.name)
+      const isNonRegionalStaff = isNonRegionalLocation(staffLocationName)
       const sameLocation = (candidate: StaffMember) =>
         Boolean(staffLocationId && candidate.assigned_location_id === staffLocationId)
 
-      // Regional staff see same-location Regional Managers first. Department Heads
-      // are only valid for the approved head-office locations.
-      const all = [
-        ...(isRegionalStaff ? rm.filter(sameLocation) : []),
-        ...(isHeadOfficeLocation ? dh : []),
-        ...mhr,
-        ...dhr,
-      ]
+      // Non-regional locations use same-location Department Heads only.
+      // Every other location is regional and uses its same-location Regional Manager only.
+      const all = isNonRegionalStaff
+        ? dh.filter((candidate) => sameLocation(candidate) && normalizeLocationName(candidate.role) === "department_head")
+        : rm.filter((candidate) => sameLocation(candidate) && normalizeLocationName(candidate.role) === "regional_manager")
       const seen = new Set<string>()
       const unique = all.filter((s) => {
         if (seen.has(s.id)) return false
@@ -1531,10 +1511,10 @@ export function StaffManagement() {
             <DialogTitle>Manage Staff HOD Assignments</DialogTitle>
             <DialogDescription>
               {hodLinkStaff && (hodLinkStaff.geofence_locations?.name ? `Location: ${hodLinkStaff.geofence_locations.name}. ` : "")}
-              {hodLinkStaff && hodCandidates.some((candidate) => candidate.role === "regional_manager")
-                ? "Regional Managers in the staff member’s location are shown first. "
-                : "Department Heads are shown only for approved head-office locations. "}
-              Select one or more HODs for <strong>{hodLinkStaff?.first_name} {hodLinkStaff?.last_name}</strong>. Uncheck a selected HOD to remove that assignment.
+              {hodLinkStaff && isNonRegionalLocation(hodLinkStaff.geofence_locations?.name)
+                ? "Only Department Heads in this non-regional location are available. "
+                : "Only the Regional Manager assigned to this regional location is available. "}
+              Select one HOD for <strong>{hodLinkStaff?.first_name} {hodLinkStaff?.last_name}</strong>. Uncheck the selected HOD to remove the assignment.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -1542,7 +1522,7 @@ export function StaffManagement() {
               <Alert variant="destructive"><AlertDescription>{hodLinkError}</AlertDescription></Alert>
             )}
             <div className="space-y-2.5">
-              <Label htmlFor="hod-search" className="text-sm font-medium">Search HOD / Regional Manager</Label>
+              <Label htmlFor="hod-search" className="text-sm font-medium">Search {hodLinkStaff && isNonRegionalLocation(hodLinkStaff.geofence_locations?.name) ? "Department Head" : "Regional Manager"}</Label>
               <Input
                 id="hod-search"
                 placeholder="Search by name, staff ID, or department..."
@@ -1561,7 +1541,7 @@ export function StaffManagement() {
               </p>
             </div>
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Select HODs (can choose multiple)</Label>
+              <Label className="text-sm font-medium">Select {hodLinkStaff && isNonRegionalLocation(hodLinkStaff.geofence_locations?.name) ? "Department Head" : "Regional Manager"}</Label>
               <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
                 {hodCandidates.filter((h) =>
                   hodSearchQuery === "" ||

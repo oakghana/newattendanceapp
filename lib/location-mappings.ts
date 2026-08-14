@@ -3,6 +3,27 @@
  * Maps QCC locations to standardized memo addresses
  */
 
+export const NON_REGIONAL_LOCATION_NAMES = [
+  "Awutu Stores",
+  "HEAD OFFICE SWANZY ARCADE",
+  "QCC Head Office",
+  "Nsawam Archive Center",
+] as const
+
+export function normalizeLocationName(value: unknown): string {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[()]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+}
+
+export function isNonRegionalLocation(value: unknown): boolean {
+  const normalized = normalizeLocationName(value)
+  return NON_REGIONAL_LOCATION_NAMES.some((name) => normalizeLocationName(name) === normalized)
+}
+
 export const LOCATION_MEMO_MAPPINGS: Record<string, string> = {
   "QCC Head Office SWANZY ARCADE": "HEAD OFFICE ACCRA, GHANA",
   "QCC Head Office Swanzy Arcade": "HEAD OFFICE ACCRA, GHANA",
