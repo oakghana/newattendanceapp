@@ -183,7 +183,10 @@ export async function POST(request: NextRequest) {
         // after HR Executive approves — HR Leave Office never writes it.
         memo_draft_subject: memo_draft_subject ? String(memo_draft_subject).trim() : null,
         memo_draft_body: memo_draft_body ? String(memo_draft_body).trim() : null,
-        memo_draft_cc: memo_draft_cc ? String(memo_draft_cc).trim() : null,
+        // Do not erase CC recipients when HR Office leaves the field unchanged.
+        memo_draft_cc: memo_draft_cc
+          ? String(memo_draft_cc).trim()
+          : String((leaveRequest as any).memo_draft_cc || "").trim() || null,
         memo_draft_last_edited_by: user.id,
         memo_draft_last_edited_role: "hr_leave_office",
         memo_draft_last_edited_at: new Date().toISOString(),

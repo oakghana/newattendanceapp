@@ -1074,10 +1074,13 @@ export async function GET(
     doc.setFontSize(8.5)
     doc.text("cc:", marginLeft, y)
     doc.setFont("times", "normal")
-    const ccRaw = String(lr.memo_draft_cc || "").trim()
-    const ccList: string[] = ccRaw
-      ? ccRaw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-      : []
+  const ccSource = lr.memo_draft_cc ?? lr.cc_recipients ?? lr.cc_list ?? ""
+  const ccList: string[] = Array.isArray(ccSource)
+    ? ccSource.map((value: unknown) => String(value).trim()).filter(Boolean)
+    : String(ccSource)
+      .split(/[\r\n,]+/)
+      .map((line) => line.trim())
+      .filter(Boolean)
     const ccIndent = marginLeft + 10
     for (const cc of ccList) {
       doc.text(cc, ccIndent, y)
