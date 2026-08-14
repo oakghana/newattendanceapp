@@ -77,16 +77,27 @@ export default async function LeaveManagementPage() {
     if (!isRegionalHr && !isRegionalManager && !isItAdmin) {
       // Legacy/non-regional workflow: HODs receive only requests explicitly
       // linked to them. Regional requests never enter this queue.
-      const { data: hodLinks } = await admin
-        .from("loan_hod_linkages")
-        .select("staff_user_id")
-        .eq("hod_user_id", user.id)
-      const staffIds = Array.from(new Set((hodLinks || []).map((row: any) => row.staff_user_id).filter(Boolean)))
+      const [{ data: hodLinks }, { data: profileLinkedStaff }] = await Promise.all([
+        admin
+          .from("loan_hod_linkages")
+          .select("staff_user_id")
+          .eq("hod_user_id", user.id),
+        admin
+          .from("user_profiles")
+          .select("id")
+          .eq("hod_id", user.id)
+          .eq("is_active", true),
+      ])
+      const staffIds = Array.from(new Set([
+        ...(hodLinks || []).map((row: any) => row.staff_user_id),
+        ...(profileLinkedStaff || []).map((row: any) => row.id),
+      ].filter(Boolean)))
       if (staffIds.length > 0) {
         const { data: hodRequests } = await admin
           .from("leave_plan_requests")
           .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, hod_decision, memo_token, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id)")
           .in("user_id", staffIds)
+          .or("workflow_route.is.null,workflow_route.eq.legacy")
           .in("status", ["pending_hod_review", "pending"])
           .or("hod_decision.is.null,hod_decision.eq.pending")
           .order("created_at", { ascending: true })
