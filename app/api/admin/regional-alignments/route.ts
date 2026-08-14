@@ -24,7 +24,7 @@ export async function GET() {
     const { admin } = context
     const [{ data: locations, error: locationError }, { data: assignments, error: assignmentError }, { data: users, error: usersError }] = await Promise.all([
       admin.from("geofence_locations").select("id, name, address, district_id").eq("is_active", true).order("name"),
-      admin.from("regional_hr_office_locations").select("id, regional_hr_user_id, location_id, region_id, is_active, assigned_at").eq("is_active", true),
+      admin.from("regional_hr_office_locations").select("id, regional_hr_user_id, regional_manager_user_id, location_id, region_id, is_active, assigned_at").eq("is_active", true),
       admin.from("user_profiles").select("id, first_name, last_name, role, assigned_location_id, region_id, is_active").eq("is_active", true).in("role", [...HR_ROLES, "regional_manager"]).order("first_name"),
     ])
     if (locationError || assignmentError || usersError) throw locationError || assignmentError || usersError
@@ -44,6 +44,7 @@ export async function PUT(request: Request) {
     const body = await request.json()
     const locationId = String(body.locationId || "")
     const regionalHrUserId = body.regionalHrUserId ? String(body.regionalHrUserId) : null
+    const regionalManagerUserId = body.regionalManagerUserId ? String(body.regionalManagerUserId) : null
     if (!locationId) return NextResponse.json({ error: "Location is required" }, { status: 400 })
     const { data: location } = await admin.from("geofence_locations").select("id, district_id").eq("id", locationId).maybeSingle()
     if (!location) return NextResponse.json({ error: "Location not found" }, { status: 404 })
@@ -51,9 +52,15 @@ export async function PUT(request: Request) {
       const { data: hr } = await admin.from("user_profiles").select("id, role, is_active").eq("id", regionalHrUserId).maybeSingle()
       if (!hr || !hr.is_active || !HR_ROLES.includes(String(hr.role).toLowerCase())) return NextResponse.json({ error: "Selected user is not an active Regional HR officer" }, { status: 400 })
     }
+    if (regionalManagerUserId) {
+      const { data: manager } = await admin.from("user_profiles").select("id, role, is_active, assigned_location_id, region_id").eq("id", regionalManagerUserId).maybeSingle()
+      const managerRole = String(manager?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
+      if (!manager || !manager.is_active || !["regional_manager", "regional_manager_office", "regionalmanager"].includes(managerRole)) return NextResponse.json({ error: "Selected user is not an active Regional Manager" }, { status: 400 })
+      if (manager.assigned_location_id && manager.assigned_location_id !== locationId) return NextResponse.json({ error: "Regional Manager must be assigned to the same location" }, { status: 409 })
+    }
     await admin.from("regional_hr_office_locations").update({ is_active: false, updated_at: new Date().toISOString() }).eq("location_id", locationId).eq("is_active", true)
-    if (regionalHrUserId) {
-      const { error } = await admin.from("regional_hr_office_locations").insert({ regional_hr_user_id: regionalHrUserId, location_id: locationId, assigned_by: actorId, is_active: true })
+    if (regionalHrUserId || regionalManagerUserId) {
+      const { error } = await admin.from("regional_hr_office_locations").insert({ regional_hr_user_id: regionalHrUserId, regional_manager_user_id: regionalManagerUserId, location_id: locationId, region_id: location.district_id || null, assigned_by: actorId, is_active: true })
       if (error) throw error
     }
     return NextResponse.json({ success: true })

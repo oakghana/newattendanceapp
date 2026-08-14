@@ -158,6 +158,20 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
   }
 
   let regionalHrId = profile.regional_hr_id || null
+  let regionalManagerId = profile.regional_manager_id || null
+  if (profile.assigned_location_id) {
+    const { data: canonicalAlignment, error: alignmentError } = await admin
+      .from("regional_hr_office_locations")
+      .select("regional_hr_user_id, regional_manager_user_id")
+      .eq("location_id", profile.assigned_location_id)
+      .eq("is_active", true)
+      .maybeSingle()
+    if (alignmentError) throw alignmentError
+    if (canonicalAlignment) {
+      regionalHrId = canonicalAlignment.regional_hr_user_id || regionalHrId
+      regionalManagerId = canonicalAlignment.regional_manager_user_id || regionalManagerId
+    }
+  }
   if (!regionalHrId) regionalHrId = (await resolveRegionalHrOffice(admin, regionId, profile.assigned_location_id))?.user_id || null
 
   return {
@@ -167,7 +181,7 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
     departmentId: profile.department_id || null,
     hodId: profile.hod_id || null,
     regionalHrId,
-    regionalManagerId: profile.regional_manager_id || null,
+    regionalManagerId,
     locationName: assignedLocation?.name || null,
     source: profile.assigned_location_id || regionId ? "profile" : "unresolved",
   }
