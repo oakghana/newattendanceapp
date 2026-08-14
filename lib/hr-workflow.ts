@@ -231,6 +231,7 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
     }
   }
   if (!regionalHrId) regionalHrId = (await resolveRegionalHrOffice(admin, regionId, profile.assigned_location_id))?.user_id || null
+  if (!regionalManagerId) regionalManagerId = await resolveRegionalManager(admin, regionId, profile.assigned_location_id)
 
   return {
     staffId,
@@ -293,6 +294,44 @@ export async function resolveRegionalHrOffice(
   if (fallbackError) throw fallbackError
   const fallback = (regionalProfiles || []).find((profile: any) => isRegionalHrLeaveOfficeRole(profile.role) || ["hr", "hr_office"].includes(normalizeWorkflowRole(profile.role)))
   return fallback ? { user_id: fallback.id, region_id: fallback.region_id, is_override: false } : null
+}
+
+/**
+ * Resolve the single accountable Regional Manager for a location/region.
+ * The admin-managed regional_hr_office_locations.regional_manager_user_id
+ * mapping is authoritative and is checked first by the caller. This fallback
+ * exists because that mapping table is frequently unpopulated in practice —
+ * without it, Regional HR could forward a request to no one and it would
+ * silently disappear from every queue.
+ */
+export async function resolveRegionalManager(
+  admin: SupabaseClient,
+  regionId: string | null | undefined,
+  locationId?: string | null,
+): Promise<string | null> {
+  if (locationId) {
+    const { data: locationProfiles, error: locationError } = await admin
+      .from("user_profiles")
+      .select("id, role, created_at")
+      .eq("assigned_location_id", locationId)
+      .eq("role", "regional_manager")
+      .eq("is_active", true)
+      .order("created_at", { ascending: true })
+      .limit(1)
+    if (locationError) throw locationError
+    if (locationProfiles && locationProfiles.length > 0) return locationProfiles[0].id
+  }
+  if (!regionId) return null
+  const { data: regionalProfiles, error: regionError } = await admin
+    .from("user_profiles")
+    .select("id, role, created_at")
+    .eq("region_id", regionId)
+    .eq("role", "regional_manager")
+    .eq("is_active", true)
+    .order("created_at", { ascending: true })
+    .limit(1)
+  if (regionError) throw regionError
+  return regionalProfiles && regionalProfiles.length > 0 ? regionalProfiles[0].id : null
 }
 
 /**

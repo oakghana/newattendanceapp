@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { notifyLeaveHodApproved, notifyLeaveHodDecision } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { calculateRequestedDays, summarizeManagerReviewStatus, type LeavePlanReviewDecision } from "@/lib/leave-planning"
-import { isAnnualLeave, canNonRegionalPipelineAct, canRegionalPipelineAct } from "@/lib/hr-workflow"
+import { isAnnualLeave, canNonRegionalPipelineAct, canRegionalPipelineAct, resolveStaffAssignments } from "@/lib/hr-workflow"
 
 function isSchemaIssue(error: any) {
   const code = error?.code || ""
@@ -341,6 +341,40 @@ export async function POST(request: NextRequest) {
         return schemaIssueResponse(requestUpdateError)
       }
       throw requestUpdateError
+    }
+
+    // Regional HR Office forwarding a request must hand it off to the Regional
+    // Manager's own review queue. That queue is driven entirely by
+    // leave_plan_reviews rows keyed on reviewer_id, so without this insert the
+    // request would update status but never appear as an assigned review for
+    // the Regional Manager — it would silently vanish from every queue.
+    if (isRegionalForward) {
+      const assignment = await resolveStaffAssignments(admin, (leavePlan as any).user_id)
+      if (!assignment.regionalManagerId) {
+        return NextResponse.json(
+          { error: "No Regional Manager is mapped to this staff member's location. Ask an admin to configure the regional office mapping before forwarding." },
+          { status: 400 },
+        )
+      }
+      const { error: assignManagerError } = await admin
+        .from("leave_plan_reviews")
+        .upsert(
+          {
+            leave_plan_request_id,
+            reviewer_id: assignment.regionalManagerId,
+            reviewer_role: "regional_manager",
+            decision: "pending",
+            recommendation: null,
+            reviewed_at: null,
+          },
+          { onConflict: "leave_plan_request_id,reviewer_id" },
+        )
+      if (assignManagerError) {
+        if (isSchemaIssue(assignManagerError)) {
+          return schemaIssueResponse(assignManagerError)
+        }
+        throw assignManagerError
+      }
     }
 
     if ((decision === "recommend_change" || decision === "rejected") && !isRegionalForward) {
