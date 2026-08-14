@@ -178,8 +178,19 @@ export async function resolveRegionalHrOffice(
   regionId: string | null | undefined,
   locationId?: string | null,
 ) {
-  // Location is authoritative when regional offices are attached directly to
-  // an office and the location has no district/region row (the Kumasi setup).
+  // The admin-managed mapping is authoritative for a location.
+  if (locationId) {
+    const { data: mapped, error: mappingError } = await admin
+      .from("regional_hr_office_locations")
+      .select("regional_hr_user_id, region_id")
+      .eq("location_id", locationId)
+      .eq("is_active", true)
+      .maybeSingle()
+    if (mappingError) throw mappingError
+    if (mapped) return { user_id: mapped.regional_hr_user_id, region_id: mapped.region_id || regionId || null, is_override: true }
+  }
+
+  // Backwards-compatible profile-based location lookup.
   if (locationId) {
     const { data: byLocation, error: locationError } = await admin
       .from("user_profiles")
