@@ -120,7 +120,7 @@ const navigationItems = [
     title: "Leave Administration",
     href: "/dashboard/leave-management",
     icon: Calendar,
-    roles: ["admin", "it-admin", "regional_hr", "hr_leave_office", "hr_office", "director_hr", "manager_hr"],
+    roles: ["admin", "it-admin", "it_admin", "it admin", "regional_hr", "hr_leave_office", "hr_office", "director_hr", "manager_hr"],
     category: "admin",
   },
   {
@@ -423,11 +423,12 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
       ]
     : navigationItems
 
-  // Normalize both the profile role and each menu item's allowed roles so the
-  // UI accepts the role values used by existing records, such as IT-ADMIN.
-  // Support role hierarchy by treating audit_staff like staff for base menus.
+  // Normalize both the profile role and each menu item's allowed roles through
+  // the shared helper so values such as "it admin", "IT-ADMIN", and "it_admin"
+  // resolve to the same effective role.
   const normalizedRole = normalizeAppRole(profile?.role)
   const effectiveRole = normalizedRole === "audit_staff" ? "staff" : normalizedRole
+  const isItAdmin = effectiveRole === "it-admin"
 
   // A handful of "main" category items are intentionally restricted to specific
   // roles (e.g. Disbursement Confirmation is only for Accounts/Loan Office staff,
@@ -474,10 +475,11 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
     // label from legacy records must not make the sidebar appear empty.
     if (item.category === "main" && !item.executive && !ROLE_RESTRICTED_MAIN_HREFS.has(item.href)) return true
 
-    return item.roles.some((role) => {
-      const normalizedAllowedRole = role.toLowerCase().replace(/[\s-]+/g, "_").trim()
-      return normalizedAllowedRole === effectiveRole
-    })
+    if (isItAdmin && ["/dashboard/leave-management", "/dashboard/staff"].includes(item.href)) {
+      return true
+    }
+
+    return item.roles.some((role) => normalizeAppRole(role) === effectiveRole)
   })
 
   const mainItems = filteredNavItems.filter((item) => item.category === "main")
