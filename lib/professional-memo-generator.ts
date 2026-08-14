@@ -54,13 +54,11 @@ export function buildMemoRemarks({
   calculatedRemarks: string[]
 }): string {
   const reason = String(savedReason || "").trim()
-  // Reasons are explanatory text only. When HR supplies one, print it once;
-  // never append the generated calculation a second time.
-  return reason
-    ? reason
-    : calculatedRemarks.length > 0
-      ? calculatedRemarks.join("; ")
-      : "—"
+  const unique = (items: string[]) => Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)))
+  // Keep HR's explanation, but remove repeated semicolon-delimited clauses and
+  // never append the same calculated detail a second time.
+  if (reason) return unique(reason.split(/\s*;\s*/)).join("; ")
+  return unique(calculatedRemarks).join("; ") || "—"
 }
 
 export interface GeneratedMemo {
@@ -457,14 +455,15 @@ async function generateMainMemo(
       date_of_appointment: firstStaff?.date_of_appointment,
       years_of_service: firstStaff?.years_of_service,
     })
-    const hasAdjustedEntitlement = firstStaff?.adjusted_entitlement_days != null
-      || firstStaff?.outstanding_entitlement_days != null
-      || firstStaff?.entitlement_days != null
     const isAnnualLeave = String(memoData.leave_type_key || "").toLowerCase() === "annual"
+    // Outstanding days are carried over in a separate field and must always be
+    // added to the base annual entitlement exactly once.
+    const baseAnnualEntitlement = Math.max(
+      resolvedEntitlement.annualLeaveDays,
+      storedEntitlementDays > 0 ? storedEntitlementDays : 0,
+    )
     const entitlementDays = isAnnualLeave
-      ? hasAdjustedEntitlement
-        ? storedEntitlementDays
-        : resolvedEntitlement.annualLeaveDays + outstandingLeaveDays
+      ? baseAnnualEntitlement + outstandingLeaveDays
       : storedEntitlementDays
     const annualMemoDates = calculateAnnualLeaveMemoDates({
       startDate: firstStaff?.leave_period_start || new Date(),
