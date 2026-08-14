@@ -875,19 +875,27 @@ export async function GET(
   const profileEntitlement = isAnnualMemo && applicantProfile
     ? resolveEntitlementFromProfile(applicantProfile as any).annualLeaveDays
     : 0
-  const rawEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || 0)
-  const grossEntitlement = isAnnualMemo
-    ? Math.max(0, profileEntitlement || Number(tableEntitlement || 0) || rawEntitlement)
-    : Math.max(0, rawEntitlement || Number(tableEntitlement || 0))
+      const rawEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || 0)
+      const breakdown = (lr.adjustment_breakdown && typeof lr.adjustment_breakdown === "object") ? lr.adjustment_breakdown : {}
+      const outstandingDays = Math.max(0, Number(
+        lr.outstanding_leave_days_added
+          ?? lr.outstanding_leave_days
+          ?? (breakdown as any).outstanding_days
+          ?? 0,
+      ))
+      const baseEntitlement = isAnnualMemo
+        ? Math.max(0, profileEntitlement || rawEntitlement || Number(tableEntitlement || 0) || effectiveDays)
+        : Math.max(0, rawEntitlement || Number(tableEntitlement || 0) || effectiveDays)
+      const grossEntitlement = isAnnualMemo ? baseEntitlement + outstandingDays : baseEntitlement
       const entitlementLabel = travelDays > 0
-        ? `${grossEntitlement || effectiveDays} plus ${travelDays} travelling day${travelDays !== 1 ? "s" : ""}`
-        : String(grossEntitlement || effectiveDays)
+        ? `${grossEntitlement} plus ${travelDays} travelling day${travelDays !== 1 ? "s" : ""}`
+        : String(grossEntitlement)
 
-      // Granted total uses only the dedicated numeric adjustment fields.
-      // Example: 36 entitlement - 4 prior/given - 0 holidays + 2 travel = 34.
+      // Outstanding days increase entitlement. They are not added to the
+      // granted leave period unless the approved leave dates include them.
       const totalDeductions = publicHolidayDaysDeducted + priorLeaveDaysDeducted
-      const annualDaysRemaining = Math.max(0, (grossEntitlement || effectiveDays) - totalDeductions)
-      const totalGranted = Math.max(0, annualDaysRemaining + travelDays)
+      const annualDaysRemaining = Math.max(0, grossEntitlement - totalDeductions)
+      const totalGranted = Math.max(0, Math.min(effectiveDays || annualDaysRemaining, annualDaysRemaining) + travelDays)
 
       const originalRequested = Number(
         lr.original_requested_days != null ? lr.original_requested_days : (lr.requested_days || 0),
@@ -900,19 +908,12 @@ export async function GET(
       if (publicHolidayDaysDeducted > 0) remarksParts.push(`${publicHolidayDaysDeducted} public holiday day(s) deducted`)
       if (priorLeaveDaysDeducted > 0) remarksParts.push(`${priorLeaveDaysDeducted} day(s) given/already enjoyed deducted`)
       if (travelDays > 0) remarksParts.push(`${travelDays} travelling day(s) added`)
-      const remarksText = String(lr.adjustment_reason || "").trim()
-      const breakdown = (lr.adjustment_breakdown && typeof lr.adjustment_breakdown === "object") ? lr.adjustment_breakdown : {}
-      const outstandingDays = Number(lr.outstanding_leave_days_added ?? lr.outstanding_leave_days ?? breakdown.outstanding_days ?? 0)
-      const breakdownTravellingDays = Number(breakdown.travelling_days ?? 0)
+      const breakdownTravellingDays = Number((breakdown as any).travelling_days ?? 0)
       if (outstandingDays > 0) remarksParts.push(`${outstandingDays} outstanding day(s) added to entitlement`)
       if (breakdownTravellingDays > 0 && travelDays === 0) remarksParts.push(`${breakdownTravellingDays} travelling day(s) added`)
-      const calculationConfirmation = remarksParts.length > 0
-        ? remarksParts.join("; ")
-        : "No day adjustment applied"
-      const remarksSummary = [remarksText, calculationConfirmation]
-        .filter(Boolean)
-        .filter((value, index, values) => values.indexOf(value) === index)
-        .join("; ")
+      // Use one canonical calculation summary. Do not append the free-text
+      // adjustment reason because it already contains these same clauses.
+      const remarksSummary = Array.from(new Set(remarksParts)).join("; ") || "No day adjustment applied"
 
       autoTable(doc, {
         startY: y,
