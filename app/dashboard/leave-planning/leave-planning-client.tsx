@@ -3983,7 +3983,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                           )}
                         </div>
                         <Button size="sm" variant="outline"
-                          disabled={!((HR_OFFICE_PENDING_STATUSES as string[]).includes(String(req.status || "")))}
+                          disabled={!((HR_OFFICE_PENDING_STATUSES as string[]).includes(String(req.status || "")) || (isRegionalHr && String(req.status || "") === "pending_regional_hr_review"))}
                           onClick={async () => {
                             setOfficeExpanded(isExpanded ? null : req.id)
                             if (!isExpanded) {
@@ -4776,7 +4776,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                         hrExecDeferRecallData.deferments.map((item: any) => {
                           const staffName = item.user_profiles
                             ? `${item.user_profiles.first_name || ""} ${item.user_profiles.last_name || ""}`.trim()
-                            : "—"
+                            : "��"
                           const dept = item.user_profiles?.departments?.name || "—"
                           const decision = item.hr_office_decision || item.hr_decision
                           const isPending = !decision
