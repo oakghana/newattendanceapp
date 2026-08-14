@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
+import { normalizeAppRole } from "@/lib/role-capabilities"
 
 export async function GET() {
   try {
@@ -16,7 +17,8 @@ export async function GET() {
 
     const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
 
-    if (!profile || !["admin", "it-admin", "department_head"].includes(profile.role)) {
+    const role = normalizeAppRole(profile?.role)
+    if (!profile || !["admin", "it-admin", "department_head"].includes(role)) {
       return NextResponse.json({ success: false, error: "Insufficient permissions" }, { status: 403 })
     }
 

@@ -2882,8 +2882,8 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                     {/* Top summary chips */}
                     <div className="flex flex-wrap gap-3">
                       <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-center min-w-[110px]">
-                        <p className="text-xs text-green-700 font-medium">Working Days</p>
-                        <p className="text-2xl font-bold text-green-800">{calculationResult.daysCount}</p>
+  <p className="text-xs text-green-700 font-medium">{leaveType === "maternity" || leaveType === "paternity" ? "Calendar Days" : "Working Days"}</p>
+  <p className="text-2xl font-bold text-green-800">{leaveType === "maternity" || leaveType === "paternity" ? calculationResult.totalCalendarDays : calculationResult.daysCount}</p>
                       </div>
                       <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-center min-w-[140px]">
                         <p className="text-xs text-slate-600 font-medium">Period</p>
@@ -2918,8 +2918,8 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                           <p className="text-lg font-bold text-red-800">{calculationResult.holidayDays}</p>
                         </div>
                         <div className="bg-green-50 rounded px-2 py-2 border border-green-200">
-                          <p className="text-xs text-green-600">Working Days</p>
-                          <p className="text-lg font-bold text-green-800">{calculationResult.businessDays}</p>
+  <p className="text-xs text-green-600">{leaveType === "maternity" || leaveType === "paternity" ? "Calendar Days" : "Working Days"}</p>
+  <p className="text-lg font-bold text-green-800">{leaveType === "maternity" || leaveType === "paternity" ? calculationResult.totalCalendarDays : calculationResult.businessDays}</p>
                         </div>
                       </div>
 
@@ -4021,7 +4021,6 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                               }
                             }
                           }}
-                          disabled={!isRegionalHr && !((HR_OFFICE_PENDING_STATUSES as string[]).includes(String(req.status || "")))}
                           className="text-xs h-8 border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed">
                           {isExpanded ? "▲ Collapse" : "▼ Adjust & Forward"}
                         </Button>

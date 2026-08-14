@@ -93,13 +93,14 @@ export async function POST(request: NextRequest) {
       holidayRecords.map((h) => [h.holiday_date, h.holiday_name])
     );
 
-    // Calculate end date by counting forward exactly entitlementDays working days,
-    // skipping weekends and public holidays
-    const { endDate, actualLeaveDays } = calculateEndDateFromStartAndDays(
-      start,
-      entitlementDays,
-      holidays
-    );
+    const isCalendarDayLeave = ["maternity", "paternity"].includes(String(leaveType).toLowerCase())
+
+    // Maternity and paternity leave use inclusive calendar days. Other leave
+    // types continue to count working days and skip weekends/holidays.
+    const endDate = isCalendarDayLeave
+      ? addDays(start, entitlementDays - 1)
+      : calculateEndDateFromStartAndDays(start, entitlementDays, holidays).endDate
+    const actualLeaveDays = entitlementDays;
 
     // Get full breakdown: total calendar days, weekend count, holiday count
     const calculated = calculateLeaveDuration(start, endDate, holidays);
@@ -118,11 +119,14 @@ export async function POST(request: NextRequest) {
       name,
     }));
 
-    // Calculate return-to-work date — first working day after leave ends
+    // Calendar-day leave returns on the next calendar day. Other leave types
+    // return on the next working day after weekends and public holidays.
     const allHolidayDates = new Set(holidayRecords.map((h) => h.holiday_date));
     let returnDate = addDays(endDate, 1);
-    while (isWeekend(returnDate) || allHolidayDates.has(format(returnDate, 'yyyy-MM-dd'))) {
-      returnDate = addDays(returnDate, 1);
+    if (!isCalendarDayLeave) {
+      while (isWeekend(returnDate) || allHolidayDates.has(format(returnDate, 'yyyy-MM-dd'))) {
+        returnDate = addDays(returnDate, 1);
+      }
     }
 
     return NextResponse.json({
