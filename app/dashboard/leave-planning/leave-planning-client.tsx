@@ -606,7 +606,7 @@ function downloadLeaveRequestsCsv(rows: any[], fileName: string) {
       String(req?.adjusted_start_date || req?.preferred_start_date || ""),
       String(req?.adjusted_end_date || req?.preferred_end_date || ""),
       String(req?.adjusted_days || req?.requested_days || ""),
-      getStatusLabel(String(req?.status || "")),
+      getStatusLabel(String(req?.status || ""), Boolean(req?.memo_reference_locked)),
       req?.submitted_at ? fmtDate(req.submitted_at) : req?.created_at ? fmtDate(req.created_at) : "",
     ]
   })

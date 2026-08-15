@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
   const isRegionalLeave = entity === "leave" && (route === "regional" || regionalLeaveStatuses.has(String(row.status || "").toLowerCase()))
   const isCorrection = Boolean(row.memo_reference_locked || existingReference)
   if (isRegionalLeave) return NextResponse.json({ error: "Regional HR memo references are read-only for HR Records." }, { status: 403 })
-  if (!hrRecordsCanReference(row.status)) return NextResponse.json({ error: `Request is not finally approved and ready for HR Records reference assignment (${row.status || "unknown"}).` }, { status: 409 })
+  if (!hrRecordsCanReference(row.status, entity)) return NextResponse.json({ error: `Request is not finally approved and ready for HR Records reference assignment (${row.status || "unknown"}).` }, { status: 409 })
 
   const { data: duplicate, error: duplicateError } = await admin.from(table).select("id").neq("id", id).ilike(referenceColumn, reference).limit(1).maybeSingle()
   if (duplicateError) return NextResponse.json({ error: duplicateError.message }, { status: 500 })
@@ -48,28 +48,25 @@ export async function POST(request: NextRequest) {
 
   const now = new Date().toISOString()
   const currentStatus = String(row.status || "")
-  // The next status must land on a value the destination office's own queue and
-  // action endpoint actually recognize as pending work — never a made-up
-  // intermediate status. For leave, "pending_hr_records_reference" is the only
-  // status that genuinely needs to move once referenced: it is functionally
-  // equivalent to "hod_approved" (HOD already approved it; it was only held back
-  // for the official memo reference), so referencing it must promote it to
-  // "hod_approved" — the exact status HR_OFFICE_PENDING_STATUSES and the HR
-  // Leave Office action route (app/api/leave/planning/hr-office/route.ts) both
-  // gate on. Requests already sitting at a downstream/final status (hod_approved,
-  // hr_office_forwarded, hr_approved, approved, regional_manager_approved, etc.)
+  // HR Records is the FINAL stage of both pipelines it serves, so assigning the
+  // official reference must always land the request on a genuinely terminal
+  // status — never send it back into an earlier queue (e.g. HR Leave Office or
+  // Director HR). For leave, "hr_approved" (label: "Approved") is that terminal
+  // status; "pending_hr_records_reference" (the dedicated self-leave HR Records
+  // stage, reached only after HR Executive has already forwarded the request)
+  // is promoted to the same terminal "hr_approved" status once referenced. For
+  // loans, "referenced" is the terminal status HR Records lands the request on
+  // once the Director HR / Managing Director approval ("approved_director") has
+  // been officially referenced. Requests already sitting at a downstream/final
+  // status (hr_approved, approved, regional_manager_approved, referenced, etc.)
   // are left untouched — a reference correction must never rewind their stage.
   const nextStatus =
     entity === "loan"
       ? "referenced"
       : currentStatus === "pending_hr_records_reference"
-        ? "hod_approved"
+        ? "hr_approved"
         : currentStatus
-  const statusIsAdvancing = nextStatus !== currentStatus
-  // Only stamp "awaiting HR Leave Office" when the request is genuinely moving into
-  // that queue for the first time. Corrections on requests already approved,
-  // rejected, or already forwarded must not be re-stamped into an earlier stage.
-  const nextWorkflowStage = entity === "loan" ? "referenced" : statusIsAdvancing ? "pending_hr_leave_processing" : undefined
+  const nextWorkflowStage = entity === "loan" ? "referenced" : undefined
   const update = isCorrection
     ? { [referenceColumn]: reference, updated_at: now }
     : {
@@ -91,7 +88,7 @@ export async function POST(request: NextRequest) {
     from_status: row.status,
     to_status: nextStatus,
     actor_user_id: user.id,
-    metadata: { reference_key: referenceKey(reference), workflow_stage: nextWorkflowStage, destination_office: entity === "loan" ? "hr_loan_office" : "hr_leave_office" },
+    metadata: { reference_key: referenceKey(reference), workflow_stage: nextWorkflowStage, destination_office: "completed" },
     created_at: now,
   })
   return NextResponse.json({ success: true, request: updated })

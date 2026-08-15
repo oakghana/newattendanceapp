@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from "react"
 import { useToast } from "@/hooks/use-toast"
 
-const FINAL_APPROVED_STATUSES = new Set(["hr_approved", "pending_hr_records_reference", "approved_director", "approved"])
+// "referenced" is the loan pipeline's terminal status — HR Records assigning
+// the official reference to an already Director HR / MD approved loan is the
+// final stage of the loan request, exactly like "hr_approved" is for leave.
+const FINAL_APPROVED_STATUSES = new Set(["hr_approved", "pending_hr_records_reference", "approved_director", "approved", "referenced"])
 const REGIONAL_LEAVE_STATUSES = new Set(["pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review", "regional_hr_approved", "regional_manager_approved", "completed"])
 
 function isRegionalLeave(row: any) {
@@ -81,7 +84,13 @@ export default function HrRecordsPage() {
     ...data.loans.map((row) => ({ ...row, entity: "loan" as const, label: row.request_number || "Loan request", reference: row.reference_number })),
   ].filter((row) => {
     const editable = canEditReference(row)
-    return view === "pending" ? editable && !row.memo_reference_locked : view === "referenced" ? Boolean(row.memo_reference_locked) && !FINAL_APPROVED_STATUSES.has(String(row.status || "").toLowerCase()) : FINAL_APPROVED_STATUSES.has(String(row.status || "").toLowerCase()) || (isRegionalLeave(row) && Boolean(row.memo_reference || row.reference_number))
+    const status = String(row.status || "").toLowerCase()
+    const locked = Boolean(row.memo_reference_locked)
+    if (view === "pending") return editable && !locked
+    if (view === "referenced") return locked && !FINAL_APPROVED_STATUSES.has(status)
+    // "Approved memos" is the truly final stage: the reference must actually be
+    // recorded (locked), not merely eligible for HR Records to act on.
+    return (locked && FINAL_APPROVED_STATUSES.has(status)) || (isRegionalLeave(row) && Boolean(row.memo_reference || row.reference_number))
   }), [data, view])
 
   const overdueRows = useMemo(() => [...data.leave, ...data.loans].filter((row) => {

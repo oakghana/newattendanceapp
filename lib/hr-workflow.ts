@@ -393,16 +393,23 @@ export async function resolveRegionalManager(
 }
 
 /**
- * HR Records is the last stop on the non-regional pipeline (HOD Review -> HR
- * Leave Office memo step -> HR Executive approval -> HR Records reference),
- * and the memo download stays blocked until it acts. A fresh (non-correction)
- * reference is therefore only accepted once HR Executive has approved the
- * request ("hr_approved"). Corrections to an already-locked reference bypass
- * this check entirely (see save-reference/route.ts), so this only gates the
- * first-time assignment.
+ * HR Records is the last stop on both pipelines it serves:
+ *  - Leave: HOD Review -> HR Leave Office memo step -> HR Executive approval
+ *    -> HR Records reference. A fresh (non-correction) reference is only
+ *    accepted once HR Executive has approved the request ("hr_approved"), or
+ *    the request has landed directly on the dedicated HR Records stage
+ *    ("pending_hr_records_reference").
+ *  - Loan: Loan Office -> HR Executive signs -> Director HR / Managing
+ *    Director approves ("approved_director") -> HR Records reference. That
+ *    Director/MD approval is the loan's final decision stage, so it is the
+ *    only status HR Records may reference against for loans.
+ * Corrections to an already-locked reference bypass this check entirely (see
+ * save-reference/route.ts), so this only gates the first-time assignment.
  */
-export function hrRecordsCanReference(status: string | null | undefined) {
-  return ["hr_approved", "pending_hr_records_reference"].includes(String(status || ""))
+export function hrRecordsCanReference(status: string | null | undefined, entity: "leave" | "loan" = "leave") {
+  const value = String(status || "")
+  if (entity === "loan") return ["approved_director", "pending_hr_records_reference"].includes(value)
+  return ["hr_approved", "pending_hr_records_reference"].includes(value)
 }
 
 export function lockedReferenceMutationError(locked: boolean) {
