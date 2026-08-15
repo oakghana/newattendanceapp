@@ -24,7 +24,11 @@ export async function POST(request: NextRequest) {
 
   const table = entity === "loan" ? "loan_requests" : "leave_plan_requests"
   const referenceColumn = entity === "loan" ? "reference_number" : "memo_reference"
-  const { data: row, error: fetchError } = await admin.from(table).select(`id, status, workflow_route, workflow_stage, memo_reference_locked, ${referenceColumn}`).eq("id", id).maybeSingle()
+  const selectColumns = entity === "loan"
+    ? `id, status, workflow_stage, memo_reference_locked, ${referenceColumn}`
+    : `id, status, workflow_route, workflow_stage, memo_reference_locked, ${referenceColumn}`
+  const { data: rowData, error: fetchError } = await admin.from(table).select(selectColumns).eq("id", id).maybeSingle()
+  const row = rowData as any
   if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 })
   if (!row) return NextResponse.json({ error: "Request not found." }, { status: 404 })
   // Regional HR may already have supplied a reference before HR Records receives
