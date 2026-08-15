@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { REGIONAL_LEAVE_STAGES, SELF_LEAVE_STAGES, resolveSelfLeaveRoute, routeLeave } from "../lib/hr-workflow"
+import { REGIONAL_LEAVE_STAGES, SELF_LEAVE_STAGES, getLeaveWorkflowView, resolveSelfLeaveRoute, routeLeave } from "../lib/hr-workflow"
 
 describe("regional self-leave workflow", () => {
   it("routes every Regional Manager leave type directly to HR Leave Office", () => {
@@ -24,6 +24,15 @@ describe("regional self-leave workflow", () => {
   it("does not put Regional HR into the self-leave route", () => {
     const route = resolveSelfLeaveRoute({ role: "regional_manager", locationName: "Kumasi Regional Office" })
     expect(route.reason).toContain("bypasses endorsement and Regional HR")
+  })
+})
+
+describe("workflow status labels", () => {
+  it("shows the correct self-leave stages", () => {
+    expect(getLeaveWorkflowView({ workflowRoute: "self_leave", status: "pending_hr_leave_processing", workflowStage: "hr_leave_office" }).statusLabel)
+      .toBe("Awaiting HR Leave Office Adjustment")
+    expect(getLeaveWorkflowView({ workflowRoute: "self_leave", status: "hr_office_forwarded", workflowStage: "hr_executive" }).statusLabel)
+      .toBe("Pending HR Executive Signing")
   })
 })
 

@@ -4,7 +4,7 @@ import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays 
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { getNextQccReference } from "@/lib/reference-number"
 import { calculateAnnualLeaveBreakdown } from "@/lib/annual-leave-calculator"
-import { isRegionalHrLeaveOfficeRole, resolveRegionalHrOffice, resolveStaffAssignments, routeLeave } from "@/lib/hr-workflow"
+import { isRegionalHrLeaveOfficeRole, resolveRegionalHrOffice, resolveSelfLeaveRoute, resolveStaffAssignments, routeLeave } from "@/lib/hr-workflow"
 
 const NON_ANNUAL_REQUIRES_APPROVED_ANNUAL = new Set([
   "sick",
@@ -268,14 +268,15 @@ export async function POST(request: NextRequest) {
         regionalOffice = { user_id: fallbackRegionalHr.id, region_id: fallbackRegionalHr.region_id || regionId || null, is_override: false }
       }
     }
-    const profileText = [roleProfile?.role, roleProfile?.staff_category, roleProfile?.position, roleProfile?.rank].filter(Boolean).join(" ").toLowerCase()
-    const isManagerGrade = /(^|\s|_)(manager|management|director|executive|head)(\s|_|$)/i.test(profileText)
-    const leaveRoute = routeLeave({
-      leaveType: leaveTypeKey,
-      locationName,
-      hasRegionalOffice: Boolean(regionalOffice),
-      isManagerGrade,
-    })
+    const selfLeaveRoute = resolveSelfLeaveRoute({ role: roleProfile?.role, locationName })
+    const leaveRoute = selfLeaveRoute.isSelfLeave
+      ? { route: "self_leave" as const, firstStage: selfLeaveRoute.firstStage }
+      : routeLeave({
+          leaveType: leaveTypeKey,
+          locationName,
+          hasRegionalOffice: Boolean(regionalOffice),
+        })
+    const isSelfLeaveWorkflow = leaveRoute.route === "self_leave"
     const isRegionalWorkflow = leaveRoute.route === "regional"
     if (!shouldAutoApprove && isRegionalWorkflow && !regionalOffice?.user_id) {
       return NextResponse.json(
@@ -285,9 +286,11 @@ export async function POST(request: NextRequest) {
     }
     const initialStatus = shouldAutoApprove
       ? "approved"
-      : isRegionalWorkflow
-        ? leaveRoute.firstStage
-        : "pending"
+      : isSelfLeaveWorkflow
+        ? "pending_hr_leave_processing"
+        : isRegionalWorkflow
+          ? leaveRoute.firstStage
+          : "pending_hod_review"
 
     // Create leave request (status depends on role and route)
     const payload: any = {
@@ -305,8 +308,8 @@ export async function POST(request: NextRequest) {
       requested_days: requestedDays,
       maternity_delivery_type: leaveTypeKey === "maternity" ? maternity_delivery_type : null,
       delivery_date: leaveTypeKey === "maternity" ? delivery_date : null,
-      workflow_route: isRegionalWorkflow ? "regional" : "legacy",
-      workflow_stage: initialStatus,
+      workflow_route: isSelfLeaveWorkflow ? "self_leave" : isRegionalWorkflow ? "regional" : "legacy",
+      workflow_stage: isSelfLeaveWorkflow ? "hr_leave_office" : isRegionalWorkflow ? "regional_hr_review" : "hod_review",
       assigned_location_id: assignment.assignedLocationId,
       region_id: regionId,
       department_id: assignment.departmentId,
@@ -375,7 +378,7 @@ export async function POST(request: NextRequest) {
     // Regional requests start with Regional HR Office adjustment and must not notify HOD.
     const isHrLeaveOffice = normalizedRole === "hr_leave_office" || isRegionalHrLeaveOfficeRole(normalizedRole)
 
-    if (!shouldAutoApprove && !isHrLeaveOffice && !isRegionalWorkflow) {
+    if (!shouldAutoApprove && !isHrLeaveOffice && !isRegionalWorkflow && !isSelfLeaveWorkflow) {
       try {
         const hodIds: string[] = []
 

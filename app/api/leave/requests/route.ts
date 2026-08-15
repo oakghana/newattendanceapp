@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
+import { resolveSelfLeaveRoute } from "@/lib/hr-workflow"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -31,6 +32,8 @@ export async function GET(request: NextRequest) {
       travelling_days_added,
       leave_year_period,
       status,
+      workflow_route,
+      workflow_stage,
       hod_decision,
       staff_category,
       created_at,
@@ -63,11 +66,36 @@ export async function GET(request: NextRequest) {
     if (userIds.length > 0) {
       const { data: users } = await supabase
         .from("unified_user_management")
-        .select("user_id, full_name, department_name, position, role, employee_id")
+        .select("user_id, full_name, department_name, position, role, employee_id, assigned_location_id")
         .in("user_id", userIds)
       
       if (users) {
         users.forEach((u: any) => { userMap[u.user_id] = u })
+      }
+    }
+
+    const profileMap: Record<string, any> = {}
+    const locationIds: string[] = []
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase.from("user_profiles").select("id, role, assigned_location_id").in("id", userIds)
+      for (const profile of profiles || []) {
+        profileMap[profile.id] = profile
+        if (profile.assigned_location_id) locationIds.push(profile.assigned_location_id)
+      }
+    }
+    const locationMap: Record<string, string> = {}
+    if (locationIds.length > 0) {
+      const { data: locations } = await supabase.from("geofence_locations").select("id, name").in("id", locationIds)
+      for (const location of locations || []) locationMap[location.id] = location.name
+    }
+    for (const req of planRequests || []) {
+      const profile = profileMap[req.user_id]
+      const resolution = resolveSelfLeaveRoute({ role: profile?.role, locationName: locationMap[profile?.assigned_location_id] })
+      if (resolution.isSelfLeave && (req.workflow_route !== "self_leave" || req.status === "pending_regional_hr_review" || req.status === "pending" || req.workflow_stage === "regional_hr_review" || req.workflow_stage === "hod_review")) {
+        await supabase.from("leave_plan_requests").update({ status: "pending_hr_leave_processing", workflow_route: "self_leave", workflow_stage: "hr_leave_office" }).eq("id", req.id)
+        req.status = "pending_hr_leave_processing"
+        req.workflow_route = "self_leave"
+        req.workflow_stage = "hr_leave_office"
       }
     }
 

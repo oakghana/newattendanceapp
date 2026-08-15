@@ -1570,7 +1570,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const profile = await getOrCreateProfile(admin, user, "id, role, department_id")
+    const profile = await getOrCreateProfile(admin, user, "id, role, department_id, assigned_location_id, region_id")
 
     const role = normalizeRoleValue(profile.role)
     const canSelfApply =

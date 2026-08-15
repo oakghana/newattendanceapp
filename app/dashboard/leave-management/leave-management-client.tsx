@@ -140,6 +140,8 @@ export function LeaveManagementClient({
       "manager_confirmed",
       "hod_approved",
   "hr_office_forwarded",
+  "pending_hr_leave_processing",
+  "pending_hr_records_reference",
   "pending_regional_hr_office_review",
   "pending_regional_hr_review",
       "regional_hr_office_review",
