@@ -13,8 +13,49 @@ export const REGIONAL_LEAVE_STAGES = {
   completed: "completed",
 } as const
 
+export const SELF_LEAVE_STAGES = {
+  hrLeaveOffice: "pending_hr_leave_processing",
+  hrExecutive: "hr_office_forwarded",
+  hrRecords: "pending_hr_records_reference",
+} as const
+
 export function normalizeWorkflowRole(role: string | null | undefined) {
   return String(role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
+}
+
+export function isRegionalManagerRole(role: string | null | undefined) {
+  return normalizeWorkflowRole(role) === "regional_manager"
+}
+
+export function isDepartmentHeadRole(role: string | null | undefined) {
+  return ["department_head", "hod"].includes(normalizeWorkflowRole(role))
+}
+
+export function isSelfLeaveRole(role: string | null | undefined, locationName?: string | null) {
+  const normalizedRole = normalizeWorkflowRole(role)
+  if (normalizedRole === "regional_manager") return true
+  return normalizedRole === "department_head" || normalizedRole === "hod" ? isExcludedLocation(locationName) : false
+}
+
+export type SelfLeaveResolution = {
+  isSelfLeave: boolean
+  route: "self_leave" | null
+  firstStage: string | null
+  reason?: string
+}
+
+export function resolveSelfLeaveRoute(input: { role?: string | null; locationName?: string | null }): SelfLeaveResolution {
+  if (isRegionalManagerRole(input.role)) {
+    return { isSelfLeave: true, route: "self_leave", firstStage: SELF_LEAVE_STAGES.hrLeaveOffice, reason: "Regional Manager self-leave bypasses endorsement and Regional HR." }
+  }
+  if (isDepartmentHeadRole(input.role) && isExcludedLocation(input.locationName)) {
+    return { isSelfLeave: true, route: "self_leave", firstStage: SELF_LEAVE_STAGES.hrLeaveOffice, reason: "HOD self-leave bypasses endorsement." }
+  }
+  return { isSelfLeave: false, route: null, firstStage: null }
+}
+
+export function isSelfLeaveWorkflowRoute(workflowRoute: string | null | undefined) {
+  return String(workflowRoute || "").toLowerCase() === "self_leave"
 }
 
 export function isHrRecordsRole(role: string | null | undefined) {
@@ -41,7 +82,7 @@ export function referenceKey(value: unknown) {
   return normalizeReference(value).toLowerCase()
 }
 
-export type LeaveRoute = "regional" | "legacy"
+export type LeaveRoute = "regional" | "legacy" | "self_leave"
 
 export type LeaveWorkflowStep = {
   key: string
@@ -68,6 +109,13 @@ const REGIONAL_WORKFLOW_STEPS: LeaveWorkflowStep[] = [
   { key: "regional_manager_approval", label: "Regional Manager Approval" },
 ]
 
+const SELF_LEAVE_WORKFLOW_STEPS: LeaveWorkflowStep[] = [
+  { key: "submitted", label: "Submitted" },
+  { key: "hr_leave_office", label: "HR Leave Office" },
+  { key: "hr_executive", label: "HR Executive" },
+  { key: "hr_records", label: "HR Records Memo Reference" },
+]
+
 export function getLeaveWorkflowView(input: {
   route?: LeaveRoute | string | null
   workflowRoute?: LeaveRoute | string | null
@@ -76,7 +124,8 @@ export function getLeaveWorkflowView(input: {
   leaveType?: string | null
   locationName?: string | null
 }): LeaveWorkflowView {
-  const route = String(input.workflowRoute || input.route || "").toLowerCase() === "regional" ? "regional" : "legacy"
+  const rawRoute = String(input.workflowRoute || input.route || "").toLowerCase()
+  const route: LeaveRoute = rawRoute === "regional" ? "regional" : rawRoute === "self_leave" ? "self_leave" : "legacy"
   const status = String(input.status || input.workflowStage || "pending_hod_review")
   const currentStage = input.workflowStage || status
   const statusLabel: Record<string, string> = {
@@ -86,7 +135,8 @@ export function getLeaveWorkflowView(input: {
     pending_regional_hr_review: "Pending Regional HR Office Review",
     pending_regional_manager_approval: "Pending Regional Manager Approval",
     pending_hr_leave_processing: "Awaiting HR Leave Office Adjustment",
-    hr_office_forwarded: "Pending HR Approval",
+    hr_office_forwarded: "Pending HR Executive Signing",
+    pending_hr_records_reference: "Awaiting HR Records Memo Reference",
     hr_approved: "Approved",
     approved: "Approved",
     rejected: "Rejected",
@@ -96,7 +146,7 @@ export function getLeaveWorkflowView(input: {
     route,
     currentStage,
     statusLabel: statusLabel[status] || status.replace(/_/g, " "),
-    steps: route === "regional" ? REGIONAL_WORKFLOW_STEPS : LEGACY_WORKFLOW_STEPS,
+    steps: route === "regional" ? REGIONAL_WORKFLOW_STEPS : route === "self_leave" ? SELF_LEAVE_WORKFLOW_STEPS : LEGACY_WORKFLOW_STEPS,
   }
 }
 
@@ -133,7 +183,7 @@ export function isRegionalLeaveException(leaveType: string | null | undefined) {
  * Regional Manager pipeline. Leave type and manager grade no longer affect
  * routing.
  */
-export function routeLeave(input: { locationName?: string | null; hasRegionalOffice: boolean }): { route: LeaveRoute; firstStage: string | null; reason?: string } {
+export function routeLeave(input: { locationName?: string | null; hasRegionalOffice: boolean; leaveType?: string | null }): { route: LeaveRoute; firstStage: string | null; reason?: string } {
   if (isExcludedLocation(input.locationName)) {
     return { route: "legacy", firstStage: null, reason: "This location uses the non-regional/head-office workflow." }
   }
@@ -157,6 +207,14 @@ export function isRegionalWorkflowRoute(workflowRoute: string | null | undefined
 /** HOD Review, HR Leave Office, and HR Executive act only on non-regional requests. */
 export function canNonRegionalPipelineAct(workflowRoute: string | null | undefined) {
   return !isRegionalWorkflowRoute(workflowRoute)
+}
+
+export function canSelfLeavePipelineAct(workflowRoute: string | null | undefined) {
+  return isSelfLeaveWorkflowRoute(workflowRoute)
+}
+
+export function canManagerReviewAct(workflowRoute: string | null | undefined) {
+  return !isSelfLeaveWorkflowRoute(workflowRoute)
 }
 
 /** Regional HR Office forwarding and Regional Manager approval act only on regional requests. */

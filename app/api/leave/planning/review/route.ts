@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { notifyLeaveHodApproved, notifyLeaveHodDecision } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { calculateRequestedDays, summarizeManagerReviewStatus, type LeavePlanReviewDecision } from "@/lib/leave-planning"
-import { isAnnualLeave, canNonRegionalPipelineAct, canRegionalPipelineAct, resolveStaffAssignments } from "@/lib/hr-workflow"
+import { isAnnualLeave, canNonRegionalPipelineAct, canRegionalPipelineAct, isSelfLeaveWorkflowRoute, resolveStaffAssignments } from "@/lib/hr-workflow"
 
 function isSchemaIssue(error: any) {
   const code = error?.code || ""
@@ -156,6 +156,9 @@ export async function POST(request: NextRequest) {
       if (targetRequestError || !targetRequest) {
         return NextResponse.json({ error: "Leave request not found." }, { status: 404 })
       }
+      if (isSelfLeaveWorkflowRoute((targetRequest as any).workflow_route)) {
+        return NextResponse.json({ error: "Self-leave requests do not require HOD, Regional HR, or Regional Manager endorsement." }, { status: 403 })
+      }
       if (isRegionalForward && (targetRequest as any).regional_hr_office_user_id && (targetRequest as any).regional_hr_office_user_id !== user.id) {
         return NextResponse.json({ error: "This request is assigned to another Regional HR Office." }, { status: 403 })
       }
@@ -209,6 +212,10 @@ export async function POST(request: NextRequest) {
 
     if (leavePlanError || !leavePlan) {
       return NextResponse.json({ error: "Leave plan request not found." }, { status: 404 })
+    }
+
+    if (isSelfLeaveWorkflowRoute((leavePlan as any).workflow_route)) {
+      return NextResponse.json({ error: "Self-leave requests do not require HOD, Regional HR, or Regional Manager endorsement." }, { status: 403 })
     }
 
     const isRegionalWorkflow = String((leavePlan as any).workflow_route || "").toLowerCase() === "regional"

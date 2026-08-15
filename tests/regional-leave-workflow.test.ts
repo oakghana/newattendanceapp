@@ -1,5 +1,31 @@
 import { describe, expect, it } from "vitest"
-import { REGIONAL_LEAVE_STAGES, routeLeave } from "../lib/hr-workflow"
+import { REGIONAL_LEAVE_STAGES, SELF_LEAVE_STAGES, resolveSelfLeaveRoute, routeLeave } from "../lib/hr-workflow"
+
+describe("regional self-leave workflow", () => {
+  it("routes every Regional Manager leave type directly to HR Leave Office", () => {
+    for (const leaveType of ["annual", "casual", "sick", "study"]) {
+      const route = resolveSelfLeaveRoute({ role: "regional_manager", locationName: "Kumasi Regional Office" })
+      expect(route.isSelfLeave).toBe(true)
+      expect(route.firstStage).toBe(SELF_LEAVE_STAGES.hrLeaveOffice)
+      expect(leaveType).toBeTruthy()
+    }
+  })
+
+  it("routes non-regional HOD self-leave directly to HR Leave Office", () => {
+    expect(resolveSelfLeaveRoute({ role: "department_head", locationName: "QCC Head Office" }).firstStage)
+      .toBe(SELF_LEAVE_STAGES.hrLeaveOffice)
+    expect(resolveSelfLeaveRoute({ role: "department_head", locationName: "Kumasi Regional Office" })).toEqual({
+      isSelfLeave: false,
+      route: null,
+      firstStage: null,
+    })
+  })
+
+  it("does not put Regional HR into the self-leave route", () => {
+    const route = resolveSelfLeaveRoute({ role: "regional_manager", locationName: "Kumasi Regional Office" })
+    expect(route.reason).toContain("bypasses endorsement and Regional HR")
+  })
+})
 
 describe("regional non-annual leave workflow", () => {
   it("routes a regional staff request to Regional HR before Regional Manager", () => {
