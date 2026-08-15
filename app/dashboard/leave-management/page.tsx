@@ -1,7 +1,7 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { LeaveManagementModuleClient } from "./leave-management-module-client"
 import { LeaveManagementPageWrapper } from "@/components/leave/leave-management-page-wrapper"
-import { isExcludedLocation } from "@/lib/hr-workflow"
+import { isExcludedLocation, resolveSelfLeaveRoute } from "@/lib/hr-workflow"
 import { Suspense } from "react"
 
 
@@ -73,6 +73,8 @@ export default async function LeaveManagementPage() {
 
     const results = await Promise.all(queries)
     const [requestsRes, linkageRes, locationRes] = results
+    userLocationName = (locationRes?.data as any)?.name || null
+    const selfLeaveResolution = resolveSelfLeaveRoute({ role: profile.role, locationName: userLocationName })
 
     if (!isRegionalHr && !isRegionalManager && !isItAdmin) {
       // Legacy/non-regional workflow: HODs receive only requests explicitly
@@ -204,6 +206,20 @@ export default async function LeaveManagementPage() {
       }
     }
 
+    if (selfLeaveResolution.isSelfLeave) {
+      const misplacedRequests = (requestsRes.data || []).filter((request: any) => request.workflow_route !== "self_leave" || request.status === "pending_regional_hr_review" || request.status === "pending_regional_hr_office_review" || request.status === "regional_hr_office_review" || request.status === "pending_hod_review")
+      if (misplacedRequests.length > 0) {
+        await Promise.all(misplacedRequests.map((request: any) => admin.from("leave_plan_requests").update({ status: "pending_hr_leave_processing", workflow_route: "self_leave", workflow_stage: "hr_leave_office" }).eq("id", request.id)))
+        for (const request of requestsRes.data || []) {
+          if (misplacedRequests.some((item: any) => item.id === request.id)) {
+            request.status = "pending_hr_leave_processing"
+            request.workflow_route = "self_leave"
+            request.workflow_stage = "hr_leave_office"
+          }
+        }
+      }
+    }
+
     staffRequests = (requestsRes.data || []).map((request: any) => ({
       id: String(request.id),
       user_id: String(request.user_id),
@@ -211,8 +227,8 @@ export default async function LeaveManagementPage() {
       end_date: request.preferred_end_date,
       reason: request.reason || "",
       leave_type: request.leave_type_key || "annual",
-      status: (request.workflow_route === "regional" && isExcludedLocation(userLocationName)) ? "pending_hod_review" : request.status,
-      workflow_route: isExcludedLocation(userLocationName) ? "legacy" : request.workflow_route,
+      status: request.status,
+      workflow_route: request.workflow_route,
       workflow_stage: request.workflow_stage,
       created_at: request.created_at,
       adjusted_start_date: request.adjusted_start_date,
@@ -222,7 +238,6 @@ export default async function LeaveManagementPage() {
     }))
 
     hasHodLinkage = Boolean((linkageRes?.data as any)?.id)
-    userLocationName = (locationRes?.data as any)?.name || null
   } catch (err) {
     console.error("[v0] Error fetching essential data:", err)
     hasHodLinkage = false
