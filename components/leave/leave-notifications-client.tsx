@@ -532,14 +532,14 @@ export function LeaveNotificationsClient() {
       <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reject Leave Request</DialogTitle>
+            <DialogTitle>Deny Leave Request</DialogTitle>
             <DialogDescription>
-              Please provide a reason for rejecting this leave request.
+              Please provide a reason for denying this leave request.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <Textarea
-              placeholder="Reason for rejection..."
+              placeholder="Reason for denial..."
               value={rejectionReason}
               onChange={(e) => setRejectionReason(e.target.value)}
             />
@@ -554,7 +554,7 @@ export function LeaveNotificationsClient() {
                 {processingId === selectedNotifId ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : null}
-                Reject Request
+                Deny Request
               </Button>
             </div>
           </div>

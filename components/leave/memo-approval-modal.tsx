@@ -252,7 +252,7 @@ export function MemoApprovalModal({
                 }`}
               >
                 <XCircle className="h-6 w-6" />
-                <span>Reject</span>
+                <span>Deny</span>
               </Button>
             </div>
           </div>
