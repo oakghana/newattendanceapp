@@ -1203,26 +1203,8 @@ export async function POST(request: NextRequest) {
   "id, role, department_id, region_id, assigned_location_id, staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id, position, geofence_locations!user_profiles_assigned_location_id_fkey(name)"
   )
 
-    const role = String((profile as any).role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-    const canSelfApply =
-      isStaffRole(role) ||
-      [
-        "admin",
-        "regional_manager",
-        "department_head",
-        "hr_officer",
-        "hr_director",
-        "director_hr",
-        "manager_hr",
-        "hr_leave_office",
-        "hr_office",
-        "loan_office",
-        "accounts",
-      ].includes(role)
-    if (!canSelfApply) {
-      return NextResponse.json({ error: "Only staff, managers, and admins can submit leave plans." }, { status: 403 })
-    }
-
+    // Every authenticated profile may submit leave. The profile role and
+    // assigned location still determine the review route after submission.
     const body = await request.json()
     const {
       leave_year_period,
@@ -1572,28 +1554,9 @@ export async function PUT(request: NextRequest) {
 
     const profile = await getOrCreateProfile(admin, user, "id, role, department_id, assigned_location_id, region_id")
 
-    const role = normalizeRoleValue(profile.role)
-    const canSelfApply =
-      isStaffRole(role) ||
-      [
-        "admin",
-        "regional_manager",
-        "department_head",
-        "hr_officer",
-        "hr_director",
-        "director_hr",
-        "manager_hr",
-        "hr_leave_office",
-        "hr_office",
-        "loan_office",
-        "accounts",
-      ].includes(role)
-
-    if (!canSelfApply) {
-      return NextResponse.json({ error: "Only staff, managers, and admins can update leave plans." }, { status: 403 })
-    }
-
-    const body = await request.json()
+  // Any authenticated profile may update its own eligible leave plan. Reviewer
+  // and administrative actions remain protected by their dedicated routes.
+  const body = await request.json()
     const {
       id,
       leave_year_period,

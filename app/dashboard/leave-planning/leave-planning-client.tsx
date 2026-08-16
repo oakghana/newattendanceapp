@@ -1058,8 +1058,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
   const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin
   const canManageLeaveTypePolicy = isHrOffice || isAdmin
   const isLoanOffice = normalizedRole === "loan_office" || normalizedRole === "hr_loan_office" || normalizedRole === "accounts_loan_office"
-  const canSelfApply = isStaff || isHod || isAdmin || isLoanOffice ||
-    ["hr_officer", "hr_director", "director_hr", "manager_hr", "hr_leave_office", "hr_office", "hr_records", "hr_records_officer", "hr_records_manager", "accounts"].includes(normalizedRole)
+  // Every authenticated role may submit a leave request. Role and location
+  // continue to control the downstream review route and reviewer permissions.
+  const canSelfApply = true
 
   // ── Data ────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false)
