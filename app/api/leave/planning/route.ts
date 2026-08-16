@@ -1013,6 +1013,73 @@ export async function GET(request: NextRequest) {
         }
 
         nonArchivedReviews = (data || []).filter((row: any) => !row?.leave_plan_request?.is_archived)
+
+        // Regional HR may have forwarded older requests before the manager
+        // review assignment row was created. Recover those requests directly
+        // from the regional status so they do not disappear from the manager's
+        // queue. New forwards still create the normal review row.
+        if (role === "regional_manager") {
+          let regionalPendingQuery = admin
+            .from("leave_plan_requests")
+            .select(`
+              id,
+              leave_year_period,
+              preferred_start_date,
+              preferred_end_date,
+              leave_type_key,
+              entitlement_days,
+              requested_days,
+              reason,
+              status,
+              workflow_route,
+              is_archived,
+              submitted_at,
+              manager_recommendation,
+              memo_reference,
+              user:user_profiles!leave_plan_requests_user_id_fkey (
+                id,
+                first_name,
+                last_name,
+                employee_id,
+                departments(name, code),
+                assigned_location_id,
+                region_id,
+                geofence_locations!user_profiles_assigned_location_id_fkey(name)
+              )
+            `)
+            .eq("workflow_route", "regional")
+            .eq("status", "pending_regional_manager_approval")
+            .eq("is_archived", false)
+
+          if (profile.assigned_location_id) {
+            const { data: scopedStaff } = await admin
+              .from("user_profiles")
+              .select("id")
+              .eq("assigned_location_id", profile.assigned_location_id)
+            regionalPendingQuery = regionalPendingQuery.in("user_id", (scopedStaff || []).map((row: any) => row.id))
+          } else if (profile.region_id) {
+            const { data: scopedStaff } = await admin
+              .from("user_profiles")
+              .select("id")
+              .eq("region_id", profile.region_id)
+            regionalPendingQuery = regionalPendingQuery.in("user_id", (scopedStaff || []).map((row: any) => row.id))
+          }
+
+          const { data: regionalPending, error: regionalPendingError } = await regionalPendingQuery
+          if (regionalPendingError) throw regionalPendingError
+          const existingIds = new Set(nonArchivedReviews.map((row: any) => String(row?.leave_plan_request?.id || "")))
+          const recoveredReviews = (regionalPending || [])
+            .filter((request: any) => !existingIds.has(String(request.id)))
+            .map((request: any) => ({
+              id: `recovered-regional-${request.id}`,
+              decision: "pending",
+              recommendation: request.manager_recommendation || null,
+              reviewed_at: null,
+              reviewer_id: user.id,
+              leave_plan_request: request,
+            }))
+          nonArchivedReviews = [...recoveredReviews, ...nonArchivedReviews]
+        }
       }
 
       const { data: staggerReviews, error: staggerError } = await admin
