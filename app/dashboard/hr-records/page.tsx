@@ -85,6 +85,13 @@ export default function HrRecordsPage() {
   ].filter((row) => {
     const editable = canEditReference(row)
     const status = String(row.status || "").toLowerCase()
+    // Intentionally NOT the same broad check used for the row's display label
+    // below: loan requests get an auto-generated `reference_number` (a
+    // provisional QCC reference) at creation time, long before they ever reach
+    // HR Records, so treating any non-empty reference/reference_number as
+    // "locked" here would hide every loan from "Pending references" from the
+    // moment it's created. The only thing that actually means HR Records has
+    // finalized and forwarded a request is `memo_reference_locked`.
     const locked = Boolean(row.memo_reference_locked)
     if (view === "pending") return editable && !locked
     if (view === "referenced") return locked && !FINAL_APPROVED_STATUSES.has(status)
