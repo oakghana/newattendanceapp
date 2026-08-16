@@ -38,12 +38,14 @@ function isNonRegionalStaff(staff: any): boolean {
 
 function validateStaffHodRule(staff: any, hod: any): { ok: boolean; reason?: string } {
   const staffLoc = String(staff?.assigned_location_id || "")
-  const hodLoc = String(hod?.assigned_location_id || "")
   const hodRole = normalizeRole(String(hod?.role || ""))
 
   if (isNonRegionalStaff(staff)) {
-    if (hodRole !== "department_head" || !staffLoc || staffLoc !== hodLoc) {
-      return { ok: false, reason: "Non-regional staff can only be linked to Department Heads in the same location." }
+    // Non-regional staff may be linked to ANY Department Head based at a
+    // non-regional location (Head Office, Awutu Stores, Nsawam Archive
+    // Center, etc.), not only one at the exact same assigned location.
+    if (hodRole !== "department_head" || !isNonRegionalLocation(hod?.geofence_locations?.name)) {
+      return { ok: false, reason: "Non-regional staff can only be linked to Department Heads at a non-regional location." }
     }
     return { ok: true }
   }
@@ -451,7 +453,7 @@ export async function POST(request: NextRequest) {
 
       const { data: hodProfile, error: hodError } = await admin
         .from("user_profiles")
-        .select("id, role, department_id, assigned_location_id, position")
+        .select("id, role, department_id, assigned_location_id, position, geofence_locations!assigned_location_id(name)")
         .eq("id", hodUserId)
         .single()
 
@@ -508,7 +510,7 @@ export async function POST(request: NextRequest) {
 
       const { data: hodRows, error: hodRowsError } = await admin
         .from("user_profiles")
-        .select("id, role, department_id, assigned_location_id, position")
+        .select("id, role, department_id, assigned_location_id, position, geofence_locations!assigned_location_id(name)")
         .in("id", hodUserIds)
 
       if (hodRowsError) throw hodRowsError

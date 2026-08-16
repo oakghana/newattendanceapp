@@ -119,22 +119,42 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       role = "hr_leave_office"
     }
 
-    if (!first_name || !last_name || !employee_id) {
+    // Select the full existing row so partial updates (e.g. toggling is_active
+    // alone) can fall back to the current values instead of wiping them out.
+    const { data: targetProfile } = await adminSupabase.from("user_profiles").select("*").eq("id", id).single()
+
+    if (!targetProfile) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    // This route accepts partial updates (e.g. { is_active } only from the
+    // Activate/Deactivate button). Any field omitted from the request body
+    // falls back to the staff member's existing value rather than being
+    // wiped out.
+    const mergedFirstName = first_name !== undefined ? first_name : targetProfile.first_name
+    const mergedLastName = last_name !== undefined ? last_name : targetProfile.last_name
+    const mergedEmployeeId = employee_id !== undefined ? employee_id : targetProfile.employee_id
+    const mergedRole = role !== undefined ? role : targetProfile.role
+    const mergedIsActive = is_active !== undefined ? is_active : targetProfile.is_active
+    const mergedDepartmentId = department_id !== undefined ? department_id : targetProfile.department_id
+    const mergedPosition = position !== undefined ? position : targetProfile.position
+    const mergedStaffCategory = staff_category !== undefined ? staff_category : targetProfile.staff_category
+    const mergedDateOfAppointment = date_of_appointment !== undefined ? date_of_appointment : targetProfile.date_of_appointment
+    const mergedYearsOfService = years_of_service !== undefined ? years_of_service : targetProfile.years_of_service
+    const mergedContactNumber = contact_number !== undefined ? contact_number : targetProfile.contact_number
+    const mergedAssignedLocationId =
+      assigned_location_id !== undefined ? assigned_location_id : targetProfile.assigned_location_id
+
+    if (!mergedFirstName || !mergedLastName || !mergedEmployeeId) {
       return NextResponse.json({ error: "First name, last name, and employee ID are required" }, { status: 400 })
     }
 
     const validCategories = ["Manager", "Senior", "Officer", "Junior"] as const
-    if (staff_category !== undefined && staff_category !== null && !validCategories.includes(staff_category)) {
+    if (mergedStaffCategory !== undefined && mergedStaffCategory !== null && !validCategories.includes(mergedStaffCategory)) {
       return NextResponse.json(
         { error: "Invalid staff category", details: `Category must be one of: ${validCategories.join(", ")}` },
         { status: 400 },
       )
-    }
-
-    const { data: targetProfile } = await adminSupabase.from("user_profiles").select("role, staff_category").eq("id", id).single()
-
-    if (!targetProfile) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
     // Staff members can only be assigned to HOD, RM, HR Executive, Department Head, or Managing Director
@@ -187,18 +207,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     let locationId = null
-    if (assigned_location_id && assigned_location_id !== "none") {
+    if (mergedAssignedLocationId && mergedAssignedLocationId !== "none") {
       // Verify location exists
       const { data: locationExists } = await adminSupabase
         .from("geofence_locations")
         .select("id")
-        .eq("id", assigned_location_id)
+        .eq("id", mergedAssignedLocationId)
         .single()
 
       if (locationExists) {
-        locationId = assigned_location_id
+        locationId = mergedAssignedLocationId
       } else {
-        console.log("[v0] Invalid location ID provided:", assigned_location_id)
+        console.log("[v0] Invalid location ID provided:", mergedAssignedLocationId)
         return NextResponse.json({ error: "Invalid location selected" }, { status: 400 })
       }
     }
@@ -206,18 +226,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     console.log("[v0] Processed location ID:", locationId)
 
     const updateData: Record<string, any> = {
-      first_name,
-      last_name,
-      employee_id,
-      department_id: department_id || null,
-      position: position || null,
-      staff_category: staff_category || null,
-      role,
-      is_active,
+      first_name: mergedFirstName,
+      last_name: mergedLastName,
+      employee_id: mergedEmployeeId,
+      department_id: mergedDepartmentId || null,
+      position: mergedPosition || null,
+      staff_category: mergedStaffCategory || null,
+      role: mergedRole,
+      is_active: mergedIsActive,
       assigned_location_id: locationId,
-      date_of_appointment: date_of_appointment || null,
-      years_of_service: years_of_service !== undefined && years_of_service !== "" ? parseInt(String(years_of_service), 10) : null,
-      contact_number: contact_number || null,
+      date_of_appointment: mergedDateOfAppointment || null,
+      years_of_service: mergedYearsOfService !== undefined && mergedYearsOfService !== "" && mergedYearsOfService !== null ? parseInt(String(mergedYearsOfService), 10) : null,
+      contact_number: mergedContactNumber || null,
       updated_at: new Date().toISOString(),
     }
 
