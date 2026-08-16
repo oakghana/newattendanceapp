@@ -419,9 +419,9 @@ export async function GET(
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle()
-    if ((leaveRequest as any).outstanding_leave_days_added == null && outstandingBalance) {
-      ;(leaveRequest as any).outstanding_leave_days_added = Number(outstandingBalance.carryover_to_next_year || 0)
-    }
+  if (outstandingBalance && Number((leaveRequest as any).outstanding_leave_days_added || (leaveRequest as any).outstanding_leave_days || 0) <= 0) {
+  ;(leaveRequest as any).outstanding_leave_days_added = Number(outstandingBalance.carryover_to_next_year || 0)
+  }
 
     // CRITICAL: Also fetch the related leave_payment_memo to get the SELECTED SIGNER data
     // The selectedSigner is stored in leave_payment_memos.memo_body, NOT leave_plan_requests
@@ -529,7 +529,10 @@ export async function GET(
   const annualEntitlement = resolveEntitlementFromProfile(applicantProfile as any)
   const savedEntitlement = Number((leaveRequest as any).entitlement_days || 0)
   const outstandingDays = Number((leaveRequest as any).outstanding_leave_days_added ?? (leaveRequest as any).outstanding_leave_days ?? 0)
-  ;(leaveRequest as any).entitlement_days = Math.max(annualEntitlement.annualLeaveDays, savedEntitlement) + Math.max(0, outstandingDays)
+  const baseEntitlement = outstandingDays > 0 && savedEntitlement > 0
+    ? Math.max(0, savedEntitlement - outstandingDays)
+    : Math.max(annualEntitlement.annualLeaveDays, savedEntitlement)
+  ;(leaveRequest as any).entitlement_days = baseEntitlement + Math.max(0, outstandingDays)
   }
 
     // Resolve HOD profile (THRO)
@@ -888,11 +891,17 @@ export async function GET(
           ?? 0,
       ))
       const baseEntitlement = isAnnualMemo
-        ? Math.max(0, profileEntitlement || rawEntitlement || Number(tableEntitlement || 0) || effectiveDays)
+        ? Math.max(0, outstandingDays > 0 && rawEntitlement > 0
+          ? rawEntitlement - outstandingDays
+          : profileEntitlement || rawEntitlement || Number(tableEntitlement || 0) || effectiveDays)
         : Math.max(0, rawEntitlement || Number(tableEntitlement || 0) || effectiveDays)
       const grossEntitlement = isAnnualMemo ? baseEntitlement + outstandingDays : baseEntitlement
-      const entitlementLabel = travelDays > 0
-        ? `${grossEntitlement} plus ${travelDays} travelling day${travelDays !== 1 ? "s" : ""}`
+      const entitlementLabel = isAnnualMemo
+        ? [
+            `${baseEntitlement} day${baseEntitlement !== 1 ? "s" : ""}`,
+            outstandingDays > 0 ? `${outstandingDays} outstanding day${outstandingDays !== 1 ? "s" : ""}` : "",
+            travelDays > 0 ? `${travelDays} travelling day${travelDays !== 1 ? "s" : ""}` : "",
+          ].filter(Boolean).join(" plus ")
         : String(grossEntitlement)
 
       // Outstanding days increase entitlement. They are not added to the
