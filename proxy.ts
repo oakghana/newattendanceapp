@@ -99,7 +99,14 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
 };
 
 function normalizeRole(role: string | null | undefined): string {
-  return (role || "").toLowerCase().trim().replace(/[-\s]+/g, "_");
+  const normalized = (role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+  if (normalized === "administrator") return "admin"
+  if (normalized === "it_admin") return "it-admin"
+  if (["regional_hr_leave_office", "regional_leave_office", "regional_hr_office", "regional_hr_officer", "regional_leave_hr"].includes(normalized)) {
+    return "regional_hr"
+  }
+  if (normalized === "head_of_department") return "department_head"
+  return normalized
 }
 
 function isProtectedRoute(pathname: string): boolean {
