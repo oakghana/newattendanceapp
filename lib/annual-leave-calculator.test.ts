@@ -4,6 +4,7 @@ import { resolveEntitlementFromProfile } from "./annual-leave-entitlement"
 import {
   addAnnualLeaveWorkingDays,
   calculateAnnualLeaveMemoDates,
+  calculateAnnualLeaveMemoBreakdown,
   extractAlreadyEnjoyedDays,
   buildAnnualLeaveDisplay,
   calculateAnnualLeaveBreakdown,
@@ -98,6 +99,29 @@ describe("annual leave calculation", () => {
     expect(result.entitlementDays).toBe(34)
     expect(result.daysAlreadyEnjoyed).toBe(10)
     expect(result.grantedDays).toBe(24)
+  })
+
+  it("uses the agreed 36 minus 1 plus 4 plus 2 annual breakdown", () => {
+    const breakdown = calculateAnnualLeaveMemoBreakdown({
+      baseEntitlementDays: 36,
+      daysAlreadyEnjoyed: 1,
+      outstandingDays: 4,
+      travellingDays: 2,
+    })
+    expect(breakdown.baseEntitlementDays).toBe(35)
+    expect(breakdown.outstandingDays).toBe(4)
+    expect(breakdown.travellingDays).toBe(2)
+    expect(breakdown.grantedDays).toBe(41)
+
+    const dates = calculateAnnualLeaveMemoDates({
+      startDate: "2026-08-03",
+      entitlementDays: 39,
+      grantedDays: breakdown.grantedDays,
+      daysAlreadyEnjoyed: 0,
+      travellingDays: breakdown.travellingDays,
+    })
+    expect(dates.endDate.toISOString().slice(0, 10)).toBe("2026-09-28")
+    expect(dates.resumptionDate.toISOString().slice(0, 10)).toBe("2026-09-29")
   })
 
   it("calculates manager entitlement with outstanding and travel days", () => {

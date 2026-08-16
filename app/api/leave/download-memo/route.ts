@@ -228,7 +228,13 @@ export async function GET(request: NextRequest) {
       ? Number(outstandingBalance?.entitlement_days ?? 0)
       : 0
     const outstandingDays = leaveTypeKey === 'annual'
-      ? Math.max(0, Number(outstandingBalance?.carryover_to_next_year ?? 0))
+      ? Math.max(0, Number(
+          (req as any).outstanding_leave_days_added
+          ?? (req as any).outstanding_leave_days
+          ?? outstandingBalance?.carryover_to_next_year
+          ?? outstandingBalance?.entitlement_days
+          ?? 0,
+        ))
       : 0
     const travelDays = leaveTypeKey === 'annual'
       ? (resolvedEntitlement?.travelDays ?? Number(req.travelling_days_added || 2))
@@ -238,9 +244,7 @@ export async function GET(request: NextRequest) {
           baseEntitlementDays: resolvedEntitlement?.annualLeaveDays ?? 36,
           daysAlreadyEnjoyed: (req.prior_leave_days_deducted != null || req.holiday_days_deducted != null)
             ? Number(req.prior_leave_days_deducted || 0) + Number(req.holiday_days_deducted || 0)
-            : outstandingBalance?.used_this_period != null
-              ? Number(outstandingBalance.used_this_period)
-              : extractAlreadyEnjoyedDays((req as any).adjustment_reason),
+            : extractAlreadyEnjoyedDays((req as any).adjustment_reason),
           outstandingDays,
           travellingDays: travelDays || 2,
         })
@@ -260,8 +264,10 @@ export async function GET(request: NextRequest) {
           // Recalculate annual grant from entitlement, deductions, and travel;
           // stored request totals may be legacy 22/24-day values.
           grantedDays: breakdown?.grantedDays ?? null,
-          daysAlreadyEnjoyed: breakdown?.daysAlreadyEnjoyed ?? explicitDeduction ?? 0,
-          travellingDays: travelDays || 2,
+      // The breakdown already subtracts enjoyed days from the base entitlement.
+      // Pass zero here so the inclusive date calculator does not subtract them again.
+      daysAlreadyEnjoyed: 0,
+      travellingDays: breakdown?.travellingDays ?? (travelDays || 2),
         })
       : null
     const endRaw = leaveTypeKey === 'annual'
