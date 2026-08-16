@@ -741,6 +741,8 @@ export async function GET(request: NextRequest) {
         officeQuery = officeQuery.eq("is_archived", false)
       }
 
+      let regionalScopedStaffIds: string[] = []
+
       // Regional HR is the first stage for every regional leave type,
       // including Annual Leave. Resolve staff IDs first because PostgREST
       // nested relation predicates can silently return an empty queue.
@@ -759,11 +761,31 @@ export async function GET(request: NextRequest) {
         }
         const { data: scopedStaff, error: scopedStaffError } = await scopedStaffQuery
         if (scopedStaffError) throw scopedStaffError
-        const staffIds = (scopedStaff || []).map((row: any) => row.id).filter(Boolean)
-        officeQuery = officeQuery.in("user_id", staffIds.length ? staffIds : ["00000000-0000-0000-0000-000000000000"])
+        regionalScopedStaffIds = (scopedStaff || []).map((row: any) => String(row.id)).filter(Boolean)
+        officeQuery = officeQuery.in("user_id", regionalScopedStaffIds.length ? regionalScopedStaffIds : ["00000000-0000-0000-0000-000000000000"])
       }
 
       const { data: requests, error: reqError } = await officeQuery
+
+      let allRegionalRequests: any[] = []
+      if (isRegionalHr && regionalScopedStaffIds.length > 0) {
+        const { data: regionalRows, error: regionalRowsError } = await admin
+          .from("leave_plan_requests")
+          .select(`
+            *,
+            user:user_profiles!leave_plan_requests_user_id_fkey (
+              id, first_name, last_name, employee_id,
+              departments(name, code),
+              assigned_location_id, region_id,
+              geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
+            )
+          `)
+          .eq("workflow_route", "regional")
+          .in("user_id", regionalScopedStaffIds)
+          .order("created_at", { ascending: false })
+        if (regionalRowsError) throw regionalRowsError
+        allRegionalRequests = regionalRows || []
+      }
 
       if (reqError) {
         if (isSchemaIssue(reqError)) return buildDegradedModeResponse("hr_office", getSchemaIssueMessage(reqError))
@@ -820,6 +842,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         mode: "hr_office",
         requests: requests || [],
+        allRequests: isRegionalHr ? allRegionalRequests : requests || [],
         myRequests: myRequests || [],
         analytics,
         outstandingLeaveMap: Object.fromEntries(outstandingLeaveMap),

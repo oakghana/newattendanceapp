@@ -2164,7 +2164,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
 
   const allRequestsFiltered: any[] = useMemo(() => {
   if (!data) return []
-  let rows = (data.requests || []).map((r: any) => {
+  let rows = ((isRegionalHr ? data.allRequests : data.requests) || []).map((r: any) => {
   const normalized = isRegionalHr && String(r?.status || "") === "pending_hod_review" && String(r?.leave_type_key || "").toLowerCase() !== "annual"
   ? { ...r, workflow_status: r.status, status: "pending_regional_hr_review" }
   : r
@@ -2610,13 +2610,14 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     // HR Executive HOD Review tab: for HR managers (manager_hr, director_hr) who are NOT also HODs
   if (isHrOffice && !isRegionalHr && !isHod && !isAdmin) t.push({ value: "hr-exec-hod-review", label: "HOD Review", Icon: UserCheck, count: hodReviewRequests.length })
   if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: isRegionalHr ? "Regional Leave Office" : "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
-    if (isHrApprover || isAdmin) {
+  if (isRegionalHr) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.allRequests || []).length })
+  if (isHrApprover || isAdmin) {
       const deferRecallPending = [...hrExecDeferRecallData.deferments, ...hrExecDeferRecallData.recalls]
         .filter((r: any) => !r.hr_office_decision && !r.hr_decision).length
       t.push({ value: "hr-approve", label: "HR Approvals", Icon: ShieldCheck, count: hrApproverQueue.length + deferRecallPending })
     }
     if (isHrApprover || isAdmin) t.push({ value: "hr-approval-queue", label: "Approval Queue", Icon: ClipboardList, count: (hrApproverData?.requests || []).length })
-    if (canSeeAllRequests) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.requests || []).length })
+    if (canSeeAllRequests && !isRegionalHr) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.requests || []).length })
     return t
   }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hodReviewRequests.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests, normalizedRole])
 
@@ -2995,7 +2996,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
             </Card>
           </div>}
 
-          {/* HOD Review ���────────────────────────────────────────────���── */}
+          {/* HOD Review ���──────────────────────────────────────────��─���── */}
           {activeTab === "hod-review" && <div>
             {/* HOD review notice */}
             <div className="mb-4 px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg flex items-start gap-3">
