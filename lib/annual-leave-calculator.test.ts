@@ -30,6 +30,7 @@ describe("annual leave calculation", () => {
 
   it("moves weekend leave endings to the next working day", () => {
     expect(getNextWorkingDay("2026-09-19").toISOString().slice(0, 10)).toBe("2026-09-21")
+    expect(getNextWorkingDay("2026-09-20").toISOString().slice(0, 10)).toBe("2026-09-21")
   })
 
   it("resolves senior staff to 36 core days plus 2 travel days", () => {
@@ -39,7 +40,7 @@ describe("annual leave calculation", () => {
     expect(entitlement.totalEntitlement).toBe(38)
   })
 
-  it("uses the same inclusive dates for 36 entitlement, 4 enjoyed, and 2 travel days", () => {
+  it("calculates the approved inclusive period and next working-day resumption", () => {
     const result = calculateAnnualLeaveMemoDates({
       startDate: "2026-08-03",
       entitlementDays: 36,

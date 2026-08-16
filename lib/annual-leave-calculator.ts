@@ -91,12 +91,12 @@ export function getNextWorkingDay(dateValue: string | Date): Date {
 /** Count working days inclusively from the start date, excluding weekends. */
 export function addAnnualLeaveWorkingDays(startDate: string | Date, workingDays: number): Date {
   const result = new Date(startDate)
-  let remaining = Math.max(0, Math.floor(workingDays))
-  while (remaining > 0) {
+  let remaining = Math.max(1, Math.floor(workingDays))
+  while (true) {
     if (result.getDay() !== 0 && result.getDay() !== 6) remaining -= 1
-    if (remaining > 0) result.setDate(result.getDate() + 1)
+    if (remaining <= 0) return result
+    result.setDate(result.getDate() + 1)
   }
-  return result
 }
 
 export interface AnnualLeaveMemoDates {

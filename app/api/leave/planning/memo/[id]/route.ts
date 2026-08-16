@@ -678,10 +678,10 @@ export async function GET(
       ))
       annualMemoDates = calculateAnnualLeaveMemoDates({
         startDate: effectiveStart,
-        entitlementDays: Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays) + memoOutstandingDays,
-        // Annual granted days are recalculated from the resolved entitlement,
-        // deductions, and travel days; never trust stale stored 22/24-day totals.
-        grantedDays: null,
+  entitlementDays: Math.max(0, Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays)),
+  // The approved day count is authoritative. Adjustments affect the entitlement breakdown,
+  // but must not extend the approved inclusive leave period.
+  grantedDays: effectiveDays,
         daysAlreadyEnjoyed: explicitDeduction ?? 0,
         travellingDays: Number(lr.travelling_days_added || 2),
       })
