@@ -81,9 +81,9 @@ async function checkForActiveLoanOfSameType(
   // This allows staff to request different loan types while having an active loan
   let query = admin
     .from("loan_requests")
-    .select("id, status, request_number, loan_type_label, loan_type")
-    .eq("user_id", userId)
-    .eq("loan_type", loanType)
+.select("id, status, request_number, loan_type_label, loan_type_key")
+  .eq("user_id", userId)
+  .eq("loan_type_key", loanType)
     .in("status", ["awaiting_hr_terms", "awaiting_committee", "staff_receiving_funds", "partially_recovered", "approved_director", "hod_approved", "sent_to_accounts"])
     .order("created_at", { ascending: false })
 
@@ -184,8 +184,9 @@ async function loadLoanType(admin: any, loanTypeKey: string) {
 function clampSalaryAdvanceRecoveryMonths(loanTypeKey: string, months?: number | null): number | null {
   const normalizedKey = String(loanTypeKey || "").toLowerCase()
   if (normalizedKey !== "salary_advance") return months ?? null
-  if (!Number.isFinite(months) || months < 12 || months > 24) return null
-  return Math.trunc(months)
+  const normalizedMonths = months == null ? null : Number(months)
+  if (normalizedMonths == null || !Number.isFinite(normalizedMonths) || normalizedMonths < 12 || normalizedMonths > 24) return null
+  return Math.trunc(normalizedMonths)
 }
 
 function shouldRetryWithoutLocationColumns(error: any): boolean {
@@ -450,13 +451,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-  const payload = {
-  request_number: genRequestNumber(),
-  assigned_location_id: assignment.assignedLocationId,
-  region_id: assignment.regionId,
-  hod_id: assignment.hodId,
-  regional_hr_id: assignment.regionalHrId,
-  regional_manager_id: assignment.regionalManagerId,
+    const payload = {
+      request_number: genRequestNumber(),
       reference_number: referenceNumber,
       user_id: user.id,
       department_id: (profile as any).department_id || null,
@@ -500,8 +496,8 @@ export async function POST(request: NextRequest) {
       if (isSchemaIssue(insertError)) {
         return NextResponse.json(
           {
-            error: "Loan module schema missing",
-            message: "Run scripts/051_loan_module_workflow.sql in Supabase SQL Editor.",
+            error: "Loan request schema mismatch",
+            message: `The loan request could not be saved because the live schema rejected a field. ${String((insertError as any).message || "Please verify the loan_requests schema.")}`,
           },
           { status: 500 },
         )
