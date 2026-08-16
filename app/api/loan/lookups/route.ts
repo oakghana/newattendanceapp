@@ -36,6 +36,10 @@ function isNonRegionalStaff(staff: any): boolean {
   return isNonRegionalLocation(staff?.geofence_locations?.name)
 }
 
+function isHeadOfficeStaff(staff: any): boolean {
+  return isNonRegionalStaff(staff)
+}
+
 function validateStaffHodRule(staff: any, hod: any): { ok: boolean; reason?: string } {
   const staffLoc = String(staff?.assigned_location_id || "")
   const hodRole = normalizeRole(String(hod?.role || ""))
@@ -586,7 +590,6 @@ export async function POST(request: NextRequest) {
           .select("id, loan_type, amount, status")
           .eq("user_id", staffUserId)
           .eq("status", "pending_hod")
-          .catch(() => ({ data: [] }))
 
         const notifications: any[] = []
         for (const hodId of hodUserIds) {

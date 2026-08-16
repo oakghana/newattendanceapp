@@ -28,9 +28,9 @@ export async function GET() {
     }
 
     const formattedStaff =
-      staff?.map((s) => ({
+      (staff as Array<any> | null)?.map((s) => ({
         ...s,
-        department_name: s.departments?.name || null,
+        department_name: Array.isArray(s.departments) ? s.departments[0]?.name || null : s.departments?.name || null,
       })) || []
 
     return NextResponse.json({ staff: formattedStaff })
