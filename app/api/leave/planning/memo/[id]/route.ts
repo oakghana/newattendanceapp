@@ -666,9 +666,17 @@ export async function GET(
     const leaveTypeKey = String(lr.leave_type_key || "annual").toLowerCase()
     let adjustedEffectiveEnd = effectiveEnd
     let annualMemoDates: ReturnType<typeof calculateAnnualLeaveMemoDates> | null = null
+    // SINGLE SOURCE OF TRUTH for annual leave: this breakdown feeds both the
+    // table numbers (Entitled/Granted/Remarks) and the From/To/resume dates below.
+    // Never recompute entitlement/granted days separately elsewhere in this route.
+    let annualBreakdown: ReturnType<typeof calculateAnnualLeaveMemoBreakdown> | null = null
+    let annualPublicHolidayDaysDeducted = 0
+    let annualPriorLeaveDaysDeducted = 0
     if (leaveTypeKey === "annual") {
+      annualPublicHolidayDaysDeducted = Math.max(0, Number(lr.holiday_days_deducted || 0))
+      annualPriorLeaveDaysDeducted = Math.max(0, Number(lr.prior_leave_days_deducted || 0))
       const explicitDeduction = (lr.prior_leave_days_deducted != null || lr.holiday_days_deducted != null)
-        ? Number(lr.prior_leave_days_deducted || 0) + Number(lr.holiday_days_deducted || 0)
+        ? annualPriorLeaveDaysDeducted + annualPublicHolidayDaysDeducted
         : extractAlreadyEnjoyedDays(lr.adjustment_reason || lr.memo_draft_body)
       const memoOutstandingDays = Math.max(0, Number(
         lr.outstanding_leave_days_added
@@ -678,8 +686,14 @@ export async function GET(
       ))
       const daysAlreadyEnjoyed = Math.max(0, explicitDeduction ?? 0)
       const travellingDays = Math.max(0, Number(lr.travelling_days_added || 2))
-      const storedEntitlement = Math.max(0, Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays))
-      const breakdown = calculateAnnualLeaveMemoBreakdown({
+      // The staff profile's tier-based entitlement is authoritative (e.g. 36 for senior
+      // staff). Only fall back to the stored/legacy request fields when no profile exists —
+      // this MUST match the entitlement figure shown in the printed table exactly, otherwise
+      // the granted-day count (and therefore the From/To dates) silently drift from the
+      // number the memo displays.
+      const profileEntitlement = ap ? resolveEntitlementFromProfile(ap).annualLeaveDays : 0
+      const storedEntitlement = Math.max(0, profileEntitlement || Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays))
+      annualBreakdown = calculateAnnualLeaveMemoBreakdown({
         baseEntitlementDays: storedEntitlement,
         daysAlreadyEnjoyed,
         outstandingDays: memoOutstandingDays,
@@ -687,10 +701,10 @@ export async function GET(
       })
       annualMemoDates = calculateAnnualLeaveMemoDates({
         startDate: effectiveStart,
-        entitlementDays: breakdown.baseEntitlementDays + breakdown.outstandingDays,
-        grantedDays: breakdown.grantedDays,
+        entitlementDays: annualBreakdown.baseEntitlementDays + annualBreakdown.outstandingDays,
+        grantedDays: annualBreakdown.grantedDays,
         daysAlreadyEnjoyed: 0,
-        travellingDays: breakdown.travellingDays,
+        travellingDays: annualBreakdown.travellingDays,
       })
       adjustedEffectiveEnd = annualMemoDates.endDate.toISOString().slice(0, 10)
     }
@@ -871,37 +885,19 @@ export async function GET(
       y += lines.length * 5.5 + 5
     }
 
-    // ── Annual leave table ───────────────────────���─────���─────────────
+    // ── Annual leave table ─────────────────────────────────────────────
     if (useTable === true) {
-      // These dedicated Day Adjustment Breakdown fields are authoritative.
-      // Public holidays and prior leave are deductions; travelling days are additions.
-      const publicHolidayDaysDeducted = Math.max(0, Number(lr.holiday_days_deducted || 0))
-      const priorLeaveDaysDeducted = Math.max(0, Number(lr.prior_leave_days_deducted || 0))
-      const travelDaysFromField = Math.max(0, Number(lr.travelling_days_added || 0))
-      const travelDays = travelDaysFromField
-
-      // ─���─ Entitlement label (top-left cell): gross entitlement ───────────────
-      // Show the staff's full annual entitlement (e.g. "24") even when some days were
-      // already enjoyed — this is what the memo should declare as the entitlement.
-  // The applicant profile is authoritative for annual entitlement. The stored
-  // request value is retained only for legacy/non-annual records.
-  const isAnnualMemo = leaveTypeKey === "annual"
-  const profileEntitlement = isAnnualMemo && applicantProfile
-    ? resolveEntitlementFromProfile(applicantProfile as any).annualLeaveDays
-    : 0
-      const rawEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || 0)
-      const breakdown = (lr.adjustment_breakdown && typeof lr.adjustment_breakdown === "object") ? lr.adjustment_breakdown : {}
-      const outstandingDays = Math.max(0, Number(
-        lr.outstanding_leave_days_added
-          ?? lr.outstanding_leave_days
-          ?? (breakdown as any).outstanding_days
-          ?? 0,
-      ))
-      const baseEntitlement = isAnnualMemo
-        ? Math.max(0, outstandingDays > 0 && rawEntitlement > 0
-          ? rawEntitlement - outstandingDays
-          : profileEntitlement || rawEntitlement || Number(tableEntitlement || 0) || effectiveDays)
-        : Math.max(0, rawEntitlement || Number(tableEntitlement || 0) || effectiveDays)
+      const isAnnualMemo = leaveTypeKey === "annual"
+      // CRITICAL: reuse the single annualBreakdown computed above (same object that
+      // produced adjustedEffectiveEnd / the resume date). Never recompute entitlement,
+      // outstanding, travel, or granted days independently here — a second formula is
+      // what previously made the printed Granted/From/To figures drift out of sync with
+      // each other and with the manual COCOBOD leave-advice worksheet.
+      const outstandingDays = annualBreakdown?.outstandingDays ?? 0
+      const travelDays = annualBreakdown?.travellingDays ?? Math.max(0, Number(lr.travelling_days_added || 0))
+      const baseEntitlement = annualBreakdown?.baseEntitlementDays !== undefined
+        ? annualBreakdown.baseEntitlementDays + annualBreakdown.daysAlreadyEnjoyed // gross, pre-deduction figure for display
+        : Math.max(0, Number(lr.entitlement_days || lr.leave_entitlement_days || 0) || effectiveDays)
       const grossEntitlement = isAnnualMemo ? baseEntitlement + outstandingDays : baseEntitlement
       const entitlementLabel = isAnnualMemo
         ? [
@@ -911,26 +907,17 @@ export async function GET(
           ].filter(Boolean).join(" plus ")
         : String(grossEntitlement)
 
-      // Outstanding days increase entitlement. They are not added to the
-      // granted leave period unless the approved leave dates include them.
-      const totalDeductions = publicHolidayDaysDeducted + priorLeaveDaysDeducted
-      const annualDaysRemaining = Math.max(0, grossEntitlement - totalDeductions)
-      const totalGranted = Math.max(0, Math.min(effectiveDays || annualDaysRemaining, annualDaysRemaining) + travelDays)
+      // Granted days: taken directly from annualBreakdown so the table total always
+      // matches the date span rendered below (base - enjoyed + outstanding + travel).
+      const totalGranted = annualBreakdown?.grantedDays ?? effectiveDays
 
-      const originalRequested = Number(
-        lr.original_requested_days != null ? lr.original_requested_days : (lr.requested_days || 0),
-      )
-      const adjustedRequested = Number(lr.adjusted_days || lr.requested_days || 0)
-      const hasIncrease = adjustedRequested > originalRequested || travelDays > 0
       const remarksParts: string[] = []
       // Remarks confirm the dedicated-field calculation. Free-text reasons
       // are displayed only and never parsed or used to change the total.
-      if (publicHolidayDaysDeducted > 0) remarksParts.push(`${publicHolidayDaysDeducted} public holiday day(s) deducted`)
-      if (priorLeaveDaysDeducted > 0) remarksParts.push(`${priorLeaveDaysDeducted} day(s) given/already enjoyed deducted`)
+      if (annualPublicHolidayDaysDeducted > 0) remarksParts.push(`${annualPublicHolidayDaysDeducted} public holiday day(s) deducted`)
+      if (annualPriorLeaveDaysDeducted > 0) remarksParts.push(`${annualPriorLeaveDaysDeducted} day(s) given/already enjoyed deducted`)
       if (travelDays > 0) remarksParts.push(`${travelDays} travelling day(s) added`)
-      const breakdownTravellingDays = Number((breakdown as any).travelling_days ?? 0)
       if (outstandingDays > 0) remarksParts.push(`${outstandingDays} outstanding day(s) added to entitlement`)
-      if (breakdownTravellingDays > 0 && travelDays === 0) remarksParts.push(`${breakdownTravellingDays} travelling day(s) added`)
       // Use one canonical calculation summary. Do not append the free-text
       // adjustment reason because it already contains these same clauses.
       const remarksSummary = Array.from(new Set(remarksParts)).join("; ") || "No day adjustment applied"
