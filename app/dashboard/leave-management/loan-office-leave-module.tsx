@@ -70,7 +70,7 @@ export function LoanOfficeLeaveModule({
         <TabsContent value="info" className="space-y-4 sm:space-y-6 w-full">
           <LeaveManagementClient
             userId={userId}
-            userRole={userRole}
+            userRole={userRole ?? ""}
             userDepartment={userDepartment}
             userFirstName={userFirstName}
             userLastName={userLastName}
@@ -87,7 +87,7 @@ export function LoanOfficeLeaveModule({
           <LeavePlanningClient
             profile={{
               id: userId,
-              role: userRole,
+              role: userRole ?? "loan_office",
               departmentName: userDepartmentName,
               departmentCode: userDepartmentCode,
             }}

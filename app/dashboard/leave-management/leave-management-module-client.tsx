@@ -73,12 +73,12 @@ export function LeaveManagementModuleClient({
     return (
       <HrExecutiveLeaveModule
         userId={userId}
-        userRole={userRole}
-        userDepartment={userDepartment}
+        userRole={userRole ?? ""}
+        userDepartment={userDepartment ?? ""}
         userFirstName={userFirstName}
         userLastName={userLastName}
         inactivityDays={inactivityDays}
-        userDepartmentName={userDepartmentName}
+        userDepartmentName={userDepartmentName ?? ""}
         userDepartmentCode={userDepartmentCode}
         userLocationName={userLocationName}
         hasHodLinkage={hasHodLinkage}
@@ -94,12 +94,12 @@ export function LeaveManagementModuleClient({
     return (
       <LoanOfficeLeaveModule
         userId={userId}
-        userRole={userRole}
-        userDepartment={userDepartment}
+        userRole={userRole ?? ""}
+        userDepartment={userDepartment ?? ""}
         userFirstName={userFirstName}
         userLastName={userLastName}
         inactivityDays={inactivityDays}
-        userDepartmentName={userDepartmentName}
+        userDepartmentName={userDepartmentName ?? ""}
         userDepartmentCode={userDepartmentCode}
         userLocationName={userLocationName}
         hasHodLinkage={hasHodLinkage}
@@ -197,9 +197,9 @@ export function LeaveManagementModuleClient({
         <TabsContent value="leave-management" className="space-y-4 sm:space-y-6 w-full">
           <LeaveManagementClient
               userId={userId}
-              userRole={userRole}
-              userDepartment={userDepartment}
-              userLocationId={userLocationId}
+              userRole={userRole ?? ""}
+              userDepartment={userDepartment ?? ""}
+              userLocationId={userLocationId ?? undefined}
               userFirstName={userFirstName}
               userLastName={userLastName}
               hasHodLinkage={hasHodLinkage}
@@ -278,9 +278,9 @@ export function LeaveManagementModuleClient({
             <TeamCalendarView
               isHrOffice={isHrOffice}
               userId={userId}
-              userDepartment={userDepartment}
-              userDepartmentName={userDepartmentName}
-              userRole={userRole}
+              userDepartment={userDepartment ?? ""}
+userDepartmentName={userDepartmentName ?? ""}
+              userRole={userRole ?? ""}
             />
           </div>
         </TabsContent>

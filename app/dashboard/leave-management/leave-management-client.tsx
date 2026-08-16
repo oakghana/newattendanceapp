@@ -53,6 +53,7 @@ interface LeaveRequest {
   leave_type: string
   status: string
   created_at: string
+  number_of_days?: number | null
   user_name?: string
   department?: string
   location?: string
@@ -86,7 +87,7 @@ interface LeaveManagementClientProps {
   userId: string
   userRole: string
   userDepartment: string | null
-  userLocationId: string | null
+  userLocationId?: string | null
   userFirstName: string | null
   userLastName: string | null
   hasHodLinkage: boolean
@@ -376,11 +377,9 @@ export function LeaveManagementClient({
       closeSignerAssignDialog()
       
       // Refresh the relevant data
-      if (signerAssignType === "deferment") {
-        fetchMyDefermentMemos()
-      } else {
-        fetchMyRecallMemos()
-      }
+  if (signerAssignType === "deferment" || signerAssignType === "recall") {
+    window.location.reload()
+  }
     } catch (error) {
       console.error("[v0] Error assigning signer:", error)
       toast({
@@ -2420,7 +2419,7 @@ export function LeaveManagementClient({
                   <DefermentRecallTracker 
                     type="deferment" 
                     userRole={userRole}
-                    userDepartment={userDepartment}
+                    userDepartment={userDepartment ?? ""}
                     userId={userId}
                   />
                 </CardContent>
@@ -2838,7 +2837,7 @@ export function LeaveManagementClient({
                   <DefermentRecallTracker 
                     type="recall" 
                     userRole={userRole}
-                    userDepartment={userDepartment}
+                    userDepartment={userDepartment ?? ""}
                     userId={userId}
                   />
                 </CardContent>
@@ -3280,7 +3279,7 @@ export function LeaveManagementClient({
         onClose={() => setShowSubmitDefermentModal(false)}
         userId={userId}
         userRole={userRole}
-        approvedLeaves={initialApprovedStaffRequests}
+        approvedLeaves={initialApprovedStaffRequests as any}
         onSuccess={() => {
           toast({ title: "Success", description: "Deferment request submitted successfully" })
         }}

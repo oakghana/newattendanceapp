@@ -118,10 +118,11 @@ interface LeaveTypeOption {
   leaveTypeLabel: string
   entitlementDays: number
   leaveYearPeriod: string
+  is_active?: boolean
 }
 
 interface LeavePlanningClientProps {
-  annualEntitlement: {
+  annualEntitlement?: {
     annualLeaveDays: number
     travelDays: number
     totalEntitlement: number
@@ -240,6 +241,11 @@ function fmtLongDate(val?: string | null) {
   } catch {
     return val
   }
+}
+
+function getOrdinalSuffix(day: number) {
+  if (day >= 11 && day <= 13) return "th"
+  return day % 10 === 1 ? "st" : day % 10 === 2 ? "nd" : day % 10 === 3 ? "rd" : "th"
 }
 
 function fmtFormalDate(val?: string | null) {
@@ -1044,7 +1050,7 @@ function HrExecRejectForm({
 }
 
 // ─── Main Component ──────────���────────────────────────────────────────────────
-export function LeavePlanningClient({ profile, annualEntitlement, initialHolidays = [], initialActiveTab }: LeavePlanningClientProps) {
+export function LeavePlanningClient({ profile, annualEntitlement = { annualLeaveDays: 0, travelDays: 0, totalEntitlement: 0, tierLabel: "Not configured" }, initialHolidays = [], initialActiveTab }: LeavePlanningClientProps) {
   const { toast } = useToast()
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
 
@@ -3731,9 +3737,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                               <Button
                                 size="sm"
                                 className="bg-emerald-700 hover:bg-emerald-800"
-                                disabled={Boolean(leaveTypeSavingKey) || (draft.isActive === leaveTypeOption.is_active && draft.entitlementDays === leaveTypeOption.entitlementDays)}
+                                disabled={Boolean(leaveTypeSavingKey) || (draft.isActive === leaveTypeOption.is_active && Number(draft.entitlementDays) === leaveTypeOption.entitlementDays)}
                                 onClick={() => void saveExistingLeaveType(leaveTypeOption.leaveTypeKey)}
-                                title={draft.isActive === leaveTypeOption.is_active && draft.entitlementDays === leaveTypeOption.entitlementDays ? "Toggle auto-saves immediately. Update entitlement days and click Save to persist." : ""}
+                                title={draft.isActive === leaveTypeOption.is_active && Number(draft.entitlementDays) === leaveTypeOption.entitlementDays ? "Toggle auto-saves immediately. Update entitlement days and click Save to persist." : ""}
                               >
                                 {leaveTypeSavingKey === leaveTypeOption.leaveTypeKey ? "Saving..." : "Save"}
                               </Button>

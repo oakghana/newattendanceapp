@@ -263,7 +263,7 @@ export function OutstandingLeavePanel() {
         setCarryoverResults(data)
         if (!carryoverDryRun) {
           // Refresh outstanding leave data
-          loadOutstandingLeave()
+          window.location.reload()
         }
       } else {
         alert(data.error || "Failed to run carryover")
