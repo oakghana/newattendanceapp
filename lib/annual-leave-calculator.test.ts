@@ -124,6 +124,40 @@ describe("annual leave calculation", () => {
     expect(dates.resumptionDate.toISOString().slice(0, 10)).toBe("2026-09-29")
   })
 
+  it("reproduces the manually-verified 36/4/0/2 memo end-to-end (download-memo route logic)", () => {
+    // Mirrors the exact field precedence used in app/api/leave/download-memo/route.ts
+    // for a staff member with no outstanding days — matches the signed paper memo
+    // (36 base, 4 already enjoyed, 2 travel days => 34 granted, 3 Aug -> 17 Sep, resume 18 Sep).
+    const req = {
+      preferred_start_date: "2026-08-03",
+      leave_type_key: "annual",
+      prior_leave_days_deducted: 4,
+      holiday_days_deducted: null,
+      outstanding_leave_days_added: 0,
+      travelling_days_added: 2,
+    } as any
+    const resolvedEntitlement = { annualLeaveDays: 36, travelDays: 2 }
+    const outstandingDays = Math.max(0, Number(req.outstanding_leave_days_added ?? req.outstanding_leave_days ?? 0))
+    const travelDays = resolvedEntitlement.travelDays ?? Number(req.travelling_days_added || 2)
+    const breakdown = calculateAnnualLeaveMemoBreakdown({
+      baseEntitlementDays: resolvedEntitlement.annualLeaveDays,
+      daysAlreadyEnjoyed: Number(req.prior_leave_days_deducted || 0) + Number(req.holiday_days_deducted || 0),
+      outstandingDays,
+      travellingDays: travelDays || 2,
+    })
+    const entitlementDays = breakdown.baseEntitlementDays + breakdown.outstandingDays
+    const annualDates = calculateAnnualLeaveMemoDates({
+      startDate: req.preferred_start_date,
+      entitlementDays,
+      grantedDays: breakdown.grantedDays,
+      daysAlreadyEnjoyed: 0,
+      travellingDays: breakdown.travellingDays,
+    })
+    expect(breakdown.grantedDays).toBe(34)
+    expect(annualDates.endDate.toISOString().slice(0, 10)).toBe("2026-09-17")
+    expect(annualDates.resumptionDate.toISOString().slice(0, 10)).toBe("2026-09-18")
+  })
+
   it("calculates manager entitlement with outstanding and travel days", () => {
     const result = calculateAnnualLeaveMemoDates({
       startDate: "2026-08-03",
