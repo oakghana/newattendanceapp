@@ -45,6 +45,16 @@ export async function GET() {
   const departmentMap = new Map((departments || []).map((department: any) => [department.id, department]))
   const decorate = (row: any) => {
     const profile = profileMap.get(row.user_id)
+    const leaveYear = row.preferred_start_date
+      ? new Date(`${row.preferred_start_date}T00:00:00`).getFullYear()
+      : new Date(row.updated_at || row.created_at || Date.now()).getFullYear()
+    const requestSubject = row.request_number || row.reference_number
+      ? row.request_number || row.reference_number || "Loan request"
+      : row.memo_subject || row.memo_draft_subject || (
+          String(row.leave_type_key || "").toLowerCase() === "annual"
+            ? `ANNUAL LEAVE ADVICE FOR ${leaveYear}`
+            : row.reason || `${String(row.leave_type_key || "Leave").replaceAll("_", " ")} leave request`
+        )
     const location = profile ? locationMap.get(profile.assigned_location_id) : null
     const department = profile ? departmentMap.get(profile.department_id) : null
     return {
@@ -54,7 +64,7 @@ export async function GET() {
       staff_category: profile?.role || "Staff",
       department: department?.name || "Department not assigned",
       location_name: location?.name || "Location not assigned",
-      request_subject: row.reason || row.leave_type_key || row.request_number || row.reference_number || "Staff request",
+      request_subject: requestSubject,
     }
   }
   return NextResponse.json({ leave: (leaveResult.data || []).map(decorate), loans: (loanResult.data || []).map(decorate) })
