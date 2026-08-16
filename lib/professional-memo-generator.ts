@@ -475,7 +475,7 @@ async function generateMainMemo(
     // added to the base annual entitlement exactly once.
     const baseAnnualEntitlement = Math.max(
       resolvedEntitlement.annualLeaveDays,
-      storedEntitlementDays > 0 ? storedEntitlementDays : 0,
+      storedEntitlementDays > 0 ? storedEntitlementDays - outstandingLeaveDays : 0,
     )
     const entitlementDays = isAnnualLeave
       ? baseAnnualEntitlement + outstandingLeaveDays
@@ -492,7 +492,8 @@ async function generateMainMemo(
 
     const entitled = entitlementDays > 0
       ? [
-          `${entitlementDays} day${entitlementDays !== 1 ? "s" : ""}`,
+          `${baseAnnualEntitlement} day${baseAnnualEntitlement !== 1 ? "s" : ""}`,
+          outstandingLeaveDays > 0 ? `${outstandingLeaveDays} outstanding day${outstandingLeaveDays !== 1 ? "s" : ""}` : "",
           travellingDays > 0 ? `${travellingDays} travelling day${travellingDays !== 1 ? "s" : ""}` : "",
         ].filter(Boolean).join(" plus ")
       : "—"
@@ -512,7 +513,7 @@ async function generateMainMemo(
     if (firstStaff?.leave_period_end) {
       if (isAnnualLeave && firstStaff.leave_period_start) {
         // Annual leave uses the same inclusive calculation and totals as every memo route.
-        toDate = fmtDateLongPdf(annualMemoDates.endDate)
+        toDate = fmtDateLongPdf(annualMemoDates.endDate.toISOString())
       } else {
         toDate = fmtDateLongPdf(firstStaff.leave_period_end)
       }

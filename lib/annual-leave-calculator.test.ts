@@ -99,6 +99,19 @@ describe("annual leave calculation", () => {
     expect(result.grantedDays).toBe(24)
   })
 
+  it("calculates manager entitlement with outstanding and travel days", () => {
+    const result = calculateAnnualLeaveMemoDates({
+      startDate: "2026-08-03",
+      entitlementDays: 36 + 4,
+      grantedDays: 41,
+      daysAlreadyEnjoyed: 1,
+      travellingDays: 2,
+    })
+    expect(result.entitlementDays).toBe(40)
+    expect(result.daysAlreadyEnjoyed).toBe(1)
+    expect(result.grantedDays).toBe(41)
+  })
+
   it("adds HR carryover days to the core annual entitlement", () => {
     const coreEntitlement = 36
     const carryover = 12
@@ -136,7 +149,7 @@ describe("annual leave calculation", () => {
       savedReason: "Adjusted after HR review",
       calculatedRemarks: ["4 day(s) already enjoyed", "2 travelling day(s) added"],
     })
-    expect(remarks).toBe("Adjusted after HR review")
+    expect(remarks).toBe("Adjusted after HR review; 4 day(s) already enjoyed; 2 travelling day(s) added")
   })
 
   it("treats given days as already enjoyed deductions", () => {
