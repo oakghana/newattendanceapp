@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
+import { isNonRegionalLocation } from "@/lib/location-mappings"
 
 function createJsonResponse(data: any, status = 200) {
   return new NextResponse(JSON.stringify(data), {
@@ -375,8 +376,24 @@ export async function POST(request: NextRequest) {
       return createJsonResponse({ success: false, error: "Only administrators can assign the Regional HR Leave Office role" }, 403)
     }
 
+    if (role === "regional_manager") {
+      if (!assigned_location_id) {
+        return createJsonResponse({ success: false, error: "Regional Managers must be assigned to a regional location" }, 400)
+      }
+
+      const { data: assignedLocation } = await adminSupabase
+        .from("geofence_locations")
+        .select("name")
+        .eq("id", assigned_location_id)
+        .maybeSingle()
+
+      if (!assignedLocation || isNonRegionalLocation(assignedLocation.name)) {
+        return createJsonResponse({ success: false, error: "Regional Managers can only be assigned to regional locations" }, 400)
+      }
+    }
+
     if (isItAdmin) {
-      const allowedForItAdmin = ["staff", "nsp", "contract", "department_head"]
+      const allowedForItAdmin = ["staff", "nsp", "contract", "department_head", "regional_manager"]
       if (!allowedForItAdmin.includes(role)) {
         console.error("[v0] Staff API - IT-Admin attempted to create disallowed role:", role)
         return createJsonResponse(
@@ -390,13 +407,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if ((role === "admin" || role === "regional_manager") && !isAdministrator) {
-      console.error("[v0] Staff API - Non-admin tried to create admin or regional_manager user")
+    if (role === "admin" && !isAdministrator) {
+      console.error("[v0] Staff API - Non-administrator tried to create an admin user")
       return createJsonResponse(
         {
           success: false,
-          error: "Only administrators can create Admin or Regional Manager accounts",
-          details: "You can only create: Staff, Department Head, IT-Admin, NSP, Intern, or Contract users",
+          error: "Only administrators can create Admin accounts",
+          details: "You can only create: Staff, Department Head, Regional Manager, IT-Admin, NSP, Intern, or Contract users",
         },
         403,
       )

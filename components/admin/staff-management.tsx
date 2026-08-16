@@ -895,9 +895,10 @@ export function StaffManagement() {
                               <>
                                 <SelectItem value="staff">Staff</SelectItem>
                                 <SelectItem value="nsp">NSP</SelectItem>
-                                <SelectItem value="contract">Contract</SelectItem>
-                                <SelectItem value="department_head">Department Head</SelectItem>
-                              </>
+                            <SelectItem value="contract">Contract</SelectItem>
+                            <SelectItem value="department_head">Department Head</SelectItem>
+                            <SelectItem value="regional_manager">Regional Manager</SelectItem>
+                          </>
                             ) : (
                               <>
                                 {isAdministrator && <SelectItem value="accounts">Accounts</SelectItem>}
@@ -1163,8 +1164,9 @@ export function StaffManagement() {
                             <SelectItem value="staff">Staff</SelectItem>
                             <SelectItem value="nsp">NSP</SelectItem>
                             <SelectItem value="contract">Contract</SelectItem>
-                            <SelectItem value="department_head">Department Head</SelectItem>
-                          </>
+                                <SelectItem value="department_head">Department Head</SelectItem>
+                                <SelectItem value="regional_manager">Regional Manager</SelectItem>
+                              </>
                         ) : (
                           <>
                             {isAdministrator && <SelectItem value="accounts">Accounts</SelectItem>}
