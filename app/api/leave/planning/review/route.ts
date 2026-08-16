@@ -94,15 +94,22 @@ export async function POST(request: NextRequest) {
 
     const suppliedMemoReference = String(memo_reference || "").trim()
 
+    // Resolve the workflow and the authoritative memo reference from the
+    // persisted request. Recovered/older review cards may not carry the memo
+    // field even though Regional HR already saved it on the request.
+
     // Resolve the workflow from the persisted request. The client payload is
     // not authoritative and older review cards do not include workflow_route.
     const { data: workflowRequest, error: workflowRequestError } = await admin
       .from("leave_plan_requests")
-      .select("workflow_route")
+      .select("workflow_route, memo_reference, reference_number")
       .eq("id", leave_plan_request_id)
       .maybeSingle()
     if (workflowRequestError && isSchemaIssue(workflowRequestError)) return schemaIssueResponse(workflowRequestError)
     if (workflowRequestError || !workflowRequest) return NextResponse.json({ error: "Leave request not found." }, { status: 404 })
+
+    const persistedMemoReference = String((workflowRequest as any).memo_reference || (workflowRequest as any).reference_number || "").trim()
+    const normalizedMemoReference = persistedMemoReference || suppliedMemoReference
 
     const isRegionalManagerApproval = role === "regional_manager"
     const isRegionalRequest = action === "forward_to_regional_manager"
@@ -127,7 +134,7 @@ export async function POST(request: NextRequest) {
     // Non-regional HR Executive forwarding intentionally does not require a
     // memo reference. HR Records assigns the official reference after final
     // approval, so this validation applies only to Regional Manager approval.
-    if (isRegionalManagerApproval && isRegionalRequest && decision === "approved" && !isRegionalForward && !suppliedMemoReference) {
+    if (isRegionalManagerApproval && isRegionalRequest && decision === "approved" && !isRegionalForward && !normalizedMemoReference) {
       return NextResponse.json({
         error: "This regional leave request cannot be approved until Regional HR Office enters the official memo reference.",
         code: "REGIONAL_MEMO_REFERENCE_REQUIRED",
@@ -323,7 +330,7 @@ export async function POST(request: NextRequest) {
         adjustment_breakdown: adjustment_breakdown || {},
         adjustment_reason: String(recommendation || "").trim() || null,
       } : {}),
-      ...((isRegionalForward || isRegionalManagerApprovalComplete) && suppliedMemoReference ? { memo_reference: suppliedMemoReference } : {}),
+      ...((isRegionalForward || isRegionalManagerApprovalComplete) && normalizedMemoReference ? { memo_reference: normalizedMemoReference } : {}),
       ...(isRegionalManagerApprovalComplete ? {
         regional_manager_id: user.id,
         regional_manager_name: `${String((profile as any).first_name || "").trim()} ${String((profile as any).last_name || "").trim()}`.trim() || "Regional Manager",
