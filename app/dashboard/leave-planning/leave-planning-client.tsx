@@ -36,6 +36,7 @@ import {
 } from "@/lib/leave-planning"
 import { getLeaveWorkflowView } from "@/lib/hr-workflow"
 import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays } from "@/lib/leave-policy"
+import { calculateAnnualLeaveMemoBreakdown, addAnnualLeaveWorkingDays } from "@/lib/annual-leave-calculator"
 import { useToast } from "@/hooks/use-toast"
 import {
   CheckCircle2,
@@ -1050,6 +1051,31 @@ function HrExecRejectForm({
 }
 
 // ─── Main Component ──────────���────────────────────────────────────────────────
+// SINGLE SOURCE OF TRUTH for the annual leave End Date shown/saved anywhere in the
+// HR Office review panel. Uses the exact same formula as the printed memo
+// (lib/annual-leave-calculator): granted = entitlement - enjoyed + outstanding + travel,
+// then End Date = Start Date + granted working days (weekends skipped).
+// Never let HR Office type the End Date by hand for annual leave -- that manual-entry
+// path is what previously produced End Dates (and day totals) that disagreed with the
+// printed memo and with the manually signed COCOBOD leave-advice worksheet.
+function computeAnnualAdjustedEndDate(
+  startDate: string,
+  entitlementDays: number,
+  daysAlreadyEnjoyed: number,
+  outstandingDays: number,
+  travellingDays: number,
+): { endDateIso: string; grantedDays: number } {
+  if (!startDate) return { endDateIso: "", grantedDays: 0 }
+  const breakdown = calculateAnnualLeaveMemoBreakdown({
+    baseEntitlementDays: entitlementDays,
+    daysAlreadyEnjoyed,
+    outstandingDays,
+    travellingDays,
+  })
+  const endDate = addAnnualLeaveWorkingDays(startDate, breakdown.grantedDays)
+  return { endDateIso: endDate.toISOString().slice(0, 10), grantedDays: breakdown.grantedDays }
+}
+
 export function LeavePlanningClient({ profile, annualEntitlement = { annualLeaveDays: 0, travelDays: 0, totalEntitlement: 0, tierLabel: "Not configured" }, initialHolidays = [], initialActiveTab }: LeavePlanningClientProps) {
   const { toast } = useToast()
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
@@ -2383,12 +2409,22 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
 
   const submitHrOfficeReview = async (requestId: string, forwardToHrExecutiveId?: string) => {
     const adjStart = officeAdjStart[requestId]
-    const adjEnd = officeAdjEnd[requestId]
     const rsn = officeReason[requestId]
     const request = hrOfficeQueue.find(r => r.id === requestId)
     const leaveType = String(request?.leave_type_key || "").toLowerCase()
     const isAnnualLeave = leaveType === "annual"
     const outstandingDays = isAnnualLeave ? Math.max(0, Number(officeOutstandingDays[requestId] || 0)) : 0
+    // ANNUAL LEAVE: End Date is always derived here — same formula as the row preview and
+    // the printed memo — never taken from a manually typed field. This is what keeps the
+    // Memo Console list, the memo PDF, and this confirmation dialog permanently in sync.
+    const annualHolidayDeducted = Number(officeHolidayDays[requestId] || 0)
+    const annualPriorDeducted = Number(officePriorDays[requestId] || 0)
+    const annualTravelAdded = Number(officeTravelDays[requestId] || 0)
+    const annualEntitlementDays = Number(request?.entitlement_days || request?.annual_leave_days || request?.requested_days || 0)
+    const annualCalc = isAnnualLeave
+      ? computeAnnualAdjustedEndDate(adjStart, annualEntitlementDays, annualPriorDeducted + annualHolidayDeducted, outstandingDays, annualTravelAdded)
+      : null
+    const adjEnd = isAnnualLeave ? (annualCalc?.endDateIso || "") : officeAdjEnd[requestId]
     const annualAdjustmentRemark = isAnnualLeave && outstandingDays > 0
       ? `${String(rsn || "Annual leave adjustment").trim()} ${outstandingDays} outstanding day(s) added to entitlement.`
       : String(rsn || "").trim()
@@ -2452,17 +2488,20 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       return
     }
 
-    const holidayDeducted = Number(officeHolidayDays[requestId] || 0)
-    const priorDeducted = Number(officePriorDays[requestId] || 0)
-    const travelAdded = Number(officeTravelDays[requestId] || 0)
-    const outstandingAdded = Number(officeOutstandingDays[requestId] || 0)
+    const holidayDeducted = annualHolidayDeducted
+    const priorDeducted = annualPriorDeducted
+    const travelAdded = annualTravelAdded
+    const outstandingAdded = outstandingDays
     // Base days = working days only (excluding weekends and public holidays) from from-date to to-date
     const holidayDatesForCalc = holidays.map((h) => h.holiday_date)
-    const baseDays = adjStart && adjEnd
-      ? calculateWorkingDays(adjStart, adjEnd, holidayDatesForCalc).workingDays
-      : 0
-    // Public holidays are ADDED to the granted days (not deducted)
-    const finalDays = Math.max(0, baseDays + outstandingAdded + holidayDeducted - priorDeducted + travelAdded)
+    const baseDays = isAnnualLeave
+      ? annualEntitlementDays
+      : (adjStart && adjEnd ? calculateWorkingDays(adjStart, adjEnd, holidayDatesForCalc).workingDays : 0)
+    // Annual leave: use the shared breakdown directly so this always matches adjEnd above
+    // (public holidays and prior leave enjoyed are deductions, travel/outstanding are additions).
+    const finalDays = isAnnualLeave
+      ? (annualCalc?.grantedDays ?? 0)
+      : Math.max(0, baseDays - holidayDeducted - priorDeducted + travelAdded)
 
     // Get selected HR executive name for confirmation
     const selectedExec = hrExecutives.find(e => e.id === forwardToHrExecutiveId)
@@ -2478,9 +2517,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       `Please confirm the adjusted leave values before forwarding:\n\n` +
       `Reference No: ${refNum || "Assigned after approval by HR Records"}\n` +
       `Adjusted Dates: ${adjStart} to ${adjEnd}\n` +
-      `Base Days: ${baseDays}\n` +
+      `${isAnnualLeave ? "Entitlement" : "Base Days"}: ${baseDays}\n` +
       `${outstandingAdded > 0 ? `+ Outstanding Days: ${outstandingAdded}\n` : ""}` +
-      `+ Public Holidays: ${holidayDeducted}\n` +
+      `- Public Holidays: ${holidayDeducted}\n` +
       `- Prior Leave Enjoyed: ${priorDeducted}\n` +
       `+ Travelling Days: ${travelAdded}\n` +
       `Final Days to Approvers: ${finalDays}\n\n` +
@@ -3875,22 +3914,37 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                   <div className="space-y-4">
                     {hrOfficeVisibleRows.map((req: any) => {
                   const isExpanded = officeExpanded === req.id
+                  const isAnnualRow = String(req.leave_type_key || "").toLowerCase() === "annual"
                   const adjStart = officeAdjStart[req.id] || req.preferred_start_date || ""
-                  const adjEnd = officeAdjEnd[req.id] || req.preferred_end_date || ""
   const holidayD = Number(officeHolidayDays[req.id] || 0)
   const travelD = Number(officeTravelDays[req.id] || 0)
   const priorD = Number(officePriorDays[req.id] || 0)
   const outstandingD = Number(officeOutstandingDays[req.id] || 0)
+                                  // ANNUAL LEAVE: End Date is always derived from Start Date + the entitlement
+                                  // breakdown below (never typed manually) so it can never disagree with the
+                                  // printed memo. Public holidays and prior leave enjoyed both reduce the
+                                  // entitlement pool, exactly as on the memo route.
+                                  const annualEntitlementDays = Number(req.entitlement_days || req.annual_leave_days || req.requested_days || 0)
+                                  const annualCalc = isAnnualRow
+                                    ? computeAnnualAdjustedEndDate(adjStart, annualEntitlementDays, priorD + holidayD, outstandingD, travelD)
+                                    : null
+                                  const adjEnd = isAnnualRow
+                                    ? (annualCalc?.endDateIso || "")
+                                    : (officeAdjEnd[req.id] || req.preferred_end_date || "")
                                   // Only the dedicated Day Adjustment Breakdown fields affect totals.
                                   // “Reason for Adjustment” is confirmation text, never numeric input.
                                   // Base days = working days (excl. weekends & holidays) from from-date to to-date
                                   const holidayDatesForRender = holidays.map((h) => h.holiday_date)
-                                  const baseDays = adjStart && adjEnd
-                                    ? calculateWorkingDays(adjStart, adjEnd, holidayDatesForRender).workingDays
-                                    : Number(req.requested_days || 0)
-                                  // Public holidays and prior leave are deductions;
-                                  // travelling days are additions.
-                                  const finalDays = Math.max(0, baseDays - holidayD - priorD + travelD)
+                                  const baseDays = isAnnualRow
+                                    ? annualEntitlementDays
+                                    : (adjStart && adjEnd
+                                        ? calculateWorkingDays(adjStart, adjEnd, holidayDatesForRender).workingDays
+                                        : Number(req.requested_days || 0))
+                                  // Public holidays and prior leave are deductions; travelling days are additions.
+                                  // Annual leave uses the shared breakdown directly so this always matches adjEnd above.
+                                  const finalDays = isAnnualRow
+                                    ? (annualCalc?.grantedDays ?? 0)
+                                    : Math.max(0, baseDays - holidayD - priorD + travelD)
   const generatedReason = [
   outstandingD > 0 ? `${outstandingD} outstanding leave day(s) added` : "",
   holidayD > 0 ? `${holidayD} public holiday day(s) deducted` : "",
@@ -4080,11 +4134,24 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                   onChange={(e) => setOfficeAdjStart((p) => ({ ...p, [req.id]: e.target.value }))} className="h-9" />
                               </div>
                               <div className="space-y-1">
-                                <Label className="text-xs font-semibold">Adjusted End Date</Label>
-                                <Input type="date" value={adjEnd}
-                                  onChange={(e) => setOfficeAdjEnd((p) => ({ ...p, [req.id]: e.target.value }))} className="h-9" />
+                                <Label className="text-xs font-semibold">
+                                  Adjusted End Date
+                                  {isAnnualRow && <span className="text-slate-400 font-normal ml-1">(auto-calculated)</span>}
+                                </Label>
+                                {isAnnualRow ? (
+                                  <Input type="date" value={adjEnd} readOnly disabled
+                                    className="h-9 bg-slate-100 text-slate-700 cursor-not-allowed" />
+                                ) : (
+                                  <Input type="date" value={adjEnd}
+                                    onChange={(e) => setOfficeAdjEnd((p) => ({ ...p, [req.id]: e.target.value }))} className="h-9" />
+                                )}
                               </div>
                             </div>
+                            {isAnnualRow && (
+                              <p className="text-xs text-slate-500 -mt-2">
+                                End Date is calculated from Start Date using Entitlement ({annualEntitlementDays}d) − Enjoyed/Holidays ({priorD + holidayD}d) + Outstanding ({outstandingD}d) + Travel ({travelD}d) = {finalDays} granted working day(s). Adjust the breakdown fields below to change it.
+                              </p>
+                            )}
 
                             {/* Instant Weekend and Holiday Detection */}
                             {adjStart && adjEnd && (() => {
