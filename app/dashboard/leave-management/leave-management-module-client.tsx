@@ -228,7 +228,7 @@ export function LeaveManagementModuleClient({
             <LeavePlanningClient
               profile={{
                 id: userId,
-                role: userRole,
+                role: userRole ?? "staff",
                 departmentName: userDepartmentName,
                 departmentCode: userDepartmentCode,
               }}
