@@ -131,20 +131,45 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
       const linkRes = await fetch("/api/loan/memo-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: memo.id }),
+        body: JSON.stringify({ id: memo.id, disposition: "attachment" }),
       })
       const linkData = await linkRes.json()
       if (!linkRes.ok) throw new Error(linkData.error || "Failed to generate memo link")
+      // Do NOT set target="_blank" here: pairing a forced `download` attribute with a
+      // new-tab navigation is what makes Chrome report "Couldn't download - No
+      // permissions". The server now sends Content-Disposition: attachment for this
+      // link (disposition: "attachment" above), so a same-tab anchor click downloads
+      // the file cleanly without navigating away.
       const a = document.createElement("a")
       a.href = linkData.path
       a.download = `${memo.type}-memo-${memo.request_number}.pdf`
-      a.target = "_blank"
-      a.rel = "noopener noreferrer"
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
     } catch (err) {
       console.error("Download failed:", err)
+    } finally {
+      setDownloadingId(null)
+    }
+  }
+
+  // Prints the actual memo PDF (opened inline in a new tab), instead of the previous
+  // behaviour which downloaded a file to disk and then called window.print() on the
+  // memo console page itself.
+  const printMemo = async (memo: ApprovedMemo) => {
+    setDownloadingId(memo.id)
+    try {
+      const linkRes = await fetch("/api/loan/memo-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: memo.id }),
+      })
+      const linkData = await linkRes.json()
+      if (!linkRes.ok) throw new Error(linkData.error || "Failed to generate memo link")
+      const win = window.open(linkData.path, "_blank", "noopener,noreferrer")
+      if (win) win.addEventListener("load", () => win.print(), { once: true })
+    } catch (err) {
+      console.error("Print failed:", err)
     } finally {
       setDownloadingId(null)
     }
@@ -587,7 +612,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                             Download
                           </button>
                           <button
-                            onClick={() => { downloadMemo(memo).then(() => setTimeout(() => window.print(), 500)) }}
+                            onClick={() => printMemo(memo)}
                             disabled={downloadingId === memo.id}
                             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-semibold transition-colors disabled:opacity-50"
                           >
