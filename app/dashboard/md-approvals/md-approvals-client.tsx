@@ -237,7 +237,7 @@ function LoanRow({
   )
 }
 
-// ─�� Period Section ────────────────────────────────────────────────────────────
+// ─��� Period Section ────────────────────────────────────────────────────────────
 function PeriodSection({
   title, loans, selected, onToggle, onSelectAll, approvedIds, defaultOpen,
 }: {
@@ -817,15 +817,17 @@ export function MdApprovalsClient({ profile }: Props) {
       const linkRes = await fetch("/api/loan/memo-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: loan.id }),
+        body: JSON.stringify({ id: loan.id, disposition: "attachment" }),
       })
       const linkData = await linkRes.json()
       if (!linkRes.ok) throw new Error(linkData.error || "Failed to generate memo link")
+      // Do NOT set target="_blank" here: combining a forced `download` attribute with a
+      // new-tab navigation is exactly what makes Chrome fail with "Couldn't download -
+      // No permissions". The server now sends Content-Disposition: attachment for this
+      // link, so a same-tab anchor click downloads the file without navigating away.
       const a = document.createElement("a")
       a.href = linkData.path
       a.download = `loan-memo-${loan.request_number}.pdf`
-      a.target = "_blank"
-      a.rel = "noopener noreferrer"
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)

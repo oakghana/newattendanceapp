@@ -790,10 +790,19 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     const pdfBytes = Buffer.from(doc.output("arraybuffer"))
 
+    // "disposition=attachment" is used by the Download button so Chrome saves the file
+    // to disk instead of trying to open it inline in the same navigation it was
+    // requested to download from (that mismatch is what produces Chrome's
+    // "Couldn't download - No permissions" error). Preview/Print still use the
+    // default "inline" so the PDF opens in the browser's viewer as before.
+    const wantsAttachment = request.nextUrl.searchParams.get("disposition") === "attachment"
+    const dispositionType = wantsAttachment ? "attachment" : "inline"
+
     return new NextResponse(pdfBytes, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename=loan-memo-${loan.request_number}.pdf`,
+        "Content-Disposition": `${dispositionType}; filename="loan-memo-${loan.request_number}.pdf"`,
+        "Content-Length": String(pdfBytes.byteLength),
         "Cache-Control": "private, no-store, max-age=0",
       },
     })
