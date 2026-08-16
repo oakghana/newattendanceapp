@@ -99,6 +99,34 @@ export function addAnnualLeaveWorkingDays(startDate: string | Date, workingDays:
   }
 }
 
+export interface AnnualLeaveMemoBreakdown {
+  baseEntitlementDays: number
+  daysAlreadyEnjoyed: number
+  outstandingDays: number
+  travellingDays: number
+  grantedDays: number
+}
+
+/** Shared annual memo formula: base - enjoyed + outstanding + travel. */
+export function calculateAnnualLeaveMemoBreakdown(input: {
+  baseEntitlementDays: number
+  daysAlreadyEnjoyed?: number | null
+  outstandingDays?: number | null
+  travellingDays?: number | null
+}): AnnualLeaveMemoBreakdown {
+  const baseEntitlementDays = Math.max(0, Math.floor(Number(input.baseEntitlementDays) || 0))
+  const daysAlreadyEnjoyed = Math.min(baseEntitlementDays, Math.max(0, Math.floor(Number(input.daysAlreadyEnjoyed) || 0)))
+  const outstandingDays = Math.max(0, Math.floor(Number(input.outstandingDays) || 0))
+  const travellingDays = Math.max(0, Math.floor(Number(input.travellingDays) || 0))
+  return {
+    baseEntitlementDays: Math.max(0, baseEntitlementDays - daysAlreadyEnjoyed),
+    daysAlreadyEnjoyed,
+    outstandingDays,
+    travellingDays,
+    grantedDays: Math.max(0, baseEntitlementDays - daysAlreadyEnjoyed + outstandingDays + travellingDays),
+  }
+}
+
 export interface AnnualLeaveMemoDates {
   entitlementDays: number
   daysAlreadyEnjoyed: number

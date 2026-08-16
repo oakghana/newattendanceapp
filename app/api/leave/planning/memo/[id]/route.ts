@@ -7,7 +7,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrApproverRole, isHrLeaveOfficeRole, isManagerRole, isStaffRole, calculateWorkingDays } from "@/lib/leave-planning"
 import { resolveEntitlementFromProfile } from "@/lib/annual-leave-entitlement"
 import { isHrRecordsRole } from "@/lib/hr-workflow"
-import { calculateAnnualLeaveMemoDates, extractAlreadyEnjoyedDays, getNextWorkingDay } from "@/lib/annual-leave-calculator"
+import { calculateAnnualLeaveMemoBreakdown, calculateAnnualLeaveMemoDates, extractAlreadyEnjoyedDays, getNextWorkingDay } from "@/lib/annual-leave-calculator"
 
 export const runtime = "nodejs"
 
@@ -679,15 +679,18 @@ export async function GET(
       const daysAlreadyEnjoyed = Math.max(0, explicitDeduction ?? 0)
       const travellingDays = Math.max(0, Number(lr.travelling_days_added || 2))
       const storedEntitlement = Math.max(0, Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays))
-      const baseEntitlement = Math.max(0, storedEntitlement - memoOutstandingDays)
-      const calculatedGrantedDays = baseEntitlement + memoOutstandingDays + travellingDays - daysAlreadyEnjoyed
+      const breakdown = calculateAnnualLeaveMemoBreakdown({
+        baseEntitlementDays: storedEntitlement,
+        daysAlreadyEnjoyed,
+        outstandingDays: memoOutstandingDays,
+        travellingDays,
+      })
       annualMemoDates = calculateAnnualLeaveMemoDates({
         startDate: effectiveStart,
-        entitlementDays: storedEntitlement,
-        // Annual leave is inclusive: 36 base + 4 outstanding + 2 travel - 1 enjoyed = 41.
-        grantedDays: Math.max(effectiveDays, calculatedGrantedDays),
-        daysAlreadyEnjoyed,
-        travellingDays,
+        entitlementDays: breakdown.baseEntitlementDays + breakdown.outstandingDays,
+        grantedDays: breakdown.grantedDays,
+        daysAlreadyEnjoyed: 0,
+        travellingDays: breakdown.travellingDays,
       })
       adjustedEffectiveEnd = annualMemoDates.endDate.toISOString().slice(0, 10)
     }

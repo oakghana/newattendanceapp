@@ -1,6 +1,6 @@
 // jsPDF and jspdf-autotable are loaded dynamically inside each function
 // to avoid SSR crashes (jsPDF accesses `window` at module initialisation time).
-import { calculateAnnualLeaveMemoDates } from "./annual-leave-calculator"
+import { calculateAnnualLeaveMemoBreakdown, calculateAnnualLeaveMemoDates } from "./annual-leave-calculator"
 import { resolveEntitlementFromProfile } from "./annual-leave-entitlement"
 
 export interface MemoData {
@@ -477,14 +477,22 @@ async function generateMainMemo(
     const baseAnnualEntitlement = isAnnualLeave
       ? Math.max(0, resolvedEntitlement.annualLeaveDays - enjoyedDaysForEntitlement)
       : storedEntitlementDays
+    const breakdown = isAnnualLeave
+      ? calculateAnnualLeaveMemoBreakdown({
+          baseEntitlementDays: resolvedEntitlement.annualLeaveDays,
+          daysAlreadyEnjoyed: enjoyedDaysForEntitlement,
+          outstandingDays: outstandingLeaveDays,
+          travellingDays,
+        })
+      : null
     const entitlementDays = isAnnualLeave
-      ? baseAnnualEntitlement + outstandingLeaveDays
+      ? breakdown!.baseEntitlementDays + breakdown!.outstandingDays
       : storedEntitlementDays
     const annualMemoDates = calculateAnnualLeaveMemoDates({
       startDate: firstStaff?.leave_period_start || new Date(),
       entitlementDays,
-      grantedDays: approvedDays,
-      daysAlreadyEnjoyed: adjustedUsedDays > 0 ? adjustedUsedDays : enjoyedDays || null,
+      grantedDays: breakdown?.grantedDays ?? approvedDays,
+      daysAlreadyEnjoyed: 0,
       travellingDays,
     })
     const annualDaysRemaining = Math.max(0, annualMemoDates.entitlementDays - annualMemoDates.daysAlreadyEnjoyed)
@@ -492,7 +500,7 @@ async function generateMainMemo(
 
     const entitled = entitlementDays > 0
       ? [
-          `${baseAnnualEntitlement} day${baseAnnualEntitlement !== 1 ? "s" : ""}`,
+          `${breakdown?.baseEntitlementDays ?? baseAnnualEntitlement} day${(breakdown?.baseEntitlementDays ?? baseAnnualEntitlement) !== 1 ? "s" : ""}`,
           outstandingLeaveDays > 0 ? `${outstandingLeaveDays} outstanding day${outstandingLeaveDays !== 1 ? "s" : ""}` : "",
           travellingDays > 0 ? `${travellingDays} travelling day${travellingDays !== 1 ? "s" : ""}` : "",
         ].filter(Boolean).join(" plus ")
