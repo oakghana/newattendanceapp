@@ -53,6 +53,7 @@ interface LeaveRequest {
   leave_type: string
   status: string
   created_at: string
+  number_of_days?: number | null
   user_name?: string
   department?: string
   location?: string
@@ -86,7 +87,7 @@ interface LeaveManagementClientProps {
   userId: string
   userRole: string
   userDepartment: string | null
-  userLocationId: string | null
+  userLocationId?: string | null
   userFirstName: string | null
   userLastName: string | null
   hasHodLinkage: boolean
@@ -140,6 +141,8 @@ export function LeaveManagementClient({
       "manager_confirmed",
       "hod_approved",
   "hr_office_forwarded",
+  "pending_hr_leave_processing",
+  "pending_hr_records_reference",
   "pending_regional_hr_office_review",
   "pending_regional_hr_review",
       "regional_hr_office_review",
@@ -374,11 +377,9 @@ export function LeaveManagementClient({
       closeSignerAssignDialog()
       
       // Refresh the relevant data
-      if (signerAssignType === "deferment") {
-        fetchMyDefermentMemos()
-      } else {
-        fetchMyRecallMemos()
-      }
+  if (signerAssignType === "deferment" || signerAssignType === "recall") {
+    window.location.reload()
+  }
     } catch (error) {
       console.error("[v0] Error assigning signer:", error)
       toast({
@@ -413,8 +414,8 @@ export function LeaveManagementClient({
       const response = await fetch(`/api/leave/export-annual?${params.toString()}`)
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Export failed")
+        const error = await response.json().catch(() => null)
+        throw new Error(error?.error || `Annual leave export failed (${response.status})`)
       }
 
       const blob = await response.blob()
@@ -792,8 +793,10 @@ export function LeaveManagementClient({
   
   const pendingNotifications = useMemo(() => managerNotifications.filter((n) => {
   const status = String(n.status || n.leave_requests?.status || "").toLowerCase().replace(/[\s-]+/g, "_")
+  const terminalStatus = ["approved", "regional_manager_approved", "hr_approved", "hr_rejected", "regional_rejected", "withdrawn", "completed"].includes(status)
+  if (terminalStatus) return false
   const isRegionalReview = ["pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review", "pending_regional_manager_approval"].includes(status)
-  return isRegionalReview || String(n.review_decision || "pending") === "pending"
+  return isRegionalReview || String(n.review_decision || "pending").toLowerCase() === "pending"
   }), [managerNotifications])
   const regionalManagerApproved = useMemo(() => managerNotifications.filter((n) => ["approved", "regional_manager_approved"].includes(String(n.status || n.leave_requests?.status || "").toLowerCase().replace(/[\s-]+/g, "_"))), [managerNotifications])
   const adminAllPending = useMemo(() => pendingNotifications, [pendingNotifications])
@@ -808,7 +811,9 @@ export function LeaveManagementClient({
 
   const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
   const isAdmin = normalizedRole === "admin"
-  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office", "hr", "audit_staff", "contract", "loan_committee", "committee", "secretary", "managing_director"].includes(normalizedRole)
+  // All authenticated users can access their leave request hub. This does not
+  // grant reviewer or administrative permissions.
+  const canUseStaffLeaveHub = true
   const isManagerView = ["admin", "regional_manager", "regional_manager_officer", "department_head", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office", "hr", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isRegionalManager = normalizedRole === "regional_manager" || normalizedRole === "regional_manager_officer"
   const isAdminView = isAdmin
@@ -2414,7 +2419,7 @@ export function LeaveManagementClient({
                   <DefermentRecallTracker 
                     type="deferment" 
                     userRole={userRole}
-                    userDepartment={userDepartment}
+                    userDepartment={userDepartment ?? ""}
                     userId={userId}
                   />
                 </CardContent>
@@ -2832,7 +2837,7 @@ export function LeaveManagementClient({
                   <DefermentRecallTracker 
                     type="recall" 
                     userRole={userRole}
-                    userDepartment={userDepartment}
+                    userDepartment={userDepartment ?? ""}
                     userId={userId}
                   />
                 </CardContent>
@@ -3070,8 +3075,9 @@ export function LeaveManagementClient({
                         paginatedMemos.map((memo: any) => {
                           // All memos from the API are already approved (filtered by status at API level)
                           // Check if they have been signed/approved by HR
-                          const hasHrApproval = memo.hr_approved_at || memo.hr_approver_name || memo.hr_signature_image_url
-                          const approvalStatus = hasHrApproval ? "Signed" : "Approved"
+                          const hasOfficialReference = Boolean(String(memo.memo_reference || "").trim())
+                          const hasHrApproval = hasOfficialReference && Boolean(memo.hr_approved_at || memo.hr_approver_name || memo.hr_signature_image_url)
+                          const approvalStatus = hasOfficialReference ? (hasHrApproval ? "Signed" : "Approved") : "Awaiting HR Records Reference"
                           
                           return (
                           <div key={memo.id} className="border border-teal-200 rounded-lg p-4 hover:bg-teal-50/50 transition-colors">
@@ -3084,9 +3090,14 @@ export function LeaveManagementClient({
                                       ✓ Approved & Signed
                                     </span>
                                   )}
-                                  {!hasHrApproval && (
+                                  {!hasHrApproval && hasOfficialReference && (
                                     <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800">
                                       ✓ Approved
+                                    </span>
+                                  )}
+                                  {!hasOfficialReference && (
+                                    <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-amber-100 text-amber-800">
+                                      Memo Reference Pending HR Records
                                     </span>
                                   )}
                                 </div>
@@ -3101,17 +3112,19 @@ export function LeaveManagementClient({
                               <div className="flex gap-2 flex-shrink-0">
                                 <Button
                                   size="sm"
-                                  className="bg-teal-600 hover:bg-teal-700 text-white"
+                                  disabled={!hasOfficialReference}
+                                  className={hasOfficialReference ? "bg-teal-600 hover:bg-teal-700 text-white" : "border-slate-300 text-slate-500"}
+                                  title={hasOfficialReference ? "Download approval memo" : "HR Records must assign the official memo reference first"}
                                   onClick={() => {
+                                    if (!hasOfficialReference) return
                                     const memoId = memo.leave_plan_request_id || memo.id
                                     if (!memoId) return
-                                    // Include the memo_token so staff/HOD users pass the token check
                                     const token = memo.memo_token ? `?token=${encodeURIComponent(memo.memo_token)}` : ""
                                     window.open(`/api/leave/planning/memo/${memoId}${token}`, "_blank")
                                   }}
                                 >
                                   <Download className="h-3.5 w-3.5 mr-1" />
-                                  Download
+                                  {hasOfficialReference ? "Download" : "Reference Pending"}
                                 </Button>
                               </div>
                             </div>
@@ -3273,7 +3286,7 @@ export function LeaveManagementClient({
         onClose={() => setShowSubmitDefermentModal(false)}
         userId={userId}
         userRole={userRole}
-        approvedLeaves={initialApprovedStaffRequests}
+        approvedLeaves={initialApprovedStaffRequests as any}
         onSuccess={() => {
           toast({ title: "Success", description: "Deferment request submitted successfully" })
         }}
@@ -3534,21 +3547,33 @@ function LeaveRequestCard({
           </div>
         )}
 
-        {/* Download Memo button — shown when leave is hr_approved and a memo token is available */}
-        {["approved", "hr_approved"].includes(normalizedStatus) && (normalizedStatus === "approved" || request.memo_token) && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-            onClick={() => {
-              const tokenQuery = request.memo_token ? `?token=${encodeURIComponent(request.memo_token)}` : ""
-              const url = `/api/leave/planning/memo/${request.id}${tokenQuery}`
-              window.open(url, "_blank")
-            }}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Download Approval Memo
-          </Button>
+        {/* Download is unlocked only after HR Records assigns the official memo reference. */}
+        {normalizedStatus === "hr_approved" && (
+          request.memo_reference?.trim() ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+              onClick={() => {
+                const tokenQuery = request.memo_token ? `?token=${encodeURIComponent(request.memo_token)}` : ""
+                window.open(`/api/leave/planning/memo/${request.id}${tokenQuery}`, "_blank")
+              }}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download Approval Memo
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled
+              className="w-full border-slate-300 text-slate-500"
+              title="HR Records must assign the official memo reference before download is available."
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Memo Reference Pending HR Records
+            </Button>
+          )
         )}
 
         {canEdit && onEdit && !hasHodChanges && (

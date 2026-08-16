@@ -20,8 +20,9 @@ export async function POST(request: NextRequest) {
 
     if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { id } = await request.json()
+    const { id, disposition } = await request.json()
     const loanId = String(id || "")
+    const wantsAttachment = disposition === "attachment"
     if (!loanId) return NextResponse.json({ error: "Loan id is required" }, { status: 400 })
 
     const [{ data: profile, error: profileError }, { data: loan, error: loanError }] = await Promise.all([
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
       exp: Date.now() + 10 * 60 * 1000,
     })
 
-    const path = `/api/loan/memo/${loanId}?token=${encodeURIComponent(token)}`
+    const path = `/api/loan/memo/${loanId}?token=${encodeURIComponent(token)}${wantsAttachment ? "&disposition=attachment" : ""}`
     return NextResponse.json({ success: true, path, expiresInSeconds: 600 })
   } catch (error: any) {
     console.error("memo-link error", error)

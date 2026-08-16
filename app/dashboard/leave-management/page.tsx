@@ -1,7 +1,7 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { LeaveManagementModuleClient } from "./leave-management-module-client"
 import { LeaveManagementPageWrapper } from "@/components/leave/leave-management-page-wrapper"
-import { isExcludedLocation } from "@/lib/hr-workflow"
+import { isExcludedLocation, resolveSelfLeaveRoute } from "@/lib/hr-workflow"
 import { Suspense } from "react"
 
 
@@ -49,7 +49,7 @@ export default async function LeaveManagementPage() {
     const queries: any[] = [
       admin
         .from("leave_plan_requests")
-        .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, workflow_route, workflow_stage, created_at, adjusted_start_date, adjusted_end_date, hod_decision, memo_token")
+        .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, workflow_route, workflow_stage, created_at, adjusted_start_date, adjusted_end_date, hod_decision, memo_token, memo_reference")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(50),
@@ -73,6 +73,8 @@ export default async function LeaveManagementPage() {
 
     const results = await Promise.all(queries)
     const [requestsRes, linkageRes, locationRes] = results
+    userLocationName = (locationRes?.data as any)?.name || null
+    const selfLeaveResolution = resolveSelfLeaveRoute({ role: profile.role, locationName: userLocationName })
 
     if (!isRegionalHr && !isRegionalManager && !isItAdmin) {
       // Legacy/non-regional workflow: HODs receive only requests explicitly
@@ -128,6 +130,7 @@ export default async function LeaveManagementPage() {
               status: request.status || "pending_hod_review",
               created_at: request.created_at,
               memo_token: request.memo_token || null,
+              memo_reference: request.memo_reference || null,
               user_name: `${staff.first_name || ""} ${staff.last_name || ""}`.trim(),
             },
           }
@@ -204,6 +207,20 @@ export default async function LeaveManagementPage() {
       }
     }
 
+    if (selfLeaveResolution.isSelfLeave) {
+      const misplacedRequests = (requestsRes.data || []).filter((request: any) => request.workflow_route !== "self_leave" || request.status === "pending_regional_hr_review" || request.status === "pending_regional_hr_office_review" || request.status === "regional_hr_office_review" || request.status === "pending_hod_review")
+      if (misplacedRequests.length > 0) {
+        await Promise.all(misplacedRequests.map((request: any) => admin.from("leave_plan_requests").update({ status: "pending_hr_leave_processing", workflow_route: "self_leave", workflow_stage: "hr_leave_office" }).eq("id", request.id)))
+        for (const request of requestsRes.data || []) {
+          if (misplacedRequests.some((item: any) => item.id === request.id)) {
+            request.status = "pending_hr_leave_processing"
+            request.workflow_route = "self_leave"
+            request.workflow_stage = "hr_leave_office"
+          }
+        }
+      }
+    }
+
     staffRequests = (requestsRes.data || []).map((request: any) => ({
       id: String(request.id),
       user_id: String(request.user_id),
@@ -211,18 +228,21 @@ export default async function LeaveManagementPage() {
       end_date: request.preferred_end_date,
       reason: request.reason || "",
       leave_type: request.leave_type_key || "annual",
-      status: (request.workflow_route === "regional" && isExcludedLocation(userLocationName)) ? "pending_hod_review" : request.status,
-      workflow_route: isExcludedLocation(userLocationName) ? "legacy" : request.workflow_route,
+      status: request.status,
+      workflow_route: request.workflow_route,
       workflow_stage: request.workflow_stage,
       created_at: request.created_at,
       adjusted_start_date: request.adjusted_start_date,
       adjusted_end_date: request.adjusted_end_date,
       hod_decision: request.hod_decision,
       memo_token: request.memo_token || null,
+      user_name: `${request.user_profiles?.first_name || profile.first_name || ""} ${request.user_profiles?.last_name || profile.last_name || ""}`.trim() || user.email || "Staff member",
+      department: (Array.isArray(profile.departments) ? profile.departments[0]?.name : (profile.departments as any)?.name) || "",
+      location: userLocationName || "",
+      rank: (request.user_profiles as any)?.position || "",
     }))
 
     hasHodLinkage = Boolean((linkageRes?.data as any)?.id)
-    userLocationName = (locationRes?.data as any)?.name || null
   } catch (err) {
     console.error("[v0] Error fetching essential data:", err)
     hasHodLinkage = false

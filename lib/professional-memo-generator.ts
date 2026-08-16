@@ -1,6 +1,6 @@
 // jsPDF and jspdf-autotable are loaded dynamically inside each function
 // to avoid SSR crashes (jsPDF accesses `window` at module initialisation time).
-import { calculateAnnualLeaveMemoDates } from "./annual-leave-calculator"
+import { calculateAnnualLeaveMemoBreakdown, calculateAnnualLeaveMemoDates } from "./annual-leave-calculator"
 import { resolveEntitlementFromProfile } from "./annual-leave-entitlement"
 
 export interface MemoData {
@@ -471,20 +471,28 @@ async function generateMainMemo(
       years_of_service: firstStaff?.years_of_service,
     })
     const isAnnualLeave = String(memoData.leave_type_key || "").toLowerCase() === "annual"
-    // Outstanding days are carried over in a separate field and must always be
-    // added to the base annual entitlement exactly once.
-    const baseAnnualEntitlement = Math.max(
-      resolvedEntitlement.annualLeaveDays,
-      storedEntitlementDays > 0 ? storedEntitlementDays : 0,
-    )
+    // Prior enjoyed days reduce the base annual entitlement. Outstanding and travel
+    // days remain separate additions in the memo breakdown.
+    const enjoyedDaysForEntitlement = adjustedUsedDays > 0 ? adjustedUsedDays : enjoyedDays || 0
+    const baseAnnualEntitlement = isAnnualLeave
+      ? Math.max(0, resolvedEntitlement.annualLeaveDays - enjoyedDaysForEntitlement)
+      : storedEntitlementDays
+    const breakdown = isAnnualLeave
+      ? calculateAnnualLeaveMemoBreakdown({
+          baseEntitlementDays: resolvedEntitlement.annualLeaveDays,
+          daysAlreadyEnjoyed: enjoyedDaysForEntitlement,
+          outstandingDays: outstandingLeaveDays,
+          travellingDays,
+        })
+      : null
     const entitlementDays = isAnnualLeave
-      ? baseAnnualEntitlement + outstandingLeaveDays
+      ? breakdown!.baseEntitlementDays + breakdown!.outstandingDays
       : storedEntitlementDays
     const annualMemoDates = calculateAnnualLeaveMemoDates({
       startDate: firstStaff?.leave_period_start || new Date(),
       entitlementDays,
-      grantedDays: approvedDays,
-      daysAlreadyEnjoyed: adjustedUsedDays > 0 ? adjustedUsedDays : enjoyedDays || null,
+      grantedDays: breakdown?.grantedDays ?? approvedDays,
+      daysAlreadyEnjoyed: 0,
       travellingDays,
     })
     const annualDaysRemaining = Math.max(0, annualMemoDates.entitlementDays - annualMemoDates.daysAlreadyEnjoyed)
@@ -492,7 +500,8 @@ async function generateMainMemo(
 
     const entitled = entitlementDays > 0
       ? [
-          `${entitlementDays} day${entitlementDays !== 1 ? "s" : ""}`,
+          `${breakdown?.baseEntitlementDays ?? baseAnnualEntitlement} day${(breakdown?.baseEntitlementDays ?? baseAnnualEntitlement) !== 1 ? "s" : ""}`,
+          outstandingLeaveDays > 0 ? `${outstandingLeaveDays} outstanding day${outstandingLeaveDays !== 1 ? "s" : ""}` : "",
           travellingDays > 0 ? `${travellingDays} travelling day${travellingDays !== 1 ? "s" : ""}` : "",
         ].filter(Boolean).join(" plus ")
       : "—"
@@ -512,7 +521,7 @@ async function generateMainMemo(
     if (firstStaff?.leave_period_end) {
       if (isAnnualLeave && firstStaff.leave_period_start) {
         // Annual leave uses the same inclusive calculation and totals as every memo route.
-        toDate = fmtDateLongPdf(annualMemoDates.endDate)
+        toDate = fmtDateLongPdf(annualMemoDates.endDate.toISOString())
       } else {
         toDate = fmtDateLongPdf(firstStaff.leave_period_end)
       }

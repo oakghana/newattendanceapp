@@ -17,7 +17,7 @@ import {
   resolveEntitlementFromProfile,
   buildAnnualLeaveEntitlementSummary,
 } from "@/lib/annual-leave-entitlement"
-import { resolveRegionalHrOffice, routeLeave } from "@/lib/hr-workflow"
+import { resolveRegionalHrOffice, resolveSelfLeaveRoute, routeLeave } from "@/lib/hr-workflow"
 
 function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
   const year = referenceDate.getFullYear()
@@ -741,6 +741,8 @@ export async function GET(request: NextRequest) {
         officeQuery = officeQuery.eq("is_archived", false)
       }
 
+      let regionalScopedStaffIds: string[] = []
+
       // Regional HR is the first stage for every regional leave type,
       // including Annual Leave. Resolve staff IDs first because PostgREST
       // nested relation predicates can silently return an empty queue.
@@ -759,11 +761,31 @@ export async function GET(request: NextRequest) {
         }
         const { data: scopedStaff, error: scopedStaffError } = await scopedStaffQuery
         if (scopedStaffError) throw scopedStaffError
-        const staffIds = (scopedStaff || []).map((row: any) => row.id).filter(Boolean)
-        officeQuery = officeQuery.in("user_id", staffIds.length ? staffIds : ["00000000-0000-0000-0000-000000000000"])
+        regionalScopedStaffIds = (scopedStaff || []).map((row: any) => String(row.id)).filter(Boolean)
+        officeQuery = officeQuery.in("user_id", regionalScopedStaffIds.length ? regionalScopedStaffIds : ["00000000-0000-0000-0000-000000000000"])
       }
 
       const { data: requests, error: reqError } = await officeQuery
+
+      let allRegionalRequests: any[] = []
+      if (isRegionalHr && regionalScopedStaffIds.length > 0) {
+        const { data: regionalRows, error: regionalRowsError } = await admin
+          .from("leave_plan_requests")
+          .select(`
+            *,
+            user:user_profiles!leave_plan_requests_user_id_fkey (
+              id, first_name, last_name, employee_id,
+              departments(name, code),
+              assigned_location_id, region_id,
+              geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
+            )
+          `)
+          .eq("workflow_route", "regional")
+          .in("user_id", regionalScopedStaffIds)
+          .order("created_at", { ascending: false })
+        if (regionalRowsError) throw regionalRowsError
+        allRegionalRequests = regionalRows || []
+      }
 
       if (reqError) {
         if (isSchemaIssue(reqError)) return buildDegradedModeResponse("hr_office", getSchemaIssueMessage(reqError))
@@ -820,6 +842,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         mode: "hr_office",
         requests: requests || [],
+        allRequests: isRegionalHr ? allRegionalRequests : requests || [],
         myRequests: myRequests || [],
         analytics,
         outstandingLeaveMap: Object.fromEntries(outstandingLeaveMap),
@@ -1203,26 +1226,8 @@ export async function POST(request: NextRequest) {
   "id, role, department_id, region_id, assigned_location_id, staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id, position, geofence_locations!user_profiles_assigned_location_id_fkey(name)"
   )
 
-    const role = String((profile as any).role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-    const canSelfApply =
-      isStaffRole(role) ||
-      [
-        "admin",
-        "regional_manager",
-        "department_head",
-        "hr_officer",
-        "hr_director",
-        "director_hr",
-        "manager_hr",
-        "hr_leave_office",
-        "hr_office",
-        "loan_office",
-        "accounts",
-      ].includes(role)
-    if (!canSelfApply) {
-      return NextResponse.json({ error: "Only staff, managers, and admins can submit leave plans." }, { status: 403 })
-    }
-
+    // Every authenticated profile may submit leave. The profile role and
+    // assigned location still determine the review route after submission.
     const body = await request.json()
     const {
       leave_year_period,
@@ -1435,11 +1440,15 @@ export async function POST(request: NextRequest) {
         .maybeSingle()
       if (fallbackRegionalHr?.id) regionalHrOffice = { user_id: fallbackRegionalHr.id, region_id: fallbackRegionalHr.region_id || resolvedRegionId || null, is_override: false }
     }
-    const leaveRoute = routeLeave({
-      leaveType: leaveTypeKey,
-      locationName,
-      hasRegionalOffice: Boolean(regionalHrOffice?.user_id),
-    })
+    const selfLeaveRoute = resolveSelfLeaveRoute({ role: (profile as any)?.role, locationName })
+    const leaveRoute = selfLeaveRoute.isSelfLeave
+      ? { route: "self_leave" as const, firstStage: selfLeaveRoute.firstStage }
+      : routeLeave({
+          leaveType: leaveTypeKey,
+          locationName,
+          hasRegionalOffice: Boolean(regionalHrOffice?.user_id),
+        })
+    const isSelfLeaveWorkflow = leaveRoute.route === "self_leave"
     const isRegionalWorkflow = leaveRoute.route === "regional"
     if (isRegionalWorkflow && !regionalHrOffice?.user_id) {
       return NextResponse.json(
@@ -1473,9 +1482,9 @@ export async function POST(request: NextRequest) {
         entitlement_days: entitlementDays,
         requested_days: requestedDays,
         reason: reason || null,
-        status: isRegionalWorkflow ? "pending_regional_hr_review" : "pending_hod_review",
-        workflow_route: isRegionalWorkflow ? "regional" : "legacy",
-        workflow_stage: isRegionalWorkflow ? "regional_hr_review" : "hod_review",
+        status: isSelfLeaveWorkflow ? "pending_hr_leave_processing" : isRegionalWorkflow ? "pending_regional_hr_review" : "pending_hod_review",
+        workflow_route: isSelfLeaveWorkflow ? "self_leave" : isRegionalWorkflow ? "regional" : "legacy",
+        workflow_stage: isSelfLeaveWorkflow ? "hr_leave_office" : isRegionalWorkflow ? "regional_hr_review" : "hod_review",
         regional_hr_office_user_id: isRegionalWorkflow ? regionalHrOffice?.user_id : null,
         // Annual leave entitlement snapshot — only columns that exist in the DB
         staff_category: annualLeaveSnapshot.staffCategory || null,
@@ -1502,7 +1511,7 @@ export async function POST(request: NextRequest) {
       throw requestError
     }
 
-    if (!isRegionalWorkflow) {
+    if (!isRegionalWorkflow && !isSelfLeaveWorkflow) {
       const nonHrReviewers = await resolveManagerReviewers(admin, user.id, (profile as any).department_id || null)
 
       if (nonHrReviewers.length === 0) {
@@ -1566,30 +1575,11 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const profile = await getOrCreateProfile(admin, user, "id, role, department_id")
+    const profile = await getOrCreateProfile(admin, user, "id, role, department_id, assigned_location_id, region_id")
 
-    const role = normalizeRoleValue(profile.role)
-    const canSelfApply =
-      isStaffRole(role) ||
-      [
-        "admin",
-        "regional_manager",
-        "department_head",
-        "hr_officer",
-        "hr_director",
-        "director_hr",
-        "manager_hr",
-        "hr_leave_office",
-        "hr_office",
-        "loan_office",
-        "accounts",
-      ].includes(role)
-
-    if (!canSelfApply) {
-      return NextResponse.json({ error: "Only staff, managers, and admins can update leave plans." }, { status: 403 })
-    }
-
-    const body = await request.json()
+  // Any authenticated profile may update its own eligible leave plan. Reviewer
+  // and administrative actions remain protected by their dedicated routes.
+  const body = await request.json()
     const {
       id,
       leave_year_period,

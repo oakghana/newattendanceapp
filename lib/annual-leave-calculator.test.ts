@@ -4,6 +4,7 @@ import { resolveEntitlementFromProfile } from "./annual-leave-entitlement"
 import {
   addAnnualLeaveWorkingDays,
   calculateAnnualLeaveMemoDates,
+  calculateAnnualLeaveMemoBreakdown,
   extractAlreadyEnjoyedDays,
   buildAnnualLeaveDisplay,
   calculateAnnualLeaveBreakdown,
@@ -30,6 +31,7 @@ describe("annual leave calculation", () => {
 
   it("moves weekend leave endings to the next working day", () => {
     expect(getNextWorkingDay("2026-09-19").toISOString().slice(0, 10)).toBe("2026-09-21")
+    expect(getNextWorkingDay("2026-09-20").toISOString().slice(0, 10)).toBe("2026-09-21")
   })
 
   it("resolves senior staff to 36 core days plus 2 travel days", () => {
@@ -39,7 +41,7 @@ describe("annual leave calculation", () => {
     expect(entitlement.totalEntitlement).toBe(38)
   })
 
-  it("uses the same inclusive dates for 36 entitlement, 4 enjoyed, and 2 travel days", () => {
+  it("calculates the approved inclusive period and next working-day resumption", () => {
     const result = calculateAnnualLeaveMemoDates({
       startDate: "2026-08-03",
       entitlementDays: 36,
@@ -99,6 +101,77 @@ describe("annual leave calculation", () => {
     expect(result.grantedDays).toBe(24)
   })
 
+  it("uses the agreed 36 minus 1 plus 4 plus 2 annual breakdown", () => {
+    const breakdown = calculateAnnualLeaveMemoBreakdown({
+      baseEntitlementDays: 36,
+      daysAlreadyEnjoyed: 1,
+      outstandingDays: 4,
+      travellingDays: 2,
+    })
+    expect(breakdown.baseEntitlementDays).toBe(35)
+    expect(breakdown.outstandingDays).toBe(4)
+    expect(breakdown.travellingDays).toBe(2)
+    expect(breakdown.grantedDays).toBe(41)
+
+    const dates = calculateAnnualLeaveMemoDates({
+      startDate: "2026-08-03",
+      entitlementDays: 39,
+      grantedDays: breakdown.grantedDays,
+      daysAlreadyEnjoyed: 0,
+      travellingDays: breakdown.travellingDays,
+    })
+    expect(dates.endDate.toISOString().slice(0, 10)).toBe("2026-09-28")
+    expect(dates.resumptionDate.toISOString().slice(0, 10)).toBe("2026-09-29")
+  })
+
+  it("reproduces the manually-verified 36/4/0/2 memo end-to-end (download-memo route logic)", () => {
+    // Mirrors the exact field precedence used in app/api/leave/download-memo/route.ts
+    // for a staff member with no outstanding days — matches the signed paper memo
+    // (36 base, 4 already enjoyed, 2 travel days => 34 granted, 3 Aug -> 17 Sep, resume 18 Sep).
+    const req = {
+      preferred_start_date: "2026-08-03",
+      leave_type_key: "annual",
+      prior_leave_days_deducted: 4,
+      holiday_days_deducted: null,
+      outstanding_leave_days_added: 0,
+      travelling_days_added: 2,
+    } as any
+    const resolvedEntitlement = { annualLeaveDays: 36, travelDays: 2 }
+    const outstandingDays = Math.max(0, Number(req.outstanding_leave_days_added ?? req.outstanding_leave_days ?? 0))
+    const travelDays = resolvedEntitlement.travelDays ?? Number(req.travelling_days_added || 2)
+    const breakdown = calculateAnnualLeaveMemoBreakdown({
+      baseEntitlementDays: resolvedEntitlement.annualLeaveDays,
+      daysAlreadyEnjoyed: Number(req.prior_leave_days_deducted || 0) + Number(req.holiday_days_deducted || 0),
+      outstandingDays,
+      travellingDays: travelDays || 2,
+    })
+    const entitlementDays = breakdown.baseEntitlementDays + breakdown.outstandingDays
+    const annualDates = calculateAnnualLeaveMemoDates({
+      startDate: req.preferred_start_date,
+      entitlementDays,
+      grantedDays: breakdown.grantedDays,
+      daysAlreadyEnjoyed: 0,
+      travellingDays: breakdown.travellingDays,
+    })
+    expect(breakdown.grantedDays).toBe(34)
+    expect(annualDates.endDate.toISOString().slice(0, 10)).toBe("2026-09-17")
+    expect(annualDates.resumptionDate.toISOString().slice(0, 10)).toBe("2026-09-18")
+  })
+
+  it("calculates manager entitlement with outstanding and travel days", () => {
+    const result = calculateAnnualLeaveMemoDates({
+      startDate: "2026-08-03",
+      entitlementDays: 36 + 4,
+      grantedDays: 41,
+      daysAlreadyEnjoyed: 1,
+      travellingDays: 2,
+    })
+    expect(result.entitlementDays).toBe(40)
+    expect(result.daysAlreadyEnjoyed).toBe(1)
+    expect(result.grantedDays).toBe(41)
+    expect(36 - result.daysAlreadyEnjoyed + 4 + 2).toBe(41)
+  })
+
   it("adds HR carryover days to the core annual entitlement", () => {
     const coreEntitlement = 36
     const carryover = 12
@@ -136,7 +209,7 @@ describe("annual leave calculation", () => {
       savedReason: "Adjusted after HR review",
       calculatedRemarks: ["4 day(s) already enjoyed", "2 travelling day(s) added"],
     })
-    expect(remarks).toBe("Adjusted after HR review")
+    expect(remarks).toBe("Adjusted after HR review; 4 day(s) already enjoyed; 2 travelling day(s) added")
   })
 
   it("treats given days as already enjoyed deductions", () => {

@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { jsPDF } from 'jspdf'
 import fs from 'fs'
 import path from 'path'
-import { calculateAnnualLeaveMemoDates, extractAlreadyEnjoyedDays } from '@/lib/annual-leave-calculator'
+import { calculateAnnualLeaveMemoBreakdown, calculateAnnualLeaveMemoDates, extractAlreadyEnjoyedDays } from '@/lib/annual-leave-calculator'
 import { resolveEntitlementFromProfile } from '@/lib/annual-leave-entitlement'
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -228,40 +228,58 @@ export async function GET(request: NextRequest) {
       ? Number(outstandingBalance?.entitlement_days ?? 0)
       : 0
     const outstandingDays = leaveTypeKey === 'annual'
-      ? Math.max(0, Number(outstandingBalance?.carryover_to_next_year ?? 0))
+      ? Math.max(0, Number(
+          (req as any).outstanding_leave_days_added
+          ?? (req as any).outstanding_leave_days
+          ?? outstandingBalance?.carryover_to_next_year
+          ?? outstandingBalance?.entitlement_days
+          ?? 0,
+        ))
       : 0
-    const entitlementDays = leaveTypeKey === 'annual'
-      ? adjustedEntitlementDays > 0
-        ? adjustedEntitlementDays
-        : (resolvedEntitlement?.annualLeaveDays ?? 36) + outstandingDays
-      : (storedEntitledDays || storedGrantedDays)
     const travelDays = leaveTypeKey === 'annual'
       ? (resolvedEntitlement?.travelDays ?? Number(req.travelling_days_added || 2))
       : Number(req.travelling_days_added || 0)
+    const breakdown = leaveTypeKey === 'annual'
+      ? calculateAnnualLeaveMemoBreakdown({
+          baseEntitlementDays: resolvedEntitlement?.annualLeaveDays ?? 36,
+          daysAlreadyEnjoyed: (req.prior_leave_days_deducted != null || req.holiday_days_deducted != null)
+            ? Number(req.prior_leave_days_deducted || 0) + Number(req.holiday_days_deducted || 0)
+            : extractAlreadyEnjoyedDays((req as any).adjustment_reason),
+          outstandingDays,
+          travellingDays: travelDays || 2,
+        })
+      : null
+    const entitlementDays = leaveTypeKey === 'annual'
+      ? (breakdown!.baseEntitlementDays + breakdown!.outstandingDays)
+      : (storedEntitledDays || storedGrantedDays)
     const explicitDeduction = (req.prior_leave_days_deducted != null || req.holiday_days_deducted != null)
       ? Number(req.prior_leave_days_deducted || 0) + Number(req.holiday_days_deducted || 0)
       : outstandingBalance?.used_this_period != null
         ? Number(outstandingBalance.used_this_period)
-        : extractAlreadyEnjoyedDays(req.adjustment_reason)
+        : extractAlreadyEnjoyedDays((req as any).adjustment_reason)
     const annualDates = leaveTypeKey === 'annual'
       ? calculateAnnualLeaveMemoDates({
           startDate: startRaw,
           entitlementDays,
           // Recalculate annual grant from entitlement, deductions, and travel;
           // stored request totals may be legacy 22/24-day values.
-          grantedDays: null,
-          daysAlreadyEnjoyed: explicitDeduction ?? Math.max(0, entitlementDays - storedGrantedDays),
-          travellingDays: travelDays || 2,
+          grantedDays: breakdown?.grantedDays ?? null,
+      // The breakdown already subtracts enjoyed days from the base entitlement.
+      // Pass zero here so the inclusive date calculator does not subtract them again.
+      daysAlreadyEnjoyed: 0,
+      travellingDays: breakdown?.travellingDays ?? (travelDays || 2),
         })
       : null
     const endRaw = leaveTypeKey === 'annual'
       ? (annualDates?.endDate.toISOString().slice(0, 10) || req.hr_approved_end_date || req.adjusted_end_date || req.preferred_end_date)
       : (req.hr_approved_end_date || req.adjusted_end_date || req.preferred_end_date)
-    const grantedDays = annualDates?.grantedDays ?? storedGrantedDays
+    const grantedDays = breakdown?.grantedDays ?? annualDates?.grantedDays ?? storedGrantedDays
     const entitledDays = annualDates?.entitlementDays ?? storedEntitledDays
-    const entitledLabel = travelDays > 0
-      ? `${entitledDays} plus ${travelDays} travelling day${travelDays !== 1 ? 's' : ''}`
-      : String(entitledDays)
+    const entitledLabel = breakdown
+      ? `${breakdown.baseEntitlementDays} plus ${breakdown.outstandingDays} outstanding day${breakdown.outstandingDays !== 1 ? 's' : ''} plus ${breakdown.travellingDays} travelling day${breakdown.travellingDays !== 1 ? 's' : ''}`
+      : travelDays > 0
+        ? `${entitledDays} plus ${travelDays} travelling day${travelDays !== 1 ? 's' : ''}`
+        : String(entitledDays)
     const remarks = annualDates && annualDates.daysAlreadyEnjoyed > 0
       ? `${annualDates.daysAlreadyEnjoyed} day(s) already enjoyed; ${travelDays} travelling day(s) added`
       : travelDays > 0

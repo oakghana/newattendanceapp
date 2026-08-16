@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { notifyLeaveHrOfficeForwarded } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrLeaveOfficeRole, isHrApproverRole, HR_OFFICE_PENDING_STATUSES } from "@/lib/leave-planning"
-import { canNonRegionalPipelineAct } from "@/lib/hr-workflow"
+import { canNonRegionalPipelineAct, canSelfLeavePipelineAct } from "@/lib/hr-workflow"
 import {
   resolveEntitlementFromProfile,
   buildAnnualLeaveEntitlementSummary,
@@ -99,10 +99,11 @@ export async function POST(request: NextRequest) {
     }
 
     const currentStatus = String((leaveRequest as any).status || "")
-    // HR Leave Office is exclusive to the non-regional pipeline — Regional HR
-    // Office forwards regional requests through /api/leave/planning/review instead.
-    if (!canNonRegionalPipelineAct((leaveRequest as any).workflow_route)) {
-      return NextResponse.json({ error: "Regional leave requests do not go through HR Leave Office. Use the Regional HR Office forward action." }, { status: 403 })
+    // HR Leave Office handles the legacy pipeline and the dedicated self-leave
+    // pipeline. Ordinary regional requests remain with Regional HR Office.
+    const workflowRoute = (leaveRequest as any).workflow_route
+    if (!canNonRegionalPipelineAct(workflowRoute) && !canSelfLeavePipelineAct(workflowRoute)) {
+      return NextResponse.json({ error: "Ordinary regional leave requests do not go through HR Leave Office. Use the Regional HR Office forward action." }, { status: 403 })
     }
     if (!(HR_OFFICE_PENDING_STATUSES as string[]).includes(currentStatus) && currentStatus !== "pending_hr_leave_processing" && currentStatus !== "hr_office_forwarded") {
       return NextResponse.json(

@@ -49,6 +49,12 @@ describe("HR Records reference gate", () => {
     expect(hrRecordsCanReference("pending_hr_records_reference")).toBe(true)
   })
 
+  it("allows HR Records to reference a director-approved loan", () => {
+    expect(hrRecordsCanReference("approved_director", "loan")).toBe(true)
+    expect(hrRecordsCanReference("hr_approved", "loan")).toBe(false)
+    expect(hrRecordsCanReference("pending_hod_review", "loan")).toBe(false)
+  })
+
   it("never allows HR Records to reference a regional-only status", () => {
     expect(hrRecordsCanReference("pending_regional_manager_approval")).toBe(false)
     expect(hrRecordsCanReference("approved")).toBe(false)

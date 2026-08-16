@@ -1,5 +1,55 @@
 import { describe, expect, it } from "vitest"
-import { REGIONAL_LEAVE_STAGES, routeLeave } from "../lib/hr-workflow"
+import { REGIONAL_LEAVE_STAGES, SELF_LEAVE_STAGES, getLeaveWorkflowView, resolveSelfLeaveRoute, routeLeave } from "../lib/hr-workflow"
+import { HR_OFFICE_PENDING_STATUSES, getStatusLabel, isRegionalHrOfficerRole } from "../lib/leave-planning"
+
+describe("regional self-leave workflow", () => {
+  it("routes every Regional Manager leave type directly to HR Leave Office", () => {
+    for (const leaveType of ["annual", "casual", "sick", "study"]) {
+      const route = resolveSelfLeaveRoute({ role: "regional_manager", locationName: "Kumasi Regional Office" })
+      expect(route.isSelfLeave).toBe(true)
+      expect(route.firstStage).toBe(SELF_LEAVE_STAGES.hrLeaveOffice)
+      expect(leaveType).toBeTruthy()
+    }
+  })
+
+  it("routes non-regional HOD self-leave directly to HR Leave Office", () => {
+    expect(resolveSelfLeaveRoute({ role: "department_head", locationName: "QCC Head Office" }).firstStage)
+      .toBe(SELF_LEAVE_STAGES.hrLeaveOffice)
+    expect(resolveSelfLeaveRoute({ role: "department_head", locationName: "Kumasi Regional Office" })).toEqual({
+      isSelfLeave: false,
+      route: null,
+      firstStage: null,
+    })
+  })
+
+  it("does not put Regional HR into the self-leave route", () => {
+    const route = resolveSelfLeaveRoute({ role: "regional_manager", locationName: "Kumasi Regional Office" })
+    expect(route.reason).toContain("bypasses endorsement and Regional HR")
+  })
+})
+
+describe("workflow status labels", () => {
+  it("includes requests waiting for HR Leave Office processing", () => {
+    expect(HR_OFFICE_PENDING_STATUSES).toContain("pending_hr_leave_processing")
+  })
+
+  it("labels approved regional requests as terminal", () => {
+    expect(getStatusLabel("approved")).toBe("Already Approved")
+    expect(getStatusLabel("regional_manager_approved")).toBe("Regional Manager Approved")
+  })
+
+  it("recognizes Regional HR Office roles for self-application", () => {
+    expect(isRegionalHrOfficerRole("regional_hr_office")).toBe(true)
+    expect(isRegionalHrOfficerRole("regional_hr_leave_office")).toBe(true)
+  })
+
+  it("shows the correct self-leave stages", () => {
+    expect(getLeaveWorkflowView({ workflowRoute: "self_leave", status: "pending_hr_leave_processing", workflowStage: "hr_leave_office" }).statusLabel)
+      .toBe("Awaiting HR Leave Office Adjustment")
+    expect(getLeaveWorkflowView({ workflowRoute: "self_leave", status: "hr_office_forwarded", workflowStage: "hr_executive" }).statusLabel)
+      .toBe("Pending HR Executive Signing")
+  })
+})
 
 describe("regional non-annual leave workflow", () => {
   it("routes a regional staff request to Regional HR before Regional Manager", () => {

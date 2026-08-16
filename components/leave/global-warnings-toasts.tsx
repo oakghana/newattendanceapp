@@ -9,6 +9,7 @@ import { useLocalStorage } from '@/hooks/use-local-storage'
 
 interface ManagementNotice {
   id: string
+  leave_request_id?: string
   staff_name: string
   resumption_date: string
   state: 'upcoming' | 'due_today' | 'overdue'
@@ -24,6 +25,7 @@ interface Warning {
   severity: 'low' | 'medium' | 'high' | 'critical'
   icon?: React.ReactNode
   dismissible?: boolean
+  actionId?: string
 }
 
 export function GlobalWarningsToasts() {
@@ -99,14 +101,15 @@ export function GlobalWarningsToasts() {
             title: notice.state === 'overdue' ? 'Resumption confirmation overdue' : 'Resumption confirmation required',
             message: `${notice.staff_name} is ${timing}. ${notice.staff_checked_in ? 'Staff check-in is recorded, but' : 'Please ensure'} HOD/RM confirmation is still required.`,
             severity: notice.state === 'overdue' ? 'high' : 'medium',
-            dismissible: false,
+            dismissible: true,
+            actionId: notice.leave_request_id,
           })
         })
 
         // A normal attendance check-in must not create a resumption notice.
         // Only show this confirmation when an active non-resumption record
         // actually exists for the employee and the check-in is linked to it.
-        const linkedResumptionRecord = nonResumptionData?.some((item) =>
+        const linkedResumptionRecord = nonResumptionData?.some((item: any) =>
           item.confirmation_status === 'pending_hod_rm' && item.first_check_in_date === today,
         )
         if (hasCheckedInToday && linkedResumptionRecord) {
@@ -123,8 +126,8 @@ export function GlobalWarningsToasts() {
         // Add non-resumption warnings only when the employee has not checked in.
         if (!hasCheckedInToday && nonResumptionData && nonResumptionData.length > 0) {
           nonResumptionData
-            .filter((item) => !item.first_check_in_date && item.confirmation_status !== 'pending_hod_rm')
-            .forEach((item) => {
+            .filter((item: any) => !item.first_check_in_date && item.confirmation_status !== 'pending_hod_rm')
+            .forEach((item: any) => {
             const daysOverdue = item.days_overdue || 0
             let severity: 'low' | 'medium' | 'high' | 'critical' = 'medium'
             let title = 'Non-Resumption Warning'
@@ -157,7 +160,7 @@ export function GlobalWarningsToasts() {
 
         // Add query memos
         if (queryMemoData && queryMemoData.length > 0) {
-          queryMemoData.forEach((item) => {
+          queryMemoData.forEach((item: any) => {
             allWarnings.push({
               id: `query-memo-${item.id}`,
               type: 'query_memo',
@@ -191,6 +194,27 @@ export function GlobalWarningsToasts() {
   const dismissWarning = (warningId: string) => {
     setDismissedWarnings([...dismissedWarnings, warningId])
     setWarnings(warnings.filter(w => w.id !== warningId))
+  }
+
+  const confirmResumption = async (warning: Warning) => {
+    // Remove it immediately and keep the current route. The API request is
+    // intentionally backgrounded so confirming cannot submit/navigate the
+    // surrounding Leave Administration page.
+    dismissWarning(warning.id)
+    if (!warning.actionId) return
+    try {
+      const response = await fetch('/api/leave/hod-confirm-resumption', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leave_plan_request_id: warning.actionId }),
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        console.error('[v0] Resumption confirmation failed:', payload.error || response.statusText)
+      }
+    } catch (error) {
+      console.error('[v0] Resumption confirmation failed:', error)
+    }
   }
 
   if (loading || warnings.length === 0) return null
@@ -263,12 +287,15 @@ export function GlobalWarningsToasts() {
                     View Memo
                   </Button>
                 )}
-                {warning.type === 'resumption_notice' && (
-                  <Button size="sm" asChild className="bg-primary hover:bg-primary/90">
-                    <a href="/dashboard/leave-management">
-                      <ClipboardCheck className="h-4 w-4 mr-1" />
-                      Confirm Resumption
-                    </a>
+                  {warning.type === 'resumption_notice' && (
+                  <Button
+                    size="sm"
+                    type="button"
+                    onClick={() => confirmResumption(warning)}
+                    className="bg-primary hover:bg-primary/90"
+                  >
+                    <ClipboardCheck className="h-4 w-4 mr-1" />
+                    Confirm Resumption
                   </Button>
                 )}
                 {warning.dismissible && (
@@ -284,14 +311,15 @@ export function GlobalWarningsToasts() {
                 </div>
               </div>}
             </div>
-            {warning.dismissible && (
-              <button
-                onClick={() => dismissWarning(warning.id)}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => dismissWarning(warning.id)}
+              aria-label={`Close ${warning.title}`}
+              title="Close"
+              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-black/10 hover:text-foreground dark:hover:bg-white/10"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         </Alert>
       ))}

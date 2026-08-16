@@ -535,7 +535,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
 
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-40 bg-sidebar/95 backdrop-blur border-r border-sidebar-border shadow-lg transform transition-all duration-300 ease-out",
+          "fixed inset-y-0 left-0 z-[100] pointer-events-auto bg-sidebar/95 backdrop-blur border-r border-sidebar-border shadow-lg transform transition-all duration-300 ease-out",
           isCollapsed ? "w-16" : "w-56",
           "lg:translate-x-0",
           isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",

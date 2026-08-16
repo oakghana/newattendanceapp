@@ -65,9 +65,12 @@ export async function GET(request: NextRequest) {
           hr_signature_image_url,
           hr_signature_data_url,
           hr_approval_note,
-          memo_token
+          memo_token,
+          memo_reference
         `)
         .in("status", ["approved", "hr_approved", "regional_manager_approved"])
+        .not("memo_reference", "is", null)
+        .neq("memo_reference", "")
         .order("hr_approved_at", { ascending: false, nullsFirst: false })
         .limit(200)
 
@@ -93,6 +96,11 @@ export async function GET(request: NextRequest) {
       }
 
       const profileMap = new Map((profilesData || []).map((p: any) => [p.id, p]))
+      const locationIds = [...new Set((profilesData || []).map((p: any) => p.assigned_location_id).filter(Boolean))]
+      const { data: locationsData } = locationIds.length
+        ? await supabase.from("geofence_locations").select("id, name, location_code").in("id", locationIds)
+        : { data: [] }
+      const locationMap = new Map((locationsData || []).map((location: any) => [location.id, location.name || location.location_code]))
 
       const memos = (approvedRequests || []).map((req: any) => {
         const profile = profileMap.get(req.user_id) || {}
@@ -105,7 +113,7 @@ export async function GET(request: NextRequest) {
           email: (profile as any).email || "N/A",
           department: (profile as any).departments?.name || "N/A",
           location_id: (profile as any).assigned_location_id || null,
-          location: (profile as any).assigned_location_id || "Not Assigned",
+          location: locationMap.get((profile as any).assigned_location_id) || "Not Assigned",
           address: "N/A",
           leave_type: req.leave_type_key || "annual",
           start_date: req.adjusted_start_date || req.preferred_start_date,
@@ -121,6 +129,7 @@ export async function GET(request: NextRequest) {
           hr_signature_image_url: req.hr_signature_image_url,
           hr_signature_data_url: req.hr_signature_data_url,
           memo_token: req.memo_token || null,
+          memo_reference: req.memo_reference || null,
         }
       })
 
@@ -191,10 +200,13 @@ export async function GET(request: NextRequest) {
         hr_signature_image_url,
         hr_signature_data_url,
         hr_approval_note,
-        memo_token
+        memo_token,
+        memo_reference
       `)
       .in("user_id", staffIds)
       .in("status", ["approved", "hr_approved", "regional_manager_approved"])
+      .not("memo_reference", "is", null)
+        .neq("memo_reference", "")
       .order("created_at", { ascending: false })
 
     if (requestError) {
@@ -217,6 +229,11 @@ export async function GET(request: NextRequest) {
 
     // Create profile map for fast lookup
     const profileMap = new Map((profilesData || []).map((p: any) => [p.id, p]))
+    const locationIds = [...new Set((profilesData || []).map((p: any) => p.assigned_location_id).filter(Boolean))]
+    const { data: locationsData } = locationIds.length
+      ? await supabase.from("geofence_locations").select("id, name, location_code").in("id", locationIds)
+      : { data: [] }
+    const locationMap = new Map((locationsData || []).map((location: any) => [location.id, location.name || location.location_code]))
 
     const memos = (approvedRequests || []).map((req: any) => {
       const profile = profileMap.get(req.user_id) || {}
@@ -227,7 +244,7 @@ export async function GET(request: NextRequest) {
         staff_name: `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "Unknown",
         email: (profile as any).email || "N/A",
         location_id: (profile as any).assigned_location_id || null,
-        location: (profile as any).assigned_location_id || "Not Assigned",
+        location: locationMap.get((profile as any).assigned_location_id) || "Not Assigned",
         address: "N/A",
         leave_type: req.leave_type_key || "annual",
         start_date: req.adjusted_start_date || req.preferred_start_date,
@@ -240,6 +257,7 @@ export async function GET(request: NextRequest) {
         hr_signature_image_url: req.hr_signature_image_url,
         hr_signature_data_url: req.hr_signature_data_url,
         memo_token: req.memo_token || null,
+        memo_reference: req.memo_reference || null,
       }
     })
 

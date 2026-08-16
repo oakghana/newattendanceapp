@@ -74,8 +74,8 @@ export function SubmitNewDefermentRequest({
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
       leaves = leaves.filter(leave =>
-        leave.user_name.toLowerCase().includes(query) ||
-        leave.reason.toLowerCase().includes(query) ||
+        (leave.user_name || "Staff member").toLowerCase().includes(query) ||
+        (leave.reason || "").toLowerCase().includes(query) ||
         leave.department?.toLowerCase().includes(query) ||
         leave.location?.toLowerCase().includes(query)
       )
@@ -228,7 +228,7 @@ export function SubmitNewDefermentRequest({
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1">
-                        <p className="font-semibold text-slate-900">{leave.user_name}</p>
+                        <p className="font-semibold text-slate-900">{leave.user_name || "Staff member"}</p>
                         <p className="text-sm text-slate-600 mt-1">
                           {new Date(leave.start_date).toLocaleDateString()} - {new Date(leave.end_date).toLocaleDateString()}
                         </p>

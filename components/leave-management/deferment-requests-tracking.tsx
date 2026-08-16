@@ -626,8 +626,9 @@ export function DefermentRequestsTracking({ userRole, userId, userDepartmentId }
       {selectedRequest && (
         <HodDefermentEndorsementModal
           request={selectedRequest}
-          open={showEndorsementModal}
-          onOpenChange={setShowEndorsementModal}
+          isOpen={showEndorsementModal}
+          onClose={() => setShowEndorsementModal(false)}
+          hodId={userId}
           onSuccess={handleEndorsementSuccess}
         />
       )}

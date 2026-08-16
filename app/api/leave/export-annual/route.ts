@@ -50,6 +50,12 @@ export async function GET(request: NextRequest) {
     const leaveYear = searchParams.get("leave_year") || ""
 
     if (SCOPED_ROLES.has(role)) {
+      if (role === "department_head" && String(actor.department_id || "") === "") {
+        return NextResponse.json({ error: "Your profile has no assigned department for export scoping" }, { status: 403 })
+      }
+      if (role === "regional_manager" && String(actor.assigned_location_id || "") === "") {
+        return NextResponse.json({ error: "Your profile has no assigned location for export scoping" }, { status: 403 })
+      }
       if (role === "department_head" && requestedDepartment && requestedDepartment !== String(actor.department_id || "")) {
         return NextResponse.json({ error: "HOD exports are limited to the assigned department" }, { status: 403 })
       }
@@ -65,12 +71,17 @@ export async function GET(request: NextRequest) {
       .order("submitted_at", { ascending: false })
 
     if (status) query = query.eq("status", status)
+    if (role === "department_head") query = query.eq("department_id", actor.department_id)
+    if (role === "regional_manager") query = query.eq("assigned_location_id", actor.assigned_location_id)
     if (leaveYear) {
       query = query.gte("preferred_start_date", `${leaveYear}-01-01`).lt("preferred_start_date", `${Number(leaveYear) + 1}-01-01`)
     }
 
     const { data: requests, error: requestError } = await query
-    if (requestError) throw requestError
+    if (requestError) {
+      console.error("[v0] Annual export request query failed:", requestError)
+      return NextResponse.json({ error: "Annual leave records could not be loaded. Check the leave request schema and assigned scope." }, { status: 500 })
+    }
 
     const userIds = [...new Set((requests || []).map((item: any) => item.user_id).filter(Boolean))]
     if (userIds.length === 0) {
@@ -84,7 +95,10 @@ export async function GET(request: NextRequest) {
       .from("user_profiles")
       .select("id, first_name, last_name, employee_id, email, phone, position, department_id, assigned_location_id, departments(name, code), geofence_locations!user_profiles_assigned_location_id_fkey(name, address)")
       .in("id", userIds)
-    if (profileError) throw profileError
+    if (profileError) {
+      console.error("[v0] Annual export profile query failed:", profileError)
+      return NextResponse.json({ error: "Staff profile details could not be loaded for the annual leave export." }, { status: 500 })
+    }
 
     const profileMap = new Map((profiles || []).map((profile: any) => [String(profile.id), profile]))
     const allowedRequests = (requests || []).filter((item: any) => {

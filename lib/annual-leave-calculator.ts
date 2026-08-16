@@ -91,12 +91,40 @@ export function getNextWorkingDay(dateValue: string | Date): Date {
 /** Count working days inclusively from the start date, excluding weekends. */
 export function addAnnualLeaveWorkingDays(startDate: string | Date, workingDays: number): Date {
   const result = new Date(startDate)
-  let remaining = Math.max(0, Math.floor(workingDays))
-  while (remaining > 0) {
+  let remaining = Math.max(1, Math.floor(workingDays))
+  while (true) {
     if (result.getDay() !== 0 && result.getDay() !== 6) remaining -= 1
-    if (remaining > 0) result.setDate(result.getDate() + 1)
+    if (remaining <= 0) return result
+    result.setDate(result.getDate() + 1)
   }
-  return result
+}
+
+export interface AnnualLeaveMemoBreakdown {
+  baseEntitlementDays: number
+  daysAlreadyEnjoyed: number
+  outstandingDays: number
+  travellingDays: number
+  grantedDays: number
+}
+
+/** Shared annual memo formula: base - enjoyed + outstanding + travel. */
+export function calculateAnnualLeaveMemoBreakdown(input: {
+  baseEntitlementDays: number
+  daysAlreadyEnjoyed?: number | null
+  outstandingDays?: number | null
+  travellingDays?: number | null
+}): AnnualLeaveMemoBreakdown {
+  const baseEntitlementDays = Math.max(0, Math.floor(Number(input.baseEntitlementDays) || 0))
+  const daysAlreadyEnjoyed = Math.min(baseEntitlementDays, Math.max(0, Math.floor(Number(input.daysAlreadyEnjoyed) || 0)))
+  const outstandingDays = Math.max(0, Math.floor(Number(input.outstandingDays) || 0))
+  const travellingDays = Math.max(0, Math.floor(Number(input.travellingDays) || 0))
+  return {
+    baseEntitlementDays: Math.max(0, baseEntitlementDays - daysAlreadyEnjoyed),
+    daysAlreadyEnjoyed,
+    outstandingDays,
+    travellingDays,
+    grantedDays: Math.max(0, baseEntitlementDays - daysAlreadyEnjoyed + outstandingDays + travellingDays),
+  }
 }
 
 export interface AnnualLeaveMemoDates {
