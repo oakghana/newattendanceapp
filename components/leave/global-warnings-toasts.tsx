@@ -101,7 +101,7 @@ export function GlobalWarningsToasts() {
             title: notice.state === 'overdue' ? 'Resumption confirmation overdue' : 'Resumption confirmation required',
             message: `${notice.staff_name} is ${timing}. ${notice.staff_checked_in ? 'Staff check-in is recorded, but' : 'Please ensure'} HOD/RM confirmation is still required.`,
             severity: notice.state === 'overdue' ? 'high' : 'medium',
-            dismissible: false,
+            dismissible: true,
             actionId: notice.leave_request_id,
           })
         })
@@ -197,6 +197,10 @@ export function GlobalWarningsToasts() {
   }
 
   const confirmResumption = async (warning: Warning) => {
+    // Remove it immediately and keep the current route. The API request is
+    // intentionally backgrounded so confirming cannot submit/navigate the
+    // surrounding Leave Administration page.
+    dismissWarning(warning.id)
     if (!warning.actionId) return
     try {
       const response = await fetch('/api/leave/hod-confirm-resumption', {
@@ -204,9 +208,10 @@ export function GlobalWarningsToasts() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ leave_plan_request_id: warning.actionId }),
       })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error || 'Unable to confirm resumption')
-      dismissWarning(warning.id)
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        console.error('[v0] Resumption confirmation failed:', payload.error || response.statusText)
+      }
     } catch (error) {
       console.error('[v0] Resumption confirmation failed:', error)
     }
@@ -306,14 +311,15 @@ export function GlobalWarningsToasts() {
                 </div>
               </div>}
             </div>
-            {warning.dismissible && (
-              <button
-                onClick={() => dismissWarning(warning.id)}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => dismissWarning(warning.id)}
+              aria-label={`Close ${warning.title}`}
+              title="Close"
+              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-black/10 hover:text-foreground dark:hover:bg-white/10"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         </Alert>
       ))}
