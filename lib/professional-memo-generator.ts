@@ -471,12 +471,12 @@ async function generateMainMemo(
       years_of_service: firstStaff?.years_of_service,
     })
     const isAnnualLeave = String(memoData.leave_type_key || "").toLowerCase() === "annual"
-    // Outstanding days are carried over in a separate field and must always be
-    // added to the base annual entitlement exactly once.
-    const baseAnnualEntitlement = Math.max(
-      resolvedEntitlement.annualLeaveDays,
-      storedEntitlementDays > 0 ? storedEntitlementDays - outstandingLeaveDays : 0,
-    )
+    // Prior enjoyed days reduce the base annual entitlement. Outstanding and travel
+    // days remain separate additions in the memo breakdown.
+    const enjoyedDaysForEntitlement = adjustedUsedDays > 0 ? adjustedUsedDays : enjoyedDays || 0
+    const baseAnnualEntitlement = isAnnualLeave
+      ? Math.max(0, resolvedEntitlement.annualLeaveDays - enjoyedDaysForEntitlement)
+      : storedEntitlementDays
     const entitlementDays = isAnnualLeave
       ? baseAnnualEntitlement + outstandingLeaveDays
       : storedEntitlementDays

@@ -111,6 +111,7 @@ describe("annual leave calculation", () => {
     expect(result.entitlementDays).toBe(40)
     expect(result.daysAlreadyEnjoyed).toBe(1)
     expect(result.grantedDays).toBe(41)
+    expect(36 - result.daysAlreadyEnjoyed + 4 + 2).toBe(41)
   })
 
   it("adds HR carryover days to the core annual entitlement", () => {

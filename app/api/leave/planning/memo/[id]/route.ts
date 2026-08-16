@@ -676,14 +676,18 @@ export async function GET(
           ?? (lr.adjustment_breakdown as any)?.outstanding_days
           ?? 0,
       ))
+      const daysAlreadyEnjoyed = Math.max(0, explicitDeduction ?? 0)
+      const travellingDays = Math.max(0, Number(lr.travelling_days_added || 2))
+      const storedEntitlement = Math.max(0, Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays))
+      const baseEntitlement = Math.max(0, storedEntitlement - memoOutstandingDays)
+      const calculatedGrantedDays = baseEntitlement + memoOutstandingDays + travellingDays - daysAlreadyEnjoyed
       annualMemoDates = calculateAnnualLeaveMemoDates({
         startDate: effectiveStart,
-  entitlementDays: Math.max(0, Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays)),
-  // The approved day count is authoritative. Adjustments affect the entitlement breakdown,
-  // but must not extend the approved inclusive leave period.
-  grantedDays: effectiveDays,
-        daysAlreadyEnjoyed: explicitDeduction ?? 0,
-        travellingDays: Number(lr.travelling_days_added || 2),
+        entitlementDays: storedEntitlement,
+        // Annual leave is inclusive: 36 base + 4 outstanding + 2 travel - 1 enjoyed = 41.
+        grantedDays: Math.max(effectiveDays, calculatedGrantedDays),
+        daysAlreadyEnjoyed,
+        travellingDays,
       })
       adjustedEffectiveEnd = annualMemoDates.endDate.toISOString().slice(0, 10)
     }
@@ -873,7 +877,7 @@ export async function GET(
       const travelDaysFromField = Math.max(0, Number(lr.travelling_days_added || 0))
       const travelDays = travelDaysFromField
 
-      // ─── Entitlement label (top-left cell): gross entitlement ───────────────
+      // ─���─ Entitlement label (top-left cell): gross entitlement ───────────────
       // Show the staff's full annual entitlement (e.g. "24") even when some days were
       // already enjoyed — this is what the memo should declare as the entitlement.
   // The applicant profile is authoritative for annual entitlement. The stored
