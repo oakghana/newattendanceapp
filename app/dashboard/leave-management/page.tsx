@@ -49,7 +49,7 @@ export default async function LeaveManagementPage() {
     const queries: any[] = [
       admin
         .from("leave_plan_requests")
-        .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, workflow_route, workflow_stage, created_at, adjusted_start_date, adjusted_end_date, hod_decision, memo_token")
+        .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, workflow_route, workflow_stage, created_at, adjusted_start_date, adjusted_end_date, hod_decision, memo_token, memo_reference")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(50),
@@ -130,6 +130,7 @@ export default async function LeaveManagementPage() {
               status: request.status || "pending_hod_review",
               created_at: request.created_at,
               memo_token: request.memo_token || null,
+              memo_reference: request.memo_reference || null,
               user_name: `${staff.first_name || ""} ${staff.last_name || ""}`.trim(),
             },
           }

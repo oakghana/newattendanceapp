@@ -3090,9 +3090,14 @@ export function LeaveManagementClient({
                                       ✓ Approved & Signed
                                     </span>
                                   )}
-                                  {!hasHrApproval && (
+                                  {!hasHrApproval && hasOfficialReference && (
                                     <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800">
                                       ✓ Approved
+                                    </span>
+                                  )}
+                                  {!hasOfficialReference && (
+                                    <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-amber-100 text-amber-800">
+                                      Memo Reference Pending HR Records
                                     </span>
                                   )}
                                 </div>
@@ -3107,17 +3112,19 @@ export function LeaveManagementClient({
                               <div className="flex gap-2 flex-shrink-0">
                                 <Button
                                   size="sm"
-                                  className="bg-teal-600 hover:bg-teal-700 text-white"
+                                  disabled={!hasOfficialReference}
+                                  className={hasOfficialReference ? "bg-teal-600 hover:bg-teal-700 text-white" : "border-slate-300 text-slate-500"}
+                                  title={hasOfficialReference ? "Download approval memo" : "HR Records must assign the official memo reference first"}
                                   onClick={() => {
+                                    if (!hasOfficialReference) return
                                     const memoId = memo.leave_plan_request_id || memo.id
                                     if (!memoId) return
-                                    // Include the memo_token so staff/HOD users pass the token check
                                     const token = memo.memo_token ? `?token=${encodeURIComponent(memo.memo_token)}` : ""
                                     window.open(`/api/leave/planning/memo/${memoId}${token}`, "_blank")
                                   }}
                                 >
                                   <Download className="h-3.5 w-3.5 mr-1" />
-                                  Download
+                                  {hasOfficialReference ? "Download" : "Reference Pending"}
                                 </Button>
                               </div>
                             </div>
@@ -3540,21 +3547,33 @@ function LeaveRequestCard({
           </div>
         )}
 
-        {/* Download Memo button — shown when leave is hr_approved and a memo token is available */}
-        {["approved", "hr_approved"].includes(normalizedStatus) && (normalizedStatus === "approved" || request.memo_token) && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-            onClick={() => {
-              const tokenQuery = request.memo_token ? `?token=${encodeURIComponent(request.memo_token)}` : ""
-              const url = `/api/leave/planning/memo/${request.id}${tokenQuery}`
-              window.open(url, "_blank")
-            }}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Download Approval Memo
-          </Button>
+        {/* Download is unlocked only after HR Records assigns the official memo reference. */}
+        {normalizedStatus === "hr_approved" && (
+          request.memo_reference?.trim() ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+              onClick={() => {
+                const tokenQuery = request.memo_token ? `?token=${encodeURIComponent(request.memo_token)}` : ""
+                window.open(`/api/leave/planning/memo/${request.id}${tokenQuery}`, "_blank")
+              }}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download Approval Memo
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled
+              className="w-full border-slate-300 text-slate-500"
+              title="HR Records must assign the official memo reference before download is available."
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Memo Reference Pending HR Records
+            </Button>
+          )
         )}
 
         {canEdit && onEdit && !hasHodChanges && (

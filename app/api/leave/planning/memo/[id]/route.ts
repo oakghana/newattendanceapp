@@ -408,8 +408,7 @@ export async function GET(
   const leaveWorkflowRoute = String((leaveRequest as any).workflow_route || "").toLowerCase()
   const isRegionalLeave = leaveWorkflowRoute === "regional" || leaveWorkflowRoute === "regional_hr"
 
-  // HR Records may assign the official memo reference after approval. Generate
-  // the memo now using the deterministic fallback reference when it is absent.
+  // The official HR Records reference is required before any memo can be rendered.
   
   // Load the latest carryover balance because older requests may not have the
     // HR-entered outstanding days copied onto leave_plan_requests yet.
@@ -781,10 +780,13 @@ export async function GET(
     // The memo is not unlocked until HR Records enters the official reference.
     const refNum = String(lr.memo_reference || "").trim()
     if (!refNum) {
-      return NextResponse.json({
-        error: "Memo reference pending HR Records. Preview and download will be available after HR Records assigns the official reference.",
-        code: "MEMO_REFERENCE_REQUIRED",
-      }, { status: 409 })
+    return NextResponse.json({
+      error: "Memo reference pending HR Records. Preview and download will be available after HR Records assigns the official reference.",
+      code: "MEMO_REFERENCE_REQUIRED",
+    }, {
+      status: 409,
+      headers: { "Cache-Control": "no-store" },
+    })
     }
     doc.text(`Our Ref No:  ${refNum}`, marginLeft, y)
     doc.text(`Date:  ${fmtFormalDate(approvalDate)}`, pageWidth - marginRight, y, { align: "right" })
