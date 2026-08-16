@@ -574,11 +574,11 @@ export function StaffManagement() {
       // non-regional location (Head Office, Awutu Stores, Nsawam Archive
       // Center, etc.) — not just one at the exact same assigned location.
       // Same-location HODs are sorted first for convenience.
-      // Regional staff may link to any Regional Manager; same-location managers
-      // are sorted first for quick selection.
+      // Regional staff may link only to the Regional Manager assigned to the
+      // staff member's exact location. The server applies the same rule.
       const all = isNonRegionalStaff
         ? dh.filter((candidate) => isDepartmentHead(candidate) && candidateIsNonRegional(candidate))
-        : rm.filter((candidate) => isRegionalManager(candidate))
+        : rm.filter((candidate) => isRegionalManager(candidate) && sameLocation(candidate))
       const seen = new Set<string>()
       const unique = all.filter((s) => {
         if (seen.has(s.id)) return false

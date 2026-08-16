@@ -170,6 +170,16 @@ function handleMissingSchema(error: any) {
 
 async function resolveManagerReviewers(admin: any, userId: string, departmentId: string | null) {
   const linkedReviewerIds: string[] = []
+  const { data: staffProfile } = await admin
+    .from("user_profiles")
+    .select("assigned_location_id")
+    .eq("id", userId)
+    .maybeSingle()
+  const assignedLocationId = String(staffProfile?.assigned_location_id || "")
+  if (!assignedLocationId) {
+    console.warn("[v0] Refusing legacy reviewer fallback because staff location is unresolved", { userId })
+    return []
+  }
   const { data: linkages } = await admin
     .from("loan_hod_linkages")
     .select("hod_user_id")
@@ -181,18 +191,23 @@ async function resolveManagerReviewers(admin: any, userId: string, departmentId:
     if (reviewerId && !linkedReviewerIds.includes(reviewerId)) linkedReviewerIds.push(reviewerId)
   }
 
-  // All roles that act as heads of department for leave review purposes
-  const HOD_ROLES = ["regional_manager", "department_head", "manager_hr", "director_hr"]
+  // Legacy/non-regional requests must resolve only to Department Heads.
+  // Regional Managers are created by the regional pipeline, never this path.
+  const HOD_ROLES = ["department_head"]
 
   if (linkedReviewerIds.length > 0) {
     const { data: linkedReviewers } = await admin
       .from("user_profiles")
-      .select("id, role")
+      .select("id, role, department_id, assigned_location_id")
       .in("id", linkedReviewerIds)
       .in("role", HOD_ROLES)
       .eq("is_active", true)
 
-    const reviewers = (linkedReviewers || []).map((r: any) => ({
+    const reviewers = (linkedReviewers || []).filter((r: any) =>
+      r.role === "department_head" &&
+      String(r.assigned_location_id || "") === assignedLocationId &&
+      Boolean(r.department_id && departmentId && r.department_id === departmentId),
+    ).map((r: any) => ({
       id: String(r.id),
       role: String(r.role || ""),
     }))
@@ -207,9 +222,7 @@ async function resolveManagerReviewers(admin: any, userId: string, departmentId:
     .eq("is_active", true)
 
   return (reviewers || []).filter((r: any) => {
-    if (r.role === "regional_manager") return true
-    if (r.role === "department_head") return Boolean(r.department_id && departmentId && r.department_id === departmentId)
-    return false
+    return r.role === "department_head" && Boolean(r.department_id && departmentId && r.department_id === departmentId)
   }).map((r: any) => ({ id: String(r.id), role: String(r.role || "") }))
 }
 

@@ -42,7 +42,12 @@ function isHeadOfficeStaff(staff: any): boolean {
 
 function validateStaffHodRule(staff: any, hod: any): { ok: boolean; reason?: string } {
   const staffLoc = String(staff?.assigned_location_id || "")
+  const hodLoc = String(hod?.assigned_location_id || "")
   const hodRole = normalizeRole(String(hod?.role || ""))
+
+  if (!staffLoc) {
+    return { ok: false, reason: "Staff must have an assigned location before an HOD linkage can be created." }
+  }
 
   if (isNonRegionalStaff(staff)) {
     // Non-regional staff may be linked to ANY Department Head based at a
@@ -54,8 +59,8 @@ function validateStaffHodRule(staff: any, hod: any): { ok: boolean; reason?: str
     return { ok: true }
   }
 
-  if (hodRole !== "regional_manager" || !staffLoc) {
-    return { ok: false, reason: "Regional staff can only be linked to Regional Managers." }
+  if (hodRole !== "regional_manager" || hodLoc !== staffLoc) {
+    return { ok: false, reason: "Regional staff can only be linked to the Regional Manager assigned to the staff member's location." }
   }
   return { ok: true }
 }

@@ -173,9 +173,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "This request is assigned to another Regional HR Office." }, { status: 403 })
       }
       const targetProfile = Array.isArray(targetRequest.user_profiles) ? targetRequest.user_profiles[0] : targetRequest.user_profiles
-      const sameScope =
-        (profile.assigned_location_id && targetProfile?.assigned_location_id === profile.assigned_location_id) ||
-        ((profile as any).region_id && targetProfile?.region_id === (profile as any).region_id)
+      const sameScope = profile.assigned_location_id
+        ? targetProfile?.assigned_location_id === profile.assigned_location_id
+        : Boolean((profile as any).region_id && targetProfile?.region_id === (profile as any).region_id)
+      if (role === "regional_manager" && String((targetRequest as any).workflow_route || "").toLowerCase() !== "regional") {
+        return NextResponse.json({ error: "Regional Managers can review only regional leave requests." }, { status: 403 })
+      }
       if (!sameScope) {
         return NextResponse.json({ error: "This request is outside your assigned location or region." }, { status: 403 })
       }
@@ -244,9 +247,9 @@ export async function POST(request: NextRequest) {
 
     if (isRegionalManagerApproval && isRegionalRequest) {
       const staffProfile = Array.isArray((leavePlan as any).user_profiles) ? (leavePlan as any).user_profiles[0] : (leavePlan as any).user_profiles
-      const sameScope =
-        (profile.assigned_location_id && staffProfile?.assigned_location_id === profile.assigned_location_id) ||
-        ((profile as any).region_id && staffProfile?.region_id === (profile as any).region_id)
+      const sameScope = profile.assigned_location_id
+        ? staffProfile?.assigned_location_id === profile.assigned_location_id
+        : Boolean((profile as any).region_id && staffProfile?.region_id === (profile as any).region_id)
       if (!sameScope) {
         return NextResponse.json({ error: "This regional request is outside your assigned region or location." }, { status: 403 })
       }
