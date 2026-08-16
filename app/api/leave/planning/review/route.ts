@@ -269,19 +269,21 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Adjusted leave date range is invalid." }, { status: 400 })
       }
 
-      const entitlementDays = Number(leavePlan.entitlement_days || 0)
-      const outstandingDays = Number(adjustment_breakdown?.outstanding_days || 0)
-      effectiveEntitlement = entitlementDays + outstandingDays
-      if (effectiveEntitlement > 0 && nextRequestedDays > effectiveEntitlement) {
-        return NextResponse.json(
-          {
-            error: outstandingDays > 0
-              ? `Adjusted request (${nextRequestedDays} day(s)) exceeds entitlement plus outstanding days (${effectiveEntitlement} day(s)).`
-              : `Adjusted request (${nextRequestedDays} day(s)) exceeds entitlement (${entitlementDays} day(s)).`,
-          },
-          { status: 400 },
-        )
-      }
+  const entitlementDays = Number(leavePlan.entitlement_days || 0)
+  const outstandingDays = Number(adjustment_breakdown?.outstanding_days || 0)
+  effectiveEntitlement = entitlementDays + outstandingDays
+  // Outstanding days are an HR-approved carryover and intentionally allow the
+  // adjusted regional annual leave period to exceed the original request and
+  // base entitlement. HR has already documented the adjustment in the memo.
+  // Keep the strict entitlement guard only when no outstanding days exist.
+  if (effectiveEntitlement > 0 && nextRequestedDays > effectiveEntitlement && outstandingDays <= 0) {
+    return NextResponse.json(
+      {
+        error: `Adjusted request (${nextRequestedDays} day(s)) exceeds entitlement (${entitlementDays} day(s)).`,
+      },
+      { status: 400 },
+    )
+  }
     }
 
     const { data: allReviews, error: allReviewsError } = await admin
