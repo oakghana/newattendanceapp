@@ -6,7 +6,16 @@ import { useToast } from "@/hooks/use-toast"
 // "referenced" is the loan pipeline's terminal status — HR Records assigning
 // the official reference to an already Director HR / MD approved loan is the
 // final stage of the loan request, exactly like "hr_approved" is for leave.
-const FINAL_APPROVED_STATUSES = new Set(["hr_approved", "pending_hr_records_reference", "approved_director", "approved", "referenced"])
+const FINAL_APPROVED_STATUSES = new Set([
+  "hr_approved",
+  "pending_hr_records_reference",
+  "approved_director",
+  "approved",
+  "referenced",
+  "staff_receiving_funds",
+  "partially_recovered",
+  "fully_recovered",
+])
 const REGIONAL_LEAVE_STATUSES = new Set(["pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review", "regional_hr_approved", "regional_manager_approved", "completed"])
 
 function isRegionalLeave(row: any) {
