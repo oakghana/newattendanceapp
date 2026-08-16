@@ -236,6 +236,10 @@ export default async function LeaveManagementPage() {
       adjusted_end_date: request.adjusted_end_date,
       hod_decision: request.hod_decision,
       memo_token: request.memo_token || null,
+      user_name: `${request.user_profiles?.first_name || profile.first_name || ""} ${request.user_profiles?.last_name || profile.last_name || ""}`.trim() || user.email || "Staff member",
+      department: (Array.isArray(profile.departments) ? profile.departments[0]?.name : (profile.departments as any)?.name) || "",
+      location: userLocationName || "",
+      rank: (request.user_profiles as any)?.position || "",
     }))
 
     hasHodLinkage = Boolean((linkageRes?.data as any)?.id)

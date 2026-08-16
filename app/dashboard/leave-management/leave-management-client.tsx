@@ -414,8 +414,8 @@ export function LeaveManagementClient({
       const response = await fetch(`/api/leave/export-annual?${params.toString()}`)
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Export failed")
+        const error = await response.json().catch(() => null)
+        throw new Error(error?.error || `Annual leave export failed (${response.status})`)
       }
 
       const blob = await response.blob()
