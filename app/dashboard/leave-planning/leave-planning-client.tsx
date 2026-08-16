@@ -1060,7 +1060,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
   const isLoanOffice = normalizedRole === "loan_office" || normalizedRole === "hr_loan_office" || normalizedRole === "accounts_loan_office"
   // Every authenticated role may submit a leave request. Role and location
   // continue to control the downstream review route and reviewer permissions.
-  const canSelfApply = true
+  const canSelfApply = true // Regional HR Office users retain the Apply for Leave action
 
   // ── Data ────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false)

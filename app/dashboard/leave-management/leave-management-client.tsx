@@ -794,8 +794,10 @@ export function LeaveManagementClient({
   
   const pendingNotifications = useMemo(() => managerNotifications.filter((n) => {
   const status = String(n.status || n.leave_requests?.status || "").toLowerCase().replace(/[\s-]+/g, "_")
+  const terminalStatus = ["approved", "regional_manager_approved", "hr_approved", "hr_rejected", "regional_rejected", "withdrawn", "completed"].includes(status)
+  if (terminalStatus) return false
   const isRegionalReview = ["pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review", "pending_regional_manager_approval"].includes(status)
-  return isRegionalReview || String(n.review_decision || "pending") === "pending"
+  return isRegionalReview || String(n.review_decision || "pending").toLowerCase() === "pending"
   }), [managerNotifications])
   const regionalManagerApproved = useMemo(() => managerNotifications.filter((n) => ["approved", "regional_manager_approved"].includes(String(n.status || n.leave_requests?.status || "").toLowerCase().replace(/[\s-]+/g, "_"))), [managerNotifications])
   const adminAllPending = useMemo(() => pendingNotifications, [pendingNotifications])
