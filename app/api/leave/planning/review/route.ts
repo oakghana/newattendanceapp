@@ -94,9 +94,19 @@ export async function POST(request: NextRequest) {
 
     const suppliedMemoReference = String(memo_reference || "").trim()
 
+    // Resolve the workflow from the persisted request. The client payload is
+    // not authoritative and older review cards do not include workflow_route.
+    const { data: workflowRequest, error: workflowRequestError } = await admin
+      .from("leave_plan_requests")
+      .select("workflow_route")
+      .eq("id", leave_plan_request_id)
+      .maybeSingle()
+    if (workflowRequestError && isSchemaIssue(workflowRequestError)) return schemaIssueResponse(workflowRequestError)
+    if (workflowRequestError || !workflowRequest) return NextResponse.json({ error: "Leave request not found." }, { status: 404 })
+
     const isRegionalManagerApproval = role === "regional_manager"
     const isRegionalRequest = action === "forward_to_regional_manager"
-      || String(body.workflow_route || "").toLowerCase() === "regional"
+      || String(workflowRequest.workflow_route || "").toLowerCase() === "regional"
     if (isRegionalManagerApproval && isRegionalRequest && decision === "approved" && !isRegionalForward) {
       const profileHasSignature = Boolean(String((profile as any).signature_data_url || "").trim())
       const { data: registeredSignature } = await admin
@@ -335,7 +345,7 @@ export async function POST(request: NextRequest) {
       const signerName = `${String((profile as any).first_name || "").trim()} ${String((profile as any).last_name || "").trim()}`.trim()
       const { data: signerSignature } = await admin
         .from("approval_signature_registry")
-        .select("signature_data_url")
+        .select("signature_data_url, signature_text")
         .eq("user_id", user.id)
         .eq("is_active", true)
         .order("updated_at", { ascending: false })

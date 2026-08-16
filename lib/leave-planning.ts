@@ -57,6 +57,7 @@ export const HOD_PENDING_STATUSES: LeavePlanStatus[] = [
 export const HR_OFFICE_PENDING_STATUSES: LeavePlanStatus[] = [
   "hod_approved",
   "hod_changes_requested", // HOD recommended date changes — HR Office can still forward with updated dates
+  "pending_hr_leave_processing", // legacy/current status awaiting HR Leave Office processing
   "manager_confirmed", // legacy
 ]
 

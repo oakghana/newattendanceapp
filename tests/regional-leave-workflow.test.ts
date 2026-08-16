@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { REGIONAL_LEAVE_STAGES, SELF_LEAVE_STAGES, getLeaveWorkflowView, resolveSelfLeaveRoute, routeLeave } from "../lib/hr-workflow"
+import { HR_OFFICE_PENDING_STATUSES } from "../lib/leave-planning"
 
 describe("regional self-leave workflow", () => {
   it("routes every Regional Manager leave type directly to HR Leave Office", () => {
@@ -28,6 +29,10 @@ describe("regional self-leave workflow", () => {
 })
 
 describe("workflow status labels", () => {
+  it("includes requests waiting for HR Leave Office processing", () => {
+    expect(HR_OFFICE_PENDING_STATUSES).toContain("pending_hr_leave_processing")
+  })
+
   it("shows the correct self-leave stages", () => {
     expect(getLeaveWorkflowView({ workflowRoute: "self_leave", status: "pending_hr_leave_processing", workflowStage: "hr_leave_office" }).statusLabel)
       .toBe("Awaiting HR Leave Office Adjustment")
