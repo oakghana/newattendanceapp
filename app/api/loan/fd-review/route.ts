@@ -464,20 +464,24 @@ ${accounts_notes ? `\nHR Loan Office Remarks: ${accounts_notes}` : ""}
       return NextResponse.json({ error: "Failed to set FD values", details: updateError.message }, { status: 500 })
     }
 
-    // Log to timeline
-    await admin
-      .from("loan_request_timeline")
-      .insert({
-        loan_request_id,
-        actor_id: user.id,
-        actor_role: submission_type === "automated_calculation" ? "accounts_loan_office" : "loan_office",
-        action_key: isCorrection ? "fd_corrected" : "fd_submitted",
-        to_status: "pending_accounts_fd_review",
-        note: isCorrection
-          ? `FD score corrected to ${fd_score}% by Accounts Loan Office (pending AE). Reason: ${correctionReason || "n/a"}`
-          : `FD score ${fd_score} submitted by ${submission_type === "automated_calculation" ? "Accounts" : "Loan"} Office${submission_type === "automated_calculation" ? " (Automated Calculation)" : ""}`,
-      })
-      .catch(err => console.error("[v0] Timeline log error:", err))
+    // Log to timeline. The Supabase query builder is "thenable" (awaitable) but is NOT
+    // a real Promise, so it has no .catch() method -- chaining .catch() directly onto it
+    // throws a TypeError that was bubbling up and turning an already-successful FD update
+    // into a fake "Internal server error" for the user. Await it and check the error
+    // result instead, exactly like the loan_requests update above.
+    const { error: timelineError } = await admin.from("loan_request_timeline").insert({
+      loan_request_id,
+      actor_id: user.id,
+      actor_role: submission_type === "automated_calculation" ? "accounts_loan_office" : "loan_office",
+      action_key: isCorrection ? "fd_corrected" : "fd_submitted",
+      to_status: "pending_accounts_fd_review",
+      note: isCorrection
+        ? `FD score corrected to ${fd_score}% by Accounts Loan Office (pending AE). Reason: ${correctionReason || "n/a"}`
+        : `FD score ${fd_score} submitted by ${submission_type === "automated_calculation" ? "Accounts" : "Loan"} Office${submission_type === "automated_calculation" ? " (Automated Calculation)" : ""}`,
+    })
+    if (timelineError) {
+      console.error("[v0] Timeline log error:", timelineError)
+    }
 
     return NextResponse.json({
       success: true,

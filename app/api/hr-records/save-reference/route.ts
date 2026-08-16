@@ -34,11 +34,20 @@ export async function POST(request: NextRequest) {
   // Regional HR may already have supplied a reference before HR Records receives
   // the request. HR Records must be able to correct that value without reopening
   // or rewinding the workflow stage.
-  const existingReference = normalizeReference(String((row as any)[referenceColumn] || ""))
   const regionalLeaveStatuses = new Set(["pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review", "regional_hr_approved", "regional_manager_approved", "completed"])
   const route = String((row as any).workflow_route || "").toLowerCase()
   const isRegionalLeave = entity === "leave" && (route === "regional" || regionalLeaveStatuses.has(String(row.status || "").toLowerCase()))
-  const isCorrection = Boolean(row.memo_reference_locked || existingReference)
+  // A request only counts as a "correction" once HR Records has actually locked
+  // it (memo_reference_locked === true). Some requests arrive at HR Records with
+  // a reference value already sitting in the column (e.g. carried over from an
+  // upstream office) even though it was never locked/forwarded. Keying off the
+  // existing reference text instead of the lock flag made the FIRST real
+  // HR Records save take the text-only branch below, which never sets
+  // memo_reference_locked or advances status/workflow_stage -- the request then
+  // stayed on "approved_director" forever and kept reappearing in "Pending
+  // references" no matter how many times it was "updated". Only a genuinely
+  // already-locked request should skip re-locking and re-advancing the stage.
+  const isCorrection = Boolean(row.memo_reference_locked)
   if (isRegionalLeave) return NextResponse.json({ error: "Regional HR memo references are read-only for HR Records." }, { status: 403 })
   if (!hrRecordsCanReference(row.status, entity)) return NextResponse.json({ error: `Request is not finally approved and ready for HR Records reference assignment (${row.status || "unknown"}).` }, { status: 409 })
 

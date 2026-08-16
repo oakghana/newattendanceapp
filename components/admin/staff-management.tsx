@@ -20,7 +20,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Users, Plus, Search, Edit, Trash2, UserCheck, UserX, Key, MapPin, Filter, Building2, Link2, Link2Off } from "lucide-react"
+import { Users, Plus, Search, Edit, UserCheck, UserX, Key, MapPin, Filter, Building2, Link2, Link2Off } from "lucide-react"
 import { PasswordManagement } from "./password-management"
 import { useNotifications } from "@/components/ui/notification-system"
 
@@ -408,40 +408,6 @@ export function StaffManagement() {
     }
   }
 
-  const handleDeactivateStaff = async (staffId: string) => {
-    if (!confirm("Are you sure you want to deactivate this staff member?")) return
-
-    try {
-      setError(null)
-      const response = await authenticatedFetch(`/api/admin/staff/${staffId}`, {
-        method: "DELETE",
-      })
-
-      if (response.status === 401 || response.status === 403) {
-        const msg = "Session expired or unauthorized. Please sign in again."
-        showError(msg, "Authentication Required")
-        setError(msg)
-        setTimeout(() => (window.location.href = "/signin"), 1200)
-        return
-      }
-
-      const result = await response.json()
-
-      if (result.success) {
-        showSuccess("Staff member deactivated successfully", "Staff Deactivated")
-        setSuccess("Staff member deactivated successfully")
-        fetchStaff()
-      } else {
-        showError(result.error || "Failed to deactivate staff member", "Deactivation Failed")
-        setError(result.error)
-      }
-    } catch (error) {
-      const errorMessage = "Failed to deactivate staff member"
-      showError(errorMessage, "Deactivation Error")
-      setError(errorMessage)
-    }
-  }
-
   const handleEditStaff = async () => {
     if (!editingStaff) return
 
@@ -602,12 +568,16 @@ export function StaffManagement() {
       const sameLocation = (candidate: StaffMember) => Boolean(staffLocationId && candidateLocationId(candidate) === staffLocationId)
       const isRegionalManager = (candidate: StaffMember) => ["regional manager", "regional manager office", "regionalmanager"].includes(roleKey(candidate))
       const isDepartmentHead = (candidate: StaffMember) => roleKey(candidate) === "department head"
+      const candidateIsNonRegional = (candidate: StaffMember) => isNonRegionalLocation(candidate.geofence_locations?.name)
 
-      // Non-regional staff use same-location Department Heads only.
+      // Non-regional staff may link to ANY Department Head based at a
+      // non-regional location (Head Office, Awutu Stores, Nsawam Archive
+      // Center, etc.) — not just one at the exact same assigned location.
+      // Same-location HODs are sorted first for convenience.
       // Regional staff may link to any Regional Manager; same-location managers
       // are sorted first for quick selection.
       const all = isNonRegionalStaff
-        ? dh.filter((candidate) => sameLocation(candidate) && isDepartmentHead(candidate))
+        ? dh.filter((candidate) => isDepartmentHead(candidate) && candidateIsNonRegional(candidate))
         : rm.filter((candidate) => isRegionalManager(candidate))
       const seen = new Set<string>()
       const unique = all.filter((s) => {
@@ -615,10 +585,10 @@ export function StaffManagement() {
         seen.add(s.id)
         return true
       }).sort((a, b) => {
-        if (!isNonRegionalStaff) {
-          const localPriority = Number(sameLocation(b)) - Number(sameLocation(a))
-          if (localPriority !== 0) return localPriority
-        }
+        // Same-location candidates are shown first for both non-regional
+        // Department Heads and regional Regional Managers.
+        const localPriority = Number(sameLocation(b)) - Number(sameLocation(a))
+        if (localPriority !== 0) return localPriority
         const regionalPriority = Number(isRegionalManager(b)) - Number(isRegionalManager(a))
         if (regionalPriority !== 0) return regionalPriority
         return `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
@@ -1453,22 +1423,21 @@ export function StaffManagement() {
                           </Button>
                           <Button
                             size="sm"
-                            variant="outline"
+                            variant={member.is_active ? "outline" : "default"}
                             onClick={() => handleUpdateStaff(member.id, { is_active: !member.is_active })}
-                            className="h-8 w-8 p-0 hover:bg-chart-2/10 hover:border-chart-2/20"
-                          >
-                            {member.is_active ? <UserX className="h-3 w-3" /> : <UserCheck className="h-3 w-3" />}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDeactivateStaff(member.id)}
-                            className="h-8 w-8 p-0 hover:bg-destructive/10 hover:border-destructive/20"
+                            title={member.is_active ? "Deactivate this staff member" : "Activate this staff member"}
+                            aria-label={member.is_active ? "Deactivate this staff member" : "Activate this staff member"}
+                            className={
+                              member.is_active
+                                ? "h-8 gap-1.5 px-2.5 hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive"
+                                : "h-8 gap-1.5 px-2.5 bg-chart-2 text-white hover:bg-chart-2/90"
+                            }
                             disabled={
                               isItAdmin && (member.role === "admin" || member.role === "it-admin")
                             }
                           >
-                            <Trash2 className="h-3 w-3" />
+                            {member.is_active ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
+                            <span className="text-xs font-medium">{member.is_active ? "Deactivate" : "Activate"}</span>
                           </Button>
                           {canManageStaffLinks && (
                             <Button
@@ -1520,7 +1489,7 @@ export function StaffManagement() {
             <DialogDescription>
               {hodLinkStaff && (hodLinkStaff.geofence_locations?.name ? `Location: ${hodLinkStaff.geofence_locations.name}. ` : "")}
               {hodLinkStaff && isNonRegionalLocation(hodLinkStaff.geofence_locations?.name)
-                ? "Only Department Heads in this non-regional location are available. "
+                ? "Any Department Head at a non-regional location (Head Office, Awutu Stores, Nsawam Archive Center, etc.) can be assigned, regardless of department. "
                 : "Only the Regional Manager assigned to this regional location is available. "}
               Select one HOD for <strong>{hodLinkStaff?.first_name} {hodLinkStaff?.last_name}</strong>. Uncheck the selected HOD to remove the assignment.
             </DialogDescription>
@@ -1545,7 +1514,7 @@ export function StaffManagement() {
                       (h.employee_id && h.employee_id.includes(hodSearchQuery)) ||
                       (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
                     ).length} of ${hodCandidates.length} HODs`
-                  : `No eligible ${hodLinkStaff && isNonRegionalLocation(hodLinkStaff.geofence_locations?.name) ? "Department Heads" : "Regional Managers"} found for this exact location.`}
+                  : `No eligible ${hodLinkStaff && isNonRegionalLocation(hodLinkStaff.geofence_locations?.name) ? "Department Heads" : "Regional Managers"} found${hodLinkStaff && !isNonRegionalLocation(hodLinkStaff.geofence_locations?.name) ? " for this exact location" : ""}.`}
               </p>
             </div>
             <div className="space-y-2">
@@ -1558,7 +1527,7 @@ export function StaffManagement() {
                   (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
                 ).length === 0 ? (
                   <p className="text-sm text-muted-foreground italic py-4 text-center">
-                    {hodSearchQuery ? "No matching eligible candidates found" : `No eligible ${hodLinkStaff && isNonRegionalLocation(hodLinkStaff.geofence_locations?.name) ? "Department Heads" : "Regional Managers"} found for this exact location.`}
+                    {hodSearchQuery ? "No matching eligible candidates found" : `No eligible ${hodLinkStaff && isNonRegionalLocation(hodLinkStaff.geofence_locations?.name) ? "Department Heads" : "Regional Managers"} found${hodLinkStaff && !isNonRegionalLocation(hodLinkStaff.geofence_locations?.name) ? " for this exact location" : ""}.`}
                   </p>
                 ) : (
                   hodCandidates.filter((h) =>

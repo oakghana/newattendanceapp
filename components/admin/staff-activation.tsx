@@ -33,7 +33,7 @@ export default function StaffActivation() {
         setPendingStaff(data.staff || [])
       }
     } catch (error) {
-      addNotification("Failed to load pending staff requests", "error")
+      addNotification({ type: "error", title: "Load failed", message: "Failed to load pending staff requests" })
     } finally {
       setIsLoading(false)
     }
@@ -52,14 +52,26 @@ export default function StaffActivation() {
       })
 
       if (response.ok) {
-        addNotification(`Staff ${activate ? "activated" : "deactivated"} successfully`, "success")
+        addNotification({
+          type: "success",
+          title: "Staff status updated",
+          message: `Staff ${activate ? "activated" : "deactivated"} successfully`,
+        })
         fetchPendingStaff()
       } else {
         const errorData = await response.json()
-        addNotification(`Failed to update staff: ${errorData.error}`, "error")
+        addNotification({
+          type: "error",
+          title: "Staff update failed",
+          message: `Failed to update staff: ${errorData.error}`,
+        })
       }
     } catch (error) {
-      addNotification("An error occurred while updating staff", "error")
+      addNotification({
+        type: "error",
+        title: "Staff update failed",
+        message: "An error occurred while updating staff",
+      })
     }
   }
 

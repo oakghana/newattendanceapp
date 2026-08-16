@@ -53,7 +53,15 @@ export default async function SecretaryMemosPage() {
         geofence_locations!user_profiles_assigned_location_id_fkey(name)
       )
     `)
-    .in("status", ["awaiting_director_hr", "approved_director", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
+    .in("status", [
+    "awaiting_director_hr",
+    "approved_director",
+    "pending_hr_records_reference",
+    "referenced",
+    "staff_receiving_funds",
+    "partially_recovered",
+    "fully_recovered",
+  ])
     .order("created_at", { ascending: false })
     .limit(300)
 
@@ -99,7 +107,10 @@ export default async function SecretaryMemosPage() {
     user_profiles: leaveProfileMap.get(leave.user_id) || null,
   }))
 
-  // Fetch all MD-stamped/approved loan memos (approved_director status with md_approved_at set)
+  // Fetch every loan memo the MD has approved, including requests that have
+  // already moved through HR Records and later disbursement/recovery stages.
+  // The old approved_director-only filter hid a memo as soon as HR Records
+  // saved the official reference and advanced its status.
   // Include user_profiles join to resolve staff names when staff_full_name is missing
   const { data: approvedLoanMemos } = await admin
     .from("loan_requests")
@@ -122,7 +133,14 @@ export default async function SecretaryMemosPage() {
         profile_image_url
       )
     `)
-    .eq("status", "approved_director")
+    .in("status", [
+      "approved_director",
+      "pending_hr_records_reference",
+      "referenced",
+      "staff_receiving_funds",
+      "partially_recovered",
+      "fully_recovered",
+    ])
     .not("md_approved_at", "is", null)
     .order("md_approved_at", { ascending: false })
     .limit(300)

@@ -47,9 +47,15 @@ export default async function LeaveManagementPage() {
     // Build parallel queries — include location lookup when user has an assigned location
     const locationId = (profile as any)?.assigned_location_id
     const queries: any[] = [
+      // Staff submissions are written to leave_requests by /api/leave/request-leave.
+      // Reading leave_plan_requests here made the staff Request tab appear empty
+      // even though the submitted request existed in the database.
       admin
-        .from("leave_plan_requests")
-        .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, workflow_route, workflow_stage, created_at, adjusted_start_date, adjusted_end_date, hod_decision, memo_token, memo_reference")
+        .from("leave_requests")
+        // Keep this select limited to columns that exist on leave_requests. Workflow-specific
+        // fields live on leave_plan_requests; requesting them here makes Supabase return
+        // an error and the page silently fall back to an empty Request tab.
+        .select("id, user_id, start_date, end_date, reason, status, created_at, approved_at, reference_number")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(50),
@@ -224,10 +230,10 @@ export default async function LeaveManagementPage() {
     staffRequests = (requestsRes.data || []).map((request: any) => ({
       id: String(request.id),
       user_id: String(request.user_id),
-      start_date: request.preferred_start_date,
-      end_date: request.preferred_end_date,
+      start_date: request.start_date,
+      end_date: request.end_date,
       reason: request.reason || "",
-      leave_type: request.leave_type_key || "annual",
+      leave_type: request.leave_type || "annual",
       status: request.status,
       workflow_route: request.workflow_route,
       workflow_stage: request.workflow_stage,

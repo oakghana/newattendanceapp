@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
       role === "managing_director" ||
       role === "secretary" ||
       ["hr_records", "hr_records_officer", "hr_records_manager"].includes(role) ||
+      ["regional_hr_leave_office", "regional_hr", "regional_leave_office"].includes(role) ||
       role === "it-admin" ||
       canDoHodReview(role) ||
       canDoCommittee(role) ||

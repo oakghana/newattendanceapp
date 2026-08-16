@@ -6,7 +6,16 @@ import { useToast } from "@/hooks/use-toast"
 // "referenced" is the loan pipeline's terminal status — HR Records assigning
 // the official reference to an already Director HR / MD approved loan is the
 // final stage of the loan request, exactly like "hr_approved" is for leave.
-const FINAL_APPROVED_STATUSES = new Set(["hr_approved", "pending_hr_records_reference", "approved_director", "approved", "referenced"])
+const FINAL_APPROVED_STATUSES = new Set([
+  "hr_approved",
+  "pending_hr_records_reference",
+  "approved_director",
+  "approved",
+  "referenced",
+  "staff_receiving_funds",
+  "partially_recovered",
+  "fully_recovered",
+])
 const REGIONAL_LEAVE_STATUSES = new Set(["pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review", "regional_hr_approved", "regional_manager_approved", "completed"])
 
 function isRegionalLeave(row: any) {
@@ -85,6 +94,13 @@ export default function HrRecordsPage() {
   ].filter((row) => {
     const editable = canEditReference(row)
     const status = String(row.status || "").toLowerCase()
+    // Intentionally NOT the same broad check used for the row's display label
+    // below: loan requests get an auto-generated `reference_number` (a
+    // provisional QCC reference) at creation time, long before they ever reach
+    // HR Records, so treating any non-empty reference/reference_number as
+    // "locked" here would hide every loan from "Pending references" from the
+    // moment it's created. The only thing that actually means HR Records has
+    // finalized and forwarded a request is `memo_reference_locked`.
     const locked = Boolean(row.memo_reference_locked)
     if (view === "pending") return editable && !locked
     if (view === "referenced") return locked && !FINAL_APPROVED_STATUSES.has(status)
