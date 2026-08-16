@@ -52,7 +52,10 @@ export default async function LeaveManagementPage() {
       // even though the submitted request existed in the database.
       admin
         .from("leave_requests")
-        .select("id, user_id, start_date, end_date, reason, leave_type, status, workflow_route, workflow_stage, created_at, approved_at, memo_token, memo_reference, reference_number")
+        // Keep this select limited to columns that exist on leave_requests. Workflow-specific
+        // fields live on leave_plan_requests; requesting them here makes Supabase return
+        // an error and the page silently fall back to an empty Request tab.
+        .select("id, user_id, start_date, end_date, reason, status, created_at, approved_at, reference_number")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(50),
