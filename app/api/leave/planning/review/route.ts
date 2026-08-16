@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
     // Non-regional HR Executive forwarding intentionally does not require a
     // memo reference. HR Records assigns the official reference after final
     // approval, so this validation applies only to Regional Manager approval.
-    if (isRegionalManagerApproval && isRegionalRequest && decision === "approved" && !isRegionalForward && !String(memo_reference || "").trim()) {
+    if (isRegionalManagerApproval && isRegionalRequest && decision === "approved" && !isRegionalForward && !suppliedMemoReference) {
       return NextResponse.json({
         error: "This regional leave request cannot be approved until Regional HR Office enters the official memo reference.",
         code: "REGIONAL_MEMO_REFERENCE_REQUIRED",
