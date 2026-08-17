@@ -102,13 +102,13 @@ export async function POST(request: NextRequest) {
     // not authoritative and older review cards do not include workflow_route.
     const { data: workflowRequest, error: workflowRequestError } = await admin
       .from("leave_plan_requests")
-      .select("workflow_route, memo_reference, reference_number")
+      .select("workflow_route, memo_reference")
       .eq("id", leave_plan_request_id)
       .maybeSingle()
     if (workflowRequestError && isSchemaIssue(workflowRequestError)) return schemaIssueResponse(workflowRequestError)
     if (workflowRequestError || !workflowRequest) return NextResponse.json({ error: "Leave request not found." }, { status: 404 })
 
-    const persistedMemoReference = String((workflowRequest as any).memo_reference || (workflowRequest as any).reference_number || "").trim()
+    const persistedMemoReference = String((workflowRequest as any).memo_reference || "").trim()
     const normalizedMemoReference = persistedMemoReference || suppliedMemoReference
 
     const isRegionalManagerApproval = role === "regional_manager"
