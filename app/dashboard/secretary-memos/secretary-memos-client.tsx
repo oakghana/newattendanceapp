@@ -180,13 +180,27 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
     try {
       const response = await fetch(`/api/leave/planning/memo/${memo.id}${tokenQuery}`)
       const contentType = response.headers.get("content-type") || ""
-      if (!response.ok || !contentType.includes("application/pdf")) return
+      if (!response.ok || !contentType.includes("application/pdf")) {
+        const message = await response.json().catch(() => ({}))
+        throw new Error(message.error || "The memo is not available for download. HR Records must assign the official reference first.")
+      }
+
       const pdfUrl = URL.createObjectURL(await response.blob())
-      const win = window.open(pdfUrl, "_blank", "noopener,noreferrer")
-      if (print && win) win.addEventListener("load", () => win.print(), { once: true })
+      if (print) {
+        const win = window.open(pdfUrl, "_blank", "noopener,noreferrer")
+        if (win) win.addEventListener("load", () => win.print(), { once: true })
+      } else {
+        const link = document.createElement("a")
+        link.href = pdfUrl
+        link.download = `${memo.leave_type || "leave"}-memo-${memo.id}.pdf`
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+      }
       window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000)
-    } catch {
-      // Expected authorization or stale-request responses remain silent in the memo console.
+    } catch (error) {
+      console.error("Leave memo download failed:", error)
+      window.alert(error instanceof Error ? error.message : "Unable to download the leave memo.")
     }
   }
 
