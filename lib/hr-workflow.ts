@@ -253,19 +253,33 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
   }
 
   let hodId: string | null = null
-  const { data: linkage } = await admin
+  const { data: linkages } = await admin
     .from("loan_hod_linkages")
     .select("hod_user_id")
     .eq("staff_user_id", staffId)
-    .limit(1)
-    .maybeSingle()
-  hodId = linkage?.hod_user_id || null
-  if (!hodId && profile.department_id) {
+    .limit(20)
+  if (linkages?.length) {
+    const linkedIds = linkages.map((row: any) => row.hod_user_id).filter(Boolean)
+    const { data: linkedProfiles } = await admin
+      .from("user_profiles")
+      .select("id, role, department_id, assigned_location_id")
+      .in("id", linkedIds)
+      .eq("is_active", true)
+    const eligible = (linkedProfiles || []).find((candidate: any) => {
+      const candidateRole = normalizeWorkflowRole(candidate.role)
+      if (isExcludedLocation(assignedLocation?.name)) {
+        return isDepartmentHeadRole(candidateRole) && isExcludedLocation(assignedLocation?.name)
+      }
+      return Boolean(profile.assigned_location_id) && isRegionalManagerRole(candidateRole) && candidate.assigned_location_id === profile.assigned_location_id
+    })
+    hodId = eligible?.id || null
+  }
+  if (!hodId && profile.department_id && isExcludedLocation(assignedLocation?.name)) {
     const { data: departmentHod } = await admin
       .from("user_profiles")
       .select("id")
       .eq("department_id", profile.department_id)
-      .in("role", ["department_head", "manager_hr", "director_hr"])
+      .eq("role", "department_head")
       .eq("is_active", true)
       .limit(1)
       .maybeSingle()
@@ -288,8 +302,14 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
       regionalManagerId = canonicalAlignment.regional_manager_user_id || regionalManagerId
     }
   }
-  if (!regionalHrId) regionalHrId = (await resolveRegionalHrOffice(admin, regionId, profile.assigned_location_id))?.user_id || null
-  if (!regionalManagerId) regionalManagerId = await resolveRegionalManager(admin, regionId, profile.assigned_location_id)
+  const isRegionalStaff = Boolean(profile.assigned_location_id) && !isExcludedLocation(assignedLocation?.name)
+  if (!isRegionalStaff) {
+    regionalHrId = null
+    regionalManagerId = null
+  } else {
+    if (!regionalHrId) regionalHrId = (await resolveRegionalHrOffice(admin, regionId, profile.assigned_location_id))?.user_id || null
+    if (!regionalManagerId) regionalManagerId = await resolveRegionalManager(admin, regionId, profile.assigned_location_id)
+  }
 
   return {
     staffId,

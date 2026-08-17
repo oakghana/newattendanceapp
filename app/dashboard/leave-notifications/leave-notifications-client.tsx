@@ -422,7 +422,7 @@ export function LeaveNotificationsClient({ userRole }: LeaveNotificationsClientP
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reject Leave Request</DialogTitle>
+            <DialogTitle>Deny Leave Request</DialogTitle>
             <DialogDescription>
               Provide a clear reason so the staff member can correct and resubmit if needed.
             </DialogDescription>

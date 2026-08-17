@@ -267,16 +267,16 @@ const STATUS_COLORS: Record<string, string> = {
 const STATUS_LABELS: Record<string, string> = {
   pending_hod: "Pending HOD",
   hod_approved: "HOD Approved",
-  hod_rejected: "HOD Rejected",
+  hod_rejected: "HOD Denied",
   sent_to_accounts: "Sent to Accounts",
   rejected_fd: "FD Not Cleared",
   awaiting_committee: "Awaiting Committee",
-  committee_rejected: "Committee Rejected",
+  committee_rejected: "Committee Denied",
   awaiting_hr_terms: "Awaiting HR Terms",
   awaiting_director_hr: "Awaiting HR Executives",
   archived: "Archived",
   approved_director: "Approved by HR Executives",
-  director_rejected: "HR Executives Rejected",
+  director_rejected: "HR Executives Denied",
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -3266,7 +3266,7 @@ export default function LoanAppPage() {
             (data?.myRequests || []).map((req) => {
               const timeline = data?.myTimelines.find((x) => x.loan_request_id === req.id)?.entries || []
               const currentStepIdx = WORKFLOW_ORDER.indexOf(req.status as typeof WORKFLOW_ORDER[number])
-              const isRejected = ["hod_rejected","rejected_fd","committee_rejected","director_rejected"].includes(req.status)
+              const isDenied = ["hod_rejected","rejected_fd","committee_rejected","director_rejected"].includes(req.status)
               const isApproved = req.status === "approved_director"
 
               const STEP_META: Record<string, { icon: string; label: string; owner: string; desc: string }> = {
@@ -3282,15 +3282,15 @@ export default function LoanAppPage() {
               return (
                 <Card key={req.id} className="overflow-hidden border border-violet-100 shadow-md">
                   {/* Header */}
-                  <div className={`px-5 py-4 flex flex-wrap items-center justify-between gap-3 ${isApproved ? "bg-emerald-600" : isRejected ? "bg-red-600" : "bg-gradient-to-r from-violet-700 to-purple-600"} text-white`}>
+                  <div className={`px-5 py-4 flex flex-wrap items-center justify-between gap-3 ${isApproved ? "bg-emerald-600" : isDenied ? "bg-red-600" : "bg-gradient-to-r from-violet-700 to-purple-600"} text-white`}>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-widest opacity-80">{req.request_number}</p>
                       <h3 className="text-lg font-bold leading-tight">{req.loan_type_label} - {req.staff_full_name || "REQUESTING STAFF"}</h3>
                       <p className="text-sm opacity-90 mt-0.5">GHc {fmtAmount(req.fixed_amount || req.requested_amount)}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
-                      <Badge className={`${isApproved ? "bg-white text-emerald-700" : isRejected ? "bg-white text-red-700" : "bg-white/20 text-white border border-white/40"} font-semibold text-xs px-3 py-1`}>
-                        {isApproved ? "🎉 Approved" : isRejected ? "����� " + statusText(req.status) : "⏳ " + statusText(req.status)}
+                      <Badge className={`${isApproved ? "bg-white text-emerald-700" : isDenied ? "bg-white text-red-700" : "bg-white/20 text-white border border-white/40"} font-semibold text-xs px-3 py-1`}>
+                        {isApproved ? "🎉 Approved" : isDenied ? "����� " + statusText(req.status) : "⏳ " + statusText(req.status)}
                       </Badge>
                       <p className="text-xs opacity-70">Submitted {fmtDate(req.submitted_at || req.created_at)}</p>
                     </div>
@@ -3298,7 +3298,7 @@ export default function LoanAppPage() {
 
                   <CardContent className="pt-6 pb-4 px-5 space-y-6">
                     {/* Visual Workflow Stepper */}
-                    {!isRejected && (
+                    {!isDenied && (
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-4">Loan Journey</p>
                         <div className="flex items-start gap-0 overflow-x-auto pb-2">
@@ -3383,7 +3383,7 @@ export default function LoanAppPage() {
                       </div>
                     )}
 
-                    {isRejected && (
+                    {isDenied && (
                       <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
                           <span className="text-3xl">❌</span>
@@ -3404,7 +3404,7 @@ export default function LoanAppPage() {
                             onClick={() => void openSecureMemo(req.id)}
                           >
                             <Download className="h-4 w-4" />
-                            Download Rejection Memo
+                            Download Denial Memo
                           </Button>
                         )}
                       </div>
@@ -5269,7 +5269,7 @@ export default function LoanAppPage() {
                   >
                     <option value="pending">Pending Approval</option>
                     <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
+                    <option value="rejected">Denied</option>
                     <option value="all">All</option>
                   </select>
                   <select
@@ -5352,7 +5352,7 @@ export default function LoanAppPage() {
                                   payment.hr_approval_status === "rejected" ? "bg-red-100 text-red-700" :
                                   "bg-amber-100 text-amber-700"
                                 }`}>
-                                  HR: {payment.hr_approval_status === "pending" ? "Pending" : payment.hr_approval_status === "approved" ? "✓ Approved" : "✗ Rejected"}
+                                  HR: {payment.hr_approval_status === "pending" ? "Pending" : payment.hr_approval_status === "approved" ? "✓ Approved" : "✗ Denied"}
                                 </span>
                               </div>
                               <div className="text-xs">
@@ -5361,7 +5361,7 @@ export default function LoanAppPage() {
                                   payment.accounts_approval_status === "rejected" ? "bg-red-100 text-red-700" :
                                   "bg-amber-100 text-amber-700"
                                 }`}>
-                                  Accts: {payment.accounts_approval_status === "pending" ? "Pending" : payment.accounts_approval_status === "approved" ? "✓ Approved" : "✗ Rejected"}
+                                  Accts: {payment.accounts_approval_status === "pending" ? "Pending" : payment.accounts_approval_status === "approved" ? "✓ Approved" : "✗ Denied"}
                                 </span>
                               </div>
                             </div>
@@ -5587,7 +5587,7 @@ export default function LoanAppPage() {
           {hodMemoCopyRows.length > 0 && (
             <Card className="border-amber-200 bg-amber-50/70">
               <CardHeader>
-                <CardTitle>Rejection Memo Copies for Staff You Approved</CardTitle>
+                <CardTitle>Denial Memo Copies for Staff You Approved</CardTitle>
                 <CardDescription>Downstream rejection memos remain available here for HOD follow-up and record keeping.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 md:grid-cols-2">
@@ -5601,7 +5601,7 @@ export default function LoanAppPage() {
                     <div className="mt-1 text-xs text-muted-foreground">Updated: {fmtDate(row.updated_at || row.created_at)}</div>
                     <div className="mt-3 flex gap-2">
                       <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>
-                        <FileText className="mr-1 h-4 w-4" /> Open Rejection Memo
+                        <FileText className="mr-1 h-4 w-4" /> Open Denial Memo
                       </Button>
                     </div>
                   </div>
@@ -5846,7 +5846,7 @@ export default function LoanAppPage() {
                       <div className="text-xs text-amber-600">awaiting action</div>
                     </div>
                     <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
-                      <div className="text-xs font-medium text-red-500 uppercase tracking-wide">Rejected</div>
+                      <div className="text-xs font-medium text-red-500 uppercase tracking-wide">Denied</div>
                       <div className="text-lg font-bold text-red-600 mt-0.5">{rejected}</div>
                       <div className="text-xs text-red-500">not approved</div>
                     </div>
@@ -5978,7 +5978,7 @@ export default function LoanAppPage() {
                       { label: "HR Office", statuses: ["sent_to_hr","hr_office_review","hr_office_approved","awaiting_director_hr","approved_director"] },
                       { label: "Director", statuses: ["awaiting_director_hr","approved_director"] },
                     ]
-                    const isRejected = ["director_rejected","rejected_fd","hod_rejected","loan_office_rejected","committee_rejected"].includes(row.status)
+                    const isDenied = ["director_rejected","rejected_fd","hod_rejected","loan_office_rejected","committee_rejected"].includes(row.status)
                     return (
                       <div className="flex items-center gap-1 mb-3">
                         {steps.map((step, i) => {
@@ -5987,12 +5987,12 @@ export default function LoanAppPage() {
                           return (
                             <div key={step.label} className="flex items-center flex-1">
                               <div className={`h-1.5 flex-1 rounded-full transition-colors ${
-                                isRejected && i === 0 ? "bg-red-400" :
+                                isDenied && i === 0 ? "bg-red-400" :
                                 isFinal ? "bg-emerald-500" :
                                 done ? "bg-violet-500" : "bg-slate-200"
                               }`} />
                               <div className={`text-[10px] whitespace-nowrap px-1 font-medium ${
-                                done && !isRejected ? "text-violet-700" : isRejected ? "text-red-400" : "text-slate-400"
+                                done && !isDenied ? "text-violet-700" : isDenied ? "text-red-400" : "text-slate-400"
                               }`}>{step.label}</div>
                             </div>
                           )
@@ -6122,7 +6122,7 @@ export default function LoanAppPage() {
                       <div className="text-lg font-bold text-emerald-700 mt-0.5">{approved}</div>
                     </div>
                     <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
-                      <div className="text-xs font-medium text-red-500 uppercase tracking-wide">Rejected</div>
+                      <div className="text-xs font-medium text-red-500 uppercase tracking-wide">Denied</div>
                       <div className="text-lg font-bold text-red-600 mt-0.5">{rejected}</div>
                     </div>
                   </div>
@@ -6198,7 +6198,7 @@ export default function LoanAppPage() {
                     <div className="flex items-center gap-2">
                       <div className="text-xs font-semibold text-slate-700">Archived</div>
                       <div className="px-2 py-1 rounded bg-slate-200 text-slate-700 text-xs font-semibold">
-                        {row.director_hr_name ? "✓ Approved" : "✗ Rejected"}
+                        {row.director_hr_name ? "✓ Approved" : "✗ Denied"}
                       </div>
                     </div>
                   </div>
@@ -6568,7 +6568,7 @@ export default function LoanAppPage() {
                     <SelectContent>
                       <SelectItem value="pending">Pending only</SelectItem>
                       <SelectItem value="approved">Approved only</SelectItem>
-                      <SelectItem value="rejected">Rejected only</SelectItem>
+                      <SelectItem value="rejected">Denied only</SelectItem>
                       <SelectItem value="all">All requests</SelectItem>
                     </SelectContent>
                   </Select>
@@ -6588,7 +6588,7 @@ export default function LoanAppPage() {
                           <div className="text-xs text-muted-foreground">Requested by {request.requester?.full_name || "Unknown requester"} on {fmtDate(request.created_at)}</div>
                         </div>
                         <Badge className={request.request_status === "pending" ? "bg-amber-600 text-white" : request.request_status === "approved" ? "bg-emerald-700 text-white" : "bg-red-700 text-white"}>
-                          {request.request_status === "pending" ? "Pending Review" : request.request_status === "approved" ? "Approved" : "Rejected"}
+                          {request.request_status === "pending" ? "Pending Review" : request.request_status === "approved" ? "Approved" : "Denied"}
                         </Badge>
                       </div>
 
@@ -6910,7 +6910,7 @@ export default function LoanAppPage() {
                   <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="approve">Endorse</SelectItem>
-                    <SelectItem value="reject">Reject</SelectItem>
+                    <SelectItem value="reject">Deny</SelectItem>
                   </SelectContent>
                 </Select>
                 <Label className="text-sm">Note (optional)</Label>
@@ -7574,7 +7574,7 @@ export default function LoanAppPage() {
                         }`}
                       >
                         <XCircle className={`h-5 w-5 mx-auto mb-1 ${modalDecision === "reject" ? "text-red-600" : "text-slate-400"}`} />
-                        <span className={`block text-xs font-semibold ${modalDecision === "reject" ? "text-red-700" : "text-slate-600"}`}>Reject</span>
+                        <span className={`block text-xs font-semibold ${modalDecision === "reject" ? "text-red-700" : "text-slate-600"}`}>Deny</span>
                         <span className={`block text-[10px] ${modalDecision === "reject" ? "text-red-600" : "text-slate-400"}`}>Deny request</span>
                       </button>
                     </div>
@@ -7653,7 +7653,8 @@ export default function LoanAppPage() {
                 {modalDecision === "approve" ? (
                   <><CheckCircle2 className="h-3.5 w-3.5" /> Sign &amp; Send to MD</>
                 ) : (
-                  <><XCircle className="h-3.5 w-3.5" /> Reject &amp; Notify Staff</>
+                  <><XCircle className="h-3.5 w-3.5" /> Deny
+ &amp; Notify Staff</>
                 )}
               </Button>
             )}
@@ -7926,7 +7927,7 @@ export default function LoanAppPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {approvingPaymentId?.startsWith("approve") ? "Approve Payment" : "Reject Payment"}
+              {approvingPaymentId?.startsWith("approve") ? "Approve Payment" : "Deny Payment"}
             </DialogTitle>
             <DialogDescription>
               {approvingPaymentId?.startsWith("approve")
@@ -7937,7 +7938,7 @@ export default function LoanAppPage() {
           <div className="space-y-4">
             <div>
               <Label className="text-xs font-semibold text-slate-600">
-                {approvingPaymentId?.startsWith("approve") ? "Approval Notes" : "Rejection Reason"}
+                {approvingPaymentId?.startsWith("approve") ? "Approval Notes" : "Denial Reason"}
               </Label>
               <Textarea
                 placeholder={approvingPaymentId?.startsWith("approve") ? "Enter approval notes..." : "Explain why this payment is being rejected..."}
@@ -7981,7 +7982,7 @@ export default function LoanAppPage() {
 
                   if (response.ok) {
                     toast({
-                      title: isApprove ? "Payment Approved" : "Payment Rejected",
+                      title: isApprove ? "Payment Approved" : "Payment Denied",
                       description: `Payment has been ${isApprove ? "approved" : "rejected"} successfully`,
                     })
                     setApprovalModalOpen(false)

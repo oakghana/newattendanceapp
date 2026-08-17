@@ -94,15 +94,22 @@ export async function POST(request: NextRequest) {
 
     const suppliedMemoReference = String(memo_reference || "").trim()
 
+    // Resolve the workflow and the authoritative memo reference from the
+    // persisted request. Recovered/older review cards may not carry the memo
+    // field even though Regional HR already saved it on the request.
+
     // Resolve the workflow from the persisted request. The client payload is
     // not authoritative and older review cards do not include workflow_route.
     const { data: workflowRequest, error: workflowRequestError } = await admin
       .from("leave_plan_requests")
-      .select("workflow_route")
+      .select("workflow_route, memo_reference")
       .eq("id", leave_plan_request_id)
       .maybeSingle()
     if (workflowRequestError && isSchemaIssue(workflowRequestError)) return schemaIssueResponse(workflowRequestError)
     if (workflowRequestError || !workflowRequest) return NextResponse.json({ error: "Leave request not found." }, { status: 404 })
+
+    const persistedMemoReference = String((workflowRequest as any).memo_reference || "").trim()
+    const normalizedMemoReference = persistedMemoReference || suppliedMemoReference
 
     const isRegionalManagerApproval = role === "regional_manager"
     const isRegionalRequest = action === "forward_to_regional_manager"
@@ -127,7 +134,7 @@ export async function POST(request: NextRequest) {
     // Non-regional HR Executive forwarding intentionally does not require a
     // memo reference. HR Records assigns the official reference after final
     // approval, so this validation applies only to Regional Manager approval.
-    if (isRegionalManagerApproval && isRegionalRequest && decision === "approved" && !isRegionalForward && !String(memo_reference || "").trim()) {
+    if (isRegionalManagerApproval && isRegionalRequest && decision === "approved" && !isRegionalForward && !normalizedMemoReference) {
       return NextResponse.json({
         error: "This regional leave request cannot be approved until Regional HR Office enters the official memo reference.",
         code: "REGIONAL_MEMO_REFERENCE_REQUIRED",
@@ -153,7 +160,11 @@ export async function POST(request: NextRequest) {
 
     if (reviewError || !reviews || reviews.length === 0) {
       const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
-      if (!isRegionalHr) {
+      const isRegionalManager = role === "regional_manager"
+      // Older forwarded regional requests can be visible in the manager queue
+      // without a matching leave_plan_reviews row. Validate the request scope
+      // below, then create the manager assignment before applying the decision.
+      if (!isRegionalHr && !isRegionalManager) {
         return NextResponse.json({ error: "Review assignment not found for this manager." }, { status: 404 })
       }
 
@@ -173,9 +184,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "This request is assigned to another Regional HR Office." }, { status: 403 })
       }
       const targetProfile = Array.isArray(targetRequest.user_profiles) ? targetRequest.user_profiles[0] : targetRequest.user_profiles
-      const sameScope =
-        (profile.assigned_location_id && targetProfile?.assigned_location_id === profile.assigned_location_id) ||
-        ((profile as any).region_id && targetProfile?.region_id === (profile as any).region_id)
+      const sameScope = profile.assigned_location_id
+        ? targetProfile?.assigned_location_id === profile.assigned_location_id
+        : Boolean((profile as any).region_id && targetProfile?.region_id === (profile as any).region_id)
+      if (role === "regional_manager" && String((targetRequest as any).workflow_route || "").toLowerCase() !== "regional") {
+        return NextResponse.json({ error: "Regional Managers can review only regional leave requests." }, { status: 403 })
+      }
       if (!sameScope) {
         return NextResponse.json({ error: "This request is outside your assigned location or region." }, { status: 403 })
       }
@@ -244,9 +258,9 @@ export async function POST(request: NextRequest) {
 
     if (isRegionalManagerApproval && isRegionalRequest) {
       const staffProfile = Array.isArray((leavePlan as any).user_profiles) ? (leavePlan as any).user_profiles[0] : (leavePlan as any).user_profiles
-      const sameScope =
-        (profile.assigned_location_id && staffProfile?.assigned_location_id === profile.assigned_location_id) ||
-        ((profile as any).region_id && staffProfile?.region_id === (profile as any).region_id)
+      const sameScope = profile.assigned_location_id
+        ? staffProfile?.assigned_location_id === profile.assigned_location_id
+        : Boolean((profile as any).region_id && staffProfile?.region_id === (profile as any).region_id)
       if (!sameScope) {
         return NextResponse.json({ error: "This regional request is outside your assigned region or location." }, { status: 403 })
       }
@@ -266,19 +280,21 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Adjusted leave date range is invalid." }, { status: 400 })
       }
 
-      const entitlementDays = Number(leavePlan.entitlement_days || 0)
-      const outstandingDays = Number(adjustment_breakdown?.outstanding_days || 0)
-      effectiveEntitlement = entitlementDays + outstandingDays
-      if (effectiveEntitlement > 0 && nextRequestedDays > effectiveEntitlement) {
-        return NextResponse.json(
-          {
-            error: outstandingDays > 0
-              ? `Adjusted request (${nextRequestedDays} day(s)) exceeds entitlement plus outstanding days (${effectiveEntitlement} day(s)).`
-              : `Adjusted request (${nextRequestedDays} day(s)) exceeds entitlement (${entitlementDays} day(s)).`,
-          },
-          { status: 400 },
-        )
-      }
+  const entitlementDays = Number(leavePlan.entitlement_days || 0)
+  const outstandingDays = Number(adjustment_breakdown?.outstanding_days || 0)
+  effectiveEntitlement = entitlementDays + outstandingDays
+  // Outstanding days are an HR-approved carryover and intentionally allow the
+  // adjusted regional annual leave period to exceed the original request and
+  // base entitlement. HR has already documented the adjustment in the memo.
+  // Keep the strict entitlement guard only when no outstanding days exist.
+  if (effectiveEntitlement > 0 && nextRequestedDays > effectiveEntitlement && outstandingDays <= 0) {
+    return NextResponse.json(
+      {
+        error: `Adjusted request (${nextRequestedDays} day(s)) exceeds entitlement (${entitlementDays} day(s)).`,
+      },
+      { status: 400 },
+    )
+  }
     }
 
     const { data: allReviews, error: allReviewsError } = await admin
@@ -318,7 +334,7 @@ export async function POST(request: NextRequest) {
         adjustment_breakdown: adjustment_breakdown || {},
         adjustment_reason: String(recommendation || "").trim() || null,
       } : {}),
-      ...((isRegionalForward || isRegionalManagerApprovalComplete) && suppliedMemoReference ? { memo_reference: suppliedMemoReference } : {}),
+      ...((isRegionalForward || isRegionalManagerApprovalComplete) && normalizedMemoReference ? { memo_reference: normalizedMemoReference } : {}),
       ...(isRegionalManagerApprovalComplete ? {
         regional_manager_id: user.id,
         regional_manager_name: `${String((profile as any).first_name || "").trim()} ${String((profile as any).last_name || "").trim()}`.trim() || "Regional Manager",
@@ -378,15 +394,35 @@ export async function POST(request: NextRequest) {
       requestUpdatePayload.requested_days = nextRequestedDays
     }
 
-    const { error: requestUpdateError } = await admin
+    // Apply the allow-list after all role-specific fields have been added.
+    // This prevents optional Regional Manager fields from bypassing the
+    // schema guard when they are appended later in the approval flow.
+    for (const key of Object.keys(requestUpdatePayload)) {
+      if (!leavePlanColumns.has(key)) delete requestUpdatePayload[key]
+    }
+
+    let { error: requestUpdateError } = await admin
       .from("leave_plan_requests")
       .update(requestUpdatePayload)
       .eq("id", leave_plan_request_id)
 
-    if (requestUpdateError) {
-      if (isSchemaIssue(requestUpdateError)) {
-        return schemaIssueResponse(requestUpdateError)
+    // Older projects may not have every optional approval column yet. Retry
+    // once without the exact missing column so the core approval can complete.
+    if (requestUpdateError && isSchemaIssue(requestUpdateError)) {
+      const missingColumn = String((requestUpdateError as any).message || "").match(/column [^.]*\.([^ ]+) does not exist/i)?.[1]
+        || String((requestUpdateError as any).message || "").match(/column ([^ ]+) does not exist/i)?.[1]
+      if (missingColumn && Object.prototype.hasOwnProperty.call(requestUpdatePayload, missingColumn)) {
+        delete requestUpdatePayload[missingColumn]
+        const retry = await admin
+          .from("leave_plan_requests")
+          .update(requestUpdatePayload)
+          .eq("id", leave_plan_request_id)
+        requestUpdateError = retry.error
       }
+    }
+
+    if (requestUpdateError) {
+      if (isSchemaIssue(requestUpdateError)) return schemaIssueResponse(requestUpdateError)
       throw requestUpdateError
     }
 
