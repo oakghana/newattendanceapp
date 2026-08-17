@@ -13,6 +13,17 @@ import { toast } from "@/hooks/use-toast"
 import { ToastAction } from "@/components/ui/toast"
 
 const POLL_INTERVAL_MS = 30_000 // 30 seconds
+const IDLE_TIMEOUT_MS = 2 * 60 * 1000
+const IDLE_EVENTS: Array<keyof WindowEventMap> = [
+  "mousemove",
+  "mousedown",
+  "keydown",
+  "touchstart",
+  "scroll",
+  "wheel",
+  "pointerdown",
+]
+
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -26,6 +37,35 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter()
   const lastSeenIdRef = useRef<string | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    if (!user) return
+
+    const supabase = createClient()
+    let idleTimer: ReturnType<typeof setTimeout> | null = null
+    let signedOut = false
+
+    const signOutForInactivity = async () => {
+      if (signedOut) return
+      signedOut = true
+      await supabase.auth.signOut()
+      router.replace("/auth/login?reason=idle")
+    }
+
+    const resetIdleTimer = () => {
+      if (signedOut) return
+      if (idleTimer) clearTimeout(idleTimer)
+      idleTimer = setTimeout(signOutForInactivity, IDLE_TIMEOUT_MS)
+    }
+
+    IDLE_EVENTS.forEach((eventName) => window.addEventListener(eventName, resetIdleTimer, { passive: true }))
+    resetIdleTimer()
+
+    return () => {
+      if (idleTimer) clearTimeout(idleTimer)
+      IDLE_EVENTS.forEach((eventName) => window.removeEventListener(eventName, resetIdleTimer))
+    }
+  }, [router, user])
 
   useEffect(() => {
     const checkAuth = async () => {
