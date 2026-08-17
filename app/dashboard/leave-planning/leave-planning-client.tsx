@@ -1323,7 +1323,8 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
 
   // ── Real-time same-month conflict warning ────────────────────────────
   const sameMonthConflict = useMemo(() => {
-    if (!startDate || !leaveType || !data?.myRequests) return null
+    const requestList = (data?.myRequests || data?.requests || []) as any[]
+    if (!startDate || !leaveType || requestList.length === 0) return null
     const newStart = new Date(startDate)
     if (Number.isNaN(newStart.getTime())) return null
     const newYear = newStart.getFullYear()
@@ -1343,7 +1344,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       "hr_approved",
     ]
 
-    return (data.myRequests as any[]).find((r: any) => {
+    return requestList.find((r: any) => {
       if (r.leave_type_key !== leaveType) return false
       if (r.is_archived) return false
       if (editingId && r.id === editingId) return false
@@ -1361,7 +1362,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       }
       return false
     }) || null
-  }, [startDate, leaveType, data?.myRequests, editingId])
+  }, [startDate, leaveType, data?.myRequests, data?.requests, editingId])
 
   // ── Loaders ──────────────────────────��──────────────────────────────
   const loadData = useCallback(async () => {

@@ -142,7 +142,7 @@ function getSchemaIssueMessage(error: any) {
   return "Leave planning schema is initializing. The module is running in compatibility mode."
 }
 
-function buildDegradedModeResponse(mode: "staff" | "manager" | "hr" | "hr_office", warning: string) {
+function buildDegradedModeResponse(mode: "staff" | "loan_office" | "manager" | "hr" | "hr_office", warning: string) {
   if (mode === "manager") {
     return NextResponse.json({ mode: "manager", reviews: [], staggerReviews: [], degraded: true, warning }, { status: 200 })
   }
@@ -910,9 +910,11 @@ export async function GET(request: NextRequest) {
         throw staggerError
       }
 
+      const staffRequests = data || []
       return NextResponse.json({
         mode: "staff",
-        requests: data || [],
+        requests: staffRequests,
+        myRequests: staffRequests,
         staggerRequests: stagger || [],
       })
     }
