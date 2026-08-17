@@ -35,15 +35,18 @@ function fmtShort(raw: string | null | undefined): string {
   })
 }
 
-function computeResumeDate(endRaw: string): string {
+  function computeResumeDate(endRaw: string, leaveType?: string): string {
   const d = new Date(endRaw)
   d.setDate(d.getDate() + 1)
-  if (d.getDay() === 6) d.setDate(d.getDate() + 2)
-  if (d.getDay() === 0) d.setDate(d.getDate() + 1)
+  const isCalendarLeave = leaveType === 'maternity' || leaveType === 'paternity'
+  if (!isCalendarLeave) {
+    if (d.getDay() === 6) d.setDate(d.getDate() + 2)
+    if (d.getDay() === 0) d.setDate(d.getDate() + 1)
+  }
   return d.toLocaleDateString('en-GB', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   })
-}
+  }
 
 function leaveTypeLabel(key: string): string {
   return (key || 'annual')
@@ -215,6 +218,7 @@ export async function GET(request: NextRequest) {
 
     const startRaw = req.hr_approved_start_date || req.adjusted_start_date || req.preferred_start_date
     const leaveTypeKey = String(req.leave_type_key || 'annual').toLowerCase()
+    const isCalendarLeave = leaveTypeKey === 'maternity' || leaveTypeKey === 'paternity'
     const storedGrantedDays = Number(req.hr_approved_days ?? req.adjusted_days ?? req.requested_days ?? 0)
     // Always resolve entitlement from the current staff profile. If the richer
     // profile query is unavailable on a legacy schema, use the management view
@@ -270,10 +274,18 @@ export async function GET(request: NextRequest) {
       travellingDays: breakdown?.travellingDays ?? (travelDays || 2),
         })
       : null
-    const endRaw = leaveTypeKey === 'annual'
-      ? (annualDates?.endDate.toISOString().slice(0, 10) || req.hr_approved_end_date || req.adjusted_end_date || req.preferred_end_date)
-      : (req.hr_approved_end_date || req.adjusted_end_date || req.preferred_end_date)
-    const grantedDays = breakdown?.grantedDays ?? annualDates?.grantedDays ?? storedGrantedDays
+    const endRaw = isCalendarLeave && startRaw && (storedEntitledDays || storedGrantedDays) > 0
+      ? (() => {
+          const end = new Date(startRaw)
+          end.setDate(end.getDate() + (storedEntitledDays || storedGrantedDays) - 1)
+          return end.toISOString().slice(0, 10)
+        })()
+      : leaveTypeKey === 'annual'
+        ? (annualDates?.endDate.toISOString().slice(0, 10) || req.hr_approved_end_date || req.adjusted_end_date || req.preferred_end_date)
+        : (req.hr_approved_end_date || req.adjusted_end_date || req.preferred_end_date)
+    const grantedDays = isCalendarLeave
+      ? (storedEntitledDays || storedGrantedDays)
+      : (breakdown?.grantedDays ?? annualDates?.grantedDays ?? storedGrantedDays)
     const entitledDays = annualDates?.entitlementDays ?? storedEntitledDays
     const entitledLabel = breakdown
       ? `${breakdown.baseEntitlementDays} plus ${breakdown.outstandingDays} outstanding day${breakdown.outstandingDays !== 1 ? 's' : ''} plus ${breakdown.travellingDays} travelling day${breakdown.travellingDays !== 1 ? 's' : ''}`
@@ -310,7 +322,7 @@ export async function GET(request: NextRequest) {
       : ''
     const serial = employeeId !== 'N/A' ? employeeId : serialDate
 
-    // ── Logo ──────────────────────────────────────────────────────────────────
+    // ── Logo ───────────────────────────────────────────────────��──────────────
     let logoBase64: string | null = null
     try {
       const logoPath = path.join(process.cwd(), 'public', 'logos', 'qcc-logo.png')
@@ -440,7 +452,8 @@ export async function GET(request: NextRequest) {
     } else {
       // Non-annual: standard format like the sample memos
       const submitDate = new Date(req.created_at || new Date()).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-      openingText = `We acknowledge receipt of your letter dated ${submitDate} in relation to the above-mentioned subject and wish to inform you that approval has been granted for you to proceed on ${grantedDays} working day(s) ${leaveTypeName.toLowerCase()} leave with effect from ${fmtOrdinal(startRaw)} to ${fmtOrdinal(endRaw)}.`
+      const dayLabel = isCalendarLeave ? 'calendar day(s)' : 'working day(s)'
+      openingText = `We acknowledge receipt of your letter dated ${submitDate} in relation to the above-mentioned subject and wish to inform you that approval has been granted for you to proceed on ${grantedDays} ${dayLabel} ${leaveTypeName.toLowerCase()} leave with effect from ${fmtOrdinal(startRaw)} to ${fmtOrdinal(endRaw)}.`
     }
     const openingLines = doc.splitTextToSize(openingText, contentW)
     doc.text(openingLines, mL, y)
@@ -537,14 +550,14 @@ export async function GET(request: NextRequest) {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9)
     doc.setTextColor(0)
-    doc.text(`You are to resume duty on ${computeResumeDate(endRaw)}.`, mL, y)
+    doc.text(`You are to resume duty on ${computeResumeDate(endRaw, leaveTypeKey)}.`, mL, y)
     y += 8
 
     // ── Closing ───────────────────────────────────────────────────────────────
     doc.text('We wish you a pleasant and relaxing vacation.', mL, y)
     y += 14
 
-    // ── Signature block ───────────────────────────────────────────────────────
+    // ── Signature block ─────────��─────────────────────────────────────────────
     if (sigImageBase64) {
       try {
         doc.addImage(sigImageBase64, 'PNG', mL, y, 35, 12)
