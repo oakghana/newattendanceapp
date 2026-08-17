@@ -547,7 +547,7 @@ function buildMemoTemplate(req: any): { subject: string; body: string; cc: strin
     templateKey: fallbackTemplate.template_key,
   }
 }
-// ────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────���───────────────────────────
 
 function getCurrentMonthRange() {
   const now = new Date()
@@ -1248,8 +1248,15 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
 
   const computedDays = useMemo(() => {
     if (!startDate || !endDate) return 0
+    if (leaveType === "maternity" || leaveType === "paternity") {
+      const start = new Date(startDate)
+      const end = new Date(endDate)
+      return Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start
+        ? 0
+        : Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    }
     return computeLeaveDays(startDate, endDate)
-  }, [startDate, endDate])
+  }, [startDate, endDate, leaveType])
 
   const selectedLeaveType = useMemo(() => {
   const base = leaveTypes.find((t) => t.leaveTypeKey === leaveType)
@@ -1323,7 +1330,8 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
 
   // ── Real-time same-month conflict warning ────────────────────────────
   const sameMonthConflict = useMemo(() => {
-    if (!startDate || !leaveType || !data?.myRequests) return null
+    const requestList = (data?.myRequests || data?.requests || []) as any[]
+    if (!startDate || !leaveType || requestList.length === 0) return null
     const newStart = new Date(startDate)
     if (Number.isNaN(newStart.getTime())) return null
     const newYear = newStart.getFullYear()
@@ -1343,7 +1351,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       "hr_approved",
     ]
 
-    return (data.myRequests as any[]).find((r: any) => {
+    return requestList.find((r: any) => {
       if (r.leave_type_key !== leaveType) return false
       if (r.is_archived) return false
       if (editingId && r.id === editingId) return false
@@ -1361,7 +1369,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       }
       return false
     }) || null
-  }, [startDate, leaveType, data?.myRequests, editingId])
+  }, [startDate, leaveType, data?.myRequests, data?.requests, editingId])
 
   // ── Loaders ──────────────────────────��──────────────────────────────
   const loadData = useCallback(async () => {
@@ -2277,7 +2285,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       if ((leaveType === "maternity" || leaveType === "paternity") && !reportUrl) {
         throw new Error(leaveType === "paternity" ? "Proof of child delivery is required before paternity leave can be saved." : "A medical report is required before maternity leave can be saved.")
       }
-      const autoResumptionDate = computeReturnToWorkDate(endDate)
+      const autoResumptionDate = computeReturnToWorkDate(endDate, [], leaveType)
       const res = await fetch("/api/leave/planning", {
         method: editingId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },

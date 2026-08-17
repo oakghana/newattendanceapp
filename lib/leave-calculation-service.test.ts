@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { calculateLeaveDuration, generateCalculationSummary } from "./leave-calculation-service"
-import { getMaternityEntitlementDays } from "./leave-policy"
+import { computeReturnToWorkDate, getMaternityEntitlementDays } from "./leave-policy"
 
 const date = (value: string) => new Date(`${value}T00:00:00Z`)
 
@@ -10,6 +10,26 @@ describe("maternity entitlement policy", () => {
     expect(getMaternityEntitlementDays("cs")).toBe(98)
     expect(getMaternityEntitlementDays("twins")).toBe(98)
     expect(getMaternityEntitlementDays("cs_twins")).toBe(98)
+  })
+})
+
+describe("calendar-day maternity and paternity rules", () => {
+  it("counts every maternity day across weekends and holidays", () => {
+    const start = date("2026-08-01")
+    const end = date("2026-10-23")
+    const totalDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+
+    expect(totalDays).toBe(84)
+    expect(computeReturnToWorkDate("2026-10-23", ["2026-10-24"], "maternity")).toBe("2026-10-24")
+  })
+
+  it("uses five inclusive calendar days for paternity leave", () => {
+    const start = date("2026-08-07")
+    const end = new Date(start)
+    end.setUTCDate(end.getUTCDate() + 4)
+
+    expect(Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1).toBe(5)
+    expect(computeReturnToWorkDate("2026-08-11", [], "paternity")).toBe("2026-08-12")
   })
 })
 

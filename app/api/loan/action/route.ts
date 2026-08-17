@@ -11,6 +11,7 @@ import {
   GOOD_FD_THRESHOLD,
   isFdExemptLoanType,
   canDoAccounts,
+  canEnterFdScore,
   canDoCommittee,
   canDoDirectorHr,
   canDoHodReview,
@@ -449,9 +450,9 @@ export async function POST(request: NextRequest) {
 
     if (action === "accounts_fd_update") {
       actionHandled = true
-      if (!canDoAccounts(role, deptName, deptCode)) {
-        return NextResponse.json({ error: "Only Accounts/Admin can update FD" }, { status: 403 })
-      }
+  if (!canEnterFdScore(role, deptName, deptCode)) {
+  return NextResponse.json({ error: "Only the Accounts Loan Office can enter FD scores" }, { status: 403 })
+  }
       if (req.status !== "sent_to_accounts") return NextResponse.json({ error: "Request is not at Accounts stage" }, { status: 400 })
 
       const fdScore = Number(body.fd_score)
