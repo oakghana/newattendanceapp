@@ -56,9 +56,12 @@ export async function POST(request: NextRequest) {
 
     const leaveTypeKey = String(leave_type || "annual").toLowerCase().trim()
     const explicitRequestedDays = requested_days_raw !== null && requested_days_raw.trim() !== ""
+    const isCalendarDayLeave = leaveTypeKey === "maternity" || leaveTypeKey === "paternity"
     const requestedDays = explicitRequestedDays && Number.isInteger(requested_days) && Number(requested_days) > 0
       ? Number(requested_days)
-      : computeLeaveDays(start_date, end_date)
+      : isCalendarDayLeave
+        ? Math.floor((new Date(end_date).getTime() - new Date(start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1
+        : computeLeaveDays(start_date, end_date)
     if (requestedDays <= 0 || (explicitRequestedDays && (!Number.isInteger(requested_days) || Number(requested_days) <= 0))) {
       return NextResponse.json({ error: "Invalid leave date range" }, { status: 400 })
     }
@@ -127,7 +130,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const returnToWorkDate = computeReturnToWorkDate(end_date)
+    const returnToWorkDate = computeReturnToWorkDate(end_date, [], leaveTypeKey)
 
     // Annual leave uses the staff-specific entitlement plus travel days.
     // Travel days are included in the allowed total but remain separately tracked.

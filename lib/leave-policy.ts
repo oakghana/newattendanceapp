@@ -75,9 +75,21 @@ export function getMaternityDeliveryLabel(deliveryType?: string | null): string 
   return "Normal delivery"
 }
 
-export function computeReturnToWorkDate(endDate: string, holidayDates: string[] = []): string {
+export function computeReturnToWorkDate(
+  endDate: string,
+  holidayDates: string[] = [],
+  leaveType?: string | null,
+): string {
   const date = new Date(endDate)
   if (Number.isNaN(date.getTime())) return "N/A"
+
+  // Maternity and paternity are inclusive calendar-day entitlements. Their
+  // return date is simply the next calendar day, even when it is a weekend or holiday.
+  if (["maternity", "paternity"].includes(String(leaveType || "").toLowerCase())) {
+    date.setDate(date.getDate() + 1)
+    return date.toISOString().split("T")[0]
+  }
+
   const holidays = new Set(holidayDates.map((value) => String(value).slice(0, 10)))
   do {
     date.setDate(date.getDate() + 1)
