@@ -390,15 +390,35 @@ export async function POST(request: NextRequest) {
       requestUpdatePayload.requested_days = nextRequestedDays
     }
 
-    const { error: requestUpdateError } = await admin
+    // Apply the allow-list after all role-specific fields have been added.
+    // This prevents optional Regional Manager fields from bypassing the
+    // schema guard when they are appended later in the approval flow.
+    for (const key of Object.keys(requestUpdatePayload)) {
+      if (!leavePlanColumns.has(key)) delete requestUpdatePayload[key]
+    }
+
+    let { error: requestUpdateError } = await admin
       .from("leave_plan_requests")
       .update(requestUpdatePayload)
       .eq("id", leave_plan_request_id)
 
-    if (requestUpdateError) {
-      if (isSchemaIssue(requestUpdateError)) {
-        return schemaIssueResponse(requestUpdateError)
+    // Older projects may not have every optional approval column yet. Retry
+    // once without the exact missing column so the core approval can complete.
+    if (requestUpdateError && isSchemaIssue(requestUpdateError)) {
+      const missingColumn = String((requestUpdateError as any).message || "").match(/column [^.]*\.([^ ]+) does not exist/i)?.[1]
+        || String((requestUpdateError as any).message || "").match(/column ([^ ]+) does not exist/i)?.[1]
+      if (missingColumn && Object.prototype.hasOwnProperty.call(requestUpdatePayload, missingColumn)) {
+        delete requestUpdatePayload[missingColumn]
+        const retry = await admin
+          .from("leave_plan_requests")
+          .update(requestUpdatePayload)
+          .eq("id", leave_plan_request_id)
+        requestUpdateError = retry.error
       }
+    }
+
+    if (requestUpdateError) {
+      if (isSchemaIssue(requestUpdateError)) return schemaIssueResponse(requestUpdateError)
       throw requestUpdateError
     }
 
