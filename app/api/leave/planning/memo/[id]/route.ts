@@ -260,7 +260,7 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
       return {
         useTable: false,
         paragraphs: [
-          `We refer to your application dated ${submittedFormal} in relation to the above-mentioned subject and wish to inform you that Management has approved your maternity leave with effect from ${startFormal} to ${endFormal} (${effectiveDays} working days).`,
+          `We refer to your application dated ${submittedFormal} in relation to the above-mentioned subject and wish to inform you that Management has approved your maternity leave with effect from ${startFormal} to ${endFormal} (${effectiveDays} calendar days).`,
           `You are expected to resume duty on ${returnFormal}.`,
           ...(adjustmentParagraph ? [adjustmentParagraph] : []),
         ],
@@ -271,7 +271,7 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
       return {
         useTable: false,
         paragraphs: [
-          `We refer to your application dated ${submittedFormal} in relation to the above-mentioned subject and wish to inform you that Management has approved your paternity leave with effect from ${startFormal} to ${endFormal} (${effectiveDays} working days).`,
+          `We refer to your application dated ${submittedFormal} in relation to the above-mentioned subject and wish to inform you that Management has approved your paternity leave with effect from ${startFormal} to ${endFormal} (${effectiveDays} calendar days).`,
           `You are expected to resume duty on ${returnFormal}.`,
           ...(adjustmentParagraph ? [adjustmentParagraph] : []),
         ],
@@ -663,8 +663,23 @@ export async function GET(
       ? Number(lr.hr_approved_days)
       : (Number(lr.adjusted_days) || Number(lr.requested_days) || 0)
 
-    const leaveTypeKey = String(lr.leave_type_key || "annual").toLowerCase()
-    let adjustedEffectiveEnd = effectiveEnd
+  const leaveTypeKey = String(lr.leave_type_key || "annual").toLowerCase()
+  const isCalendarLeave = leaveTypeKey === "maternity" || leaveTypeKey === "paternity"
+  let adjustedEffectiveEnd = effectiveEnd
+  let calendarEffectiveDays = effectiveDays
+  if (isCalendarLeave && effectiveStart) {
+    const start = new Date(effectiveStart)
+    const storedCalendarDays = Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays || 0)
+    if (storedCalendarDays > 0) {
+      calendarEffectiveDays = storedCalendarDays
+      const end = new Date(start)
+      end.setDate(end.getDate() + storedCalendarDays - 1)
+      adjustedEffectiveEnd = end.toISOString().slice(0, 10)
+    } else if (effectiveEnd) {
+      const end = new Date(effectiveEnd)
+      calendarEffectiveDays = Math.max(1, Math.floor((end.getTime() - start.getTime()) / 86400000) + 1)
+    }
+  }
     let annualMemoDates: ReturnType<typeof calculateAnnualLeaveMemoDates> | null = null
     // SINGLE SOURCE OF TRUTH for annual leave: this breakdown feeds both the
     // table numbers (Entitled/Granted/Remarks) and the From/To/resume dates below.
@@ -709,8 +724,12 @@ export async function GET(
       adjustedEffectiveEnd = annualMemoDates.endDate.toISOString().slice(0, 10)
     }
 
-    // Return-to-work date is the next working day after the calculated end.
-    const returnDate = annualMemoDates?.resumptionDate || getNextWorkingDay(adjustedEffectiveEnd)
+  // Calendar leave resumes on the next calendar day; other leave resumes on the next working day.
+  const nextCalendarDay = new Date(`${adjustedEffectiveEnd}T00:00:00`)
+  nextCalendarDay.setDate(nextCalendarDay.getDate() + 1)
+  const returnDate = isCalendarLeave
+    ? nextCalendarDay
+    : (annualMemoDates?.resumptionDate || getNextWorkingDay(adjustedEffectiveEnd))
     const returnDateIso = returnDate.toISOString()
 
     const leaveLabel   = leaveTypeLabel(leaveTypeKey)
@@ -729,7 +748,7 @@ export async function GET(
       leave_type: leaveLabel,
       leave_start_date: fmtFormalDate(effectiveStart),
       leave_end_date: fmtFormalDate(adjustedEffectiveEnd),
-      approved_days: String(effectiveDays),
+      approved_days: String(isCalendarLeave ? calendarEffectiveDays : effectiveDays),
       submitted_date: fmtFormalDate(lr.submitted_at || lr.created_at),
       return_to_work_date: fmtFormalDateWithWeekday(returnDateIso),
     }
@@ -745,7 +764,7 @@ export async function GET(
     // Stored draftBody values are stale and may contain wrong leave-type content
     // (e.g. a casual leave record with annual leave body text from old data entry).
     {
-      const built = buildBuiltinBody(lr, effectiveStart, adjustedEffectiveEnd, effectiveDays, returnDateIso, holidayDatesForMemo)
+      const built = buildBuiltinBody(lr, effectiveStart, adjustedEffectiveEnd, isCalendarLeave ? calendarEffectiveDays : effectiveDays, returnDateIso, holidayDatesForMemo)
       paragraphs          = built.paragraphs
       closingLine         = built.closing
       // HARD SAFETY GUARD: table format is EXCLUSIVELY for annual leave.
