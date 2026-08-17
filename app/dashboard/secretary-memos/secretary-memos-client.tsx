@@ -182,7 +182,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
       const contentType = response.headers.get("content-type") || ""
       if (!response.ok || !contentType.includes("application/pdf")) {
         const message = await response.json().catch(() => ({}))
-        throw new Error(message.error || "The memo is not available for download. HR Records must assign the official reference first.")
+        throw new Error(message.error || "The memo is not available for download yet.")
       }
 
       const pdfUrl = URL.createObjectURL(await response.blob())

@@ -820,18 +820,19 @@ export async function GET(
     doc.setFont("times", "normal")
     doc.setFontSize(9)
     const approvalDate = lr.hr_approved_at || lr.created_at
-    // The memo is not unlocked until HR Records enters the official reference.
+    // Regional leave is complete after Regional Manager approval and does not use
+    // the HR Records reference workflow. Non-regional leave keeps the reference gate.
     const refNum = String(lr.memo_reference || "").trim()
-    if (!refNum) {
-    return NextResponse.json({
-      error: "Memo reference pending HR Records. Preview and download will be available after HR Records assigns the official reference.",
-      code: "MEMO_REFERENCE_REQUIRED",
-    }, {
-      status: 409,
-      headers: { "Cache-Control": "no-store" },
-    })
+    if (!isRegionalLeave && !refNum) {
+      return NextResponse.json({
+        error: "Memo reference pending HR Records. Preview and download will be available after HR Records assigns the official reference.",
+        code: "MEMO_REFERENCE_REQUIRED",
+      }, {
+        status: 409,
+        headers: { "Cache-Control": "no-store" },
+      })
     }
-    doc.text(`Our Ref No:  ${refNum}`, marginLeft, y)
+    doc.text(`Our Ref No:  ${refNum || String(lr.request_number || lr.id || "REGIONAL")}`, marginLeft, y)
     doc.text(`Date:  ${fmtFormalDate(approvalDate)}`, pageWidth - marginRight, y, { align: "right" })
     y += 10
 
