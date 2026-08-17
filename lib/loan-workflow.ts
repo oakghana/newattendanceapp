@@ -142,6 +142,26 @@ export function canDoLoanOffice(role: string, deptName?: string | null, deptCode
          isLoanOfficeDepartment(deptName, deptCode)
 }
 
+export function canEnterFdScore(role: string, deptName?: string | null, deptCode?: string | null): boolean {
+  const normalizedRole = normalizeRole(role)
+  return (
+    isAdminRole(normalizedRole) ||
+    normalizedRole === "accounts_loan_office" ||
+    normalizedRole === "accounts_loan_officer" ||
+    isLoanOfficeDepartment(deptName, deptCode)
+  )
+}
+
+export function canApproveFdScore(role: string, deptName?: string | null, deptCode?: string | null): boolean {
+  const normalizedRole = normalizeRole(role)
+  return (
+    isAdminRole(normalizedRole) ||
+    normalizedRole === "accounts_executive" ||
+    normalizedRole === "accounts" ||
+    isAccountsDepartment(deptName, deptCode)
+  )
+}
+
 export function canDoAccounts(role: string, deptName?: string | null, deptCode?: string | null): boolean {
   const normalizedRole = normalizeRole(role)
   return (

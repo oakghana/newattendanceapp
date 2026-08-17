@@ -1239,6 +1239,7 @@ export default function LoanAppPage() {
     // Loan Office workspace: loan_office/manager_hr ONLY if in HR dept (not Accounts dept)
   // Accounts-dept loan_office users get Accounts tab, not Loan Office tab
   const userDeptName = data?.profile?.departmentName || ""
+  const canEnterFdScore = isAdmin || normalizedRole === "accounts_loan_office" || normalizedRole === "accounts_loan_officer" || /loan/i.test(userDeptName)
   const userDeptIsAccounts = /account|finance/i.test(userDeptName)
   const canAccessLoanOfficeWorkspace =
     isAdmin ||
@@ -4273,11 +4274,11 @@ export default function LoanAppPage() {
                             )}
                           </TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
-                          {p?.accounts && (
-                            <TableCell>
-                              <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>
-                            </TableCell>
-                          )}
+{canEnterFdScore && (
+  <TableCell>
+  <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>
+  </TableCell>
+  )}
                         </TableRow>
                       )
                     })}
@@ -4289,7 +4290,7 @@ export default function LoanAppPage() {
 
           {accountsViewMode === "card" && pagedAccounts.map((row) => (
             <StageCard key={row.id} row={row}>
-              {p?.accounts && <Button size="sm" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>}
+              {canEnterFdScore && <Button size="sm" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>}
             </StageCard>
           ))}
 
