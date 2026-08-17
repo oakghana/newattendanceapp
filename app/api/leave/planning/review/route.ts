@@ -160,7 +160,11 @@ export async function POST(request: NextRequest) {
 
     if (reviewError || !reviews || reviews.length === 0) {
       const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
-      if (!isRegionalHr) {
+      const isRegionalManager = role === "regional_manager"
+      // Older forwarded regional requests can be visible in the manager queue
+      // without a matching leave_plan_reviews row. Validate the request scope
+      // below, then create the manager assignment before applying the decision.
+      if (!isRegionalHr && !isRegionalManager) {
         return NextResponse.json({ error: "Review assignment not found for this manager." }, { status: 404 })
       }
 
