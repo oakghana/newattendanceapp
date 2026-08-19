@@ -1249,6 +1249,7 @@ export default function LoanAppPage() {
     (["loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) ||
     (normalizedRole === "manager_hr" && !userDeptIsAccounts)
   const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
+  const canManageLoanAdministration = Boolean(isAdmin)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
   const templateOptions = useMemo(
     () => (registryData?.templates || []).filter((template) => template.workflow_domain === selectedTemplateDomain),
@@ -6390,7 +6391,7 @@ export default function LoanAppPage() {
               variant="outline"
               className="border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
               onClick={() => runLookupAction({ action: "auto_link_by_location" }, "Auto-link by location completed")}
-              disabled={lookupLoading || !canDirectLinkageUpdate}
+              disabled={lookupLoading || !canManageLoanAdministration}
             >
               Auto-link Staff to HOD by Location
             </Button>
@@ -6872,13 +6873,13 @@ export default function LoanAppPage() {
                         <div><strong>Address:</strong> {staff?.geofence_locations?.address || "N/A"}</div>
                         {(staff as any)?.departments?.name && <div><strong>Dept:</strong> {(staff as any).departments.name}</div>}
                       </div>
-                      {canDirectLinkageUpdate && (
-                        <div className="mt-3">
-                          <Button size="sm" variant="outline" onClick={() => editLinkageFromCard(link.staff_user_id, link.hod_user_id)}>
-                            Edit This Linkage
-                          </Button>
-                        </div>
-                      )}
+{canManageLoanAdministration && (
+  <div className="mt-3">
+  <Button size="sm" variant="outline" onClick={() => editLinkageFromCard(link.staff_user_id, link.hod_user_id)}>
+  Edit This Linkage
+  </Button>
+  </div>
+  )}
                     </div>
                   )
                 })}

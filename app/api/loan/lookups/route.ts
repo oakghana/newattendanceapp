@@ -375,7 +375,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-  const action = String(body?.action || "")
+    const action = String(body?.action || "")
+    const adminOnlyActions = new Set(["delete_loan_type", "upsert_hod_linkage", "upsert_hod_linkage_batch", "upsert_hod_linkage_staff_batch", "auto_link_by_location"])
+    if (adminOnlyActions.has(action) && !["admin", "super_admin", "god"].includes(role)) {
+      return NextResponse.json({ error: "Only administrators can perform this loan administration action" }, { status: 403 })
+    }
   
   if (action === "delete_loan_type") {
     const loanKey = String(body?.loan_key || "").trim()
