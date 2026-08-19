@@ -375,9 +375,24 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const action = String(body?.action || "")
+  const action = String(body?.action || "")
+  
+  if (action === "delete_loan_type") {
+    const loanKey = String(body?.loan_key || "").trim()
+    if (!loanKey) return NextResponse.json({ error: "loan_key is required" }, { status: 400 })
 
-    if (action === "update_loan_type") {
+    const { data, error } = await admin
+      .from("loan_types")
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq("loan_key", loanKey)
+      .select("*")
+      .single()
+
+    if (error) throw error
+    return NextResponse.json({ success: true, data })
+  }
+
+  if (action === "update_loan_type") {
       const loanKey = String(body?.loan_key || "")
       const loanLabel = String(body?.loan_label || "").trim() || null
       const isActive = body?.is_active
