@@ -69,7 +69,7 @@ export function AnnualLeaveCompliancePanel() {
               🔔 Your leave payment processing depends on submitting an approved leave plan. Submit now to ensure timely processing.
             </p>
             <div className="flex gap-2">
-              <Link href="/dashboard/leave-management">
+              <Link href="/dashboard/leave-management?tab=leave-planning">
                 <Button size="sm" className="bg-amber-600 hover:bg-amber-700">
                   Submit Leave Plan Now
                 </Button>
