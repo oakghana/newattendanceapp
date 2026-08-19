@@ -112,7 +112,9 @@ export function LeaveManagementModuleClient({
 
   const searchParams = useSearchParams()
   const defaultTab = isRegionalHR ? "leave-planning" : "leave-management"
-  const [activeTab, setActiveTab] = useState(() => searchParams.get("tab") || defaultTab)
+  const requestedTab = searchParams.get("tab")
+  const shouldOpenApplyForm = requestedTab === "leave-planning"
+  const [activeTab, setActiveTab] = useState(() => requestedTab || defaultTab)
 
   // Links elsewhere in the app (e.g. the "Apply for Leave" button) point here
   // with ?tab=leave-planning so they land directly on the Leave Center tab
@@ -220,7 +222,7 @@ export function LeaveManagementModuleClient({
                 departmentName: userDepartmentName,
                 departmentCode: userDepartmentCode,
               }}
-              initialActiveTab="hr-office"
+              initialActiveTab={shouldOpenApplyForm ? "apply" : "hr-office"}
             />
           </TabsContent>
         ) : (
@@ -232,6 +234,7 @@ export function LeaveManagementModuleClient({
                 departmentName: userDepartmentName,
                 departmentCode: userDepartmentCode,
               }}
+              initialActiveTab={shouldOpenApplyForm ? "apply" : undefined}
             />
           </TabsContent>
         )}

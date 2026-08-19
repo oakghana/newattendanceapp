@@ -807,7 +807,7 @@ export default function LoginPage() {
           <div className="mt-6 text-center border-t border-border pt-6">
             <p className="text-sm font-medium text-foreground">Quality Control Company Limited</p>
             <p className="text-xs text-muted-foreground mt-1">Intranet Portal — Built & managed by your IT Department with ❤️</p>
-            <p className="text-xs text-muted-foreground mt-2 font-mono text-center">🚀 V.2.1-15-05-26</p>
+            <p className="inline-flex items-center mt-3 rounded-full border border-primary/30 bg-primary px-4 py-1.5 text-xs font-semibold tracking-wide text-primary-foreground shadow-[0_4px_0_hsl(var(--primary)/0.45),0_6px_12px_hsl(var(--primary)/0.18)] transition-transform hover:-translate-y-0.5">🚀 V.2.1-19-08-26</p>
           </div>
           </CardContent>
         </Card>
