@@ -44,6 +44,14 @@ export function AnnualLeaveCompliancePanel() {
 
   useEffect(() => {
     fetchCompliance()
+
+    const handleLeavePlanSubmitted = () => {
+      setDismissed(true)
+      void fetchCompliance()
+    }
+
+    window.addEventListener("leave-plan-submitted", handleLeavePlanSubmitted)
+    return () => window.removeEventListener("leave-plan-submitted", handleLeavePlanSubmitted)
   }, [fetchCompliance])
 
   if (loading || !data || dismissed) {
