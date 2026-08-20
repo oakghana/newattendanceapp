@@ -66,6 +66,8 @@ export function LocationManagement() {
   const [locationPermission, setLocationPermission] = useState<"granted" | "denied" | "prompt" | null>(null)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [retryCount, setRetryCount] = useState(0)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [canManageLocations, setCanManageLocations] = useState(false)
 
   const [newLocation, setNewLocation] = useState({
     name: "",
@@ -152,6 +154,7 @@ export function LocationManagement() {
 
       const data = await response.json()
       setLocations(Array.isArray(data) ? data : data.data || [])
+      setCanManageLocations(Array.isArray(data) ? false : Boolean(data.canManage))
       setError(null)
       setRetryCount(0)
     } catch (err) {
@@ -682,9 +685,9 @@ export function LocationManagement() {
           </div>
         </div>
 
-        <Dialog open={isAddingLocation} onOpenChange={setIsAddingLocation}>
-          <DialogTrigger asChild>
-            <Button disabled={!isOnline} className="w-full sm:w-auto">
+  {canManageLocations && <Dialog open={isAddingLocation} onOpenChange={setIsAddingLocation}>
+  <DialogTrigger asChild>
+  <Button disabled={!isOnline} className="w-full sm:w-auto">
               <Plus className="h-4 w-4 mr-2" />
               Add Location
             </Button>
@@ -931,11 +934,11 @@ export function LocationManagement() {
                 </p>
               )}
             </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {error && (
+  </DialogContent>
+  </Dialog>}
+  </div>
+  
+  {error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription className="flex items-center justify-between">
@@ -949,14 +952,35 @@ export function LocationManagement() {
         </Alert>
       )}
 
-      {success && (
-        <Alert className="border-green-500 bg-green-50">
-          <AlertDescription className="text-green-800">{success}</AlertDescription>
-        </Alert>
-      )}
+  {success && (
+  <Alert className="border-green-500 bg-green-50">
+  <AlertDescription className="text-green-800">{success}</AlertDescription>
+  </Alert>
+  )}
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        {locations.map((location) => (
+  <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center">
+    <div className="relative flex-1">
+      <Label htmlFor="location-search" className="sr-only">Search locations</Label>
+      <Input
+        id="location-search"
+        value={searchQuery}
+        onChange={(event) => setSearchQuery(event.target.value)}
+        placeholder="Search by location, address, type, or region"
+        className="pr-10"
+      />
+      {searchQuery && (
+        <Button type="button" variant="ghost" size="sm" className="absolute right-1 top-1" onClick={() => setSearchQuery("")}>
+          Clear
+        </Button>
+      )}
+    </div>
+    <p className="text-sm text-muted-foreground">
+      {locations.filter((location) => `${location.name} ${location.address} ${location.location_type} ${location.parent_location?.name || ""}`.toLowerCase().includes(searchQuery.trim().toLowerCase())).length} of {locations.length} locations
+    </p>
+  </div>
+  
+  <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+  {locations.filter((location) => `${location.name} ${location.address} ${location.location_type} ${location.parent_location?.name || ""}`.toLowerCase().includes(searchQuery.trim().toLowerCase())).map((location) => (
           <Card key={location.id} className="hover:shadow-md transition-shadow">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -994,18 +1018,21 @@ export function LocationManagement() {
                   <QrCode className="h-4 w-4 mr-1" />
                   QR Code
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => setEditingLocation(location)}>
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant={location.is_active ? "destructive" : "default"}
-                  onClick={() => handleToggleLocation(location)}
-                  disabled={loading}
-                  title={location.is_active ? "Deactivate location" : "Activate location"}
-                >
-                  <Power className="h-4 w-4" />
-                </Button>
+  {canManageLocations && <>
+  <Button size="sm" variant="outline" onClick={() => setEditingLocation(location)} aria-label={`Edit ${location.name}`}>
+  <Edit className="h-4 w-4" />
+  </Button>
+  <Button
+  size="sm"
+  variant={location.is_active ? "destructive" : "default"}
+  onClick={() => handleToggleLocation(location)}
+  disabled={loading}
+  title={location.is_active ? "Deactivate location" : "Activate location"}
+  aria-label={location.is_active ? `Deactivate ${location.name}` : `Activate ${location.name}`}
+  >
+  <Power className="h-4 w-4" />
+  </Button>
+  </>}
               </div>
             </CardContent>
           </Card>

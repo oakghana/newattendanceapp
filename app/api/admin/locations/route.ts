@@ -18,6 +18,7 @@ export async function GET() {
     const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
 
     const role = normalizeAppRole(profile?.role)
+    const canManage = ["admin", "it-admin", "it_admin"].includes(role)
     if (!profile || !["admin", "it-admin", "it_admin", "department_head"].includes(role)) {
       return NextResponse.json({ success: false, error: "Insufficient permissions" }, { status: 403 })
     }
@@ -33,7 +34,7 @@ export async function GET() {
       return NextResponse.json({ success: true, data: [] })
     }
 
-    return NextResponse.json({ success: true, data: locations || [] })
+    return NextResponse.json({ success: true, data: locations || [], canManage })
   } catch (error) {
     console.error("[v0] Locations API error:", error)
     return NextResponse.json({ success: false, error: "Failed to fetch locations", data: [] }, { status: 500 })
