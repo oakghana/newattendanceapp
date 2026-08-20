@@ -284,8 +284,10 @@ export function LocationManagement() {
           check_in_start_time: editingLocation.check_in_start_time || null,
           check_out_end_time: editingLocation.check_out_end_time || null,
           require_early_checkout_reason: editingLocation.require_early_checkout_reason ?? true,
-          working_hours_description: editingLocation.working_hours_description || null,
-        }),
+  working_hours_description: editingLocation.working_hours_description || null,
+  location_type: editingLocation.location_type || "facility",
+  parent_location_id: editingLocation.parent_location_id || null,
+  }),
       })
 
       if (response.status === 409) {
@@ -964,7 +966,13 @@ export function LocationManagement() {
                     <Badge variant="outline">
                       {location.location_type === "regional_office" ? "Regional Office" : location.location_type === "district_office" ? "District Office" : "Facility"}
                     </Badge>
-                    {location.parent_location && <Badge variant="secondary">Under {location.parent_location.name}</Badge>}
+                    {location.location_type === "district_office" ? (
+                      <Badge variant={location.parent_location ? "secondary" : "destructive"}>
+                        {location.parent_location ? `Under ${location.parent_location.name}` : "Not linked to region"}
+                      </Badge>
+                    ) : location.location_type === "regional_office" ? (
+                      <Badge variant="secondary">Regional parent</Badge>
+                    ) : null}
                   </div>
                 </div>
                 <Badge variant={location.is_active ? "default" : "secondary"}>
@@ -1036,6 +1044,39 @@ export function LocationManagement() {
                   required
                 />
               </div>
+              <div>
+                <Label htmlFor="editLocationType">Location Type</Label>
+                <select
+                  id="editLocationType"
+                  value={editingLocation.location_type || "facility"}
+                  onChange={(e) => setEditingLocation({ ...editingLocation, location_type: e.target.value as GeofenceLocation["location_type"], parent_location_id: null, parent_location: null })}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="regional_office">Regional Office</option>
+                  <option value="district_office">District Office</option>
+                  <option value="facility">Facility</option>
+                </select>
+              </div>
+              {editingLocation.location_type === "district_office" && (
+                <div>
+                  <Label htmlFor="editParentLocation">Parent Regional Office</Label>
+                  <select
+                    id="editParentLocation"
+                    value={editingLocation.parent_location_id || ""}
+                    onChange={(e) => setEditingLocation({ ...editingLocation, parent_location_id: e.target.value || null })}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    required
+                  >
+                    <option value="">Select a regional office</option>
+                    {locations.filter((location) => location.location_type === "regional_office" && location.id !== editingLocation.id).map((location) => (
+                      <option key={location.id} value={location.id}>{location.name}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    This district will appear under the selected regional office and in regional reporting.
+                  </p>
+                </div>
+              )}
               <div>
                 <Label htmlFor="editAddress">Address</Label>
                 <Input
