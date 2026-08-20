@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     }
 
     const normalizedRole = normalizeAppRole(profile.role)
-    if (!['admin', 'regional_manager', 'department_head', 'managing_director', 'director_hr', 'manager_hr', 'staff'].includes(normalizedRole)) {
+    if (!['admin', 'regional_manager', 'department_head', 'managing_director', 'regional_hr', 'director_hr', 'manager_hr', 'staff'].includes(normalizedRole)) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
     console.log("[v0] Reports API - User role:", normalizedRole)
@@ -114,9 +114,7 @@ export async function GET(request: NextRequest) {
         ...(linkedDistricts || []).map((mapping) => mapping.district_location_id),
         ...(childLocations || []).map((location) => location.id),
       ].filter((id, index, all) => id && all.indexOf(id) === index)
-  query = normalizedRole === "regional_hr"
-    ? query.eq("check_in_location_id", profile.assigned_location_id)
-    : query.in("check_in_location_id", regionalScopedLocationIds)
+  query = query.in("check_in_location_id", regionalScopedLocationIds)
   } else if (safeRegionId && ["admin", "department_head", "managing_director", "director_hr", "manager_hr"].includes(profile.role)) {
   const { data: mappedDistricts } = await adminClientForScope
     .from("region_location_mappings")
