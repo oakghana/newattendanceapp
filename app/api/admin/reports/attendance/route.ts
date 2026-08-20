@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       .eq("id", user.id)
       .single()
 
-    if (!profile || !["admin", "regional_manager", "department_head", "managing_director", "director_hr", "manager_hr", "staff"].includes(normalizeAppRole(profile.role))) {
+    if (!profile || !["admin", "regional_manager", "department_head", "managing_director", "regional_hr", "director_hr", "manager_hr", "staff"].includes(normalizeAppRole(profile.role))) {
       console.error("[v0] Reports API - Insufficient permissions:", profile?.role)
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
 
     const adminClientForScope = await createAdminClient()
     let regionalScopedLocationIds: string[] | null = null
-    if (normalizedRole === "regional_manager" && profile.assigned_location_id) {
+    if ((normalizedRole === "regional_manager" || normalizedRole === "regional_hr") && profile.assigned_location_id) {
       const { data: linkedDistricts } = await adminClientForScope
         .from("region_location_mappings")
         .select("district_location_id")
@@ -114,7 +114,9 @@ export async function GET(request: NextRequest) {
         ...(linkedDistricts || []).map((mapping) => mapping.district_location_id),
         ...(childLocations || []).map((location) => location.id),
       ].filter((id, index, all) => id && all.indexOf(id) === index)
-  query = query.in("check_in_location_id", regionalScopedLocationIds)
+  query = normalizedRole === "regional_hr"
+    ? query.eq("check_in_location_id", profile.assigned_location_id)
+    : query.in("check_in_location_id", regionalScopedLocationIds)
   } else if (safeRegionId && ["admin", "department_head", "managing_director", "director_hr", "manager_hr"].includes(profile.role)) {
   const { data: mappedDistricts } = await adminClientForScope
     .from("region_location_mappings")

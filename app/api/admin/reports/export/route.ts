@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       const { data: profile } = await supabase.from("user_profiles").select("role, assigned_location_id").eq("id", user.id).single()
 
       const normalizedRole = normalizeAppRole(profile?.role)
-      if (!profile || !["admin", "regional_manager", "department_head", "managing_director", "director_hr", "manager_hr"].includes(normalizedRole)) {
+      if (!profile || !["admin", "regional_manager", "department_head", "managing_director", "regional_hr", "director_hr", "manager_hr"].includes(normalizedRole)) {
         return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
       }
 
@@ -47,11 +47,13 @@ export async function POST(request: NextRequest) {
         const { data: children } = await adminClient.from("geofence_locations").select("id").eq("parent_location_id", regionId).eq("is_active", true)
         const scopedIds = [regionId, ...(mappings || []).map((row) => row.district_location_id), ...(children || []).map((row) => row.id)].filter((id, index, all) => id && all.indexOf(id) === index)
         attendanceQuery = attendanceQuery.in("check_in_location_id", scopedIds)
-      } else if (normalizedRole === "regional_manager" && profile.assigned_location_id) {
+      } else if ((normalizedRole === "regional_manager" || normalizedRole === "regional_hr") && profile.assigned_location_id) {
         const { data: mappings } = await adminClient.from("region_location_mappings").select("district_location_id").eq("regional_location_id", profile.assigned_location_id)
         const { data: children } = await adminClient.from("geofence_locations").select("id").eq("parent_location_id", profile.assigned_location_id).eq("is_active", true)
         const scopedIds = [profile.assigned_location_id, ...(mappings || []).map((row) => row.district_location_id), ...(children || []).map((row) => row.id)].filter(Boolean)
-        attendanceQuery = attendanceQuery.in("check_in_location_id", [...new Set(scopedIds)])
+        attendanceQuery = normalizedRole === "regional_hr"
+          ? attendanceQuery.eq("check_in_location_id", profile.assigned_location_id)
+          : attendanceQuery.in("check_in_location_id", [...new Set(scopedIds)])
       }
 
       const { data: attendanceRecords, error: attendanceError } = await attendanceQuery.order("check_in_time", {

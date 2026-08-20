@@ -25,7 +25,7 @@ interface AttendanceRecord {
 }
 
 interface SimpleHrReportsProps {
-  scopeRole: string
+  scopeRole: "admin" | "regional_manager" | "regional_hr" | "department_head"
   scopeDepartmentId: string | null
   scopeLocationId: string | null
 }
@@ -82,7 +82,10 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
       if (scopeLocationId) params.append("location_id", scopeLocationId)
 
       const res = await fetch(`/api/admin/reports/attendance?${params}`, { cache: "no-store" })
-      if (!res.ok) return
+      if (!res.ok) {
+        console.error("[v0] Regional HR report request failed", res.status)
+        return
+      }
       const json = await res.json()
       if (json.success) {
         const fetched: AttendanceRecord[] = json.data?.records || []

@@ -154,7 +154,7 @@ const authenticatedFetch = async (input: RequestInfo | URL, init: RequestInit = 
 
 interface AttendanceReportsProps {
   /** Server-resolved role so the component knows immediately which filters to lock */
-  scopeRole?: "admin" | "regional_manager" | "department_head"
+  scopeRole?: "admin" | "regional_manager" | "regional_hr" | "department_head"
   /** For department_head: their own department_id (all other depts hidden) */
   scopeDepartmentId?: string | null
   /** For regional_manager: their own location_id (all other locations hidden) */
@@ -180,6 +180,7 @@ export function AttendanceReports({
   // Derived scope flags (server props take precedence once available)
   const isDeptHead = scopeRole === "department_head"
   const isRegionalManager = scopeRole === "regional_manager"
+  const isRegionalHr = scopeRole === "regional_hr"
   const isAdmin = scopeRole === "admin" || (!scopeRole)
   
   // Auto-enable compact mode on small screens for denser layout
@@ -252,6 +253,7 @@ export function AttendanceReports({
   const [selectedLocation, setSelectedLocation] = useState(() =>
   scopeRole === "regional_manager" ? "all" : scopeLocationId ? scopeLocationId : "all"
   )
+  const locationIsLocked = isRegionalHr && Boolean(scopeLocationId)
   const [selectedRegion, setSelectedRegion] = useState("all")
   const [selectedDistrict, setSelectedDistrict] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
@@ -395,7 +397,8 @@ export function AttendanceReports({
       })
 
       if (selectedDepartment !== "all") params.append("department_id", selectedDepartment)
-  if (selectedLocation !== "all") params.append("location_id", selectedLocation)
+  if (locationIsLocked && scopeLocationId) params.append("location_id", scopeLocationId)
+  else if (selectedLocation !== "all") params.append("location_id", selectedLocation)
   if (selectedRegion !== "all") params.append("region_id", selectedRegion)
   if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
 
@@ -496,7 +499,8 @@ export function AttendanceReports({
       })
 
       if (selectedDepartment !== "all") params.append("department_id", selectedDepartment)
-  if (selectedLocation !== "all") params.append("location_id", selectedLocation)
+  if (locationIsLocked && scopeLocationId) params.append("location_id", scopeLocationId)
+  else if (selectedLocation !== "all") params.append("location_id", selectedLocation)
   if (selectedRegion !== "all") params.append("region_id", selectedRegion)
   if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
       if (selectedStatus !== "all") params.append("status", selectedStatus)
@@ -604,7 +608,8 @@ export function AttendanceReports({
       })
 
       if (selectedDepartment !== "all") params.append("department_id", selectedDepartment)
-  if (selectedLocation !== "all") params.append("location_id", selectedLocation)
+  if (locationIsLocked && scopeLocationId) params.append("location_id", scopeLocationId)
+  else if (selectedLocation !== "all") params.append("location_id", selectedLocation)
   if (selectedRegion !== "all") params.append("region_id", selectedRegion)
   if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
       if (selectedStatus !== "all") params.append("status", selectedStatus)
@@ -822,7 +827,7 @@ export function AttendanceReports({
               filters: {
                 startDate,
                 endDate,
-                locationId: selectedLocation !== "all" ? selectedLocation : null,
+                locationId: locationIsLocked && scopeLocationId ? scopeLocationId : selectedLocation !== "all" ? selectedLocation : null,
                 regionId: selectedRegion !== "all" ? selectedRegion : null,
                 districtId: selectedDistrict !== "all" ? selectedDistrict : null,
                 departmentId: selectedDepartment !== "all" ? selectedDepartment : null,
