@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
+import { normalizeAppRole } from "@/lib/role-capabilities"
 
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371e3 // Earth's radius in meters
@@ -32,10 +33,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Check if user has admin or department_head role
+    // Only administrators may edit location definitions and hierarchy.
     const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
+    const role = normalizeAppRole(profile?.role)
 
-    if (!profile || !["admin", "department_head"].includes(profile.role)) {
+    if (!profile || !["admin", "it-admin", "it_admin"].includes(role)) {
       console.log("[v0] Location update - insufficient permissions")
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
@@ -44,6 +46,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     console.log("[v0] Location update data:", body)
 
     const { name, address, latitude, longitude, radius_meters, is_active } = body
+    const locationType = ["regional_office", "district_office", "facility"].includes(body.location_type)
+      ? body.location_type
+      : "facility"
+
+    if (locationType === "district_office" && !body.parent_location_id) {
+      return NextResponse.json({ error: "A regional office is required for district offices" }, { status: 400 })
+    }
 
     const newLat = Number(latitude)
     const newLng = Number(longitude)
@@ -108,6 +117,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         check_out_end_time: body.check_out_end_time || null,
         require_early_checkout_reason: body.require_early_checkout_reason ?? true,
         working_hours_description: body.working_hours_description || null,
+        location_type: locationType,
+        parent_location_id: body.parent_location_id || null,
         updated_at: new Date().toISOString(),
       })
         .eq("id", id)

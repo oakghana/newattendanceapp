@@ -1,4 +1,5 @@
 import { createClientAndGetUser, createAdminClient } from "@/lib/supabase/server"
+import { normalizeAppRole } from "@/lib/role-capabilities"
 import { type NextRequest, NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
@@ -21,12 +22,16 @@ export async function GET(request: NextRequest) {
       .eq("id", user.id)
       .single()
 
-    if (!profile || !["admin", "regional_manager", "department_head", "director_hr", "manager_hr", "staff"].includes(profile.role)) {
+    if (!profile || !["admin", "regional_manager", "department_head", "managing_director", "regional_hr", "director_hr", "manager_hr", "staff"].includes(normalizeAppRole(profile.role))) {
       console.error("[v0] Reports API - Insufficient permissions:", profile?.role)
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
 
-    console.log("[v0] Reports API - User role:", profile.role)
+    const normalizedRole = normalizeAppRole(profile.role)
+    if (!['admin', 'regional_manager', 'department_head', 'managing_director', 'regional_hr', 'director_hr', 'manager_hr', 'staff'].includes(normalizedRole)) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+    }
+    console.log("[v0] Reports API - User role:", normalizedRole)
 
     // Get query parameters
     const { searchParams } = new URL(request.url)
@@ -35,8 +40,9 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get("end_date") || new Date().toISOString().split("T")[0]
     const departmentId = searchParams.get("department_id")
     const userId = searchParams.get("user_id")
-    const locationId = searchParams.get("location_id")
-    const districtId = searchParams.get("district_id")
+  const locationId = searchParams.get("location_id")
+  const regionId = searchParams.get("region_id")
+  const districtId = searchParams.get("district_id")
     const status = searchParams.get("status")
 
     console.log("[v0] Reports API - Filters:", {
@@ -57,13 +63,17 @@ export async function GET(request: NextRequest) {
           id,
           name,
           address,
-          district_id
+          district_id,
+          location_type,
+          parent_location_id
         ),
         check_out_location:geofence_locations!check_out_location_id (
           id,
           name,
           address,
-          district_id
+          district_id,
+          location_type,
+          parent_location_id
         )
       `)
       .gte("check_in_time", `${startDate}T00:00:00`)
@@ -71,11 +81,12 @@ export async function GET(request: NextRequest) {
 
     // Validate incoming UUID-like params to avoid invalid input to Postgres
     const safeLocationId = locationId && locationId !== "undefined" ? locationId : null
+    const safeRegionId = regionId && regionId !== "undefined" && regionId !== "all" ? regionId : null
     const safeDistrictId = districtId && districtId !== "undefined" ? districtId : null
     const safeDepartmentId = departmentId && departmentId !== "undefined" ? departmentId : null
     const safeStatus = status && status !== "undefined" && status !== "all" ? status : null
 
-    if (profile.role === "staff") {
+    if (normalizedRole === "staff") {
       query = query.eq("user_id", user.id)
     } else if (userId) {
       query = query.eq("user_id", userId)
@@ -86,14 +97,41 @@ export async function GET(request: NextRequest) {
     // regional_manager → restricted to their own assigned_location_id
     // department_head  → restricted to their own department_id
 
-    if (profile.role === "regional_manager" && profile.assigned_location_id) {
-      // Regional manager can only see records where the check-in location matches
-      // their assigned location, regardless of any user-supplied location filter.
-      query = query.eq("check_in_location_id", profile.assigned_location_id)
-    } else if (safeLocationId) {
-      // Admin (or future roles): honour the explicit location filter
-      query = query.eq("check_in_location_id", safeLocationId)
-    }
+    const adminClientForScope = await createAdminClient()
+    let regionalScopedLocationIds: string[] | null = null
+    if ((normalizedRole === "regional_manager" || normalizedRole === "regional_hr") && profile.assigned_location_id) {
+      const { data: linkedDistricts } = await adminClientForScope
+        .from("region_location_mappings")
+        .select("district_location_id")
+        .eq("regional_location_id", profile.assigned_location_id)
+      const { data: childLocations } = await adminClientForScope
+        .from("geofence_locations")
+        .select("id")
+        .eq("parent_location_id", profile.assigned_location_id)
+        .eq("is_active", true)
+      regionalScopedLocationIds = [
+        profile.assigned_location_id,
+        ...(linkedDistricts || []).map((mapping) => mapping.district_location_id),
+        ...(childLocations || []).map((location) => location.id),
+      ].filter((id, index, all) => id && all.indexOf(id) === index)
+  query = query.in("check_in_location_id", regionalScopedLocationIds)
+  } else if (safeRegionId && ["admin", "department_head", "managing_director", "director_hr", "manager_hr"].includes(profile.role)) {
+  const { data: mappedDistricts } = await adminClientForScope
+    .from("region_location_mappings")
+    .select("district_location_id")
+    .eq("regional_location_id", safeRegionId)
+  const { data: childLocations } = await adminClientForScope
+    .from("geofence_locations")
+    .select("id")
+    .eq("parent_location_id", safeRegionId)
+    .eq("is_active", true)
+  const regionLocationIds = [safeRegionId, ...(mappedDistricts || []).map((row) => row.district_location_id), ...(childLocations || []).map((row) => row.id)]
+    .filter((id, index, all) => id && all.indexOf(id) === index)
+  query = query.in("check_in_location_id", regionLocationIds)
+  } else if (safeLocationId) {
+  // Admin and authorized report roles honour the explicit location filter.
+  query = query.eq("check_in_location_id", safeLocationId)
+  }
 
     // If a status filter is selected, scope records by status
     if (safeStatus) {
@@ -102,8 +140,7 @@ export async function GET(request: NextRequest) {
 
     // Department scoping via user_profiles sub-query
     // Use adminClient for department scoping lookups to bypass RLS
-    const adminClientForScope = await createAdminClient()
-    if (profile.role === "department_head") {
+    if (normalizedRole === "department_head") {
       const { data: deptUsers } = await adminClientForScope
         .from("user_profiles")
         .select("id")
@@ -114,7 +151,7 @@ export async function GET(request: NextRequest) {
       } else {
         query = query.eq("user_id", "00000000-0000-0000-0000-000000000000")
       }
-    } else if (safeDepartmentId && profile.role !== "staff") {
+    } else if (safeDepartmentId && normalizedRole !== "staff") {
       const { data: deptUsers } = await adminClientForScope
         .from("user_profiles")
         .select("id")
@@ -171,16 +208,18 @@ export async function GET(request: NextRequest) {
             name,
             code
           ),
-          assigned_location:geofence_locations!assigned_location_id (
-            id,
-            name,
-            address,
-            district_id,
-            districts (
+assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
               id,
-              name
+              name,
+              address,
+              district_id,
+              location_type,
+              parent_location_id,
+              districts (
+                id,
+                name
+              )
             )
-          )
         `)
         .in("id", userIds)
       
@@ -300,6 +339,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const incompleteReportRecords = enrichedRecords.filter((record) => {
+      const profile = record.user_profiles
+      const location = record.check_in_location || record.geofence_locations
+      const fullName = `${profile?.first_name || ""} ${profile?.last_name || ""}`.trim()
+      return !fullName || !profile?.employee_id || !profile?.departments?.name || !location?.name || !record.check_in_time || !record.status
+    })
+    if (incompleteReportRecords.length > 0) {
+      return NextResponse.json({
+        success: false,
+        error: "Attendance report data is incomplete. Missing staff, employee ID, department, location, date, or status records must be corrected before viewing this report.",
+        incompleteRecordCount: incompleteReportRecords.length,
+        recordIds: incompleteReportRecords.slice(0, 20).map((record) => record.id),
+      }, { status: 422 })
+    }
+
     // Calculate summary statistics
     // Calculate total matching records (without pagination) via a dedicated count query.
     // IMPORTANT: every filter chain call MUST be reassigned — Supabase builder is immutable.
@@ -311,14 +365,14 @@ export async function GET(request: NextRequest) {
         .gte("check_in_time", `${startDate}T00:00:00`)
         .lte("check_in_time", `${endDate}T23:59:59`)
 
-      if (profile.role === "staff") {
+      if (normalizedRole === "staff") {
         countQuery = countQuery.eq("user_id", user.id)
       } else if (userId) {
         countQuery = countQuery.eq("user_id", userId)
       }
       // Mirror location scoping
-      if (profile.role === "regional_manager" && profile.assigned_location_id) {
-        countQuery = countQuery.eq("check_in_location_id", profile.assigned_location_id)
+      if (profile.role === "regional_manager" && regionalScopedLocationIds?.length) {
+        countQuery = countQuery.in("check_in_location_id", regionalScopedLocationIds)
       } else if (safeLocationId) {
         countQuery = countQuery.eq("check_in_location_id", safeLocationId)
       }
@@ -328,8 +382,8 @@ export async function GET(request: NextRequest) {
       }
       // Mirror department scoping
       const deptIdForCount =
-        profile.role === "department_head" ? profile.department_id : safeDepartmentId
-      if (deptIdForCount && profile.role !== "staff") {
+        normalizedRole === "department_head" ? profile.department_id : safeDepartmentId
+      if (deptIdForCount && normalizedRole !== "staff") {
         const { data: deptUsersCount } = await supabase
           .from("user_profiles")
           .select("id")
@@ -379,6 +433,15 @@ export async function GET(request: NextRequest) {
       {} as Record<string, { count: number; totalHours: number }>,
     )
 
+    const locationScopeQuery = adminClientForScope
+      .from("geofence_locations")
+      .select("id, name, address, location_type, parent_location_id")
+      .eq("is_active", true)
+      .order("name")
+    const { data: scopedLocations } = regionalScopedLocationIds
+      ? await locationScopeQuery.in("id", regionalScopedLocationIds)
+      : await locationScopeQuery
+
     console.log("[v0] Reports API - Returning", totalRecords, "records with summary")
 
     return NextResponse.json(
@@ -386,6 +449,7 @@ export async function GET(request: NextRequest) {
         success: true,
         data: {
           records: enrichedRecords,
+          locations: scopedLocations || [],
           summary: {
             totalRecords,
             totalWorkHours: Math.round(totalWorkHours * 100) / 100,

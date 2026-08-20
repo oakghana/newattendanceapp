@@ -4,6 +4,7 @@ import type React from "react"
 import Link from "next/link"
 
 import { useState, useEffect, useCallback } from "react"
+import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -48,9 +49,13 @@ interface GeofenceLocation {
   check_out_end_time?: string | null
   require_early_checkout_reason?: boolean
   working_hours_description?: string | null
+  location_type?: "regional_office" | "district_office" | "facility"
+  parent_location_id?: string | null
+  parent_location?: { id: string; name: string; location_type?: string } | null
 }
 
 export function LocationManagement() {
+  const { toast } = useToast()
   const [locations, setLocations] = useState<GeofenceLocation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -63,9 +68,13 @@ export function LocationManagement() {
   const [locationPermission, setLocationPermission] = useState<"granted" | "denied" | "prompt" | null>(null)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [retryCount, setRetryCount] = useState(0)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [canManageLocations, setCanManageLocations] = useState(false)
 
   const [newLocation, setNewLocation] = useState({
     name: "",
+    location_type: "facility" as GeofenceLocation["location_type"],
+    parent_location_id: "",
     address: "",
     latitude: "",
     longitude: "",
@@ -137,7 +146,7 @@ export function LocationManagement() {
         throw new Error("No internet connection")
       }
 
-      const response = await fetch("/api/admin/locations")
+      const response = await fetch("/api/admin/locations", { cache: "no-store" })
       if (!response.ok) {
         if (response.status >= 500 && attempt < 3) {
           throw new Error("RETRY")
@@ -147,6 +156,7 @@ export function LocationManagement() {
 
       const data = await response.json()
       setLocations(Array.isArray(data) ? data : data.data || [])
+      setCanManageLocations(Array.isArray(data) ? false : Boolean(data.canManage))
       setError(null)
       setRetryCount(0)
     } catch (err) {
@@ -187,6 +197,8 @@ export function LocationManagement() {
           },
           body: JSON.stringify({
             name: newLocation.name,
+            location_type: newLocation.location_type,
+            parent_location_id: newLocation.parent_location_id || null,
             address: newLocation.address,
             latitude: Number.parseFloat(newLocation.latitude),
             longitude: Number.parseFloat(newLocation.longitude),
@@ -220,6 +232,8 @@ export function LocationManagement() {
         setIsAddingLocation(false)
         setNewLocation({ 
           name: "", 
+          location_type: "facility",
+          parent_location_id: "",
           address: "", 
           latitude: "", 
           longitude: "", 
@@ -275,15 +289,23 @@ export function LocationManagement() {
           check_in_start_time: editingLocation.check_in_start_time || null,
           check_out_end_time: editingLocation.check_out_end_time || null,
           require_early_checkout_reason: editingLocation.require_early_checkout_reason ?? true,
-          working_hours_description: editingLocation.working_hours_description || null,
-        }),
+  working_hours_description: editingLocation.working_hours_description || null,
+  location_type: editingLocation.location_type || "facility",
+  parent_location_id: editingLocation.parent_location_id || null,
+  }),
       })
 
       if (response.status === 409) {
         const errorData = await response.json()
+        const conflictMessage = `Coordinate conflict: ${errorData.error}`
         setError(
-          `⚠️ COORDINATE CONFLICT: ${errorData.error}\n\nPlease verify:\n• You have the correct GPS coordinates\n• This is not a duplicate location\n• The location is actually different from: ${errorData.conflictingLocations?.join(", ")}`,
+          `${conflictMessage}\n\nPlease verify:\n• You have the correct GPS coordinates\n• This is not a duplicate location\n• The location is actually different from: ${errorData.conflictingLocations?.join(", ")}`,
         )
+        toast({
+          title: "Location update failed",
+          description: conflictMessage,
+          variant: "destructive",
+        })
         setLoading(false)
         return
       }
@@ -294,7 +316,12 @@ export function LocationManagement() {
       }
 
       const result = await response.json()
-      setSuccess(result.message || "Location updated successfully - Only this location was modified")
+      const message = result.message || "Location updated successfully"
+      setSuccess(message)
+      toast({
+        title: "Location updated",
+        description: message,
+      })
       await fetchLocations()
       setEditingLocation(null)
 
@@ -302,6 +329,11 @@ export function LocationManagement() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to update location"
       setError(errorMessage)
+      toast({
+        title: "Location update failed",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
@@ -331,13 +363,23 @@ export function LocationManagement() {
       }
 
       const action = location.is_active ? "deactivated" : "activated"
-      setSuccess(`Location ${action} successfully - All staff dashboards will update automatically`)
+      const message = `Location ${action} successfully`
+      setSuccess(`${message} - All staff dashboards will update automatically`)
+      toast({
+        title: `Location ${action}`,
+        description: message,
+      })
       await fetchLocations()
 
       setTimeout(() => setSuccess(null), 5000)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to update location status"
       setError(errorMessage)
+      toast({
+        title: "Location status update failed",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
@@ -671,9 +713,9 @@ export function LocationManagement() {
           </div>
         </div>
 
-        <Dialog open={isAddingLocation} onOpenChange={setIsAddingLocation}>
-          <DialogTrigger asChild>
-            <Button disabled={!isOnline} className="w-full sm:w-auto">
+  {canManageLocations && <Dialog open={isAddingLocation} onOpenChange={setIsAddingLocation}>
+  <DialogTrigger asChild>
+  <Button disabled={!isOnline} className="w-full sm:w-auto">
               <Plus className="h-4 w-4 mr-2" />
               Add Location
             </Button>
@@ -701,6 +743,38 @@ export function LocationManagement() {
                   </p>
                 )}
               </div>
+
+              <div>
+                <Label htmlFor="location_type">Location Type *</Label>
+                <select
+                  id="location_type"
+                  value={newLocation.location_type}
+                  onChange={(e) => setNewLocation((prev) => ({ ...prev, location_type: e.target.value as GeofenceLocation["location_type"], parent_location_id: "" }))}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="regional_office">Regional Office</option>
+                  <option value="district_office">District Office</option>
+                  <option value="facility">Facility</option>
+                </select>
+              </div>
+
+              {newLocation.location_type === "district_office" && (
+                <div>
+                  <Label htmlFor="parent_location_id">Parent Regional Office *</Label>
+                  <select
+                    id="parent_location_id"
+                    value={newLocation.parent_location_id}
+                    onChange={(e) => setNewLocation((prev) => ({ ...prev, parent_location_id: e.target.value }))}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    required
+                  >
+                    <option value="">Select a regional office</option>
+                    {locations.filter((location) => location.location_type === "regional_office").map((location) => (
+                      <option key={location.id} value={location.id}>{location.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <Label htmlFor="address">Address *</Label>
@@ -888,11 +962,11 @@ export function LocationManagement() {
                 </p>
               )}
             </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {error && (
+  </DialogContent>
+  </Dialog>}
+  </div>
+  
+  {error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription className="flex items-center justify-between">
@@ -906,18 +980,53 @@ export function LocationManagement() {
         </Alert>
       )}
 
-      {success && (
-        <Alert className="border-green-500 bg-green-50">
-          <AlertDescription className="text-green-800">{success}</AlertDescription>
-        </Alert>
-      )}
+  {success && (
+  <Alert className="border-green-500 bg-green-50">
+  <AlertDescription className="text-green-800">{success}</AlertDescription>
+  </Alert>
+  )}
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        {locations.map((location) => (
+  <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center">
+    <div className="relative flex-1">
+      <Label htmlFor="location-search" className="sr-only">Search locations</Label>
+      <Input
+        id="location-search"
+        value={searchQuery}
+        onChange={(event) => setSearchQuery(event.target.value)}
+        placeholder="Search by location, address, type, or region"
+        className="pr-10"
+      />
+      {searchQuery && (
+        <Button type="button" variant="ghost" size="sm" className="absolute right-1 top-1" onClick={() => setSearchQuery("")}>
+          Clear
+        </Button>
+      )}
+    </div>
+    <p className="text-sm text-muted-foreground">
+      {locations.filter((location) => `${location.name} ${location.address} ${location.location_type} ${location.parent_location?.name || ""}`.toLowerCase().includes(searchQuery.trim().toLowerCase())).length} of {locations.length} locations
+    </p>
+  </div>
+  
+  <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+  {locations.filter((location) => `${location.name} ${location.address} ${location.location_type} ${location.parent_location?.name || ""}`.toLowerCase().includes(searchQuery.trim().toLowerCase())).map((location) => (
           <Card key={location.id} className="hover:shadow-md transition-shadow">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base sm:text-lg truncate">{location.name}</CardTitle>
+                <div className="min-w-0">
+                  <CardTitle className="text-base sm:text-lg truncate">{location.name}</CardTitle>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Badge variant="outline">
+                      {location.location_type === "regional_office" ? "Regional Office" : location.location_type === "district_office" ? "District Office" : "Facility"}
+                    </Badge>
+                    {location.location_type === "district_office" ? (
+                      <Badge variant={location.parent_location ? "secondary" : "destructive"}>
+                        {location.parent_location ? `Under ${location.parent_location.name}` : "Not linked to region"}
+                      </Badge>
+                    ) : location.location_type === "regional_office" ? (
+                      <Badge variant="secondary">Regional parent</Badge>
+                    ) : null}
+                  </div>
+                </div>
                 <Badge variant={location.is_active ? "default" : "secondary"}>
                   {location.is_active ? "Active" : "Inactive"}
                 </Badge>
@@ -937,18 +1046,21 @@ export function LocationManagement() {
                   <QrCode className="h-4 w-4 mr-1" />
                   QR Code
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => setEditingLocation(location)}>
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant={location.is_active ? "destructive" : "default"}
-                  onClick={() => handleToggleLocation(location)}
-                  disabled={loading}
-                  title={location.is_active ? "Deactivate location" : "Activate location"}
-                >
-                  <Power className="h-4 w-4" />
-                </Button>
+  {canManageLocations && <>
+  <Button size="sm" variant="outline" onClick={() => setEditingLocation(location)} aria-label={`Edit ${location.name}`}>
+  <Edit className="h-4 w-4" />
+  </Button>
+  <Button
+  size="sm"
+  variant={location.is_active ? "destructive" : "default"}
+  onClick={() => handleToggleLocation(location)}
+  disabled={loading}
+  title={location.is_active ? "Deactivate location" : "Activate location"}
+  aria-label={location.is_active ? `Deactivate ${location.name}` : `Activate ${location.name}`}
+  >
+  <Power className="h-4 w-4" />
+  </Button>
+  </>}
               </div>
             </CardContent>
           </Card>
@@ -987,6 +1099,56 @@ export function LocationManagement() {
                   required
                 />
               </div>
+              <div className="rounded-lg border border-primary/40 bg-primary/5 p-4">
+                <p className="mb-3 text-sm font-semibold text-primary">Hierarchy &amp; Region Linkage</p>
+                <Label htmlFor="editLocationType">Location Type</Label>
+                <select
+                  id="editLocationType"
+                  value={editingLocation.location_type || "facility"}
+                  onChange={(e) => {
+                    const nextType = e.target.value as GeofenceLocation["location_type"]
+                    setEditingLocation({
+                      ...editingLocation,
+                      location_type: nextType,
+                      parent_location_id: nextType === "regional_office" ? null : editingLocation.parent_location_id || null,
+                      parent_location: nextType === "regional_office" ? null : editingLocation.parent_location,
+                    })
+                  }}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="regional_office">Regional Office</option>
+                  <option value="district_office">District Office</option>
+                  <option value="facility">Facility</option>
+                </select>
+              </div>
+              {editingLocation.location_type !== "regional_office" && (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+                  <Label htmlFor="editParentLocation">Region Linkage</Label>
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Link this {editingLocation.location_type === "district_office" ? "district office" : "facility"} to a regional office. This controls regional visibility and reporting.
+                  </p>
+                  <select
+                    id="editParentLocation"
+                    value={editingLocation.parent_location_id || ""}
+                    onChange={(e) => {
+                      const parentId = e.target.value || null
+                      const parent = locations.find((location) => location.id === parentId) || null
+                      setEditingLocation({ ...editingLocation, parent_location_id: parentId, parent_location: parent })
+                    }}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">No regional office linked</option>
+                    {locations.filter((location) => location.location_type === "regional_office" && location.id !== editingLocation.id).map((location) => (
+                      <option key={location.id} value={location.id}>{location.name}</option>
+                    ))}
+                  </select>
+                  {editingLocation.parent_location && (
+                    <p className="mt-2 text-xs font-medium text-primary">
+                      Linked to: {editingLocation.parent_location.name}
+                    </p>
+                  )}
+                </div>
+              )}
               <div>
                 <Label htmlFor="editAddress">Address</Label>
                 <Input

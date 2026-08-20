@@ -9,6 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Users, Clock, CheckCircle, AlertTriangle, Search, Download, FileSpreadsheet, Loader2, CalendarIcon, MapPin, RefreshCcw } from "lucide-react"
 import * as XLSX from "xlsx"
 
+interface ReportLocation {
+  id: string
+  name: string
+  location_type?: string
+  parent_location_id?: string | null
+}
+
 interface AttendanceRecord {
   id: string
   check_in_time: string
@@ -25,7 +32,7 @@ interface AttendanceRecord {
 }
 
 interface SimpleHrReportsProps {
-  scopeRole: string
+  scopeRole: "admin" | "regional_manager" | "regional_hr" | "department_head"
   scopeDepartmentId: string | null
   scopeLocationId: string | null
 }
@@ -63,10 +70,13 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
   const [rowsPerPage, setRowsPerPage] = useState("1000")
   const [departmentFilter, setDepartmentFilter] = useState("all")
   const [locationFilter, setLocationFilter] = useState("all")
+  const [scopedLocations, setScopedLocations] = useState<ReportLocation[]>([])
 
-  // Extract unique departments and locations from records
+  // The API returns the authorized regional office and linked districts even when no rows match.
   const departments = Array.from(new Set(records.map(r => r.user_profiles?.departments?.name || "").filter(Boolean))).sort()
-  const locations = Array.from(new Set(records.map(r => r.user_profiles?.assigned_location?.name || "").filter(Boolean))).sort()
+  const locations = scopedLocations.length > 0
+    ? scopedLocations.map((location) => location.name).sort()
+    : Array.from(new Set(records.map(r => r.user_profiles?.assigned_location?.name || "").filter(Boolean))).sort()
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -79,13 +89,18 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
         page_size: "5000",
       })
       if (scopeDepartmentId) params.append("department_id", scopeDepartmentId)
-      if (scopeLocationId) params.append("location_id", scopeLocationId)
+      // Regional HR must receive the whole assigned region scope, not only the office row.
+      if (scopeLocationId && scopeRole !== "regional_hr") params.append("location_id", scopeLocationId)
 
       const res = await fetch(`/api/admin/reports/attendance?${params}`, { cache: "no-store" })
-      if (!res.ok) return
+      if (!res.ok) {
+        console.error("[v0] Regional HR report request failed", res.status)
+        return
+      }
       const json = await res.json()
       if (json.success) {
         const fetched: AttendanceRecord[] = json.data?.records || []
+        setScopedLocations(json.data?.locations || [])
         setRecords(fetched)
         // Use the API's true total count (from DB count query) for headline metrics
         setTotalCount(json.data?.summary?.totalRecords ?? fetched.length)
@@ -272,6 +287,12 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
               </SelectContent>
             </Select>
             {/* Location filter */}
+            {scopeRole === "regional_hr" && scopeLocationId && (
+              <div className="flex h-9 items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 text-xs font-medium text-blue-800">
+                <MapPin className="h-3.5 w-3.5" />
+                Assigned region and linked districts
+              </div>
+            )}
             <Select value={locationFilter} onValueChange={setLocationFilter}>
               <SelectTrigger className="h-9 w-40">
                 <SelectValue placeholder="All locations" />

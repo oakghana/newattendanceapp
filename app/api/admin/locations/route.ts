@@ -18,11 +18,15 @@ export async function GET() {
     const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
 
     const role = normalizeAppRole(profile?.role)
+    const canManage = ["admin", "it-admin", "it_admin"].includes(role)
     if (!profile || !["admin", "it-admin", "it_admin", "department_head"].includes(role)) {
       return NextResponse.json({ success: false, error: "Insufficient permissions" }, { status: 403 })
     }
 
-    const { data: locations, error } = await supabase.from("geofence_locations").select("*").order("name")
+    const { data: locations, error } = await supabase
+      .from("geofence_locations")
+      .select("*, parent_location:parent_location_id(id, name, location_type)")
+      .order("name")
 
     if (error) {
       console.error("[v0] Locations query error:", error)
@@ -30,7 +34,7 @@ export async function GET() {
       return NextResponse.json({ success: true, data: [] })
     }
 
-    return NextResponse.json({ success: true, data: locations || [] })
+    return NextResponse.json({ success: true, data: locations || [], canManage })
   } catch (error) {
     console.error("[v0] Locations API error:", error)
     return NextResponse.json({ success: false, error: "Failed to fetch locations", data: [] }, { status: 500 })
@@ -46,6 +50,13 @@ export async function POST(request: Request) {
     const role = normalizeAppRole(profile?.role)
     if (!["admin", "it-admin", "it_admin"].includes(role)) return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     const body = await request.json()
+    const locationType = ["regional_office", "district_office", "facility"].includes(body.location_type)
+      ? body.location_type
+      : "facility"
+
+    if (locationType === "district_office" && !body.parent_location_id) {
+      return NextResponse.json({ error: "A regional office is required for district offices" }, { status: 400 })
+    }
 
     const { data: location, error } = await supabase
       .from("geofence_locations")
@@ -61,6 +72,8 @@ export async function POST(request: Request) {
           check_out_end_time: body.check_out_end_time || null,
           require_early_checkout_reason: body.require_early_checkout_reason ?? true,
           working_hours_description: body.working_hours_description || null,
+          location_type: locationType,
+          parent_location_id: body.parent_location_id || null,
         },
       ])
       .select()

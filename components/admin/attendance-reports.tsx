@@ -45,7 +45,9 @@ interface AttendanceRecord {
   is_check_in_outside_location?: boolean
   is_check_out_outside_location?: boolean
   early_checkout_reason?: string
+  early_checkout_proved_by?: string
   lateness_reason?: string
+  lateness_proved_by?: string
   notes?: string
   user_profiles?: {
     first_name?: string
@@ -56,11 +58,16 @@ interface AttendanceRecord {
       name?: string
       code?: string
     }
-    assigned_location?: {
-      name?: string
-      address?: string
-    }
+  assigned_location?: {
+    name?: string
+    address?: string
+    location_type?: string
     districts?: {
+      id?: string
+      name?: string
+    }
+  }
+  districts?: {
       id?: string
       name?: string
     }
@@ -69,6 +76,7 @@ interface AttendanceRecord {
     id: string
     name: string
     address: string
+    location_type?: string
   }
   check_out_location?: {
     id: string
@@ -95,11 +103,13 @@ interface Department {
   code: string
 }
 
-interface Location {
+  interface Location {
   id: string
   name: string
   address: string
-}
+  location_type?: string
+  parent_location_id?: string | null
+  }
 
 interface District {
   id: string
@@ -144,7 +154,7 @@ const authenticatedFetch = async (input: RequestInfo | URL, init: RequestInit = 
 
 interface AttendanceReportsProps {
   /** Server-resolved role so the component knows immediately which filters to lock */
-  scopeRole?: "admin" | "regional_manager" | "department_head"
+  scopeRole?: "admin" | "regional_manager" | "regional_hr" | "department_head"
   /** For department_head: their own department_id (all other depts hidden) */
   scopeDepartmentId?: string | null
   /** For regional_manager: their own location_id (all other locations hidden) */
@@ -170,6 +180,7 @@ export function AttendanceReports({
   // Derived scope flags (server props take precedence once available)
   const isDeptHead = scopeRole === "department_head"
   const isRegionalManager = scopeRole === "regional_manager"
+  const isRegionalHr = scopeRole === "regional_hr"
   const isAdmin = scopeRole === "admin" || (!scopeRole)
   
   // Auto-enable compact mode on small screens for denser layout
@@ -240,8 +251,10 @@ export function AttendanceReports({
   const [locations, setLocations] = useState<Location[]>([])
   const [districts, setDistricts] = useState<District[]>([])
   const [selectedLocation, setSelectedLocation] = useState(() =>
-    scopeLocationId ? scopeLocationId : "all"
+  scopeRole === "regional_manager" ? "all" : scopeLocationId ? scopeLocationId : "all"
   )
+  const locationIsLocked = isRegionalHr && Boolean(scopeLocationId)
+  const [selectedRegion, setSelectedRegion] = useState("all")
   const [selectedDistrict, setSelectedDistrict] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
@@ -344,12 +357,12 @@ export function AttendanceReports({
         record.check_in_location_name ||
         record.check_in_location?.name ||
         record.geofence_locations?.name ||
-        'N/A'
+        'Missing authoritative record'
       )
     }
 
     return (
-      record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || record.geofence_locations?.name || 'N/A'
+      record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || record.geofence_locations?.name || 'Missing authoritative record'
     )
   }
 
@@ -360,7 +373,7 @@ export function AttendanceReports({
     fetchDepartments()
     fetchLocations()
     fetchDistricts()
-  }, [authChecked, isAuthenticated, startDate, endDate, selectedDepartment, selectedLocation, selectedDistrict, selectedStatus, page, pageSize])
+  }, [authChecked, isAuthenticated, startDate, endDate, selectedDepartment, selectedLocation, selectedRegion, selectedDistrict, selectedStatus, page, pageSize])
 
   useEffect(() => {
     // When the Reasons tab is opened, fetch a larger set that contains all reason entries
@@ -384,8 +397,10 @@ export function AttendanceReports({
       })
 
       if (selectedDepartment !== "all") params.append("department_id", selectedDepartment)
-      if (selectedLocation !== "all") params.append("location_id", selectedLocation)
-      if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
+  if (locationIsLocked && scopeLocationId) params.append("location_id", scopeLocationId)
+  else if (selectedLocation !== "all") params.append("location_id", selectedLocation)
+  if (selectedRegion !== "all") params.append("region_id", selectedRegion)
+  if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
 
       const res = await authenticatedFetch(`/api/admin/reports/attendance?${params}`)
       const json = await res.json()
@@ -424,7 +439,7 @@ export function AttendanceReports({
               department_id,
               assigned_location_id,
               departments ( id, name, code ),
-              assigned_location:geofence_locations!assigned_location_id ( id, name, address )
+              assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey ( id, name, address, location_type )
             `)
             .in("id", reasonUserIds)
 
@@ -484,8 +499,10 @@ export function AttendanceReports({
       })
 
       if (selectedDepartment !== "all") params.append("department_id", selectedDepartment)
-      if (selectedLocation !== "all") params.append("location_id", selectedLocation)
-      if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
+  if (locationIsLocked && scopeLocationId) params.append("location_id", scopeLocationId)
+  else if (selectedLocation !== "all") params.append("location_id", selectedLocation)
+  if (selectedRegion !== "all") params.append("region_id", selectedRegion)
+  if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
       if (selectedStatus !== "all") params.append("status", selectedStatus)
       // Pagination params
       params.append("page", String(page))
@@ -509,6 +526,9 @@ export function AttendanceReports({
       if (result.success) {
         setRecords(result.data.records || [])
         setSummary(result.data.summary || null)
+        if (Array.isArray(result.data.locations)) {
+          setLocations(result.data.locations)
+        }
         setTotalRecords(result.data.summary?.totalRecords || 0)
         console.log("[v0] Successfully loaded", result.data.records?.length || 0, "records (page)")
       } else {
@@ -543,11 +563,12 @@ export function AttendanceReports({
   // users list removed — Employee filter omitted per requirements
 
   const fetchLocations = async () => {
-    try {
-      const supabase = createClient()
+  if (isRegionalManager || currentUserRole === "regional_manager") return
+  try {
+  const supabase = createClient()
       const { data, error } = await supabase
         .from("geofence_locations")
-        .select("id, name, address")
+        .select("id, name, address, location_type")
         .eq("is_active", true)
         .order("name")
 
@@ -587,8 +608,10 @@ export function AttendanceReports({
       })
 
       if (selectedDepartment !== "all") params.append("department_id", selectedDepartment)
-      if (selectedLocation !== "all") params.append("location_id", selectedLocation)
-      if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
+  if (locationIsLocked && scopeLocationId) params.append("location_id", scopeLocationId)
+  else if (selectedLocation !== "all") params.append("location_id", selectedLocation)
+  if (selectedRegion !== "all") params.append("region_id", selectedRegion)
+  if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
       if (selectedStatus !== "all") params.append("status", selectedStatus)
 
       const res = await authenticatedFetch(`/api/admin/reports/attendance?${params}`)
@@ -649,20 +672,20 @@ export function AttendanceReports({
           ...exportRecords.map((record) => {
               const checkInLabel = record.google_maps_name && record.is_check_in_outside_location
                 ? record.google_maps_name
-                : record.check_in_location?.name || record.check_in_location_name || "N/A"
+                : record.check_in_location?.name || record.check_in_location_name || "Missing authoritative record"
 
-              const checkOutLabel = record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || "N/A"
+              const checkOutLabel = record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || "Missing authoritative record"
 
               const row = [
                 new Date(record.check_in_time).toLocaleDateString(),
-                `"${record.user_profiles?.employee_id || "N/A"}"`,
+                `"${record.user_profiles?.employee_id || "Missing authoritative record"}"`,
                 `"${(record.user_profiles?.first_name || "") + (record.user_profiles?.last_name ? ' ' + record.user_profiles.last_name : '') || 'Unknown User'}"`,
-                `"${record.user_profiles?.departments?.name || "N/A"}"`,
-                `"${record.user_profiles?.assigned_location?.name || "N/A"}"`,
+                `"${record.user_profiles?.departments?.name || "Missing authoritative record"}"`,
+                `"${record.user_profiles?.assigned_location?.name || "Missing authoritative record"}"`,
                 `"${new Date(record.check_in_time).toLocaleTimeString()}"`,
                 `"${checkInLabel}"`,
                 `"${record.is_check_in_outside_location ? "Outside Assigned Location" : "On-site"}"`,
-                `"${record.check_out_time ? new Date(record.check_out_time).toLocaleTimeString() : "N/A"}"`,
+                `"${record.check_out_time ? new Date(record.check_out_time).toLocaleTimeString() : "Missing authoritative record"}"`,
                 `"${checkOutLabel}"`,
                 `"${record.is_check_out_outside_location ? "Outside Assigned Location" : "On-site"}"`,
                 `"${record.early_checkout_reason || "-"}"`,
@@ -715,10 +738,10 @@ export function AttendanceReports({
           ...exportRecords.map((record) => {
             const checkInLabel = record.google_maps_name && record.is_check_in_outside_location
               ? record.google_maps_name
-              : record.check_in_location?.name || record.check_in_location_name || "N/A"
+              : record.check_in_location?.name || record.check_in_location_name || "Missing authoritative record"
 
             const checkOutLabel =
-              record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || "N/A"
+              record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || "Missing authoritative record"
 
             const firstName = record.user_profiles?.first_name || ""
             const lastName = record.user_profiles?.last_name || ""
@@ -726,10 +749,10 @@ export function AttendanceReports({
 
             return [
               new Date(record.check_in_time).toLocaleDateString(),
-              record.user_profiles?.employee_id || "N/A",
+              record.user_profiles?.employee_id || "Missing authoritative record",
               fullName,
-              record.user_profiles?.departments?.name || "N/A",
-              record.user_profiles?.assigned_location?.name || "N/A",
+              record.user_profiles?.departments?.name || "Missing authoritative record",
+              record.user_profiles?.assigned_location?.name || "Missing authoritative record",
               new Date(record.check_in_time).toLocaleTimeString(),
               checkInLabel,
               record.is_check_in_outside_location ? "Outside Assigned Location" : "On-site",
@@ -741,7 +764,7 @@ export function AttendanceReports({
               record.lateness_reason || "-",
               record.lateness_proved_by || "-",
               record.work_hours != null ? Number(record.work_hours.toFixed(2)) : 0,
-              record.status ? record.status.charAt(0).toUpperCase() + record.status.slice(1) : "N/A",
+              record.status ? record.status.charAt(0).toUpperCase() + record.status.slice(1) : "Missing authoritative record",
               record.is_check_in_outside_location || record.is_check_out_outside_location ? "Remote Work" : "On-site",
             ]
           }),
@@ -804,7 +827,8 @@ export function AttendanceReports({
               filters: {
                 startDate,
                 endDate,
-                locationId: selectedLocation !== "all" ? selectedLocation : null,
+                locationId: locationIsLocked && scopeLocationId ? scopeLocationId : selectedLocation !== "all" ? selectedLocation : null,
+                regionId: selectedRegion !== "all" ? selectedRegion : null,
                 districtId: selectedDistrict !== "all" ? selectedDistrict : null,
                 departmentId: selectedDepartment !== "all" ? selectedDepartment : null,
                 reportType: "attendance",
@@ -1089,10 +1113,30 @@ export function AttendanceReports({
               />
             </div>
 
-            <div className="space-y-3">
-              <label className="text-sm font-semibold text-gray-700 dark:text-slate-200 flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-green-600" />
-                Location
+  {(isAdmin || isDeptHead || currentUserRole === "managing_director" || currentUserRole === "director_hr" || currentUserRole === "manager_hr") && (
+  <div className="space-y-3">
+  <label className="text-sm font-semibold text-gray-700 dark:text-slate-200 flex items-center gap-2">
+  <MapPin className="h-4 w-4 text-blue-600" />
+  Region
+  </label>
+  <Select value={selectedRegion} onValueChange={(value) => { setSelectedRegion(value); setSelectedLocation("all"); setSelectedDistrict("all"); setPage(1) }}>
+  <SelectTrigger className="w-full border border-gray-200 dark:border-slate-600 rounded-md bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-slate-100">
+  <SelectValue placeholder="All Regions" />
+  </SelectTrigger>
+  <SelectContent>
+  <SelectItem value="all">All Regions</SelectItem>
+  {locations.filter((location) => location.location_type === "regional_office").map((region) => (
+  <SelectItem key={region.id} value={region.id}>{region.name}</SelectItem>
+  ))}
+  </SelectContent>
+  </Select>
+  </div>
+  )}
+
+  <div className="space-y-3">
+  <label className="text-sm font-semibold text-gray-700 dark:text-slate-200 flex items-center gap-2">
+  <MapPin className="h-4 w-4 text-green-600" />
+  Location
                 {isRegionalManager && (
                   <span className="ml-1 text-xs text-amber-600 font-normal">(your location)</span>
                 )}
@@ -1766,11 +1810,11 @@ export function AttendanceReports({
                               </div>
                               <div>
                                 <p className="font-medium text-gray-900 dark:text-slate-100">{displayUserLabel(record)}</p>
-                                <p className="text-sm text-gray-600 dark:text-slate-300">{record.user_profiles?.employee_id || 'N/A'}</p>
+                                <p className="text-sm text-gray-600 dark:text-slate-300">{record.user_profiles?.employee_id || 'Missing authoritative record'}</p>
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className={compactMode ? "py-1" : "py-2"}><Badge variant="outline" className={compactMode ? "font-medium text-gray-700 dark:text-slate-200 text-xs" : "font-medium text-gray-700 dark:text-slate-200 text-sm"}>{record.user_profiles?.departments?.name || 'N/A'}</Badge></TableCell>
+                          <TableCell className={compactMode ? "py-1" : "py-2"}><Badge variant="outline" className={compactMode ? "font-medium text-gray-700 dark:text-slate-200 text-xs" : "font-medium text-gray-700 dark:text-slate-200 text-sm"}>{record.user_profiles?.departments?.name || 'Missing authoritative record'}</Badge></TableCell>
                           <TableCell className={compactMode ? "py-1 text-gray-800 dark:text-slate-200 text-xs" : "py-2 text-gray-800 dark:text-slate-200 text-sm"}>{new Date(record.check_in_time).toLocaleTimeString()}</TableCell>
                           <TableCell className="py-2 text-gray-800 dark:text-slate-200 text-sm"><div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-gray-500 dark:text-slate-400" /><span className="text-sm text-gray-700 dark:text-slate-300 max-w-xs truncate block" title={getLocationLabel(record, 'in')}>{getLocationLabel(record, 'in')}</span></div></TableCell>
                           <TableCell className={compactMode ? "hidden sm:table-cell py-1 text-gray-800 dark:text-slate-200 text-xs" : "hidden sm:table-cell py-2 text-gray-800 dark:text-slate-200 text-sm"}>{record.check_out_time ? new Date(record.check_out_time).toLocaleTimeString() : <span className="text-gray-400 dark:text-slate-400">-</span>}</TableCell>
@@ -1853,7 +1897,7 @@ export function AttendanceReports({
                     <div key={record.id} className="p-2 bg-white rounded-md shadow-sm border">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium">{displayUserLabel(record)} <span className="text-xs text-gray-500">({record.user_profiles?.employee_id || record.user_id?.slice(0,8) || 'N/A'})</span></p>
+                          <p className="text-sm font-medium">{displayUserLabel(record)} <span className="text-xs text-gray-500">({record.user_profiles?.employee_id || record.user_id?.slice(0,8) || 'Missing authoritative record'})</span></p>
                           <p className="text-xs text-gray-500">{new Date(record.check_in_time).toLocaleDateString()} • {new Date(record.check_in_time).toLocaleTimeString()}</p>
                         </div>
                         <div className="text-right">
