@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
       .eq("id", user.id)
       .single()
 
-    if (!profile || !["admin", "regional_manager", "department_head", "director_hr", "manager_hr", "staff"].includes(profile.role)) {
+    if (!profile || !["admin", "regional_manager", "department_head", "managing_director", "director_hr", "manager_hr", "staff"].includes(profile.role)) {
       console.error("[v0] Reports API - Insufficient permissions:", profile?.role)
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
@@ -35,8 +35,9 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get("end_date") || new Date().toISOString().split("T")[0]
     const departmentId = searchParams.get("department_id")
     const userId = searchParams.get("user_id")
-    const locationId = searchParams.get("location_id")
-    const districtId = searchParams.get("district_id")
+  const locationId = searchParams.get("location_id")
+  const regionId = searchParams.get("region_id")
+  const districtId = searchParams.get("district_id")
     const status = searchParams.get("status")
 
     console.log("[v0] Reports API - Filters:", {
@@ -75,6 +76,7 @@ export async function GET(request: NextRequest) {
 
     // Validate incoming UUID-like params to avoid invalid input to Postgres
     const safeLocationId = locationId && locationId !== "undefined" ? locationId : null
+    const safeRegionId = regionId && regionId !== "undefined" && regionId !== "all" ? regionId : null
     const safeDistrictId = districtId && districtId !== "undefined" ? districtId : null
     const safeDepartmentId = departmentId && departmentId !== "undefined" ? departmentId : null
     const safeStatus = status && status !== "undefined" && status !== "all" ? status : null
@@ -107,11 +109,24 @@ export async function GET(request: NextRequest) {
         ...(linkedDistricts || []).map((mapping) => mapping.district_location_id),
         ...(childLocations || []).map((location) => location.id),
       ].filter((id, index, all) => id && all.indexOf(id) === index)
-      query = query.in("check_in_location_id", regionalScopedLocationIds)
-    } else if (safeLocationId) {
-      // Admin (or future roles): honour the explicit location filter
-      query = query.eq("check_in_location_id", safeLocationId)
-    }
+  query = query.in("check_in_location_id", regionalScopedLocationIds)
+  } else if (safeRegionId && ["admin", "department_head", "managing_director", "director_hr", "manager_hr"].includes(profile.role)) {
+  const { data: mappedDistricts } = await adminClientForScope
+    .from("region_location_mappings")
+    .select("district_location_id")
+    .eq("regional_location_id", safeRegionId)
+  const { data: childLocations } = await adminClientForScope
+    .from("geofence_locations")
+    .select("id")
+    .eq("parent_location_id", safeRegionId)
+    .eq("is_active", true)
+  const regionLocationIds = [safeRegionId, ...(mappedDistricts || []).map((row) => row.district_location_id), ...(childLocations || []).map((row) => row.id)]
+    .filter((id, index, all) => id && all.indexOf(id) === index)
+  query = query.in("check_in_location_id", regionLocationIds)
+  } else if (safeLocationId) {
+  // Admin and authorized report roles honour the explicit location filter.
+  query = query.eq("check_in_location_id", safeLocationId)
+  }
 
     // If a status filter is selected, scope records by status
     if (safeStatus) {

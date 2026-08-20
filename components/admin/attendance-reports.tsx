@@ -103,11 +103,13 @@ interface Department {
   code: string
 }
 
-interface Location {
+  interface Location {
   id: string
   name: string
   address: string
-}
+  location_type?: string
+  parent_location_id?: string | null
+  }
 
 interface District {
   id: string
@@ -248,8 +250,9 @@ export function AttendanceReports({
   const [locations, setLocations] = useState<Location[]>([])
   const [districts, setDistricts] = useState<District[]>([])
   const [selectedLocation, setSelectedLocation] = useState(() =>
-    scopeLocationId ? scopeLocationId : "all"
+  scopeLocationId ? scopeLocationId : "all"
   )
+  const [selectedRegion, setSelectedRegion] = useState("all")
   const [selectedDistrict, setSelectedDistrict] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
@@ -368,7 +371,7 @@ export function AttendanceReports({
     fetchDepartments()
     fetchLocations()
     fetchDistricts()
-  }, [authChecked, isAuthenticated, startDate, endDate, selectedDepartment, selectedLocation, selectedDistrict, selectedStatus, page, pageSize])
+  }, [authChecked, isAuthenticated, startDate, endDate, selectedDepartment, selectedLocation, selectedRegion, selectedDistrict, selectedStatus, page, pageSize])
 
   useEffect(() => {
     // When the Reasons tab is opened, fetch a larger set that contains all reason entries
@@ -392,8 +395,9 @@ export function AttendanceReports({
       })
 
       if (selectedDepartment !== "all") params.append("department_id", selectedDepartment)
-      if (selectedLocation !== "all") params.append("location_id", selectedLocation)
-      if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
+  if (selectedLocation !== "all") params.append("location_id", selectedLocation)
+  if (selectedRegion !== "all") params.append("region_id", selectedRegion)
+  if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
 
       const res = await authenticatedFetch(`/api/admin/reports/attendance?${params}`)
       const json = await res.json()
@@ -492,8 +496,9 @@ export function AttendanceReports({
       })
 
       if (selectedDepartment !== "all") params.append("department_id", selectedDepartment)
-      if (selectedLocation !== "all") params.append("location_id", selectedLocation)
-      if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
+  if (selectedLocation !== "all") params.append("location_id", selectedLocation)
+  if (selectedRegion !== "all") params.append("region_id", selectedRegion)
+  if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
       if (selectedStatus !== "all") params.append("status", selectedStatus)
       // Pagination params
       params.append("page", String(page))
@@ -599,8 +604,9 @@ export function AttendanceReports({
       })
 
       if (selectedDepartment !== "all") params.append("department_id", selectedDepartment)
-      if (selectedLocation !== "all") params.append("location_id", selectedLocation)
-      if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
+  if (selectedLocation !== "all") params.append("location_id", selectedLocation)
+  if (selectedRegion !== "all") params.append("region_id", selectedRegion)
+  if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
       if (selectedStatus !== "all") params.append("status", selectedStatus)
 
       const res = await authenticatedFetch(`/api/admin/reports/attendance?${params}`)
@@ -817,6 +823,7 @@ export function AttendanceReports({
                 startDate,
                 endDate,
                 locationId: selectedLocation !== "all" ? selectedLocation : null,
+                regionId: selectedRegion !== "all" ? selectedRegion : null,
                 districtId: selectedDistrict !== "all" ? selectedDistrict : null,
                 departmentId: selectedDepartment !== "all" ? selectedDepartment : null,
                 reportType: "attendance",
@@ -1101,10 +1108,30 @@ export function AttendanceReports({
               />
             </div>
 
-            <div className="space-y-3">
-              <label className="text-sm font-semibold text-gray-700 dark:text-slate-200 flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-green-600" />
-                Location
+  {(isAdmin || isDeptHead || currentUserRole === "managing_director" || currentUserRole === "director_hr" || currentUserRole === "manager_hr") && (
+  <div className="space-y-3">
+  <label className="text-sm font-semibold text-gray-700 dark:text-slate-200 flex items-center gap-2">
+  <MapPin className="h-4 w-4 text-blue-600" />
+  Region
+  </label>
+  <Select value={selectedRegion} onValueChange={(value) => { setSelectedRegion(value); setSelectedLocation("all"); setSelectedDistrict("all"); setPage(1) }}>
+  <SelectTrigger className="w-full border border-gray-200 dark:border-slate-600 rounded-md bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-slate-100">
+  <SelectValue placeholder="All Regions" />
+  </SelectTrigger>
+  <SelectContent>
+  <SelectItem value="all">All Regions</SelectItem>
+  {locations.filter((location) => location.location_type === "regional_office").map((region) => (
+  <SelectItem key={region.id} value={region.id}>{region.name}</SelectItem>
+  ))}
+  </SelectContent>
+  </Select>
+  </div>
+  )}
+
+  <div className="space-y-3">
+  <label className="text-sm font-semibold text-gray-700 dark:text-slate-200 flex items-center gap-2">
+  <MapPin className="h-4 w-4 text-green-600" />
+  Location
                 {isRegionalManager && (
                   <span className="ml-1 text-xs text-amber-600 font-normal">(your location)</span>
                 )}
