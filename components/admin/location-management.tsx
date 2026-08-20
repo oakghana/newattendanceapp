@@ -4,6 +4,7 @@ import type React from "react"
 import Link from "next/link"
 
 import { useState, useEffect, useCallback } from "react"
+import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -54,6 +55,7 @@ interface GeofenceLocation {
 }
 
 export function LocationManagement() {
+  const { toast } = useToast()
   const [locations, setLocations] = useState<GeofenceLocation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -295,9 +297,15 @@ export function LocationManagement() {
 
       if (response.status === 409) {
         const errorData = await response.json()
+        const conflictMessage = `Coordinate conflict: ${errorData.error}`
         setError(
-          `⚠️ COORDINATE CONFLICT: ${errorData.error}\n\nPlease verify:\n• You have the correct GPS coordinates\n• This is not a duplicate location\n• The location is actually different from: ${errorData.conflictingLocations?.join(", ")}`,
+          `${conflictMessage}\n\nPlease verify:\n• You have the correct GPS coordinates\n• This is not a duplicate location\n• The location is actually different from: ${errorData.conflictingLocations?.join(", ")}`,
         )
+        toast({
+          title: "Location update failed",
+          description: conflictMessage,
+          variant: "destructive",
+        })
         setLoading(false)
         return
       }
@@ -308,7 +316,12 @@ export function LocationManagement() {
       }
 
       const result = await response.json()
-      setSuccess(result.message || "Location updated successfully - Only this location was modified")
+      const message = result.message || "Location updated successfully"
+      setSuccess(message)
+      toast({
+        title: "Location updated",
+        description: message,
+      })
       await fetchLocations()
       setEditingLocation(null)
 
@@ -316,6 +329,11 @@ export function LocationManagement() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to update location"
       setError(errorMessage)
+      toast({
+        title: "Location update failed",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
@@ -345,13 +363,23 @@ export function LocationManagement() {
       }
 
       const action = location.is_active ? "deactivated" : "activated"
-      setSuccess(`Location ${action} successfully - All staff dashboards will update automatically`)
+      const message = `Location ${action} successfully`
+      setSuccess(`${message} - All staff dashboards will update automatically`)
+      toast({
+        title: `Location ${action}`,
+        description: message,
+      })
       await fetchLocations()
 
       setTimeout(() => setSuccess(null), 5000)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to update location status"
       setError(errorMessage)
+      toast({
+        title: "Location status update failed",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
