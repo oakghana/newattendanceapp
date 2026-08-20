@@ -142,7 +142,7 @@ export function LocationManagement() {
         throw new Error("No internet connection")
       }
 
-      const response = await fetch("/api/admin/locations")
+      const response = await fetch("/api/admin/locations", { cache: "no-store" })
       if (!response.ok) {
         if (response.status >= 500 && attempt < 3) {
           throw new Error("RETRY")
@@ -1044,12 +1044,21 @@ export function LocationManagement() {
                   required
                 />
               </div>
-              <div>
+              <div className="rounded-lg border border-primary/40 bg-primary/5 p-4">
+                <p className="mb-3 text-sm font-semibold text-primary">Hierarchy &amp; Region Linkage</p>
                 <Label htmlFor="editLocationType">Location Type</Label>
                 <select
                   id="editLocationType"
                   value={editingLocation.location_type || "facility"}
-                  onChange={(e) => setEditingLocation({ ...editingLocation, location_type: e.target.value as GeofenceLocation["location_type"], parent_location_id: null, parent_location: null })}
+                  onChange={(e) => {
+                    const nextType = e.target.value as GeofenceLocation["location_type"]
+                    setEditingLocation({
+                      ...editingLocation,
+                      location_type: nextType,
+                      parent_location_id: nextType === "regional_office" ? null : editingLocation.parent_location_id || null,
+                      parent_location: nextType === "regional_office" ? null : editingLocation.parent_location,
+                    })
+                  }}
                   className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
                   <option value="regional_office">Regional Office</option>
@@ -1057,24 +1066,32 @@ export function LocationManagement() {
                   <option value="facility">Facility</option>
                 </select>
               </div>
-              {editingLocation.location_type === "district_office" && (
-                <div>
-                  <Label htmlFor="editParentLocation">Parent Regional Office</Label>
+              {editingLocation.location_type !== "regional_office" && (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+                  <Label htmlFor="editParentLocation">Region Linkage</Label>
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Link this {editingLocation.location_type === "district_office" ? "district office" : "facility"} to a regional office. This controls regional visibility and reporting.
+                  </p>
                   <select
                     id="editParentLocation"
                     value={editingLocation.parent_location_id || ""}
-                    onChange={(e) => setEditingLocation({ ...editingLocation, parent_location_id: e.target.value || null })}
+                    onChange={(e) => {
+                      const parentId = e.target.value || null
+                      const parent = locations.find((location) => location.id === parentId) || null
+                      setEditingLocation({ ...editingLocation, parent_location_id: parentId, parent_location: parent })
+                    }}
                     className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    required
                   >
-                    <option value="">Select a regional office</option>
+                    <option value="">No regional office linked</option>
                     {locations.filter((location) => location.location_type === "regional_office" && location.id !== editingLocation.id).map((location) => (
                       <option key={location.id} value={location.id}>{location.name}</option>
                     ))}
                   </select>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    This district will appear under the selected regional office and in regional reporting.
-                  </p>
+                  {editingLocation.parent_location && (
+                    <p className="mt-2 text-xs font-medium text-primary">
+                      Linked to: {editingLocation.parent_location.name}
+                    </p>
+                  )}
                 </div>
               )}
               <div>
