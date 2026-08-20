@@ -462,7 +462,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
   const canEditGlobalLeaveSettings = canManageGlobalPolicies(normalizedRole) && canManageHolidays(normalizedRole)
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 w-full max-w-full overflow-x-hidden space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-primary">Profile Settings</h1>
@@ -488,7 +488,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="flex w-full min-w-0 flex-wrap gap-1 overflow-x-auto p-1">
           <TabsTrigger value="profile">Profile Info</TabsTrigger>
           <TabsTrigger value="signature">Signature</TabsTrigger>
           <TabsTrigger value="security">Security & Preferences</TabsTrigger>
