@@ -93,10 +93,16 @@ export async function GET(request: NextRequest) {
         .from("region_location_mappings")
         .select("district_location_id")
         .eq("regional_location_id", profile.assigned_location_id)
+      const { data: childLocations } = await adminClientForScope
+        .from("geofence_locations")
+        .select("id")
+        .eq("parent_location_id", profile.assigned_location_id)
+        .eq("is_active", true)
       regionalScopedLocationIds = [
         profile.assigned_location_id,
         ...(linkedDistricts || []).map((mapping) => mapping.district_location_id),
-      ]
+        ...(childLocations || []).map((location) => location.id),
+      ].filter((id, index, all) => id && all.indexOf(id) === index)
       query = query.in("check_in_location_id", regionalScopedLocationIds)
     } else if (safeLocationId) {
       // Admin (or future roles): honour the explicit location filter
@@ -386,6 +392,15 @@ export async function GET(request: NextRequest) {
       {} as Record<string, { count: number; totalHours: number }>,
     )
 
+    const locationScopeQuery = adminClientForScope
+      .from("geofence_locations")
+      .select("id, name, address, location_type, parent_location_id")
+      .eq("is_active", true)
+      .order("name")
+    const { data: scopedLocations } = regionalScopedLocationIds
+      ? await locationScopeQuery.in("id", regionalScopedLocationIds)
+      : await locationScopeQuery
+
     console.log("[v0] Reports API - Returning", totalRecords, "records with summary")
 
     return NextResponse.json(
@@ -393,6 +408,7 @@ export async function GET(request: NextRequest) {
         success: true,
         data: {
           records: enrichedRecords,
+          locations: scopedLocations || [],
           summary: {
             totalRecords,
             totalWorkHours: Math.round(totalWorkHours * 100) / 100,

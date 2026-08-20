@@ -509,6 +509,9 @@ export function AttendanceReports({
       if (result.success) {
         setRecords(result.data.records || [])
         setSummary(result.data.summary || null)
+        if (Array.isArray(result.data.locations)) {
+          setLocations(result.data.locations)
+        }
         setTotalRecords(result.data.summary?.totalRecords || 0)
         console.log("[v0] Successfully loaded", result.data.records?.length || 0, "records (page)")
       } else {
@@ -543,8 +546,9 @@ export function AttendanceReports({
   // users list removed — Employee filter omitted per requirements
 
   const fetchLocations = async () => {
-    try {
-      const supabase = createClient()
+  if (isRegionalManager || currentUserRole === "regional_manager") return
+  try {
+  const supabase = createClient()
       const { data, error } = await supabase
         .from("geofence_locations")
         .select("id, name, address")
