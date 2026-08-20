@@ -57,13 +57,17 @@ export async function GET(request: NextRequest) {
           id,
           name,
           address,
-          district_id
+          district_id,
+          location_type,
+          parent_location_id
         ),
         check_out_location:geofence_locations!check_out_location_id (
           id,
           name,
           address,
-          district_id
+          district_id,
+          location_type,
+          parent_location_id
         )
       `)
       .gte("check_in_time", `${startDate}T00:00:00`)
@@ -184,16 +188,18 @@ export async function GET(request: NextRequest) {
             name,
             code
           ),
-          assigned_location:geofence_locations!assigned_location_id (
-            id,
-            name,
-            address,
-            district_id,
-            districts (
+assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
               id,
-              name
+              name,
+              address,
+              district_id,
+              location_type,
+              parent_location_id,
+              districts (
+                id,
+                name
+              )
             )
-          )
         `)
         .in("id", userIds)
       
@@ -311,6 +317,21 @@ export async function GET(request: NextRequest) {
       } catch (auditErr) {
         console.error('[v0] Reports API - Failed to write missing_user_profiles audit log:', auditErr)
       }
+    }
+
+    const incompleteReportRecords = enrichedRecords.filter((record) => {
+      const profile = record.user_profiles
+      const location = record.check_in_location || record.geofence_locations
+      const fullName = `${profile?.first_name || ""} ${profile?.last_name || ""}`.trim()
+      return !fullName || !profile?.employee_id || !profile?.departments?.name || !location?.name || !record.check_in_time || !record.status
+    })
+    if (incompleteReportRecords.length > 0) {
+      return NextResponse.json({
+        success: false,
+        error: "Attendance report data is incomplete. Missing staff, employee ID, department, location, date, or status records must be corrected before viewing this report.",
+        incompleteRecordCount: incompleteReportRecords.length,
+        recordIds: incompleteReportRecords.slice(0, 20).map((record) => record.id),
+      }, { status: 422 })
     }
 
     // Calculate summary statistics

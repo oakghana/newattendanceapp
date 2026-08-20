@@ -45,7 +45,9 @@ interface AttendanceRecord {
   is_check_in_outside_location?: boolean
   is_check_out_outside_location?: boolean
   early_checkout_reason?: string
+  early_checkout_proved_by?: string
   lateness_reason?: string
+  lateness_proved_by?: string
   notes?: string
   user_profiles?: {
     first_name?: string
@@ -56,11 +58,16 @@ interface AttendanceRecord {
       name?: string
       code?: string
     }
-    assigned_location?: {
-      name?: string
-      address?: string
-    }
+  assigned_location?: {
+    name?: string
+    address?: string
+    location_type?: string
     districts?: {
+      id?: string
+      name?: string
+    }
+  }
+  districts?: {
       id?: string
       name?: string
     }
@@ -69,6 +76,7 @@ interface AttendanceRecord {
     id: string
     name: string
     address: string
+    location_type?: string
   }
   check_out_location?: {
     id: string
@@ -344,12 +352,12 @@ export function AttendanceReports({
         record.check_in_location_name ||
         record.check_in_location?.name ||
         record.geofence_locations?.name ||
-        'N/A'
+        'Missing authoritative record'
       )
     }
 
     return (
-      record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || record.geofence_locations?.name || 'N/A'
+      record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || record.geofence_locations?.name || 'Missing authoritative record'
     )
   }
 
@@ -424,7 +432,7 @@ export function AttendanceReports({
               department_id,
               assigned_location_id,
               departments ( id, name, code ),
-              assigned_location:geofence_locations!assigned_location_id ( id, name, address )
+              assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey ( id, name, address, location_type )
             `)
             .in("id", reasonUserIds)
 
@@ -551,7 +559,7 @@ export function AttendanceReports({
   const supabase = createClient()
       const { data, error } = await supabase
         .from("geofence_locations")
-        .select("id, name, address")
+        .select("id, name, address, location_type")
         .eq("is_active", true)
         .order("name")
 
@@ -653,20 +661,20 @@ export function AttendanceReports({
           ...exportRecords.map((record) => {
               const checkInLabel = record.google_maps_name && record.is_check_in_outside_location
                 ? record.google_maps_name
-                : record.check_in_location?.name || record.check_in_location_name || "N/A"
+                : record.check_in_location?.name || record.check_in_location_name || "Missing authoritative record"
 
-              const checkOutLabel = record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || "N/A"
+              const checkOutLabel = record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || "Missing authoritative record"
 
               const row = [
                 new Date(record.check_in_time).toLocaleDateString(),
-                `"${record.user_profiles?.employee_id || "N/A"}"`,
+                `"${record.user_profiles?.employee_id || "Missing authoritative record"}"`,
                 `"${(record.user_profiles?.first_name || "") + (record.user_profiles?.last_name ? ' ' + record.user_profiles.last_name : '') || 'Unknown User'}"`,
-                `"${record.user_profiles?.departments?.name || "N/A"}"`,
-                `"${record.user_profiles?.assigned_location?.name || "N/A"}"`,
+                `"${record.user_profiles?.departments?.name || "Missing authoritative record"}"`,
+                `"${record.user_profiles?.assigned_location?.name || "Missing authoritative record"}"`,
                 `"${new Date(record.check_in_time).toLocaleTimeString()}"`,
                 `"${checkInLabel}"`,
                 `"${record.is_check_in_outside_location ? "Outside Assigned Location" : "On-site"}"`,
-                `"${record.check_out_time ? new Date(record.check_out_time).toLocaleTimeString() : "N/A"}"`,
+                `"${record.check_out_time ? new Date(record.check_out_time).toLocaleTimeString() : "Missing authoritative record"}"`,
                 `"${checkOutLabel}"`,
                 `"${record.is_check_out_outside_location ? "Outside Assigned Location" : "On-site"}"`,
                 `"${record.early_checkout_reason || "-"}"`,
@@ -719,10 +727,10 @@ export function AttendanceReports({
           ...exportRecords.map((record) => {
             const checkInLabel = record.google_maps_name && record.is_check_in_outside_location
               ? record.google_maps_name
-              : record.check_in_location?.name || record.check_in_location_name || "N/A"
+              : record.check_in_location?.name || record.check_in_location_name || "Missing authoritative record"
 
             const checkOutLabel =
-              record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || "N/A"
+              record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || "Missing authoritative record"
 
             const firstName = record.user_profiles?.first_name || ""
             const lastName = record.user_profiles?.last_name || ""
@@ -730,10 +738,10 @@ export function AttendanceReports({
 
             return [
               new Date(record.check_in_time).toLocaleDateString(),
-              record.user_profiles?.employee_id || "N/A",
+              record.user_profiles?.employee_id || "Missing authoritative record",
               fullName,
-              record.user_profiles?.departments?.name || "N/A",
-              record.user_profiles?.assigned_location?.name || "N/A",
+              record.user_profiles?.departments?.name || "Missing authoritative record",
+              record.user_profiles?.assigned_location?.name || "Missing authoritative record",
               new Date(record.check_in_time).toLocaleTimeString(),
               checkInLabel,
               record.is_check_in_outside_location ? "Outside Assigned Location" : "On-site",
@@ -745,7 +753,7 @@ export function AttendanceReports({
               record.lateness_reason || "-",
               record.lateness_proved_by || "-",
               record.work_hours != null ? Number(record.work_hours.toFixed(2)) : 0,
-              record.status ? record.status.charAt(0).toUpperCase() + record.status.slice(1) : "N/A",
+              record.status ? record.status.charAt(0).toUpperCase() + record.status.slice(1) : "Missing authoritative record",
               record.is_check_in_outside_location || record.is_check_out_outside_location ? "Remote Work" : "On-site",
             ]
           }),
@@ -1770,11 +1778,11 @@ export function AttendanceReports({
                               </div>
                               <div>
                                 <p className="font-medium text-gray-900 dark:text-slate-100">{displayUserLabel(record)}</p>
-                                <p className="text-sm text-gray-600 dark:text-slate-300">{record.user_profiles?.employee_id || 'N/A'}</p>
+                                <p className="text-sm text-gray-600 dark:text-slate-300">{record.user_profiles?.employee_id || 'Missing authoritative record'}</p>
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className={compactMode ? "py-1" : "py-2"}><Badge variant="outline" className={compactMode ? "font-medium text-gray-700 dark:text-slate-200 text-xs" : "font-medium text-gray-700 dark:text-slate-200 text-sm"}>{record.user_profiles?.departments?.name || 'N/A'}</Badge></TableCell>
+                          <TableCell className={compactMode ? "py-1" : "py-2"}><Badge variant="outline" className={compactMode ? "font-medium text-gray-700 dark:text-slate-200 text-xs" : "font-medium text-gray-700 dark:text-slate-200 text-sm"}>{record.user_profiles?.departments?.name || 'Missing authoritative record'}</Badge></TableCell>
                           <TableCell className={compactMode ? "py-1 text-gray-800 dark:text-slate-200 text-xs" : "py-2 text-gray-800 dark:text-slate-200 text-sm"}>{new Date(record.check_in_time).toLocaleTimeString()}</TableCell>
                           <TableCell className="py-2 text-gray-800 dark:text-slate-200 text-sm"><div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-gray-500 dark:text-slate-400" /><span className="text-sm text-gray-700 dark:text-slate-300 max-w-xs truncate block" title={getLocationLabel(record, 'in')}>{getLocationLabel(record, 'in')}</span></div></TableCell>
                           <TableCell className={compactMode ? "hidden sm:table-cell py-1 text-gray-800 dark:text-slate-200 text-xs" : "hidden sm:table-cell py-2 text-gray-800 dark:text-slate-200 text-sm"}>{record.check_out_time ? new Date(record.check_out_time).toLocaleTimeString() : <span className="text-gray-400 dark:text-slate-400">-</span>}</TableCell>
@@ -1857,7 +1865,7 @@ export function AttendanceReports({
                     <div key={record.id} className="p-2 bg-white rounded-md shadow-sm border">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium">{displayUserLabel(record)} <span className="text-xs text-gray-500">({record.user_profiles?.employee_id || record.user_id?.slice(0,8) || 'N/A'})</span></p>
+                          <p className="text-sm font-medium">{displayUserLabel(record)} <span className="text-xs text-gray-500">({record.user_profiles?.employee_id || record.user_id?.slice(0,8) || 'Missing authoritative record'})</span></p>
                           <p className="text-xs text-gray-500">{new Date(record.check_in_time).toLocaleDateString()} • {new Date(record.check_in_time).toLocaleTimeString()}</p>
                         </div>
                         <div className="text-right">
