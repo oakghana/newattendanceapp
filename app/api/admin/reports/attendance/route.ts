@@ -86,10 +86,18 @@ export async function GET(request: NextRequest) {
     // regional_manager → restricted to their own assigned_location_id
     // department_head  → restricted to their own department_id
 
+    const adminClientForScope = await createAdminClient()
+    let regionalScopedLocationIds: string[] | null = null
     if (profile.role === "regional_manager" && profile.assigned_location_id) {
-      // Regional manager can only see records where the check-in location matches
-      // their assigned location, regardless of any user-supplied location filter.
-      query = query.eq("check_in_location_id", profile.assigned_location_id)
+      const { data: linkedDistricts } = await adminClientForScope
+        .from("region_location_mappings")
+        .select("district_location_id")
+        .eq("regional_location_id", profile.assigned_location_id)
+      regionalScopedLocationIds = [
+        profile.assigned_location_id,
+        ...(linkedDistricts || []).map((mapping) => mapping.district_location_id),
+      ]
+      query = query.in("check_in_location_id", regionalScopedLocationIds)
     } else if (safeLocationId) {
       // Admin (or future roles): honour the explicit location filter
       query = query.eq("check_in_location_id", safeLocationId)
@@ -102,7 +110,6 @@ export async function GET(request: NextRequest) {
 
     // Department scoping via user_profiles sub-query
     // Use adminClient for department scoping lookups to bypass RLS
-    const adminClientForScope = await createAdminClient()
     if (profile.role === "department_head") {
       const { data: deptUsers } = await adminClientForScope
         .from("user_profiles")
@@ -317,8 +324,8 @@ export async function GET(request: NextRequest) {
         countQuery = countQuery.eq("user_id", userId)
       }
       // Mirror location scoping
-      if (profile.role === "regional_manager" && profile.assigned_location_id) {
-        countQuery = countQuery.eq("check_in_location_id", profile.assigned_location_id)
+      if (profile.role === "regional_manager" && regionalScopedLocationIds?.length) {
+        countQuery = countQuery.in("check_in_location_id", regionalScopedLocationIds)
       } else if (safeLocationId) {
         countQuery = countQuery.eq("check_in_location_id", safeLocationId)
       }

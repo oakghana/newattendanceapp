@@ -48,6 +48,9 @@ interface GeofenceLocation {
   check_out_end_time?: string | null
   require_early_checkout_reason?: boolean
   working_hours_description?: string | null
+  location_type?: "regional_office" | "district_office" | "facility"
+  parent_location_id?: string | null
+  parent_location?: { id: string; name: string; location_type?: string } | null
 }
 
 export function LocationManagement() {
@@ -66,6 +69,8 @@ export function LocationManagement() {
 
   const [newLocation, setNewLocation] = useState({
     name: "",
+    location_type: "facility" as GeofenceLocation["location_type"],
+    parent_location_id: "",
     address: "",
     latitude: "",
     longitude: "",
@@ -187,6 +192,8 @@ export function LocationManagement() {
           },
           body: JSON.stringify({
             name: newLocation.name,
+            location_type: newLocation.location_type,
+            parent_location_id: newLocation.parent_location_id || null,
             address: newLocation.address,
             latitude: Number.parseFloat(newLocation.latitude),
             longitude: Number.parseFloat(newLocation.longitude),
@@ -220,6 +227,8 @@ export function LocationManagement() {
         setIsAddingLocation(false)
         setNewLocation({ 
           name: "", 
+          location_type: "facility",
+          parent_location_id: "",
           address: "", 
           latitude: "", 
           longitude: "", 
@@ -703,6 +712,38 @@ export function LocationManagement() {
               </div>
 
               <div>
+                <Label htmlFor="location_type">Location Type *</Label>
+                <select
+                  id="location_type"
+                  value={newLocation.location_type}
+                  onChange={(e) => setNewLocation((prev) => ({ ...prev, location_type: e.target.value as GeofenceLocation["location_type"], parent_location_id: "" }))}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="regional_office">Regional Office</option>
+                  <option value="district_office">District Office</option>
+                  <option value="facility">Facility</option>
+                </select>
+              </div>
+
+              {newLocation.location_type === "district_office" && (
+                <div>
+                  <Label htmlFor="parent_location_id">Parent Regional Office *</Label>
+                  <select
+                    id="parent_location_id"
+                    value={newLocation.parent_location_id}
+                    onChange={(e) => setNewLocation((prev) => ({ ...prev, parent_location_id: e.target.value }))}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    required
+                  >
+                    <option value="">Select a regional office</option>
+                    {locations.filter((location) => location.location_type === "regional_office").map((location) => (
+                      <option key={location.id} value={location.id}>{location.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
                 <Label htmlFor="address">Address *</Label>
                 <Input
                   id="address"
@@ -917,7 +958,15 @@ export function LocationManagement() {
           <Card key={location.id} className="hover:shadow-md transition-shadow">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base sm:text-lg truncate">{location.name}</CardTitle>
+                <div className="min-w-0">
+                  <CardTitle className="text-base sm:text-lg truncate">{location.name}</CardTitle>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Badge variant="outline">
+                      {location.location_type === "regional_office" ? "Regional Office" : location.location_type === "district_office" ? "District Office" : "Facility"}
+                    </Badge>
+                    {location.parent_location && <Badge variant="secondary">Under {location.parent_location.name}</Badge>}
+                  </div>
+                </div>
                 <Badge variant={location.is_active ? "default" : "secondary"}>
                   {location.is_active ? "Active" : "Inactive"}
                 </Badge>
