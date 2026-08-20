@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClientAndGetUser, createAdminClient } from "@/lib/supabase/server"
+import { normalizeAppRole } from "@/lib/role-capabilities"
 import * as XLSX from "xlsx"
 import jsPDF from "jspdf"
 import "jspdf-autotable"
@@ -22,7 +23,8 @@ export async function POST(request: NextRequest) {
       // Check admin role
       const { data: profile } = await supabase.from("user_profiles").select("role, assigned_location_id").eq("id", user.id).single()
 
-      if (!profile || !["admin", "regional_manager", "department_head", "managing_director", "director_hr", "manager_hr"].includes(profile.role)) {
+      const normalizedRole = normalizeAppRole(profile?.role)
+      if (!profile || !["admin", "regional_manager", "department_head", "managing_director", "director_hr", "manager_hr"].includes(normalizedRole)) {
         return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
       }
 
@@ -40,12 +42,12 @@ export async function POST(request: NextRequest) {
       }
       if (locationId) {
         attendanceQuery = attendanceQuery.eq("check_in_location_id", locationId)
-      } else if (regionId && ["admin", "department_head", "director_hr", "manager_hr"].includes(profile.role)) {
+      } else if (regionId && ["admin", "department_head", "director_hr", "manager_hr"].includes(normalizedRole)) {
         const { data: mappings } = await adminClient.from("region_location_mappings").select("district_location_id").eq("regional_location_id", regionId)
         const { data: children } = await adminClient.from("geofence_locations").select("id").eq("parent_location_id", regionId).eq("is_active", true)
         const scopedIds = [regionId, ...(mappings || []).map((row) => row.district_location_id), ...(children || []).map((row) => row.id)].filter((id, index, all) => id && all.indexOf(id) === index)
         attendanceQuery = attendanceQuery.in("check_in_location_id", scopedIds)
-      } else if (profile.role === "regional_manager" && profile.assigned_location_id) {
+      } else if (normalizedRole === "regional_manager" && profile.assigned_location_id) {
         const { data: mappings } = await adminClient.from("region_location_mappings").select("district_location_id").eq("regional_location_id", profile.assigned_location_id)
         const { data: children } = await adminClient.from("geofence_locations").select("id").eq("parent_location_id", profile.assigned_location_id).eq("is_active", true)
         const scopedIds = [profile.assigned_location_id, ...(mappings || []).map((row) => row.district_location_id), ...(children || []).map((row) => row.id)].filter(Boolean)

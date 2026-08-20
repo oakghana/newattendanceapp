@@ -250,7 +250,7 @@ export function AttendanceReports({
   const [locations, setLocations] = useState<Location[]>([])
   const [districts, setDistricts] = useState<District[]>([])
   const [selectedLocation, setSelectedLocation] = useState(() =>
-  scopeLocationId ? scopeLocationId : "all"
+  scopeRole === "regional_manager" ? "all" : scopeLocationId ? scopeLocationId : "all"
   )
   const [selectedRegion, setSelectedRegion] = useState("all")
   const [selectedDistrict, setSelectedDistrict] = useState("all")

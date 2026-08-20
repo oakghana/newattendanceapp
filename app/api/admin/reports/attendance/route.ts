@@ -1,4 +1,5 @@
 import { createClientAndGetUser, createAdminClient } from "@/lib/supabase/server"
+import { normalizeAppRole } from "@/lib/role-capabilities"
 import { type NextRequest, NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
@@ -21,12 +22,16 @@ export async function GET(request: NextRequest) {
       .eq("id", user.id)
       .single()
 
-    if (!profile || !["admin", "regional_manager", "department_head", "managing_director", "director_hr", "manager_hr", "staff"].includes(profile.role)) {
+    if (!profile || !["admin", "regional_manager", "department_head", "managing_director", "director_hr", "manager_hr", "staff"].includes(normalizeAppRole(profile.role))) {
       console.error("[v0] Reports API - Insufficient permissions:", profile?.role)
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
 
-    console.log("[v0] Reports API - User role:", profile.role)
+    const normalizedRole = normalizeAppRole(profile.role)
+    if (!['admin', 'regional_manager', 'department_head', 'managing_director', 'director_hr', 'manager_hr', 'staff'].includes(normalizedRole)) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+    }
+    console.log("[v0] Reports API - User role:", normalizedRole)
 
     // Get query parameters
     const { searchParams } = new URL(request.url)
@@ -81,7 +86,7 @@ export async function GET(request: NextRequest) {
     const safeDepartmentId = departmentId && departmentId !== "undefined" ? departmentId : null
     const safeStatus = status && status !== "undefined" && status !== "all" ? status : null
 
-    if (profile.role === "staff") {
+    if (normalizedRole === "staff") {
       query = query.eq("user_id", user.id)
     } else if (userId) {
       query = query.eq("user_id", userId)
@@ -94,7 +99,7 @@ export async function GET(request: NextRequest) {
 
     const adminClientForScope = await createAdminClient()
     let regionalScopedLocationIds: string[] | null = null
-    if (profile.role === "regional_manager" && profile.assigned_location_id) {
+    if (normalizedRole === "regional_manager" && profile.assigned_location_id) {
       const { data: linkedDistricts } = await adminClientForScope
         .from("region_location_mappings")
         .select("district_location_id")
@@ -135,7 +140,7 @@ export async function GET(request: NextRequest) {
 
     // Department scoping via user_profiles sub-query
     // Use adminClient for department scoping lookups to bypass RLS
-    if (profile.role === "department_head") {
+    if (normalizedRole === "department_head") {
       const { data: deptUsers } = await adminClientForScope
         .from("user_profiles")
         .select("id")
@@ -146,7 +151,7 @@ export async function GET(request: NextRequest) {
       } else {
         query = query.eq("user_id", "00000000-0000-0000-0000-000000000000")
       }
-    } else if (safeDepartmentId && profile.role !== "staff") {
+    } else if (safeDepartmentId && normalizedRole !== "staff") {
       const { data: deptUsers } = await adminClientForScope
         .from("user_profiles")
         .select("id")
@@ -360,7 +365,7 @@ assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
         .gte("check_in_time", `${startDate}T00:00:00`)
         .lte("check_in_time", `${endDate}T23:59:59`)
 
-      if (profile.role === "staff") {
+      if (normalizedRole === "staff") {
         countQuery = countQuery.eq("user_id", user.id)
       } else if (userId) {
         countQuery = countQuery.eq("user_id", userId)
@@ -377,8 +382,8 @@ assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
       }
       // Mirror department scoping
       const deptIdForCount =
-        profile.role === "department_head" ? profile.department_id : safeDepartmentId
-      if (deptIdForCount && profile.role !== "staff") {
+        normalizedRole === "department_head" ? profile.department_id : safeDepartmentId
+      if (deptIdForCount && normalizedRole !== "staff") {
         const { data: deptUsersCount } = await supabase
           .from("user_profiles")
           .select("id")

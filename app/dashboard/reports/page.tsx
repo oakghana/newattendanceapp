@@ -3,6 +3,7 @@ import { SimpleHrReports } from "@/components/admin/simple-hr-reports"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { BarChart3, TrendingUp } from "lucide-react"
+import { normalizeAppRole } from "@/lib/role-capabilities"
 
 export default async function ReportsPage() {
   const supabase = await createClient()
@@ -18,12 +19,13 @@ export default async function ReportsPage() {
     .eq("id", user.id)
     .single()
 
-  if (!profile || !["admin", "regional_manager", "department_head", "director_hr", "manager_hr"].includes(profile.role)) {
+  const normalizedRole = normalizeAppRole(profile?.role)
+  if (!profile || !["admin", "regional_manager", "department_head", "managing_director", "director_hr", "manager_hr"].includes(normalizedRole)) {
     redirect("/dashboard")
   }
 
-  const isHrRole = profile.role === "director_hr" || profile.role === "manager_hr"
-  const scopeRole = profile.role as "admin" | "regional_manager" | "department_head"
+  const isHrRole = normalizedRole === "director_hr" || normalizedRole === "manager_hr"
+  const scopeRole = normalizedRole as "admin" | "regional_manager" | "department_head"
   const scopeDepartmentId = profile.department_id ?? null
   const scopeLocationId = profile.assigned_location_id ?? null
 
