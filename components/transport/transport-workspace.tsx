@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "@/hooks/use-toast"
+import { isRegionalManagerRole } from "@/lib/role-capabilities"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -29,7 +30,9 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
   const isDriver = ["driver", "drivers"].includes(normalizedRole)
   const canManage = ["admin", "administrator", "it_admin", "it_admin_role"].includes(normalizedRole)
   const canCreateRequest = isRegionalHr
-  const canEditDriverLicense = isRegionalHr || isDriver
+  const isRegionalManager = isRegionalManagerRole(normalizedRole)
+  const canEditDriverLicense = isRegionalHr
+  const canViewDriverLicense = isRegionalHr || isRegionalManager || isDriver || canManage
   const [requestOpen, setRequestOpen] = useState(false)
   const router = useRouter()
   async function handleRequestSubmit(event: FormEvent<HTMLFormElement>) {
@@ -99,7 +102,7 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
 
       <section className="grid gap-4 md:grid-cols-2" aria-label="Transport modules">
         {modules.map(({ title, description, icon: Icon, href, editableFor }) => {
-          const workspaceCanWrite = editableFor === "driver" ? canEditDriverLicense : title === "Transport requests" ? canCreateRequest : canManage
+          const workspaceCanWrite = editableFor === "driver" ? canViewDriverLicense : title === "Transport requests" ? canCreateRequest : canManage
           return (
           <Card key={title} className="transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-sm">
             <CardHeader className="gap-3 p-4">

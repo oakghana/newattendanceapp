@@ -18,8 +18,12 @@ export function isAttendanceOnlyRole(role?: string | null): boolean {
   return ATTENDANCE_ONLY_ROLES.includes(normalizeAppRole(role) as (typeof ATTENDANCE_ONLY_ROLES)[number])
 }
 
+export function isRegionalManagerRole(role?: string | null): boolean {
+  return normalizeAppRole(role) === "regional_manager"
+}
+
 export function canManageTransport(role?: string | null): boolean {
-  return isRegionalHrRole(role) || isAdminRole(role)
+  return isRegionalHrRole(role) || isRegionalManagerRole(role) || isAdminRole(role)
 }
 
 export function canCreateTransportRequest(role?: string | null): boolean {
