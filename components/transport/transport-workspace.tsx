@@ -36,18 +36,30 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     const selectedFiles = Array.from(form.getAll("supportingDocuments")).filter((value): value is File => value instanceof File && value.size > 0)
+    if (selectedFiles.some((file) => file.size > 5 * 1024 * 1024)) {
+      toast({ title: "Document is too large", description: "Each supporting document must be 5 MB or smaller.", variant: "destructive" })
+      return
+    }
     const documents = []
     for (const file of selectedFiles) {
       const uploadForm = new FormData()
       uploadForm.append("file", file)
       uploadForm.append("folder", "transport-supporting-documents")
       const uploadResponse = await fetch("/api/upload", { method: "POST", body: uploadForm })
-      if (!uploadResponse.ok) { toast({ title: "Document upload failed", description: `Unable to upload ${file.name}. Please try again.`, variant: "destructive" }); return }
+      if (!uploadResponse.ok) {
+        const errorBody = await uploadResponse.json().catch(() => null)
+        toast({ title: "Document upload failed", description: errorBody?.error ?? `Unable to upload ${file.name}. Please try again.`, variant: "destructive" })
+        return
+      }
       const uploaded = await uploadResponse.json()
       documents.push({ name: file.name, url: uploaded.url, type: file.type, size: file.size })
     }
     const response = await fetch("/api/transport/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ purpose: form.get("purpose"), origin: form.get("origin"), destination: form.get("destination"), eventDate: form.get("eventDate"), passengerCount: form.get("passengerCount"), supportingDocuments: documents }) })
-    if (!response.ok) { toast({ title: "Unable to submit request", description: "Please check the details and try again.", variant: "destructive" }); return }
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => null)
+      toast({ title: "Unable to submit request", description: errorBody?.error ?? "The request could not be saved. Please try again.", variant: "destructive" })
+      return
+    }
     setRequestOpen(false)
     toast({ title: "Transport request submitted", description: "Your request has been added to the request register for Regional HR review." })
     router.push("/dashboard/transport/requests")

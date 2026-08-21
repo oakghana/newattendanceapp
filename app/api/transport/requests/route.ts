@@ -23,6 +23,7 @@ export async function POST(request: Request) {
 
   const { data, error } = await supabase.from("transport_requests").insert({
     requester_id: user.id,
+    request_type: "regional_transport",
     purpose,
     origin,
     destination,
