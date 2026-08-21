@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowUpRight, Bus, FileText, IdCard, Inbox, Plus, ShieldCheck } from "lucide-react"
+import { ArrowUpRight, Bus, FileText, IdCard, Inbox, Paperclip, Plus, ShieldCheck } from "lucide-react"
 import Link from "next/link"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -35,7 +35,18 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
   async function handleRequestSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    const response = await fetch("/api/transport/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ purpose: form.get("purpose"), origin: form.get("origin"), destination: form.get("destination"), eventDate: form.get("eventDate"), passengerCount: form.get("passengerCount") }) })
+    const selectedFiles = Array.from(form.getAll("supportingDocuments")).filter((value): value is File => value instanceof File && value.size > 0)
+    const documents = []
+    for (const file of selectedFiles) {
+      const uploadForm = new FormData()
+      uploadForm.append("file", file)
+      uploadForm.append("folder", "transport-supporting-documents")
+      const uploadResponse = await fetch("/api/upload", { method: "POST", body: uploadForm })
+      if (!uploadResponse.ok) { toast({ title: "Document upload failed", description: `Unable to upload ${file.name}. Please try again.`, variant: "destructive" }); return }
+      const uploaded = await uploadResponse.json()
+      documents.push({ name: file.name, url: uploaded.url, type: file.type, size: file.size })
+    }
+    const response = await fetch("/api/transport/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ purpose: form.get("purpose"), origin: form.get("origin"), destination: form.get("destination"), eventDate: form.get("eventDate"), passengerCount: form.get("passengerCount"), supportingDocuments: documents }) })
     if (!response.ok) { toast({ title: "Unable to submit request", description: "Please check the details and try again.", variant: "destructive" }); return }
     setRequestOpen(false)
     toast({ title: "Transport request submitted", description: "Your request has been added to the request register for Regional HR review." })
@@ -90,7 +101,7 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-4 pt-0">
-              <Button size="sm" variant={workspaceCanWrite ? "default" : "outline"} disabled={!workspaceCanWrite} onClick={title === "Transport requests" && workspaceCanWrite ? openRequestForm : undefined} title={workspaceCanWrite ? "Open transport workspace" : "Read-only access"}>Open workspace</Button>
+              {title === "Transport requests" ? <Button size="sm" variant="default" asChild><Link href="/dashboard/transport/requests">View all requests</Link></Button> : <Button size="sm" variant={workspaceCanWrite ? "default" : "outline"} disabled={!workspaceCanWrite} onClick={undefined} title={workspaceCanWrite ? "Open transport workspace" : "Read-only access"}>Open workspace</Button>}
             </CardContent>
           </Card>
           )
@@ -107,6 +118,7 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
               <div className="grid gap-2"><Label htmlFor="transport-purpose">Purpose</Label><Input id="transport-purpose" name="purpose" required placeholder="Staff bus, official travel, funeral, or programme" /></div>
               <div className="grid gap-2 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="transport-origin">Origin</Label><Input id="transport-origin" name="origin" required placeholder="Departure location" /></div><div className="grid gap-2"><Label htmlFor="transport-destination">Destination</Label><Input id="transport-destination" name="destination" required placeholder="Destination" /></div></div>
               <div className="grid gap-2 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="transport-date">Event date</Label><Input id="transport-date" name="eventDate" required type="date" /></div><div className="grid gap-2"><Label htmlFor="transport-passengers">Passengers</Label><Input id="transport-passengers" name="passengerCount" required min="1" type="number" /></div></div>
+              <div className="grid gap-2"><Label htmlFor="transport-documents">Supporting documents</Label><div className="flex items-center gap-2 rounded-md border border-dashed p-3"><Paperclip className="size-4 text-muted-foreground" /><Input id="transport-documents" name="supportingDocuments" type="file" multiple accept="application/pdf,image/jpeg,image/png" className="cursor-pointer border-0 p-0 shadow-none" /></div><p className="text-xs text-muted-foreground">Attach approval letters, programme schedules, quotations, or other evidence. PDF, JPG, and PNG up to 5 MB each.</p></div>
             <DialogFooter><Button type="button" variant="outline" onClick={() => setRequestOpen(false)}>Cancel</Button><Button type="submit">Submit request</Button></DialogFooter>
           </form>
         </DialogContent>
