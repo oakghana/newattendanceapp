@@ -29,6 +29,8 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
   const isRegionalHr = ["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isDriver = ["driver", "drivers"].includes(normalizedRole)
   const canManage = ["admin", "administrator", "it_admin", "it_admin_role", "regional_manager"].includes(normalizedRole)
+  const isDepartmentHead = normalizedRole === "department_head"
+  const isTransportManager = normalizedRole === "transport_manager"
   const canCreateRequest = isRegionalHr
   const isRegionalManager = isRegionalManagerRole(normalizedRole)
   const canEditDriverLicense = isRegionalHr
@@ -87,7 +89,7 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
           <Badge variant="secondary" className="w-fit">Transport operations</Badge>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" asChild><Link href="/dashboard/transport/requests"><Inbox data-icon="inline-start" /> View requests</Link></Button>
+          <Button variant="outline" asChild><Link href="/dashboard/transport/requests"><Inbox data-icon="inline-start" /> View requests</Link></Button>{(isDepartmentHead || isTransportManager) && <Button variant="outline" asChild><Link href="/dashboard/transport/nonregional"><Inbox data-icon="inline-start" /> Non-regional requisitions</Link></Button>}
           {canCreateRequest && <Button onClick={openRequestForm} title="Create a regional transport request">
             <Plus data-icon="inline-start" /> New transport request
           </Button>}

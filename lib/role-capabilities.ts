@@ -22,12 +22,22 @@ export function isRegionalManagerRole(role?: string | null): boolean {
   return normalizeAppRole(role) === "regional_manager"
 }
 
+export const NON_REGIONAL_TRANSPORT_LOCATIONS = ["QCC Head Office", "Awutu Stores", "Nsawam Archives"] as const
+
+export function isTransportManagerRole(role?: string | null): boolean {
+  return normalizeAppRole(role) === "transport_manager"
+}
+
+export function isDepartmentHeadRole(role?: string | null): boolean {
+  return normalizeAppRole(role) === "department_head"
+}
+
 export function canManageTransport(role?: string | null): boolean {
-  return isRegionalHrRole(role) || isRegionalManagerRole(role) || isAdminRole(role)
+  return isRegionalHrRole(role) || isRegionalManagerRole(role) || isTransportManagerRole(role) || isAdminRole(role)
 }
 
 export function canCreateTransportRequest(role?: string | null): boolean {
-  return isRegionalHrRole(role)
+  return isRegionalHrRole(role) || isDepartmentHeadRole(role)
 }
 
 export function isRegionalHrRole(role?: string | null): boolean {
