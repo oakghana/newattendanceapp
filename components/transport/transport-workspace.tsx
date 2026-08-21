@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowUpRight, Bus, FileText, IdCard, Inbox, Paperclip, Plus, ShieldCheck } from "lucide-react"
+import { ArrowRight, ArrowUpRight, Bus, CalendarDays, Clock3, FileSignature, FileText, IdCard, Inbox, MapPin, Paperclip, Plus, ShieldCheck } from "lucide-react"
 import Link from "next/link"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -20,12 +20,19 @@ const modules = [
   { title: "Memo templates", description: "Prepare QCC/COCOBOD request, approval, rejection, and response memo formats.", icon: FileText, href: "/dashboard/transport/templates" },
 ]
 
+type QueueRow = { id: string; purpose: string; origin: string; destination: string; event_date: string | null; reference_number: string | null }
+
 type TransportWorkspaceProps = {
   role: string
+  pendingCount?: number
+  totalCount?: number
+  queueRows?: QueueRow[]
 }
 
-export function TransportWorkspace({ role }: TransportWorkspaceProps) {
+export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, queueRows = [] }: TransportWorkspaceProps) {
   const normalizedRole = role.toLowerCase().trim().replace(/[\s-]+/g, "_")
+  const isManagingDirector = normalizedRole === "managing_director"
+  const isHrExecutive = normalizedRole === "hr_executive" || normalizedRole === "hr_executive_officer"
   const isRegionalHr = ["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isDriver = ["driver", "drivers"].includes(normalizedRole)
   const canManage = ["admin", "administrator", "it_admin", "it_admin_role", "regional_manager"].includes(normalizedRole)
@@ -74,6 +81,69 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
     setRequestOpen(true)
   }
 
+  if (isManagingDirector || isHrExecutive) {
+    const accentClass = isManagingDirector ? "text-primary" : "text-accent"
+    const accentBg = isManagingDirector ? "bg-primary/10" : "bg-accent/10"
+    const accentBorder = isManagingDirector ? "border-primary/20" : "border-accent/25"
+    const accentTint = isManagingDirector ? "bg-primary/[0.03]" : "bg-accent/[0.04]"
+    const Icon = isManagingDirector ? ShieldCheck : FileSignature
+    const officeLabel = isManagingDirector ? "Office of the Managing Director" : "HR Executive Office"
+    const deskTitle = isManagingDirector ? "Transport approval desk" : "Memo signing desk"
+    const deskDescription = isManagingDirector ? "Endorsed regional transport requests await your review before they move to HR Executive for the response memo." : "Approved requests are ready for memo drafting, preview, and your signature before HR Records assigns the reference."
+    const actionLabel = isManagingDirector ? "Open approval desk" : "Open signing desk"
+    const pendingLabel = isManagingDirector ? "Awaiting your approval" : "Awaiting your signature"
+
+    return (
+      <div className="flex min-w-0 flex-col gap-6">
+        <header className={`overflow-hidden rounded-xl border ${accentBorder} ${accentTint}`}>
+          <div className="flex flex-col gap-5 border-b border-border/60 bg-background/70 p-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-4">
+              <div className={`flex size-12 shrink-0 items-center justify-center rounded-xl ${accentBg} ${accentClass}`}><Icon className="size-6" /></div>
+              <div>
+                <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${accentClass}`}>{officeLabel}</p>
+                <h1 className="mt-1 text-3xl font-semibold tracking-tight text-balance">{deskTitle}</h1>
+                <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">{deskDescription}</p>
+              </div>
+            </div>
+            <Button size="lg" asChild><Link href="/dashboard/transport/requests"><Icon data-icon="inline-start" /> {actionLabel}</Link></Button>
+          </div>
+          <div className="grid gap-px bg-border/60 sm:grid-cols-3">
+            <div className="flex items-center gap-3 bg-background p-5"><div className={`flex size-9 items-center justify-center rounded-lg ${accentBg} ${accentClass}`}><Clock3 className="size-4" /></div><div><p className="text-2xl font-semibold tracking-tight">{pendingCount}</p><p className="text-xs text-muted-foreground">{pendingLabel}</p></div></div>
+            <div className="flex items-center gap-3 bg-background p-5"><div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground"><Inbox className="size-4" /></div><div><p className="text-2xl font-semibold tracking-tight">{totalCount}</p><p className="text-xs text-muted-foreground">Total requests in the register</p></div></div>
+            <div className="flex items-center gap-3 bg-background p-5"><div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground"><ShieldCheck className="size-4" /></div><div><p className="text-sm font-semibold">{isManagingDirector ? "Endorsed by regional management" : "Approved by the Managing Director"}</p><p className="text-xs text-muted-foreground">Current stage entering your queue</p></div></div>
+          </div>
+        </header>
+
+        <Card className="overflow-hidden">
+          <CardHeader className="flex-row items-center justify-between gap-3 border-b bg-muted/20">
+            <div><CardTitle>Priority queue</CardTitle><CardDescription>The most recent requests waiting on your action.</CardDescription></div>
+            <Button variant="outline" size="sm" asChild><Link href="/dashboard/transport/requests">View all<ArrowRight data-icon="inline-end" /></Link></Button>
+          </CardHeader>
+          <CardContent className="p-0">
+            {queueRows.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 p-10 text-center"><div className={`flex size-10 items-center justify-center rounded-full ${accentBg} ${accentClass}`}><Icon className="size-5" /></div><p className="text-sm font-medium">Nothing waiting on you right now</p><p className="text-sm text-muted-foreground">New requests reaching your stage will appear here first.</p></div>
+            ) : (
+              <ul className="divide-y">
+                {queueRows.map((row) => (
+                  <li key={row.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-1">
+                      <p className="font-medium">{row.purpose}</p>
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1"><MapPin className="size-3.5" /> {row.origin} to {row.destination}</span>
+                        {row.event_date && <span className="flex items-center gap-1"><CalendarDays className="size-3.5" /> {row.event_date}</span>}
+                        {row.reference_number && <Badge variant="secondary">{row.reference_number}</Badge>}
+                      </div>
+                    </div>
+                    <Button variant="outline" size="sm" asChild><Link href="/dashboard/transport/requests">Review<ArrowRight data-icon="inline-end" /></Link></Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -89,7 +159,7 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
           <Badge variant="secondary" className="w-fit">Transport operations</Badge>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" asChild><Link href="/dashboard/transport/requests"><Inbox data-icon="inline-start" /> View requests</Link></Button>{(normalizedRole === "managing_director" || normalizedRole === "hr_executive" || normalizedRole === "hr_executive_officer") && <Button asChild><Link href="/dashboard/transport/requests"><ShieldCheck data-icon="inline-start" /> Approval desk</Link></Button>}{(isDepartmentHead || isTransportManager) && <Button variant="outline" asChild><Link href="/dashboard/transport/nonregional"><Inbox data-icon="inline-start" /> Non-regional requisitions</Link></Button>}
+          <Button variant="outline" asChild><Link href="/dashboard/transport/requests"><Inbox data-icon="inline-start" /> View requests</Link></Button>{(isDepartmentHead || isTransportManager) && <Button variant="outline" asChild><Link href="/dashboard/transport/nonregional"><Inbox data-icon="inline-start" /> Non-regional requisitions</Link></Button>}
           {canCreateRequest && <Button onClick={openRequestForm} title="Create a regional transport request">
             <Plus data-icon="inline-start" /> New transport request
           </Button>}

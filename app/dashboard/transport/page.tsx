@@ -21,5 +21,19 @@ export default async function TransportPage() {
   const normalizedRole = profile?.role ? normalizeRole(profile.role) : ""
   if (!profile || (!TRANSPORT_ROLES.has(normalizedRole) && !canManageTransport(profile.role))) redirect("/dashboard")
 
-  return <TransportWorkspace role={profile.role ?? normalizedRole} />
+  const isManagingDirector = normalizedRole === "managing_director"
+  const isHrExecutive = normalizedRole === "hr_executive" || normalizedRole === "hr_executive_officer"
+  let pendingCount = 0
+  let totalCount = 0
+  let queueRows: { id: string; purpose: string; origin: string; destination: string; event_date: string | null; reference_number: string | null }[] = []
+  if (isManagingDirector || isHrExecutive) {
+    const stage = isManagingDirector ? "managing_director_approval" : "hr_executive_signing"
+    const { count: total } = await supabase.from("transport_requests").select("id", { count: "exact", head: true })
+    const { data: pendingRows, count: pending } = await supabase.from("transport_requests").select("id, purpose, origin, destination, event_date, reference_number", { count: "exact" }).eq("workflow_stage", stage).order("created_at", { ascending: false }).limit(4)
+    totalCount = total ?? 0
+    pendingCount = pending ?? 0
+    queueRows = pendingRows ?? []
+  }
+
+  return <TransportWorkspace role={profile.role ?? normalizedRole} pendingCount={pendingCount} totalCount={totalCount} queueRows={queueRows} />
 }
