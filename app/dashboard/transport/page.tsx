@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { TransportWorkspace } from "@/components/transport/transport-workspace"
 import { createClient } from "@/lib/supabase/server"
+import { canManageTransport } from "@/lib/role-capabilities"
 
 const TRANSPORT_ROLES = new Set([
   "admin", "administrator", "it-admin", "it_admin", "driver", "regional_hr", "regional hr", "regional_hr_office", "regional hr office", "regional_hr_officer", "regional hr officer", "regional_manager", "regional manager",
@@ -18,7 +19,7 @@ export default async function TransportPage() {
 
   const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
   const normalizedRole = profile?.role ? normalizeRole(profile.role) : ""
-  if (!profile || !TRANSPORT_ROLES.has(normalizedRole)) redirect("/dashboard")
+  if (!profile || (!TRANSPORT_ROLES.has(normalizedRole) && !canManageTransport(profile.role))) redirect("/dashboard")
 
-  return <TransportWorkspace role={normalizedRole} />
+  return <TransportWorkspace role={profile.role ?? normalizedRole} />
 }

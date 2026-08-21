@@ -14,7 +14,7 @@ export default async function TransportRequestsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
   const { data: profile } = await supabase.from("user_profiles").select("role, region_id, district_id").eq("id", user.id).single()
-  if (!profile || !roles.has(normalize(profile.role ?? ""))) redirect("/dashboard")
+  if (!profile || !profile.role || (!roles.has(normalize(profile.role)) && !isRegionalManagerRole(profile.role))) redirect("/dashboard")
   const canCreate = isRegionalHrRole(profile.role)
   const canAct = isRegionalManagerRole(profile.role)
   let requestsQuery = supabase.from("transport_requests").select("id, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, assigned_district_id").order("created_at", { ascending: false }).limit(200)
