@@ -13,14 +13,23 @@ export default async function TransportRequestsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
-  const { data: profile } = await supabase.from("user_profiles").select("role, region_id, district_id").eq("id", user.id).single()
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("role, region_id, assigned_location_id, geofence_locations!user_profiles_assigned_location_id_fkey(district_id, districts(region_id))")
+    .eq("id", user.id)
+    .single()
   if (!profile || !profile.role || (!roles.has(normalize(profile.role)) && !isRegionalManagerRole(profile.role))) redirect("/dashboard")
   const canCreate = isRegionalHrRole(profile.role)
   const canAct = isRegionalManagerRole(profile.role)
-  let requestsQuery = supabase.from("transport_requests").select("id, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, assigned_district_id").order("created_at", { ascending: false }).limit(200)
+  const assignedLocation = profile.geofence_locations as { district_id?: string | null; districts?: { region_id?: string | null } | null } | null
+  const locationId = profile.assigned_location_id ?? null
+  const districtId = assignedLocation?.district_id ?? null
+  const regionId = profile.region_id ?? assignedLocation?.districts?.region_id ?? null
+  let requestsQuery = supabase.from("transport_requests").select("id, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id").order("created_at", { ascending: false }).limit(200)
   if (isRegionalManagerRole(profile.role)) {
-    if (profile.region_id) requestsQuery = requestsQuery.eq("assigned_region_id", profile.region_id)
-    if (profile.district_id) requestsQuery = requestsQuery.eq("assigned_district_id", profile.district_id)
+    if (locationId) requestsQuery = requestsQuery.or(`origin_location_id.eq.${locationId},origin_location_id.is.null`)
+    if (!locationId && districtId) requestsQuery = requestsQuery.eq("linked_district_id", districtId)
+    else if (!locationId && !districtId && regionId) requestsQuery = requestsQuery.eq("assigned_region_id", regionId)
   }
   const { data: requests } = await requestsQuery
 

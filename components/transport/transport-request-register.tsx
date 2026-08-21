@@ -12,7 +12,7 @@ export type TransportRequestRow = {
   id: string; purpose: string; origin: string; destination: string; event_date: string | null
   passenger_count: number; status: string | null; workflow_stage: string | null
   reference_number: string | null; supporting_documents: { name?: string; url?: string }[] | null
-  assigned_region_id?: string | null; assigned_district_id?: string | null
+  assigned_region_id?: string | null; linked_district_id?: string | null
 }
 
 const label = (value: string | null) => (value ?? "submitted").replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())
