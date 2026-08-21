@@ -1,6 +1,6 @@
 "use client"
 
-import { Bus, FileText, IdCard, Inbox, LockKeyhole, Plus, ShieldCheck } from "lucide-react"
+import { ArrowUpRight, Bus, FileText, IdCard, Inbox, Plus, ShieldCheck } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -24,48 +24,46 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
   const canCreateRequest = isRegionalHr
   const canEditDriverLicense = isDriver
   return (
-    <div className="flex min-w-0 flex-col gap-8">
-      <header className="flex flex-col gap-4 border-b pb-6 md:flex-row md:items-end md:justify-between">
+    <div className="flex min-w-0 flex-col gap-6">
+      <header className="flex flex-col gap-4 border-b pb-5 md:flex-row md:items-end md:justify-between">
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary"><Bus /></div>
+            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><Bus /></div>
             <div>
               <h1 className="text-3xl font-semibold tracking-tight text-balance">Transport Management</h1>
               <p className="text-muted-foreground leading-6">Manage regional transport requests, approvals, memos, and driver compliance.</p>
             </div>
           </div>
-          <Badge variant="outline" className="w-fit">Migration pending approval</Badge>
+          <Badge variant="secondary" className="w-fit">Transport operations</Badge>
         </div>
         <Button disabled={!canCreateRequest} title={canCreateRequest ? "Create a regional transport request" : "Only Regional HR can create transport requests"}>
           <Plus data-icon="inline-start" /> New transport request
         </Button>
       </header>
 
-      <Card className="border-amber-300/60 bg-amber-50/50">
-        <CardContent className="flex items-start gap-3 p-5 text-amber-950">
-          <LockKeyhole className="mt-0.5 shrink-0" />
-          <div className="flex flex-col gap-1">
-            <p className="font-medium">Safe rollout in progress</p>
-            <p className="text-sm leading-6">The transport screens are prepared without changing your existing database or current workflows. Requests and live queues will activate only after you review and approve the additive migration.</p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border bg-muted/30 p-3"><p className="text-xs font-medium text-muted-foreground">Request workflow</p><p className="mt-1 text-sm font-semibold">Regional HR led</p></div>
+        <div className="rounded-lg border bg-muted/30 p-3"><p className="text-xs font-medium text-muted-foreground">Approval chain</p><p className="mt-1 text-sm font-semibold">Regional to management</p></div>
+        <div className="rounded-lg border bg-muted/30 p-3"><p className="text-xs font-medium text-muted-foreground">Compliance</p><p className="mt-1 text-sm font-semibold">License monitoring</p></div>
+      </div>
 
       <section className="grid gap-4 md:grid-cols-2" aria-label="Transport modules">
         {modules.map(({ title, description, icon: Icon, href, editableFor }) => {
           const workspaceCanWrite = editableFor === "driver" ? canEditDriverLicense : title === "Transport requests" ? canCreateRequest : canManage
           return (
-          <Card key={title} className="transition-colors hover:border-primary/50">
-            <CardHeader>
+          <Card key={title} className="transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-sm">
+            <CardHeader className="gap-3 p-4">
               <div className="flex items-center justify-between gap-4">
-                <Icon className="text-primary" />
+                <div className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary"><Icon /></div>
                 <ShieldCheck className="text-muted-foreground" />
               </div>
-              <CardTitle>{title}</CardTitle>
-              <CardDescription className="leading-6">{description}</CardDescription>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-1"><CardTitle className="text-base">{title}</CardTitle><CardDescription className="text-sm leading-5">{description}</CardDescription></div>
+                <ArrowUpRight className="mt-0.5 shrink-0 text-muted-foreground" />
+              </div>
             </CardHeader>
-            <CardContent>
-              <Button variant="outline" disabled={!workspaceCanWrite} title={workspaceCanWrite ? "Open transport workspace" : "Read-only access"}>Open workspace</Button>
+            <CardContent className="px-4 pb-4 pt-0">
+              <Button size="sm" variant={workspaceCanWrite ? "default" : "outline"} disabled={!workspaceCanWrite} title={workspaceCanWrite ? "Open transport workspace" : "Read-only access"}>Open workspace</Button>
             </CardContent>
           </Card>
           )
