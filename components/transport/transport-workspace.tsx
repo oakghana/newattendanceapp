@@ -15,7 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 const modules = [
   { title: "Transport requests", description: "Create and track staff bus, official travel, funeral, and programme requests.", icon: Bus, href: "/dashboard/transport" },
-  { title: "Approval queues", description: "Review requests routed to Regional HR, Regional Managers, HR Records, and management.", icon: Inbox, href: "/dashboard/transport/approvals" },
+  { title: "Approval queues", description: "Review requests routed to Regional HR, Regional Managers, HR Records, and management.", icon: Inbox, href: "/dashboard/transport/requests" },
   { title: "Driver licenses", description: "Monitor expiry dates and keep expired or suspended drivers out of assignments.", icon: IdCard, href: "/dashboard/transport/drivers", editableFor: "driver" },
   { title: "Memo templates", description: "Prepare QCC/COCOBOD request, approval, rejection, and response memo formats.", icon: FileText, href: "/dashboard/transport/templates" },
 ]
@@ -28,7 +28,7 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
   const normalizedRole = role.toLowerCase().trim().replace(/[\s-]+/g, "_")
   const isRegionalHr = ["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isDriver = ["driver", "drivers"].includes(normalizedRole)
-  const canManage = ["admin", "administrator", "it_admin", "it_admin_role"].includes(normalizedRole)
+  const canManage = ["admin", "administrator", "it_admin", "it_admin_role", "regional_manager"].includes(normalizedRole)
   const canCreateRequest = isRegionalHr
   const isRegionalManager = isRegionalManagerRole(normalizedRole)
   const canEditDriverLicense = isRegionalHr
