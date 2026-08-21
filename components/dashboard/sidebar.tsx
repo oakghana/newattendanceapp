@@ -47,6 +47,7 @@ import {
   Mail,
   Stamp,
   ScrollText,
+  Bus,
 } from "lucide-react"
 import Image from "next/image"
 import { canAccessMemoConsole, normalizeAppRole } from "@/lib/role-capabilities"
@@ -186,6 +187,20 @@ const navigationItems = [
     icon: MapPin,
     roles: ["admin", "it-admin"],
     category: "admin",
+  },
+  {
+    title: "Transport Management",
+    href: "/dashboard/transport",
+    icon: Bus,
+    roles: ["admin", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "director_hr", "manager_hr"],
+    category: "admin",
+    subItems: [
+      { title: "Requests", href: "/dashboard/transport" },
+      { title: "My Approvals", href: "/dashboard/transport/approvals" },
+      { title: "Driver Licenses", href: "/dashboard/transport/drivers" },
+      { title: "Memo Templates", href: "/dashboard/transport/templates" },
+      { title: "Distribution Archive", href: "/dashboard/transport/archive" },
+    ],
   },
 
   {
