@@ -3,6 +3,7 @@ import { ArrowLeft, Bus, Plus } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { TransportRequestRegister } from "@/components/transport/transport-request-register"
+import { TransportApprovalDashboard } from "@/components/transport/transport-approval-dashboard"
 import { createClient } from "@/lib/supabase/server"
 import { isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 
@@ -41,7 +42,11 @@ export default async function TransportRequestsPage() {
   const signatures = new Map((signerProfiles ?? []).map((signer) => [signer.id, signer.signature_data_url]))
   const requestsWithSignatures = (requests ?? []).map((request) => ({ ...request, regional_manager_signature_data_url: request.regional_manager_signer_id ? signatures.get(request.regional_manager_signer_id) ?? null : null }))
 
+  const pendingCount = requests?.filter((request) => canManagingDirector ? request.workflow_stage === "managing_director_approval" : canHrExecutive ? request.workflow_stage === "hr_executive_signing" : false).length ?? 0
+
   return <main className="flex flex-col gap-6">
+    {canManagingDirector && <TransportApprovalDashboard role="managing_director" pendingCount={pendingCount} totalCount={requests?.length ?? 0} />}
+    {canHrExecutive && <TransportApprovalDashboard role="hr_executive" pendingCount={pendingCount} totalCount={requests?.length ?? 0} />}
     <header className="flex flex-col gap-5 border-b pb-6 md:flex-row md:items-end md:justify-between"><div className="flex items-start gap-3"><div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Bus /></div><div><p className="text-sm font-medium text-primary">Transport Management</p><h1 className="text-3xl font-semibold tracking-tight text-balance">Transport request register</h1><p className="mt-1 max-w-2xl text-muted-foreground leading-6">Track every request from submission through Regional HR review, approval, and fulfilment.</p></div></div><div className="flex flex-wrap gap-2"><Button variant="outline" asChild><Link href="/dashboard/transport"><ArrowLeft data-icon="inline-start" /> Back to transport</Link></Button>{canCreate && <Button asChild><Link href="/dashboard/transport"><Plus data-icon="inline-start" /> New transport request</Link></Button>}</div></header>
     <TransportRequestRegister rows={requestsWithSignatures} canCreate={canCreate} canAct={canAct} canHrRecords={canHrRecords} canManagingDirector={canManagingDirector} canHrExecutive={canHrExecutive} />
   </main>

@@ -89,7 +89,7 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
           <Badge variant="secondary" className="w-fit">Transport operations</Badge>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" asChild><Link href="/dashboard/transport/requests"><Inbox data-icon="inline-start" /> View requests</Link></Button>{(isDepartmentHead || isTransportManager) && <Button variant="outline" asChild><Link href="/dashboard/transport/nonregional"><Inbox data-icon="inline-start" /> Non-regional requisitions</Link></Button>}
+          <Button variant="outline" asChild><Link href="/dashboard/transport/requests"><Inbox data-icon="inline-start" /> View requests</Link></Button>{(normalizedRole === "managing_director" || normalizedRole === "hr_executive" || normalizedRole === "hr_executive_officer") && <Button asChild><Link href="/dashboard/transport/requests"><ShieldCheck data-icon="inline-start" /> Approval desk</Link></Button>}{(isDepartmentHead || isTransportManager) && <Button variant="outline" asChild><Link href="/dashboard/transport/nonregional"><Inbox data-icon="inline-start" /> Non-regional requisitions</Link></Button>}
           {canCreateRequest && <Button onClick={openRequestForm} title="Create a regional transport request">
             <Plus data-icon="inline-start" /> New transport request
           </Button>}
