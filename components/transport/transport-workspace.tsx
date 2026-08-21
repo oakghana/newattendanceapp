@@ -1,6 +1,10 @@
 "use client"
 
+import { useState } from "react"
 import { ArrowUpRight, Bus, FileText, IdCard, Inbox, Plus, ShieldCheck } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -23,6 +27,14 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
   const canManage = ["admin", "administrator", "it_admin", "it_admin_role"].includes(normalizedRole)
   const canCreateRequest = isRegionalHr
   const canEditDriverLicense = isDriver
+  const [requestOpen, setRequestOpen] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+
+  function openRequestForm() {
+    setSubmitted(false)
+    setRequestOpen(true)
+  }
+
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <header className="flex flex-col gap-4 border-b pb-5 md:flex-row md:items-end md:justify-between">
@@ -36,7 +48,7 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
           </div>
           <Badge variant="secondary" className="w-fit">Transport operations</Badge>
         </div>
-        <Button disabled={!canCreateRequest} title={canCreateRequest ? "Create a regional transport request" : "Only Regional HR can create transport requests"}>
+        <Button disabled={!canCreateRequest} onClick={openRequestForm} title={canCreateRequest ? "Create a regional transport request" : "Only Regional HR can create transport requests"}>
           <Plus data-icon="inline-start" /> New transport request
         </Button>
       </header>
@@ -63,12 +75,33 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-4 pt-0">
-              <Button size="sm" variant={workspaceCanWrite ? "default" : "outline"} disabled={!workspaceCanWrite} title={workspaceCanWrite ? "Open transport workspace" : "Read-only access"}>Open workspace</Button>
+              <Button size="sm" variant={workspaceCanWrite ? "default" : "outline"} disabled={!workspaceCanWrite} onClick={title === "Transport requests" && workspaceCanWrite ? openRequestForm : undefined} title={workspaceCanWrite ? "Open transport workspace" : "Read-only access"}>Open workspace</Button>
             </CardContent>
           </Card>
           )
         })}
       </section>
+
+      <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New transport request</DialogTitle>
+            <DialogDescription>Capture the regional transport details for review and routing.</DialogDescription>
+          </DialogHeader>
+          {submitted ? (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm leading-6">
+              Request details captured. The request is ready for Regional HR review and memo reference entry.
+            </div>
+          ) : (
+            <form className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); setSubmitted(true) }}>
+              <div className="grid gap-2"><Label htmlFor="transport-purpose">Purpose</Label><Input id="transport-purpose" required placeholder="Staff bus, official travel, funeral, or programme" /></div>
+              <div className="grid gap-2 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="transport-origin">Origin</Label><Input id="transport-origin" required placeholder="Departure location" /></div><div className="grid gap-2"><Label htmlFor="transport-destination">Destination</Label><Input id="transport-destination" required placeholder="Destination" /></div></div>
+              <div className="grid gap-2 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="transport-date">Event date</Label><Input id="transport-date" required type="date" /></div><div className="grid gap-2"><Label htmlFor="transport-passengers">Passengers</Label><Input id="transport-passengers" required min="1" type="number" /></div></div>
+              <DialogFooter><Button type="button" variant="outline" onClick={() => setRequestOpen(false)}>Cancel</Button><Button type="submit">Continue request</Button></DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
