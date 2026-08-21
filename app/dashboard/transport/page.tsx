@@ -25,15 +25,38 @@ export default async function TransportPage() {
   const isHrExecutive = normalizedRole === "hr_executive" || normalizedRole === "hr_executive_officer"
   let pendingCount = 0
   let totalCount = 0
-  let queueRows: { id: string; purpose: string; origin: string; destination: string; event_date: string | null; reference_number: string | null }[] = []
+  let regionalPendingCount = 0
+  let nonRegionalPendingCount = 0
+  let queueRows: { id: string; purpose: string; origin: string; destination: string; event_date: string | null; reference_number: string | null; request_type: "regional" | "nonregional" }[] = []
   if (isManagingDirector || isHrExecutive) {
     const stage = isManagingDirector ? "managing_director_approval" : "hr_executive_signing"
     const { count: total } = await supabase.from("transport_requests").select("id", { count: "exact", head: true })
     const { data: pendingRows, count: pending } = await supabase.from("transport_requests").select("id, purpose, origin, destination, event_date, reference_number", { count: "exact" }).eq("workflow_stage", stage).order("created_at", { ascending: false }).limit(4)
     totalCount = total ?? 0
-    pendingCount = pending ?? 0
-    queueRows = pendingRows ?? []
+    regionalPendingCount = pending ?? 0
+    queueRows = (pendingRows ?? []).map((row) => ({ ...row, request_type: "regional" as const }))
+
+    if (isManagingDirector) {
+      const { count: nonRegionalTotal } = await supabase.from("nonregional_transport_requisitions").select("id", { count: "exact", head: true })
+      const { data: nonRegionalRows, count: nonRegionalPending } = await supabase.from("nonregional_transport_requisitions").select("id, purpose, origin, destination, required_at, department, location", { count: "exact" }).eq("md_decision", "pending").order("created_at", { ascending: false }).limit(4)
+      totalCount += nonRegionalTotal ?? 0
+      nonRegionalPendingCount = nonRegionalPending ?? 0
+      queueRows = [
+        ...queueRows,
+        ...(nonRegionalRows ?? []).map((row) => ({ id: row.id, purpose: row.purpose, origin: row.origin, destination: row.destination, event_date: row.required_at, reference_number: `${row.department} · ${row.location}`, request_type: "nonregional" as const })),
+      ]
+    }
+    pendingCount = regionalPendingCount + nonRegionalPendingCount
   }
 
-  return <TransportWorkspace role={profile.role ?? normalizedRole} pendingCount={pendingCount} totalCount={totalCount} queueRows={queueRows} />
+  return (
+    <TransportWorkspace
+      role={profile.role ?? normalizedRole}
+      pendingCount={pendingCount}
+      totalCount={totalCount}
+      queueRows={queueRows}
+      regionalPendingCount={regionalPendingCount}
+      nonRegionalPendingCount={nonRegionalPendingCount}
+    />
+  )
 }

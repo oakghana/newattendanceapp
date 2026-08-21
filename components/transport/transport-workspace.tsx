@@ -20,16 +20,18 @@ const modules = [
   { title: "Memo templates", description: "Prepare QCC/COCOBOD request, approval, rejection, and response memo formats.", icon: FileText, href: "/dashboard/transport/templates" },
 ]
 
-type QueueRow = { id: string; purpose: string; origin: string; destination: string; event_date: string | null; reference_number: string | null }
+type QueueRow = { id: string; purpose: string; origin: string; destination: string; event_date: string | null; reference_number: string | null; request_type?: "regional" | "nonregional" }
 
 type TransportWorkspaceProps = {
   role: string
   pendingCount?: number
   totalCount?: number
   queueRows?: QueueRow[]
+  regionalPendingCount?: number
+  nonRegionalPendingCount?: number
 }
 
-export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, queueRows = [] }: TransportWorkspaceProps) {
+export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, queueRows = [], regionalPendingCount = 0, nonRegionalPendingCount = 0 }: TransportWorkspaceProps) {
   const normalizedRole = role.toLowerCase().trim().replace(/[\s-]+/g, "_")
   const isManagingDirector = normalizedRole === "managing_director"
   const isHrExecutive = normalizedRole === "hr_executive" || normalizedRole === "hr_executive_officer"
