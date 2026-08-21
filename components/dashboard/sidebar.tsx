@@ -192,7 +192,7 @@ const navigationItems = [
     title: "Transport Management",
     href: "/dashboard/transport",
     icon: Bus,
-    roles: ["admin", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "director_hr", "manager_hr"],
+    roles: ["admin", "administrator", "it-admin", "it_admin", "driver", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "director_hr", "manager_hr"],
     category: "admin",
     subItems: [
       { title: "Requests", href: "/dashboard/transport" },
@@ -517,6 +517,11 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
       title: "Staff & Access",
       icon: Users,
       hrefs: ["/dashboard/staff", "/dashboard/staff-activation", "/dashboard/data-management", "/dashboard/locations"],
+    },
+    {
+      title: "Transport Management",
+      icon: Bus,
+      hrefs: ["/dashboard/transport", "/dashboard/transport/approvals", "/dashboard/transport/drivers", "/dashboard/transport/templates", "/dashboard/transport/archive"],
     },
     {
       title: "Security & System",
