@@ -12,5 +12,5 @@ export default async function DriverLicensesPage() {
   let driversQuery = supabase.from("transport_drivers").select("*").order("expiry_date")
   if ((isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role)) && profile.region_id) driversQuery = driversQuery.eq("assigned_region_id", profile.region_id)
   const { data: drivers } = await driversQuery
-  return <DriverLicenseWorkspace initialDrivers={drivers ?? []} canVerify={isRegionalHrRole(profile.role)} canEndorse={isRegionalManagerRole(profile.role)} />
+  return <DriverLicenseWorkspace initialDrivers={drivers ?? []} canVerify={isRegionalHrRole(profile.role)} />
 }

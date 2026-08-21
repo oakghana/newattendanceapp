@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   const passengerCount = Number(body.passengerCount)
   const supportingDocuments = Array.isArray(body.supportingDocuments) ? body.supportingDocuments.slice(0, 10).map((document: unknown) => { const item = document as Record<string, unknown>; return { name: String(item.name ?? "supporting-document"), url: String(item.url ?? ""), type: String(item.type ?? "application/octet-stream"), size: Number(item.size ?? 0) } }).filter((document: { url: string }) => document.url) : []
   if (!purpose || !origin || !destination || !eventDate || !Number.isInteger(passengerCount) || passengerCount < 1) return NextResponse.json({ error: "Complete all required request details." }, { status: 400 })
-  const { data, error } = await supabase.from("transport_requests").insert({ requester_id: user.id, request_type: "regional_transport", purpose, origin, destination, event_date: eventDate, passenger_count: passengerCount, status: "submitted", workflow_stage: "regional_hr_review", supporting_documents: supportingDocuments }).select("id").single()
+  const { data, error } = await supabase.from("transport_requests").insert({ requester_id: user.id, request_type: "regional_transport", purpose, origin, destination, event_date: eventDate, passenger_count: passengerCount, status: "submitted", workflow_stage: "regional_manager_endorsement", supporting_documents: supportingDocuments }).select("id").single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ id: data.id }, { status: 201 })
 }
@@ -34,8 +34,13 @@ export async function PATCH(request: Request) {
   if (!requestId) return NextResponse.json({ error: "A request id is required." }, { status: 400 })
   const { data: transportRequest } = await supabase.from("transport_requests").select("id, assigned_region_id, workflow_stage").eq("id", requestId).single()
   if (!transportRequest || transportRequest.assigned_region_id !== profile.region_id) return NextResponse.json({ error: "This request is outside your assigned region." }, { status: 403 })
-  const { error } = await supabase.from("transport_requests").update({ status: "endorsed", workflow_stage: "hr_records_review", updated_at: new Date().toISOString() }).eq("id", requestId)
-  if (error) return NextResponse.json({ error: "Unable to endorse this request." }, { status: 500 })
-  await supabase.from("transport_request_events").insert({ request_id: requestId, actor_id: user.id, action: "regional_manager_endorsed", from_stage: transportRequest.workflow_stage, to_stage: "hr_records_review", comment: String(body.comment ?? "Endorsed by Regional Manager for HR Records processing.") })
+  const decision = body.decision === "deny" ? "deny" : "endorse"
+  if (transportRequest.workflow_stage !== "regional_manager_endorsement") return NextResponse.json({ error: "This request is not awaiting Regional Manager action." }, { status: 409 })
+  const update = decision === "deny"
+    ? { status: "rejected", workflow_stage: "closed", updated_at: new Date().toISOString() }
+    : { status: "endorsed", workflow_stage: "hr_records_review", updated_at: new Date().toISOString() }
+  const { error } = await supabase.from("transport_requests").update(update).eq("id", requestId)
+  if (error) return NextResponse.json({ error: `Unable to ${decision} this request.` }, { status: 500 })
+  await supabase.from("transport_request_events").insert({ request_id: requestId, actor_id: user.id, action: decision === "deny" ? "regional_manager_denied" : "regional_manager_endorsed", from_stage: transportRequest.workflow_stage, to_stage: update.workflow_stage, comment: String(body.comment ?? (decision === "deny" ? "Denied by Regional Manager." : "Endorsed by Regional Manager for HR Records processing.")) })
   return NextResponse.json({ ok: true })
 }
