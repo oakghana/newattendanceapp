@@ -57,7 +57,7 @@ export async function PATCH(request: Request) {
     if (!inScope) return NextResponse.json({ error: "This request is outside your assigned office." }, { status: 403 })
     if (row.workflow_stage !== "regional_manager_endorsement" || !["endorse", "deny"].includes(decision)) return NextResponse.json({ error: "This request is not awaiting Regional Manager action." }, { status: 409 })
   } else if (isHrRecords) {
-    if (row.workflow_stage !== "hr_records_review" || !["preview_memo", "save_memo", "correct", "return_for_correction", "forward_to_md"].includes(decision)) return NextResponse.json({ error: "This request is not awaiting HR Records action." }, { status: 409 })
+    if (!["hr_records_review", "hr_records"].includes(row.workflow_stage) || !["preview_memo", "save_memo", "correct", "return_for_correction", "forward_to_md"].includes(decision)) return NextResponse.json({ error: "This request is not awaiting HR Records action." }, { status: 409 })
   } else if (isManagingDirector) {
     if (row.workflow_stage !== "managing_director_approval" || !["approve", "reject"].includes(decision)) return NextResponse.json({ error: "This request is not awaiting Managing Director action." }, { status: 409 })
   } else if (isHrExecutive) {
