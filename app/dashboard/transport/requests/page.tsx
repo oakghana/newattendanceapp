@@ -36,9 +36,13 @@ export default async function TransportRequestsPage() {
     else if (!locationId && !districtId && regionId) requestsQuery = requestsQuery.eq("assigned_region_id", regionId)
   }
   const { data: requests } = await requestsQuery
+  const signerIds = (requests ?? []).map((request) => request.regional_manager_signer_id).filter((id): id is string => Boolean(id))
+  const { data: signerProfiles } = signerIds.length ? await supabase.from("user_profiles").select("id, signature_data_url").in("id", signerIds) : { data: [] as { id: string; signature_data_url?: string | null }[] }
+  const signatures = new Map((signerProfiles ?? []).map((signer) => [signer.id, signer.signature_data_url]))
+  const requestsWithSignatures = (requests ?? []).map((request) => ({ ...request, regional_manager_signature_data_url: request.regional_manager_signer_id ? signatures.get(request.regional_manager_signer_id) ?? null : null }))
 
   return <main className="flex flex-col gap-6">
     <header className="flex flex-col gap-5 border-b pb-6 md:flex-row md:items-end md:justify-between"><div className="flex items-start gap-3"><div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Bus /></div><div><p className="text-sm font-medium text-primary">Transport Management</p><h1 className="text-3xl font-semibold tracking-tight text-balance">Transport request register</h1><p className="mt-1 max-w-2xl text-muted-foreground leading-6">Track every request from submission through Regional HR review, approval, and fulfilment.</p></div></div><div className="flex flex-wrap gap-2"><Button variant="outline" asChild><Link href="/dashboard/transport"><ArrowLeft data-icon="inline-start" /> Back to transport</Link></Button>{canCreate && <Button asChild><Link href="/dashboard/transport"><Plus data-icon="inline-start" /> New transport request</Link></Button>}</div></header>
-    <TransportRequestRegister rows={requests ?? []} canCreate={canCreate} canAct={canAct} canHrRecords={canHrRecords} canManagingDirector={canManagingDirector} canHrExecutive={canHrExecutive} />
+    <TransportRequestRegister rows={requestsWithSignatures} canCreate={canCreate} canAct={canAct} canHrRecords={canHrRecords} canManagingDirector={canManagingDirector} canHrExecutive={canHrExecutive} />
   </main>
 }
