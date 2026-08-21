@@ -29,7 +29,7 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
   const isDriver = ["driver", "drivers"].includes(normalizedRole)
   const canManage = ["admin", "administrator", "it_admin", "it_admin_role"].includes(normalizedRole)
   const canCreateRequest = isRegionalHr
-  const canEditDriverLicense = isDriver
+  const canEditDriverLicense = isRegionalHr || isDriver
   const [requestOpen, setRequestOpen] = useState(false)
   const router = useRouter()
   async function handleRequestSubmit(event: FormEvent<HTMLFormElement>) {
@@ -85,9 +85,9 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" asChild><Link href="/dashboard/transport/requests"><Inbox data-icon="inline-start" /> View requests</Link></Button>
-          <Button disabled={!canCreateRequest} onClick={openRequestForm} title={canCreateRequest ? "Create a regional transport request" : "Only Regional HR can create transport requests"}>
+          {canCreateRequest && <Button onClick={openRequestForm} title="Create a regional transport request">
             <Plus data-icon="inline-start" /> New transport request
-          </Button>
+          </Button>}
         </div>
       </header>
 
@@ -113,7 +113,7 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-4 pt-0">
-              {title === "Transport requests" ? <Button size="sm" variant="default" asChild><Link href="/dashboard/transport/requests">View all requests</Link></Button> : <Button size="sm" variant={workspaceCanWrite ? "default" : "outline"} disabled={!workspaceCanWrite} onClick={undefined} title={workspaceCanWrite ? "Open transport workspace" : "Read-only access"}>Open workspace</Button>}
+              {title === "Transport requests" ? <Button size="sm" variant="default" asChild><Link href="/dashboard/transport/requests">View all requests</Link></Button> : <Button size="sm" variant={workspaceCanWrite ? "default" : "outline"} disabled={!workspaceCanWrite} asChild={workspaceCanWrite} title={workspaceCanWrite ? "Open transport workspace" : "Read-only access"}>{workspaceCanWrite ? <Link href={href}>Open workspace</Link> : "Read-only access"}</Button>}
             </CardContent>
           </Card>
           )

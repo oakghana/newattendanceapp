@@ -5,6 +5,11 @@ export async function GET() {
   try {
     const supabase = await createClient()
 
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const { data: actor } = await supabase.from("user_profiles").select("role, is_active").eq("id", user.id).single()
+    if (!actor?.is_active || actor.role !== "admin") return NextResponse.json({ error: "Only active administrators can manage account activation." }, { status: 403 })
+
     const { data: staff, error } = await supabase
       .from("user_profiles")
       .select(`
@@ -44,6 +49,11 @@ export async function PATCH(request: NextRequest) {
   try {
     const { userId, activate } = await request.json()
     const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const { data: actor } = await supabase.from("user_profiles").select("role, is_active").eq("id", user.id).single()
+    if (!actor?.is_active || actor.role !== "admin") return NextResponse.json({ error: "Only active administrators can change account activation." }, { status: 403 })
+    if (typeof userId !== "string" || typeof activate !== "boolean") return NextResponse.json({ error: "Invalid activation request." }, { status: 400 })
 
     const { error: updateError } = await supabase
       .from("user_profiles")

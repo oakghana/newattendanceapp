@@ -12,6 +12,19 @@ export function normalizeAppRole(role?: string | null): string {
 export const REGIONAL_HR_ROLES = ["regional_hr"] as const
 export const HR_LEAVE_OFFICE_ROLES = ["hr_leave_office", "hr_office", "director_hr", "manager_hr"] as const
 export const ADMIN_ROLES = ["admin", "super_admin", "god"] as const
+export const ATTENDANCE_ONLY_ROLES = ["intern", "nsp"] as const
+
+export function isAttendanceOnlyRole(role?: string | null): boolean {
+  return ATTENDANCE_ONLY_ROLES.includes(normalizeAppRole(role) as (typeof ATTENDANCE_ONLY_ROLES)[number])
+}
+
+export function canManageTransport(role?: string | null): boolean {
+  return isRegionalHrRole(role) || isAdminRole(role)
+}
+
+export function canCreateTransportRequest(role?: string | null): boolean {
+  return isRegionalHrRole(role)
+}
 
 export function isRegionalHrRole(role?: string | null): boolean {
   return REGIONAL_HR_ROLES.includes(normalizeAppRole(role) as (typeof REGIONAL_HR_ROLES)[number])

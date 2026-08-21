@@ -5,6 +5,10 @@ export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const { data: profile } = await supabase.from("user_profiles").select("role, is_active").eq("id", user.id).single()
+  const role = String(profile?.role ?? "").toLowerCase().trim().replace(/[\s-]+/g, "_")
+  const regionalHrRoles = new Set(["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"])
+  if (!profile?.is_active || !regionalHrRoles.has(role)) return NextResponse.json({ error: "Only active Regional HR Office users can create transport requests." }, { status: 403 })
 
   const body = await request.json()
   const purpose = String(body.purpose ?? "").trim()

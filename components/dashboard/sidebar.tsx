@@ -50,7 +50,7 @@ import {
   Bus,
 } from "lucide-react"
 import Image from "next/image"
-import { canAccessMemoConsole, normalizeAppRole } from "@/lib/role-capabilities"
+import { canAccessMemoConsole, isAttendanceOnlyRole, normalizeAppRole } from "@/lib/role-capabilities"
 
 interface SidebarProps {
   user: {
@@ -444,6 +444,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
   const normalizedRole = normalizeAppRole(profile?.role)
   const effectiveRole = normalizedRole === "audit_staff" ? "staff" : normalizedRole
   const isItAdmin = effectiveRole === "it-admin"
+  const isAttendanceOnly = isAttendanceOnlyRole(effectiveRole)
 
   // A handful of "main" category items are intentionally restricted to specific
   // roles (e.g. Disbursement Confirmation is only for Accounts/Loan Office staff,
@@ -466,6 +467,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
   ])
 
   const filteredNavItems = allNavigationItems.filter((item) => {
+    if (isAttendanceOnly) return item.href === "/dashboard/attendance"
     // Disbursement confirmation belongs only to Accounts/Loan Office workflows.
     // Explicitly deny it for HR Records and HR Leave Office even if a legacy
     // "main" navigation fallback would otherwise make it visible.
