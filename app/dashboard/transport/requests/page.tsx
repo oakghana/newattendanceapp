@@ -4,7 +4,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { TransportRequestRegister } from "@/components/transport/transport-request-register"
 import { createClient } from "@/lib/supabase/server"
-import { isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
+import { isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 
 const roles = new Set(["admin", "administrator", "it_admin", "driver", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "director_hr", "manager_hr"])
 const normalize = (value: string) => value.toLowerCase().trim().replace(/[\s-]+/g, "_")
@@ -19,8 +19,11 @@ export default async function TransportRequestsPage() {
     .eq("id", user.id)
     .single()
   if (!profile || !profile.role || (!roles.has(normalize(profile.role)) && !isRegionalManagerRole(profile.role))) redirect("/dashboard")
+  const normalizedRole = normalizeAppRole(profile.role)
   const canCreate = isRegionalHrRole(profile.role)
   const canAct = isRegionalManagerRole(profile.role)
+  const canHrRecords = ["hr_records", "hr_records_officer", "hr_records_manager"].includes(normalizedRole)
+  const canManagingDirector = normalizedRole === "managing_director"
   const assignedLocation = profile.geofence_locations as { district_id?: string | null; districts?: { region_id?: string | null } | null } | null
   const locationId = profile.assigned_location_id ?? null
   const districtId = assignedLocation?.district_id ?? null
@@ -35,6 +38,6 @@ export default async function TransportRequestsPage() {
 
   return <main className="flex flex-col gap-6">
     <header className="flex flex-col gap-5 border-b pb-6 md:flex-row md:items-end md:justify-between"><div className="flex items-start gap-3"><div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Bus /></div><div><p className="text-sm font-medium text-primary">Transport Management</p><h1 className="text-3xl font-semibold tracking-tight text-balance">Transport request register</h1><p className="mt-1 max-w-2xl text-muted-foreground leading-6">Track every request from submission through Regional HR review, approval, and fulfilment.</p></div></div><div className="flex flex-wrap gap-2"><Button variant="outline" asChild><Link href="/dashboard/transport"><ArrowLeft data-icon="inline-start" /> Back to transport</Link></Button>{canCreate && <Button asChild><Link href="/dashboard/transport"><Plus data-icon="inline-start" /> New transport request</Link></Button>}</div></header>
-    <TransportRequestRegister rows={requests ?? []} canCreate={canCreate} canAct={canAct} />
+    <TransportRequestRegister rows={requests ?? []} canCreate={canCreate} canAct={canAct} canHrRecords={canHrRecords} canManagingDirector={canManagingDirector} />
   </main>
 }
