@@ -15,5 +15,5 @@ export default async function TransportPage() {
   const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
   if (!profile || !TRANSPORT_ROLES.has(profile.role)) redirect("/dashboard")
 
-  return <TransportWorkspace />
+  return <TransportWorkspace role={profile.role} />
 }

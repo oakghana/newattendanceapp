@@ -8,11 +8,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 const modules = [
   { title: "Transport requests", description: "Create and track staff bus, official travel, funeral, and programme requests.", icon: Bus, href: "/dashboard/transport" },
   { title: "Approval queues", description: "Review requests routed to Regional HR, Regional Managers, HR Records, and management.", icon: Inbox, href: "/dashboard/transport/approvals" },
-  { title: "Driver licenses", description: "Monitor expiry dates and keep expired or suspended drivers out of assignments.", icon: IdCard, href: "/dashboard/transport/drivers" },
+  { title: "Driver licenses", description: "Monitor expiry dates and keep expired or suspended drivers out of assignments.", icon: IdCard, href: "/dashboard/transport/drivers", editableFor: "driver" },
   { title: "Memo templates", description: "Prepare QCC/COCOBOD request, approval, rejection, and response memo formats.", icon: FileText, href: "/dashboard/transport/templates" },
 ]
 
-export function TransportWorkspace() {
+type TransportWorkspaceProps = {
+  role: string
+}
+
+export function TransportWorkspace({ role }: TransportWorkspaceProps) {
+  const normalizedRole = role.toLowerCase().trim().replace(/[\s-]+/g, "_")
+  const isRegionalHr = ["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
+  const isDriver = ["driver", "drivers"].includes(normalizedRole)
+  const canManage = ["admin", "administrator", "it_admin", "it_admin_role"].includes(normalizedRole)
+  const canCreateRequest = isRegionalHr
+  const canEditDriverLicense = isDriver
   return (
     <div className="flex min-w-0 flex-col gap-8">
       <header className="flex flex-col gap-4 border-b pb-6 md:flex-row md:items-end md:justify-between">
@@ -26,7 +36,7 @@ export function TransportWorkspace() {
           </div>
           <Badge variant="outline" className="w-fit">Migration pending approval</Badge>
         </div>
-        <Button disabled title="Available after the transport database migration is approved">
+        <Button disabled={!canCreateRequest} title={canCreateRequest ? "Create a regional transport request" : "Only Regional HR can create transport requests"}>
           <Plus data-icon="inline-start" /> New transport request
         </Button>
       </header>
@@ -42,7 +52,9 @@ export function TransportWorkspace() {
       </Card>
 
       <section className="grid gap-4 md:grid-cols-2" aria-label="Transport modules">
-        {modules.map(({ title, description, icon: Icon, href }) => (
+        {modules.map(({ title, description, icon: Icon, href, editableFor }) => {
+          const workspaceCanWrite = editableFor === "driver" ? canEditDriverLicense : title === "Transport requests" ? canCreateRequest : canManage
+          return (
           <Card key={title} className="transition-colors hover:border-primary/50">
             <CardHeader>
               <div className="flex items-center justify-between gap-4">
@@ -53,10 +65,11 @@ export function TransportWorkspace() {
               <CardDescription className="leading-6">{description}</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" disabled title="Available after the transport database migration is approved">Open workspace</Button>
+              <Button variant="outline" disabled={!workspaceCanWrite} title={workspaceCanWrite ? "Open transport workspace" : "Read-only access"}>Open workspace</Button>
             </CardContent>
           </Card>
-        ))}
+          )
+        })}
       </section>
     </div>
   )
