@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type FormEvent } from "react"
 import { ArrowUpRight, Bus, FileText, IdCard, Inbox, Plus, ShieldCheck } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { toast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -28,11 +29,17 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
   const canCreateRequest = isRegionalHr
   const canEditDriverLicense = isDriver
   const [requestOpen, setRequestOpen] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
-
   function openRequestForm() {
-    setSubmitted(false)
     setRequestOpen(true)
+  }
+
+  function handleRequestSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setRequestOpen(false)
+    toast({
+      title: "Transport request submitted",
+      description: "Your request has been sent to Regional HR for review and memo reference entry.",
+    })
   }
 
   return (
@@ -88,18 +95,12 @@ export function TransportWorkspace({ role }: TransportWorkspaceProps) {
             <DialogTitle>New transport request</DialogTitle>
             <DialogDescription>Capture the regional transport details for review and routing.</DialogDescription>
           </DialogHeader>
-          {submitted ? (
-            <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm leading-6">
-              Request details captured. The request is ready for Regional HR review and memo reference entry.
-            </div>
-          ) : (
-            <form className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); setSubmitted(true) }}>
+          <form className="flex flex-col gap-4" onSubmit={handleRequestSubmit}>
               <div className="grid gap-2"><Label htmlFor="transport-purpose">Purpose</Label><Input id="transport-purpose" required placeholder="Staff bus, official travel, funeral, or programme" /></div>
               <div className="grid gap-2 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="transport-origin">Origin</Label><Input id="transport-origin" required placeholder="Departure location" /></div><div className="grid gap-2"><Label htmlFor="transport-destination">Destination</Label><Input id="transport-destination" required placeholder="Destination" /></div></div>
               <div className="grid gap-2 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="transport-date">Event date</Label><Input id="transport-date" required type="date" /></div><div className="grid gap-2"><Label htmlFor="transport-passengers">Passengers</Label><Input id="transport-passengers" required min="1" type="number" /></div></div>
-              <DialogFooter><Button type="button" variant="outline" onClick={() => setRequestOpen(false)}>Cancel</Button><Button type="submit">Continue request</Button></DialogFooter>
-            </form>
-          )}
+            <DialogFooter><Button type="button" variant="outline" onClick={() => setRequestOpen(false)}>Cancel</Button><Button type="submit">Submit request</Button></DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
