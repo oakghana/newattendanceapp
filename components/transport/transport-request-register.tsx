@@ -61,6 +61,7 @@ export function TransportRequestRegister({ rows, canCreate, canAct, canHrRecords
     if (!response.ok) { setMessage(result.error ?? "Unable to process selected requests."); return }
     window.location.reload()
   }
+  const visibleRows = rows.filter((row) => `${row.reference_number ?? ""} ${row.purpose} ${row.origin} ${row.destination}`.toLowerCase().includes(query.toLowerCase()) && (status === "all" || (row.status ?? "submitted") === status))
   const mdQueue = visibleRows.filter((row) => row.workflow_stage === "managing_director_approval")
   const execQueue = visibleRows.filter((row) => row.workflow_stage === "hr_executive_signing")
   const activeQueue = canManagingDirector ? mdQueue : canHrExecutive ? execQueue : []
@@ -71,7 +72,6 @@ export function TransportRequestRegister({ rows, canCreate, canAct, canHrRecords
   const memoRecipient = isResponseMemo ? "THE REGIONAL MANAGER" : "THE MANAGING DIRECTOR"
   const memoIntro = isResponseMemo ? "We refer to your approved transport request and write to convey Management's response as follows:" : "We respectfully submit this request for your consideration and approval. The details of the request are as follows:"
   const memoClosing = "You can count on our usual co-operation."
-  const visibleRows = rows.filter((row) => `${row.reference_number ?? ""} ${row.purpose} ${row.origin} ${row.destination}`.toLowerCase().includes(query.toLowerCase()) && (status === "all" || (row.status ?? "submitted") === status))
 
   async function decide(id: string, decision: "endorse" | "deny" | "return_for_correction" | "forward_to_md" | "approve" | "reject" | "send_to_hr_executive" | "approve_hr_memo") {
     const comment = window.prompt(decision === "reject" || decision === "return_for_correction" ? "Reason or correction note:" : "Optional comment:", "")
