@@ -61,6 +61,7 @@ interface SidebarProps {
     first_name: string
     last_name: string
     employee_id: string
+    profile_image_url?: string | null
     role: string
     departments?: {
       name: string
@@ -73,7 +74,7 @@ interface SidebarProps {
 
 const EXEC_ROLES = ["managing_director", "secretary"] as const
 const ALL_STAFF_ROLES = [
-  "admin", "it-admin", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "department_head",
+  "admin", "it-admin", "driver", "transport_manager", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "department_head",
   "staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "director_hr", "manager_hr",
   "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern",
   "contract", "managing_director", "secretary", "hr_records", "hr_records_officer", "hr_records_manager",

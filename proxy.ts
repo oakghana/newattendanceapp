@@ -13,6 +13,8 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   
   // HR/Leave Management — every authenticated role may access this page
   "/dashboard/leave-management": [
+    "driver",
+    "transport_manager",
     "admin",
     "staff",
     "nsp",
@@ -41,6 +43,8 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
     "leave_admin",
   ],
   "/dashboard/leave-planning": [
+    "driver",
+    "transport_manager",
     "admin",
     "staff",
     "nsp",
@@ -70,10 +74,10 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   ],
   
   // Attendance check-in — the universal landing page for every role after login
-  "/dashboard/attendance": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_records", "regional_hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
+  "/dashboard/attendance": ["driver", "transport_manager", "staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_records", "regional_hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
 
   // Staff Dashboard root — all roles
-  "/dashboard": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_records", "regional_hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
+  "/dashboard": ["driver", "transport_manager", "staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_records", "regional_hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
   
   // HR Records reference-management queue
   "/dashboard/hr-records": ["admin", "hr_records", "it-admin", "system_admin"],
