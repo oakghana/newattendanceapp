@@ -442,7 +442,8 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
   // the shared helper so values such as "it admin", "IT-ADMIN", and "it_admin"
   // resolve to the same effective role.
   const normalizedRole = normalizeAppRole(profile?.role)
-  const effectiveRole = normalizedRole === "audit_staff" ? "staff" : normalizedRole
+  const isProtectedAdministrator = String(user?.email || "").trim().toLowerCase() === "ohemengappiah@qccgh.com"
+  const effectiveRole = isProtectedAdministrator ? "admin" : normalizedRole === "audit_staff" ? "staff" : normalizedRole
   const isItAdmin = effectiveRole === "it-admin"
   const isAttendanceOnly = isAttendanceOnlyRole(effectiveRole)
 
