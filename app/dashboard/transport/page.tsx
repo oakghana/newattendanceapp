@@ -25,15 +25,23 @@ export default async function TransportPage() {
   let regionalPendingCount = 0
   let nonRegionalPendingCount = 0
   let queueRows: { id: string; purpose: string; origin: string; destination: string; event_date: string | null; reference_number: string | null; request_type: "regional" | "nonregional" }[] = []
-  const { count: allTransportCount } = await supabase.from("transport_requests").select("id", { count: "exact", head: true })
-  totalCount = allTransportCount ?? 0
+  try {
+    const { count: allTransportCount } = await supabase.from("transport_requests").select("id", { count: "exact", head: true })
+    totalCount = allTransportCount ?? 0
+  } catch (error) {
+    console.error("[v0] Transport landing: request count unavailable", error)
+  }
   if (isManagingDirector || isHrExecutive) {
-    const stage = isManagingDirector ? "managing_director_approval" : "hr_executive_signing"
-    const { count: total } = await supabase.from("transport_requests").select("id", { count: "exact", head: true })
-    const { data: pendingRows, count: pending } = await supabase.from("transport_requests").select("id, purpose, origin, destination, event_date, reference_number", { count: "exact" }).eq("workflow_stage", stage).order("created_at", { ascending: false }).limit(4)
-    totalCount = total ?? 0
-    regionalPendingCount = pending ?? 0
-    queueRows = (pendingRows ?? []).map((row) => ({ ...row, request_type: "regional" as const }))
+    try {
+      const stage = isManagingDirector ? "managing_director_approval" : "hr_executive_signing"
+      const { count: total } = await supabase.from("transport_requests").select("id", { count: "exact", head: true })
+      const { data: pendingRows, count: pending } = await supabase.from("transport_requests").select("id, purpose, origin, destination, event_date, reference_number", { count: "exact" }).eq("workflow_stage", stage).order("created_at", { ascending: false }).limit(4)
+      totalCount = total ?? totalCount
+      regionalPendingCount = pending ?? 0
+      queueRows = (pendingRows ?? []).map((row) => ({ ...row, request_type: "regional" as const }))
+    } catch (error) {
+      console.error("[v0] Transport landing: approval queue unavailable", error)
+    }
 
     if (isManagingDirector) {
       try {
