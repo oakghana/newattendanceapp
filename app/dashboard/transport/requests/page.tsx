@@ -25,7 +25,7 @@ export default async function TransportRequestsPage() {
   const canAct = isRegionalManagerRole(profile.role)
   const canHrRecords = ["hr_records", "hr_records_officer", "hr_records_manager"].includes(normalizedRole)
   const canManagingDirector = normalizedRole === "managing_director"
-  const canHrExecutive = ["hr_executive", "hr_executive_officer"].includes(normalizedRole)
+  const canHrExecutive = ["hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
   const assignedLocation = profile.geofence_locations as { district_id?: string | null; districts?: { region_id?: string | null } | null } | null
   const locationId = profile.assigned_location_id ?? null
   const districtId = assignedLocation?.district_id ?? null
@@ -35,6 +35,7 @@ export default async function TransportRequestsPage() {
     if (locationId) requestsQuery = requestsQuery.or(`origin_location_id.eq.${locationId},origin_location_id.is.null`)
     if (!locationId && districtId) requestsQuery = requestsQuery.eq("linked_district_id", districtId)
     else if (!locationId && !districtId && regionId) requestsQuery = requestsQuery.eq("assigned_region_id", regionId)
+    requestsQuery = requestsQuery.eq("workflow_stage", "regional_manager_approval")
   }
   const { data: requests } = await requestsQuery
   const signerIds = (requests ?? []).map((request) => request.regional_manager_signer_id).filter((id): id is string => Boolean(id))

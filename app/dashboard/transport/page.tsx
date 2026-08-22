@@ -5,7 +5,7 @@ import { canManageTransport } from "@/lib/role-capabilities"
 
 const TRANSPORT_ROLES = new Set([
   "admin", "administrator", "it-admin", "it_admin", "driver", "regional_hr", "regional hr", "regional_hr_office", "regional hr office", "regional_hr_officer", "regional hr officer", "regional_manager", "regional manager",
-  "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "director_hr", "manager_hr",
+  "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "director_hr", "manager_hr", "hr_executive", "hr_executive_officer",
 ])
 
 function normalizeRole(role: string) {
@@ -22,7 +22,7 @@ export default async function TransportPage() {
   if (!profile || (!TRANSPORT_ROLES.has(normalizedRole) && !canManageTransport(profile.role))) redirect("/dashboard")
 
   const isManagingDirector = normalizedRole === "managing_director"
-  const isHrExecutive = normalizedRole === "hr_executive" || normalizedRole === "hr_executive_officer"
+  const isHrExecutive = ["hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
   let pendingCount = 0
   let totalCount = 0
   let regionalPendingCount = 0

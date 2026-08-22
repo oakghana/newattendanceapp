@@ -91,7 +91,7 @@ export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, que
     const Icon = isManagingDirector ? ShieldCheck : FileSignature
     const officeLabel = isManagingDirector ? "Office of the Managing Director" : "HR Executive Office"
     const deskTitle = isManagingDirector ? "Transport approval desk" : "Memo signing desk"
-    const deskDescription = isManagingDirector ? "Endorsed regional transport requests await your review before they move to HR Executive for the response memo." : "Approved requests are ready for memo drafting, preview, and your signature before HR Records assigns the reference."
+    const deskDescription = isManagingDirector ? "Regional and non-regional transport requests are separated below. Preview the correct request before approving it." : "Approved regional and non-regional transport requests are ready for memo preview and your signature before HR Records assigns the reference."
     const actionLabel = isManagingDirector ? "Open approval desk" : "Open signing desk"
     const pendingLabel = isManagingDirector ? "Awaiting your approval" : "Awaiting your signature"
 
@@ -109,16 +109,16 @@ export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, que
             </div>
             <Button size="lg" asChild><Link href="/dashboard/transport/requests"><Icon data-icon="inline-start" /> {actionLabel}</Link></Button>
           </div>
-          <div className="grid gap-px bg-border/60 sm:grid-cols-3">
+          <div className="grid gap-px bg-border/60 sm:grid-cols-4">
             <div className="flex items-center gap-3 bg-background p-5"><div className={`flex size-9 items-center justify-center rounded-lg ${accentBg} ${accentClass}`}><Clock3 className="size-4" /></div><div><p className="text-2xl font-semibold tracking-tight">{pendingCount}</p><p className="text-xs text-muted-foreground">{pendingLabel}</p></div></div>
             <div className="flex items-center gap-3 bg-background p-5"><div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground"><Inbox className="size-4" /></div><div><p className="text-2xl font-semibold tracking-tight">{totalCount}</p><p className="text-xs text-muted-foreground">Total requests in the register</p></div></div>
-            <div className="flex items-center gap-3 bg-background p-5"><div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground"><ShieldCheck className="size-4" /></div><div><p className="text-sm font-semibold">{isManagingDirector ? "Endorsed by regional management" : "Approved by the Managing Director"}</p><p className="text-xs text-muted-foreground">Current stage entering your queue</p></div></div>
+            {isManagingDirector && <div className="flex items-center gap-3 bg-background p-5"><div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground"><Bus className="size-4" /></div><div><p className="text-2xl font-semibold tracking-tight">{regionalPendingCount}</p><p className="text-xs text-muted-foreground">Regional requests</p></div></div>}{isManagingDirector && <div className="flex items-center gap-3 bg-background p-5"><div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground"><FileText className="size-4" /></div><div><p className="text-2xl font-semibold tracking-tight">{nonRegionalPendingCount}</p><p className="text-xs text-muted-foreground">Non-regional requests</p></div></div>}{!isManagingDirector && <div className="flex items-center gap-3 bg-background p-5"><div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground"><ShieldCheck className="size-4" /></div><div><p className="text-sm font-semibold">Approved by the Managing Director</p><p className="text-xs text-muted-foreground">Current stage entering your queue</p></div></div>}
           </div>
         </header>
 
         <Card className="overflow-hidden">
           <CardHeader className="flex-row items-center justify-between gap-3 border-b bg-muted/20">
-            <div><CardTitle>Priority queue</CardTitle><CardDescription>The most recent requests waiting on your action.</CardDescription></div>
+            <div><CardTitle>{isManagingDirector ? "Approval queue" : "Signing queue"}</CardTitle><CardDescription>{isManagingDirector ? "Regional and non-regional requests are clearly labeled before you approve." : "Preview every approved transport request and memo before signing."}</CardDescription></div>
             <Button variant="outline" size="sm" asChild><Link href="/dashboard/transport/requests">View all<ArrowRight data-icon="inline-end" /></Link></Button>
           </CardHeader>
           <CardContent className="p-0">
@@ -133,10 +133,10 @@ export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, que
                       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1"><MapPin className="size-3.5" /> {row.origin} to {row.destination}</span>
                         {row.event_date && <span className="flex items-center gap-1"><CalendarDays className="size-3.5" /> {row.event_date}</span>}
-                        {row.reference_number && <Badge variant="secondary">{row.reference_number}</Badge>}
+                        <Badge variant={row.request_type === "nonregional" ? "outline" : "secondary"}>{row.request_type === "nonregional" ? "Non-regional" : "Regional"}</Badge>{row.reference_number && <Badge variant="secondary">{row.reference_number}</Badge>}
                       </div>
                     </div>
-                    <Button variant="outline" size="sm" asChild><Link href="/dashboard/transport/requests">Review<ArrowRight data-icon="inline-end" /></Link></Button>
+                    <Button variant="outline" size="sm" asChild><Link href={`/dashboard/transport/${row.request_type === "nonregional" ? "nonregional" : "requests"}`}><FileText data-icon="inline-start" /> Preview and review</Link></Button>
                   </li>
                 ))}
               </ul>
