@@ -24,8 +24,17 @@ export async function GET() {
 export async function PATCH(request: Request) {
   const { supabase, user, profile } = await actor()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!profile?.is_active || !isRegionalHrRole(profile.role)) return NextResponse.json({ error: "Only Regional HR Office users can verify or edit licenses." }, { status: 403 })
+  const normalizedRole = String(profile?.role ?? "").toLowerCase().trim().replace(/[\s-]+/g, "_")
+  const isDriver = normalizedRole === "driver"
+  if (!profile?.is_active || (!isRegionalHrRole(profile.role) && !isDriver)) return NextResponse.json({ error: "Transport license access denied." }, { status: 403 })
   const body = await request.json()
+  if (isDriver) {
+    const { data: driver } = await supabase.from("transport_drivers").select("id, profile_id").eq("profile_id", user.id).maybeSingle()
+    if (!driver || body.id !== driver.id || typeof body.license_document_url !== "string" || !body.license_document_url.startsWith("http")) return NextResponse.json({ error: "You can only update your own license document." }, { status: 403 })
+    const { error } = await supabase.from("transport_drivers").update({ license_document_url: body.license_document_url, updated_at: new Date().toISOString(), verification_status: "pending" }).eq("id", driver.id).eq("profile_id", user.id)
+    if (error) return NextResponse.json({ error: "Unable to save your license document." }, { status: 500 })
+    return NextResponse.json({ ok: true })
+  }
   const id = String(body.id ?? "")
   const verificationStatus = String(body.verification_status ?? "")
   if (!id || !["pending", "verified", "needs_correction"].includes(verificationStatus)) return NextResponse.json({ error: "Invalid verification request." }, { status: 400 })

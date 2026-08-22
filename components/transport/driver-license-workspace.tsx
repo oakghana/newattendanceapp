@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { FileText, Pencil, Search, ShieldCheck, TriangleAlert } from "lucide-react"
+import { useMemo, useRef, useState } from "react"
+import { FileText, Pencil, Search, ShieldCheck, TriangleAlert, Upload } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,9 +21,29 @@ export function DriverLicenseWorkspace({ initialDrivers, canVerify, role = "mana
   const [search, setSearch] = useState("")
   const [editing, setEditing] = useState<Driver | null>(null)
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileInput = useRef<HTMLInputElement>(null)
   const visible = useMemo(() => drivers.filter((driver) => `${driver.full_name} ${driver.license_number} ${driver.license_type ?? ""}`.toLowerCase().includes(search.toLowerCase())), [drivers, search])
   const pending = drivers.filter((driver) => driver.verification_status !== "verified").length
   const expiring = drivers.filter((driver) => new Date(driver.expiry_date).getTime() < Date.now() + 90 * 86400000).length
+
+  async function uploadLicense(file: File) {
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append("file", file)
+      form.append("folder", "driver-licenses")
+      const upload = await fetch("/api/upload", { method: "POST", body: form })
+      const result = await upload.json().catch(() => null)
+      if (!upload.ok) throw new Error(result?.error ?? "Upload failed")
+      const driverId = (initialDrivers[0] as Driver | undefined)?.id
+      if (!driverId) throw new Error("Your driver record has not been created yet.")
+      const save = await fetch("/api/transport/drivers", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: driverId, license_document_url: result.url }) })
+      if (!save.ok) throw new Error((await save.json().catch(() => null))?.error ?? "Unable to save license")
+      toast({ title: "License uploaded", description: "Your document is awaiting verification." })
+    } catch (error) { toast({ title: "Upload failed", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" }) }
+    finally { setUploading(false) }
+  }
 
   async function save(status: string) {
     if (!editing) return
@@ -39,7 +59,8 @@ export function DriverLicenseWorkspace({ initialDrivers, canVerify, role = "mana
 
   if (role === "driver") return <div className="flex flex-col gap-6">
     <header className="flex flex-col gap-2 border-b pb-5"><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><ShieldCheck /></div><div><p className="text-sm font-medium text-primary">Driver workspace</p><h1 className="text-3xl font-semibold tracking-tight">Assigned transport tasks</h1><p className="text-muted-foreground leading-6">Your approved transport assignments, routes, meeting times, and departure details.</p></div></div></header>
-    <Card><CardHeader><CardTitle>My assignments</CardTitle></CardHeader><CardContent className="grid gap-4">{assignedTasks.map((task) => <article key={task.id} className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-4"><div><p className="text-xs text-muted-foreground">Route</p><p className="font-medium">{task.origin} to {task.destination}</p></div><div><p className="text-xs text-muted-foreground">Meet / depart</p><p className="font-medium">{task.required_at}</p></div><div><p className="text-xs text-muted-foreground">Vehicle</p><p className="font-medium">{task.recommended_vehicle || "To be confirmed"}</p></div><div><p className="text-xs text-muted-foreground">Passengers</p><p className="font-medium">{task.persons_requiring_transport}</p></div><div className="sm:col-span-2 lg:col-span-4"><p className="text-sm leading-6">{task.purpose}</p><Badge variant="secondary">{task.status}</Badge></div></article>)}{assignedTasks.length === 0 && <p className="p-8 text-center text-sm text-muted-foreground">No transport assignments have been assigned to you yet.</p>}</CardContent></Card>
+    <Card><CardHeader><CardTitle>My driving license</CardTitle></CardHeader><CardContent className="flex flex-wrap items-center justify-between gap-4"><div><p className="font-medium">{drivers[0]?.license_document_url ? "Document uploaded" : "No document uploaded"}</p><p className="text-sm text-muted-foreground">PDF, JPG, or PNG up to 5 MB. Regional HR will verify it.</p></div><input ref={fileInput} type="file" accept="application/pdf,image/jpeg,image/png" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadLicense(file); event.currentTarget.value = "" }} /><Button type="button" disabled={uploading || !drivers[0]} onClick={() => fileInput.current?.click()}><Upload className="mr-2 size-4" />{uploading ? "Uploading..." : drivers[0]?.license_document_url ? "Replace license" : "Upload license"}</Button>{drivers[0]?.license_document_url && <Button variant="outline" asChild><a href={drivers[0].license_document_url} target="_blank" rel="noreferrer"><FileText className="mr-2 size-4" />View document</a></Button>}</CardContent></Card>
+    <Card><CardHeader><CardTitle>My assignments</CardTitle></CardHeader><CardContent className="grid gap-4">{assignedTasks.map((task) => <article key={task.id} className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-4"><div><p className="text-xs text-muted-foreground">Route</p><p className="font-medium">{task.origin} to {task.destination}</p></div><div><p className="text-xs text-muted-foreground">Meet / depart</p><p className="font-medium">{task.required_at}</p></div><div><p className="text-xs text-muted-foreground">Vehicle</p><p className="font-medium">{task.assigned_vehicle || "To be confirmed"}</p></div><div><p className="text-xs text-muted-foreground">Passengers</p><p className="font-medium">{task.persons_requiring_transport}</p></div><div className="sm:col-span-2 lg:col-span-4"><p className="text-sm leading-6">{task.purpose}</p><Badge variant="secondary">{task.status}</Badge></div></article>)}{assignedTasks.length === 0 && <p className="p-8 text-center text-sm text-muted-foreground">No transport assignments have been assigned to you yet.</p>}</CardContent></Card>
   </div>
 
   return <div className="flex flex-col gap-6">
