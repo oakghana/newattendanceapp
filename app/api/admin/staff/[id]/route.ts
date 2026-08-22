@@ -127,6 +127,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
+    const protectedAdministratorEmail = "ohemengappiah@qccgh.com"
+    const isProtectedAdministrator = String(targetProfile.email || "").trim().toLowerCase() === protectedAdministratorEmail
+    if (isProtectedAdministrator && (role !== undefined && role !== "admin" || is_active === false || (email && String(email).trim().toLowerCase() !== protectedAdministratorEmail))) {
+      await adminSupabase.from("audit_logs").insert({ user_id: user.id, action: "blocked_protected_administrator_change", resource_type: "user_profile", resource_id: id, details: { target_email: protectedAdministratorEmail, attempted_role: role, attempted_active: is_active, attempted_email: email } })
+      return NextResponse.json({ error: "The sole Administrator account is protected and cannot be reassigned, deactivated, renamed, or deleted through this route." }, { status: 403 })
+    }
+    if (isProtectedAdministrator) role = "admin"
+
     // This route accepts partial updates (e.g. { is_active } only from the
     // Activate/Deactivate button). Any field omitted from the request body
     // falls back to the staff member's existing value rather than being
