@@ -404,6 +404,11 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
 
+    const { data: targetProfile } = await supabase.from("user_profiles").select("email, role").eq("id", id).single()
+    if (String(targetProfile?.email || "").trim().toLowerCase() === "ohemengappiah@qccgh.com") {
+      return NextResponse.json({ error: "The sole Administrator account cannot be deactivated." }, { status: 403 })
+    }
+
     // Deactivate instead of delete to preserve data integrity
     const { data: deactivatedProfile, error: deactivateError } = await supabase
       .from("user_profiles")
