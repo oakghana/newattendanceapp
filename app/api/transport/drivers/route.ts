@@ -31,10 +31,29 @@ export async function PATCH(request: Request) {
   if (isDriver) {
     const { data: driver } = await supabase.from("transport_drivers").select("id, profile_id").eq("profile_id", user.id).maybeSingle()
     if (typeof body.license_document_url !== "string" || !body.license_document_url.startsWith("http")) return NextResponse.json({ error: "A valid license document is required." }, { status: 400 })
-    if (!driver) return NextResponse.json({ error: "Your driver profile is not yet registered. Please ask Transport Management to create your driver record." }, { status: 409 })
-    const { error } = await supabase.from("transport_drivers").update({ license_document_url: body.license_document_url, updated_at: new Date().toISOString(), verification_status: "pending" }).eq("id", driver.id).eq("profile_id", user.id)
+    const { data: driverProfile } = await supabase.from("user_profiles").select("id, first_name, last_name, employee_id").eq("id", user.id).maybeSingle()
+    if (!driverProfile) return NextResponse.json({ error: "Your user profile could not be found." }, { status: 404 })
+    const fullName = [driverProfile.first_name, driverProfile.last_name].filter(Boolean).join(" ") || "Driver"
+    if (!driver) {
+      const { data: created, error: createError } = await supabase.from("transport_drivers").insert({
+        profile_id: user.id,
+        full_name: fullName,
+        license_number: driverProfile.employee_id || `PENDING-${user.id.slice(0, 8)}`,
+        license_type: "Pending verification",
+        expiry_date: "2099-12-31",
+        status: "active",
+        verification_status: "pending",
+        license_document_url: body.license_document_url,
+      }).select("*").single()
+      if (createError) {
+        console.error("[v0] Driver license record creation failed:", createError)
+        return NextResponse.json({ error: "Unable to create your driver license record." }, { status: 500 })
+      }
+      return NextResponse.json({ ok: true, driver: created })
+    }
+    const { data: updated, error } = await supabase.from("transport_drivers").update({ license_document_url: body.license_document_url, updated_at: new Date().toISOString(), verification_status: "pending" }).eq("id", driver.id).eq("profile_id", user.id).select("*").single()
     if (error) return NextResponse.json({ error: "Unable to save your license document." }, { status: 500 })
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, driver: updated })
   }
   const id = String(body.id ?? "")
   const verificationStatus = String(body.verification_status ?? "")

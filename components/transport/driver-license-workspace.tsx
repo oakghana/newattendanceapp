@@ -39,6 +39,8 @@ export function DriverLicenseWorkspace({ initialDrivers, canVerify, role = "mana
       const driverId = (initialDrivers[0] as Driver | undefined)?.id
       const save = await fetch("/api/transport/drivers", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: driverId, license_document_url: result.url }) })
       if (!save.ok) throw new Error((await save.json().catch(() => null))?.error ?? "Unable to save license")
+      const saved = await save.json().catch(() => null)
+      if (saved?.driver) setDrivers([saved.driver])
       toast({ title: "License uploaded", description: "Your document is awaiting verification." })
     } catch (error) { toast({ title: "Upload failed", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" }) }
     finally { setUploading(false) }
