@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowRight, ArrowUpRight, Bus, CalendarDays, Clock3, FileSignature, FileText, IdCard, Inbox, MapPin, Paperclip, Plus, ShieldCheck } from "lucide-react"
+import { Activity, ArrowRight, ArrowUpRight, Bus, CalendarDays, CheckCircle2, Clock3, FileSignature, FileText, IdCard, Inbox, MapPin, Paperclip, Plus, ShieldCheck, Users } from "lucide-react"
 import Link from "next/link"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -147,6 +147,10 @@ export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, que
     )
   }
 
+  const operationalRole = isDepartmentHead ? "Department Head" : isRegionalManager ? "Regional Manager" : isTransportManager ? "Transport Manager" : "Transport Operations"
+  const operationalSubtitle = isDepartmentHead ? "Monitor departmental transport requests and endorsements." : isRegionalManager ? "Review endorsed regional requests within your assigned scope." : isTransportManager ? "Coordinate transport fulfilment, fleet readiness, and request delivery." : "Monitor transport requests, approvals, and compliance."
+  const operationalMetrics = isDepartmentHead ? [{ label: "Department requests", value: totalCount, note: "Requests raised by your department", icon: Users }, { label: "Awaiting endorsement", value: pendingCount, note: "Items requiring your review", icon: Clock3 }, { label: "Approved requests", value: Math.max(totalCount - pendingCount, 0), note: "Cleared for next workflow stage", icon: CheckCircle2 }, { label: "Workflow ownership", value: "HOD", note: "Departmental request gate", icon: ShieldCheck }] : isRegionalManager ? [{ label: "Regional queue", value: pendingCount, note: "Endorsed requests in your scope", icon: Clock3 }, { label: "Requests in register", value: totalCount, note: "Location-scoped transport records", icon: Bus }, { label: "Approval stage", value: "Regional", note: "Only regional manager actions", icon: ShieldCheck }, { label: "Scope control", value: "Assigned", note: "Location, district, or region", icon: Activity }] : [{ label: "Open requests", value: totalCount, note: "Transport requests in register", icon: Bus }, { label: "Needs attention", value: pendingCount, note: "Requests requiring action", icon: Clock3 }, { label: "Fleet readiness", value: "Active", note: "Driver and vehicle operations", icon: CheckCircle2 }, { label: "Control level", value: "Operational", note: "Managed transport workspace", icon: ShieldCheck }]
+
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <header className="flex flex-col gap-4 border-b pb-5 md:flex-row md:items-end md:justify-between">
@@ -154,8 +158,8 @@ export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, que
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><Bus /></div>
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-balance">Transport Management</h1>
-              <p className="text-muted-foreground leading-6">Manage regional transport requests, approvals, memos, and driver compliance.</p>
+              <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">QCC Transport Control</p><h1 className="text-3xl font-semibold tracking-tight text-balance">{operationalRole} portal</h1>
+              <p className="text-muted-foreground leading-6">{operationalSubtitle}</p></div>
             </div>
           </div>
           <Badge variant="secondary" className="w-fit">Transport operations</Badge>
@@ -168,11 +172,9 @@ export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, que
         </div>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-lg border bg-muted/30 p-3"><p className="text-xs font-medium text-muted-foreground">Request workflow</p><p className="mt-1 text-sm font-semibold">Regional HR led</p></div>
-        <div className="rounded-lg border bg-muted/30 p-3"><p className="text-xs font-medium text-muted-foreground">Approval chain</p><p className="mt-1 text-sm font-semibold">Regional to management</p></div>
-        <div className="rounded-lg border bg-muted/30 p-3"><p className="text-xs font-medium text-muted-foreground">Compliance</p><p className="mt-1 text-sm font-semibold">License monitoring</p></div>
-      </div>
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={`${operationalRole} transport metrics`}>
+        {operationalMetrics.map(({ label, value, note, icon: MetricIcon }) => <Card key={label} className="overflow-hidden"><CardContent className="flex items-start justify-between gap-3 p-4"><div className="flex flex-col gap-1"><p className="text-xs font-medium text-muted-foreground">{label}</p><p className="text-2xl font-semibold tracking-tight">{value}</p><p className="text-xs leading-5 text-muted-foreground">{note}</p></div><div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><MetricIcon /></div></CardContent></Card>)}
+      </section>
 
       <section className="grid gap-4 md:grid-cols-2" aria-label="Transport modules">
         {modules.map(({ title, description, icon: Icon, href, editableFor }) => {
