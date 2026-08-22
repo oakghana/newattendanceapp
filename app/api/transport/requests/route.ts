@@ -55,11 +55,11 @@ export async function PATCH(request: Request) {
     const invalid = selectedRows.find((row) => row.workflow_stage !== requiredStage || (isHrExecutive && (!row.memo_subject || !row.memo_body)))
     if (invalid) return NextResponse.json({ error: "Every selected request must be in the current approval queue and have a saved memo." }, { status: 409 })
     const now = new Date().toISOString()
-    const signer = isHrExecutive ? (await supabase.from("user_profiles").select("signature_data_url").eq("id", user.id).single()).data : null
+    const signer = isHrExecutive ? (await supabase.from("approval_signature_registry").select("signature_data_url").eq("user_id", user.id).eq("is_active", true).maybeSingle()).data : null
     const update = isManagingDirector
       ? { status: "pending_hr_executive", workflow_stage: "hr_executive_signing", updated_at: now }
       : decision === "approve_hr_memo"
-        ? { status: "approved", workflow_stage: "hr_records_review", hr_executive_signer_id: user.id, hr_executive_signed_at: now, hr_executive_signature_data_url: signer?.signature_data_url ?? null, hr_executive_handoff_by: user.id, hr_executive_handoff_at: now, updated_at: now }
+        ? { status: "approved", workflow_stage: "hr_records_review", hr_executive_handoff_by: user.id, hr_executive_handoff_at: now, memo_amendments: JSON.stringify({ text: row.memo_amendments ?? "", hr_executive_signer_id: user.id, hr_executive_signed_at: now, hr_executive_signature_data_url: signer?.signature_data_url ?? null }), updated_at: now }
         : { status: "rejected", workflow_stage: "closed", updated_at: now }
     const { error: updateError } = await supabase.from("transport_requests").update(update).in("id", bulkIds).eq("workflow_stage", requiredStage)
     if (updateError) return NextResponse.json({ error: `Unable to process selected requests: ${updateError.message}` }, { status: 500 })
@@ -68,7 +68,7 @@ export async function PATCH(request: Request) {
   }
   const requestId = String(body.id ?? "")
   if (!requestId) return NextResponse.json({ error: "A request id is required." }, { status: 400 })
-  const { data: row } = await supabase.from("transport_requests").select("id, purpose, origin, destination, event_date, passenger_count, assigned_region_id, linked_district_id, origin_location_id, workflow_stage, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, regional_manager_signature_data_url, hr_records_amended_by, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url").eq("id", requestId).single()
+  const { data: row } = await supabase.from("transport_requests").select("id, purpose, origin, destination, event_date, passenger_count, assigned_region_id, linked_district_id, origin_location_id, workflow_stage, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, hr_records_amended_by, hr_records_amended_at").eq("id", requestId).single()
   if (!row) return NextResponse.json({ error: "Transport request not found." }, { status: 404 })
   const assignedLocation = profile.geofence_locations as { district_id?: string | null; districts?: { region_id?: string | null } | null } | null
   if (isManager) {
@@ -91,7 +91,7 @@ export async function PATCH(request: Request) {
   else if (decision === "save_memo") update = { memo_reference: String(body.memoReference ?? "").trim(), memo_date: String(body.memoDate ?? "").trim(), memo_subject: String(body.memoSubject ?? "").trim(), memo_body: String(body.memoBody ?? "").trim(), memo_amendments: String(body.memoAmendments ?? "").trim(), ...(isHrExecutive ? {} : { hr_records_amended_by: user.id, hr_records_amended_at: new Date().toISOString() }), updated_at: new Date().toISOString() }
   else if (decision === "approve_hr_memo") { if (!row.memo_subject || !row.memo_body) return NextResponse.json({ error: "Open and save the edited memo before approving it." }, { status: 409 }); const { data: signer } = await supabase.from("user_profiles").select("signature_data_url").eq("id", user.id).single(); update = { status: "approved", workflow_stage: "hr_records_review", hr_executive_signer_id: user.id, hr_executive_signed_at: new Date().toISOString(), hr_executive_signature_data_url: signer?.signature_data_url ?? null, hr_executive_handoff_by: user.id, hr_executive_handoff_at: new Date().toISOString(), updated_at: new Date().toISOString() } }
   else if (decision === "send_to_hr_executive") update = { status: "approved", workflow_stage: "hr_records_review", hr_executive_handoff_by: user.id, hr_executive_handoff_at: new Date().toISOString(), updated_at: new Date().toISOString() }
-  else if (decision === "endorse") { const { data: signer } = await supabase.from("user_profiles").select("signature_data_url").eq("id", user.id).single(); update = { status: "endorsed", workflow_stage: "managing_director_approval", regional_manager_signer_id: user.id, regional_manager_signed_at: new Date().toISOString(), regional_manager_signature_data_url: signer?.signature_data_url ?? null, updated_at: new Date().toISOString() } }
+  else if (decision === "endorse") { const { data: signer } = await supabase.from("approval_signature_registry").select("signature_data_url").eq("user_id", user.id).eq("is_active", true).maybeSingle(); const signedAt = new Date().toISOString(); update = { status: "endorsed", workflow_stage: "managing_director_approval", memo_amendments: JSON.stringify({ text: row.memo_amendments ?? "", regional_manager_signer_id: user.id, regional_manager_signed_at: signedAt, regional_manager_signature_data_url: signer?.signature_data_url ?? null }), updated_at: signedAt } }
   else if (decision === "deny" || decision === "reject") update = { status: "rejected", workflow_stage: "closed", updated_at: new Date().toISOString() }
   else if (decision === "return_for_correction") update = { status: "returned_for_correction", workflow_stage: "regional_hr_correction", updated_at: new Date().toISOString() }
   else if (decision === "forward_to_md") update = { status: "pending_md_approval", workflow_stage: "managing_director_approval", updated_at: new Date().toISOString() }

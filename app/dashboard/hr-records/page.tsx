@@ -23,11 +23,16 @@ function isRegionalLeave(row: any) {
 }
 
 function canEditReference(row: any) {
+  if (row.entity === "transport") return ["hr_records_review", "referenced"].includes(String(row.workflow_stage || ""))
   return !isRegionalLeave(row) && FINAL_APPROVED_STATUSES.has(String(row.status || "").toLowerCase())
 }
 
+function isReferenceLocked(row: any) {
+  return row.entity === "transport" ? row.workflow_stage === "referenced" : Boolean(row.memo_reference_locked)
+}
+
 export default function HrRecordsPage() {
-  const [data, setData] = useState<{ leave: any[]; loans: any[] }>({ leave: [], loans: [] })
+  const [data, setData] = useState<{ leave: any[]; loans: any[]; transport: any[] }>({ leave: [], loans: [], transport: [] })
   const [error, setError] = useState("")
   const [saving, setSaving] = useState<string | null>(null)
   const [references, setReferences] = useState<Record<string, string>>({})
@@ -42,7 +47,7 @@ export default function HrRecordsPage() {
     setData(json)
     setReferences((current) => {
       const next = { ...current }
-      for (const row of [...(json.leave || []), ...(json.loans || [])]) {
+      for (const row of [...(json.leave || []), ...(json.loans || []), ...(json.transport || [])]) {
         const key = `${(json.leave || []).some((item: any) => item.id === row.id) ? "leave" : "loan"}-${row.id}`
         next[key] = row.memo_reference || row.reference_number || ""
       }
@@ -91,6 +96,7 @@ export default function HrRecordsPage() {
   const rows = useMemo(() => [
     ...data.leave.map((row) => ({ ...row, entity: "leave" as const, label: row.leave_type_key || "Leave request", reference: row.memo_reference })),
     ...data.loans.map((row) => ({ ...row, entity: "loan" as const, label: row.request_number || "Loan request", reference: row.reference_number })),
+    ...data.transport.map((row) => ({ ...row, entity: "transport" as const, label: row.request_subject || row.purpose || "Transport request", reference: row.memo_reference })),
   ].filter((row) => {
     const editable = canEditReference(row)
     const status = String(row.status || "").toLowerCase()
@@ -101,16 +107,16 @@ export default function HrRecordsPage() {
     // "locked" here would hide every loan from "Pending references" from the
     // moment it's created. The only thing that actually means HR Records has
     // finalized and forwarded a request is `memo_reference_locked`.
-    const locked = Boolean(row.memo_reference_locked)
+    const locked = isReferenceLocked(row)
     if (view === "pending") return editable && !locked
     if (view === "referenced") return locked && !FINAL_APPROVED_STATUSES.has(status)
     // "Approved memos" is the truly final stage: the reference must actually be
     // recorded (locked), not merely eligible for HR Records to act on.
-    return (locked && FINAL_APPROVED_STATUSES.has(status)) || (isRegionalLeave(row) && Boolean(row.memo_reference || row.reference_number))
+    return (locked && (FINAL_APPROVED_STATUSES.has(status) || row.entity === "transport")) || (isRegionalLeave(row) && Boolean(row.memo_reference || row.reference_number))
   }), [data, view])
 
-  const overdueRows = useMemo(() => [...data.leave, ...data.loans].filter((row) => {
-    if (row.memo_reference_locked || row.memo_reference || row.reference_number) return false
+const overdueRows = useMemo(() => [...data.leave, ...data.loans, ...data.transport].filter((row) => {
+  if (row.workflow_stage === "referenced" || row.memo_reference_locked || row.memo_reference || row.reference_number) return false
     const timestamp = new Date(row.updated_at || row.submitted_at || row.created_at || 0).getTime()
     return timestamp > 0 && Date.now() - timestamp > 3 * 24 * 60 * 60 * 1000
   }), [data])
