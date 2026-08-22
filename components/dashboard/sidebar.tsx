@@ -481,6 +481,9 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
     if (isItAdmin && item.category === "admin") {
       return ["/dashboard/leave-management", "/dashboard/staff"].includes(item.href)
     }
+    if (["driver", "transport_manager"].includes(effectiveRole) && ["/dashboard/leave-management", "/dashboard/loan-app", "/dashboard/transport"].includes(item.href)) {
+      return true
+    }
     if (item.href === "/dashboard/device-violations") {
       return effectiveRole === "admin"
     }
