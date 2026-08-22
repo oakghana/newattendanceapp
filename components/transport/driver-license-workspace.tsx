@@ -16,7 +16,7 @@ type Driver = {
   license_document_url?: string | null; assigned_region_id?: string | null
 }
 
-export function DriverLicenseWorkspace({ initialDrivers, canVerify }: { initialDrivers: Driver[]; canVerify: boolean }) {
+export function DriverLicenseWorkspace({ initialDrivers, canVerify, role = "manager", assignedTasks = [] }: { initialDrivers: Driver[]; canVerify: boolean; role?: string; assignedTasks?: any[] }) {
   const [drivers, setDrivers] = useState(initialDrivers)
   const [search, setSearch] = useState("")
   const [editing, setEditing] = useState<Driver | null>(null)
@@ -36,6 +36,11 @@ export function DriverLicenseWorkspace({ initialDrivers, canVerify }: { initialD
     setEditing(null)
     toast({ title: status === "verified" ? "License confirmed" : "Correction requested", description: "The driver record has been updated." })
   }
+
+  if (role === "driver") return <div className="flex flex-col gap-6">
+    <header className="flex flex-col gap-2 border-b pb-5"><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><ShieldCheck /></div><div><p className="text-sm font-medium text-primary">Driver workspace</p><h1 className="text-3xl font-semibold tracking-tight">Assigned transport tasks</h1><p className="text-muted-foreground leading-6">Your approved transport assignments, routes, meeting times, and departure details.</p></div></div></header>
+    <Card><CardHeader><CardTitle>My assignments</CardTitle></CardHeader><CardContent className="grid gap-4">{assignedTasks.map((task) => <article key={task.id} className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-4"><div><p className="text-xs text-muted-foreground">Route</p><p className="font-medium">{task.origin} to {task.destination}</p></div><div><p className="text-xs text-muted-foreground">Meet / depart</p><p className="font-medium">{task.required_at}</p></div><div><p className="text-xs text-muted-foreground">Vehicle</p><p className="font-medium">{task.recommended_vehicle || "To be confirmed"}</p></div><div><p className="text-xs text-muted-foreground">Passengers</p><p className="font-medium">{task.persons_requiring_transport}</p></div><div className="sm:col-span-2 lg:col-span-4"><p className="text-sm leading-6">{task.purpose}</p><Badge variant="secondary">{task.status}</Badge></div></article>)}{assignedTasks.length === 0 && <p className="p-8 text-center text-sm text-muted-foreground">No transport assignments have been assigned to you yet.</p>}</CardContent></Card>
+  </div>
 
   return <div className="flex flex-col gap-6">
     <header className="flex flex-col gap-2 border-b pb-5"><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><ShieldCheck /></div><div><h1 className="text-3xl font-semibold tracking-tight">Driver licenses</h1><p className="text-muted-foreground leading-6">Review license evidence and keep regional transport assignments compliant.</p></div></div><p className="text-sm text-muted-foreground">Your results are limited to the locations and region assigned to your role.</p></header>

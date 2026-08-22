@@ -59,7 +59,7 @@ export async function PATCH(request: Request) {
     const update = isManagingDirector
       ? { status: "pending_hr_executive", workflow_stage: "hr_executive_signing", updated_at: now }
       : decision === "approve_hr_memo"
-        ? { status: "approved", workflow_stage: "hr_records_review", hr_executive_handoff_by: user.id, hr_executive_handoff_at: now, memo_amendments: JSON.stringify({ text: row.memo_amendments ?? "", hr_executive_signer_id: user.id, hr_executive_signed_at: now, hr_executive_signature_data_url: signer?.signature_data_url ?? null }), updated_at: now }
+        ? { status: "approved", workflow_stage: "hr_records_review", hr_executive_handoff_by: user.id, hr_executive_handoff_at: now, memo_amendments: JSON.stringify({ text: String(body.memoAmendments ?? ""), hr_executive_signer_id: user.id, hr_executive_signed_at: now, hr_executive_signature_data_url: signer?.signature_data_url ?? null }), updated_at: now }
         : { status: "rejected", workflow_stage: "closed", updated_at: now }
     const { error: updateError } = await supabase.from("transport_requests").update(update).in("id", bulkIds).eq("workflow_stage", requiredStage)
     if (updateError) return NextResponse.json({ error: `Unable to process selected requests: ${updateError.message}` }, { status: 500 })

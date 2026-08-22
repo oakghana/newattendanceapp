@@ -12,11 +12,16 @@ export default async function DriverLicensesPage() {
     .select("role, is_active, region_id, assigned_location_id, geofence_locations!user_profiles_assigned_location_id_fkey(districts(region_id))")
     .eq("id", user.id)
     .single()
-  if (!profile || profile.is_active === false || !canManageTransport(profile.role)) redirect("/dashboard")
+  const normalizedRole = String(profile?.role ?? "").toLowerCase().trim().replace(/[\s-]+/g, "_")
+  const isDriver = normalizedRole === "driver"
+  if (!profile || profile.is_active === false || (!canManageTransport(profile.role) && !isDriver)) redirect("/dashboard")
   const assignedLocation = profile.geofence_locations as { districts?: { region_id?: string | null } | null } | null
   const regionId = profile.region_id ?? assignedLocation?.districts?.region_id ?? null
   let driversQuery = supabase.from("transport_drivers").select("*").order("expiry_date")
   if ((isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role)) && regionId) driversQuery = driversQuery.eq("assigned_region_id", regionId)
   const { data: drivers } = await driversQuery
-  return <DriverLicenseWorkspace initialDrivers={drivers ?? []} canVerify={isRegionalHrRole(profile.role)} />
+  const { data: assignedTasks } = isDriver
+    ? await supabase.from("nonregional_transport_requisitions").select("id, department, location, origin, destination, purpose, required_at, return_at, persons_requiring_transport, status, recommended_vehicle, transport_use_date, driver:user_profiles!recommended_driver_id(first_name,last_name)").eq("recommended_driver_id", user.id).order("required_at", { ascending: true })
+    : { data: [] as any[] }
+  return <DriverLicenseWorkspace initialDrivers={isDriver ? [] : (drivers ?? [])} canVerify={!isDriver && isRegionalHrRole(profile.role)} role={isDriver ? "driver" : normalizedRole} assignedTasks={assignedTasks ?? []} />
 }

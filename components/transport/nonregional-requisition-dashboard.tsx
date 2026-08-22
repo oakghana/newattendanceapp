@@ -74,8 +74,8 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
       <header className="flex items-start gap-3">
         <div className="flex flex-col gap-1">
           <p className="text-sm font-medium text-primary">Non-regional transport</p>
-          <h1 className="text-3xl font-semibold tracking-tight">Transport requisitions</h1>
-          <p className="mt-1 text-muted-foreground">Head Office, Awutu Stores, and Nsawam Archives.</p>
+          <h1 className="text-3xl font-semibold tracking-tight">{role === "staff" || role === "department_head" ? "My transport requests" : "Transport requisitions"}</h1>
+          <p className="mt-1 text-muted-foreground">{role === "staff" || role === "department_head" ? "Track approval, download your approved request, and follow the assigned transport plan." : "Head Office, Awutu Stores, and Nsawam Archives."}</p>
         </div>
       </header>
 
@@ -106,6 +106,14 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
                   <p><strong>Required:</strong> {request.required_at}</p>
                 </div>
                 <p className="text-sm leading-6">{request.purpose}</p>
+                {request.md_decision === "approved" && (role === "staff" || role === "department_head") && (
+                  <section className="grid gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Transport assignment details">
+                    <div><p className="text-xs font-medium text-muted-foreground">Assigned driver</p><p className="mt-1 font-medium">{request.driver ? `${request.driver.first_name ?? ""} ${request.driver.last_name ?? ""}`.trim() : "Awaiting assignment"}</p></div>
+                    <div><p className="text-xs font-medium text-muted-foreground">Vehicle</p><p className="mt-1 font-medium">{request.recommended_vehicle || "Awaiting assignment"}</p></div>
+                    <div><p className="text-xs font-medium text-muted-foreground">Meet / leave</p><p className="mt-1 font-medium">{request.transport_use_date || request.required_at || "To be confirmed"}</p></div>
+                    <div><p className="text-xs font-medium text-muted-foreground">Assignment status</p><p className="mt-1 font-medium">{request.status === "assigned" ? "Driver assigned" : "Approved — awaiting assignment"}</p></div>
+                  </section>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {role === "managing_director" && request.md_decision === "pending" && (
                     <>

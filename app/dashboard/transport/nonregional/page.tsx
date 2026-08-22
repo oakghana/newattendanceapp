@@ -9,6 +9,6 @@ export default async function NonRegionalTransportPage() {
   if (!user) redirect("/auth/login")
   const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
   const role = normalizeAppRole(profile?.role)
-  if (!["department_head", "managing_director", "transport_manager", "admin"].includes(role)) redirect("/dashboard/transport")
+  if (!["staff", "department_head", "managing_director", "transport_manager", "admin"].includes(role)) redirect("/dashboard/transport")
   return <NonRegionalRequisitionDashboard role={role} />
 }

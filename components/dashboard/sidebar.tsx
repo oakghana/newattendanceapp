@@ -192,14 +192,13 @@ const navigationItems = [
     title: "Transport Management",
     href: "/dashboard/transport",
     icon: Bus,
-    roles: ["admin", "administrator", "it-admin", "it_admin", "driver", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "director_hr", "manager_hr"],
+    roles: ["admin", "administrator", "it-admin", "it_admin", "driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "director_hr", "manager_hr"],
     category: "admin",
     subItems: [
       { title: "Requests", href: "/dashboard/transport" },
-      { title: "My Approvals", href: "/dashboard/transport/approvals" },
+      { title: "My Approvals", href: "/dashboard/transport/requests" },
       { title: "Driver Licenses", href: "/dashboard/transport/drivers" },
-      { title: "Memo Templates", href: "/dashboard/transport/templates" },
-      { title: "Distribution Archive", href: "/dashboard/transport/archive" },
+      { title: "Non-regional requisitions", href: "/dashboard/transport/nonregional" },
     ],
   },
 
@@ -524,7 +523,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
     {
       title: "Transport Management",
       icon: Bus,
-      hrefs: ["/dashboard/transport", "/dashboard/transport/approvals", "/dashboard/transport/drivers", "/dashboard/transport/templates", "/dashboard/transport/archive"],
+      hrefs: ["/dashboard/transport", "/dashboard/transport/requests", "/dashboard/transport/drivers", "/dashboard/transport/nonregional"],
     },
     {
       title: "Security & System",
