@@ -43,8 +43,30 @@ export async function PATCH(request: Request) {
   const isManager = isRegionalManagerRole(profile?.role)
   if (!profile?.is_active || (!isManager && !isHrRecords && !isManagingDirector && !isHrExecutive)) return NextResponse.json({ error: "You do not have permission to process this request." }, { status: 403 })
   const body = await request.json()
-  const requestId = String(body.id ?? "")
   const decision = String(body.decision ?? "")
+  const bulkIds = Array.isArray(body.ids) ? [...new Set(body.ids.map((id: unknown) => String(id).trim()).filter(Boolean))] : []
+  if (bulkIds.length > 0) {
+    if (!((isManagingDirector && ["approve", "reject"].includes(decision)) || (isHrExecutive && ["approve_hr_memo", "reject"].includes(decision)))) return NextResponse.json({ error: "Bulk approval is not available for this role or decision." }, { status: 403 })
+    if (bulkIds.length > 100) return NextResponse.json({ error: "Select no more than 100 requests at a time." }, { status: 400 })
+    const requiredStage = isManagingDirector ? "managing_director_approval" : "hr_executive_signing"
+    const { data: selectedRows, error: selectedError } = await supabase.from("transport_requests").select("id, workflow_stage, memo_subject, memo_body").in("id", bulkIds)
+    if (selectedError) return NextResponse.json({ error: selectedError.message }, { status: 500 })
+    if (!selectedRows || selectedRows.length !== bulkIds.length) return NextResponse.json({ error: "One or more selected requests could not be found." }, { status: 404 })
+    const invalid = selectedRows.find((row) => row.workflow_stage !== requiredStage || (isHrExecutive && (!row.memo_subject || !row.memo_body)))
+    if (invalid) return NextResponse.json({ error: "Every selected request must be in the current approval queue and have a saved memo." }, { status: 409 })
+    const now = new Date().toISOString()
+    const signer = isHrExecutive ? (await supabase.from("user_profiles").select("signature_data_url").eq("id", user.id).single()).data : null
+    const update = isManagingDirector
+      ? { status: "pending_hr_executive", workflow_stage: "hr_executive_signing", updated_at: now }
+      : decision === "approve_hr_memo"
+        ? { status: "approved", workflow_stage: "hr_records_review", hr_executive_signer_id: user.id, hr_executive_signed_at: now, hr_executive_signature_data_url: signer?.signature_data_url ?? null, hr_executive_handoff_by: user.id, hr_executive_handoff_at: now, updated_at: now }
+        : { status: "rejected", workflow_stage: "closed", updated_at: now }
+    const { error: updateError } = await supabase.from("transport_requests").update(update).in("id", bulkIds).eq("workflow_stage", requiredStage)
+    if (updateError) return NextResponse.json({ error: `Unable to process selected requests: ${updateError.message}` }, { status: 500 })
+    await supabase.from("transport_request_events").insert(selectedRows.map((row) => ({ request_id: row.id, actor_id: user.id, action: `transport_bulk_${decision}`, from_stage: row.workflow_stage, to_stage: update.workflow_stage, comment: String(body.comment ?? `Transport request ${decision.replace(/_/g, " ")}.`) })))
+    return NextResponse.json({ ok: true, processed: bulkIds.length })
+  }
+  const requestId = String(body.id ?? "")
   if (!requestId) return NextResponse.json({ error: "A request id is required." }, { status: 400 })
   const { data: row } = await supabase.from("transport_requests").select("id, purpose, origin, destination, event_date, passenger_count, assigned_region_id, linked_district_id, origin_location_id, workflow_stage, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, regional_manager_signature_data_url, hr_records_amended_by, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url").eq("id", requestId).single()
   if (!row) return NextResponse.json({ error: "Transport request not found." }, { status: 404 })
