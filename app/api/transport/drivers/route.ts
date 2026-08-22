@@ -30,7 +30,8 @@ export async function PATCH(request: Request) {
   const body = await request.json()
   if (isDriver) {
     const { data: driver } = await supabase.from("transport_drivers").select("id, profile_id").eq("profile_id", user.id).maybeSingle()
-    if (!driver || body.id !== driver.id || typeof body.license_document_url !== "string" || !body.license_document_url.startsWith("http")) return NextResponse.json({ error: "You can only update your own license document." }, { status: 403 })
+    if (typeof body.license_document_url !== "string" || !body.license_document_url.startsWith("http")) return NextResponse.json({ error: "A valid license document is required." }, { status: 400 })
+    if (!driver) return NextResponse.json({ error: "Your driver profile is not yet registered. Please ask Transport Management to create your driver record." }, { status: 409 })
     const { error } = await supabase.from("transport_drivers").update({ license_document_url: body.license_document_url, updated_at: new Date().toISOString(), verification_status: "pending" }).eq("id", driver.id).eq("profile_id", user.id)
     if (error) return NextResponse.json({ error: "Unable to save your license document." }, { status: 500 })
     return NextResponse.json({ ok: true })
