@@ -40,13 +40,13 @@ export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, que
   const isHrExecutive = ["hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
   const isRegionalHr = ["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isDriver = ["driver", "drivers"].includes(normalizedRole)
-  const canManage = ["admin", "administrator", "it_admin", "it_admin_role", "regional_manager"].includes(normalizedRole)
+  const canManage = ["admin", "administrator", "it_admin", "it_admin_role", "regional_manager", "transport_manager"].includes(normalizedRole)
   const isDepartmentHead = normalizedRole === "department_head"
   const isTransportManager = normalizedRole === "transport_manager"
   const canCreateRequest = isRegionalHr || isDepartmentHead || isHrExecutive
   const isRegionalManager = isRegionalManagerRole(normalizedRole)
-  const canEditDriverLicense = isRegionalHr
-  const canViewDriverLicense = isRegionalHr || isRegionalManager || isDriver || canManage
+  const canEditDriverLicense = isRegionalHr || isTransportManager
+  const canViewDriverLicense = isRegionalHr || isRegionalManager || isDriver || isTransportManager || canManage
   const [requestOpen, setRequestOpen] = useState(false)
   const router = useRouter()
   async function handleRequestSubmit(event: FormEvent<HTMLFormElement>) {
