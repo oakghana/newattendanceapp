@@ -13,7 +13,7 @@ export default async function TransportPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
 
-  const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
+  const { data: profile } = await supabase.from("user_profiles").select("role, first_name, last_name, department, location").eq("id", user.id).single()
   const normalizedRole = normalizeAppRole(profile?.role)
   const hasTransportAccess = TRANSPORT_ROLES.has(normalizedRole) || canManageTransport(profile?.role) || canCreateTransportRequest(profile?.role) || ["managing_director", "hr_executive", "hr_executive_officer", "department_head", "transport_manager"].includes(normalizedRole)
   if (!profile || !hasTransportAccess) redirect("/dashboard")
@@ -60,6 +60,9 @@ export default async function TransportPage() {
   return (
     <TransportWorkspace
       role={profile.role ?? normalizedRole}
+      requesterName={[profile.first_name, profile.last_name].filter(Boolean).join(" ")}
+      requesterDepartment={profile.department ?? ""}
+      requesterLocation={profile.location ?? ""}
       pendingCount={pendingCount}
       totalCount={totalCount}
       queueRows={queueRows}

@@ -29,9 +29,12 @@ type TransportWorkspaceProps = {
   queueRows?: QueueRow[]
   regionalPendingCount?: number
   nonRegionalPendingCount?: number
+  requesterName?: string
+  requesterDepartment?: string
+  requesterLocation?: string
 }
 
-export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, queueRows = [], regionalPendingCount = 0, nonRegionalPendingCount = 0 }: TransportWorkspaceProps) {
+export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, queueRows = [], regionalPendingCount = 0, nonRegionalPendingCount = 0, requesterName = "", requesterDepartment = "", requesterLocation = "" }: TransportWorkspaceProps) {
   const normalizedRole = role.toLowerCase().trim().replace(/[\s-]+/g, "_")
   const isManagingDirector = ["managing_director", "director"].includes(normalizedRole)
   const isHrExecutive = ["hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
@@ -40,7 +43,7 @@ export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, que
   const canManage = ["admin", "administrator", "it_admin", "it_admin_role", "regional_manager"].includes(normalizedRole)
   const isDepartmentHead = normalizedRole === "department_head"
   const isTransportManager = normalizedRole === "transport_manager"
-  const canCreateRequest = isRegionalHr
+  const canCreateRequest = isRegionalHr || isDepartmentHead || isHrExecutive
   const isRegionalManager = isRegionalManagerRole(normalizedRole)
   const canEditDriverLicense = isRegionalHr
   const canViewDriverLicense = isRegionalHr || isRegionalManager || isDriver || canManage
@@ -68,14 +71,15 @@ export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, que
       const uploaded = await uploadResponse.json()
       documents.push({ name: file.name, url: uploaded.url, type: file.type, size: file.size })
     }
-    const response = await fetch("/api/transport/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ purpose: form.get("purpose"), origin: form.get("origin"), destination: form.get("destination"), eventDate: form.get("eventDate"), passengerCount: form.get("passengerCount"), supportingDocuments: documents }) })
+    const isNonRegionalRequester = isDepartmentHead || isHrExecutive
+    const response = await fetch(isNonRegionalRequester ? "/api/transport/nonregional" : "/api/transport/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(isNonRegionalRequester ? { requisitionDate: form.get("eventDate"), department: requesterDepartment, location: requesterLocation || "QCC Head Office", origin: form.get("origin"), destination: form.get("destination"), requiredAt: form.get("eventDate"), returnAt: form.get("returnDate"), personsRequiringTransport: form.get("passengerCount"), purpose: form.get("purpose"), hodAuthorization: requesterName, hodSignatureDataUrl: `AUTO:${requesterName}` } : { purpose: form.get("purpose"), origin: form.get("origin"), destination: form.get("destination"), eventDate: form.get("eventDate"), passengerCount: form.get("passengerCount"), supportingDocuments: documents }) })
     if (!response.ok) {
       const errorBody = await response.json().catch(() => null)
       toast({ title: "Unable to submit request", description: errorBody?.error ?? "The request could not be saved. Please try again.", variant: "destructive" })
       return
     }
     setRequestOpen(false)
-    toast({ title: "Transport request submitted", description: "Your request has been added to the request register for Regional HR review." })
+    toast({ title: "Transport request submitted", description: isDepartmentHead || isHrExecutive ? "Your non-regional requisition is now awaiting Managing Director approval." : "Your request has been added to the request register for Regional HR review." })
     router.push("/dashboard/transport/requests")
     router.refresh()
   }
@@ -165,7 +169,7 @@ export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, que
           <Badge variant="secondary" className="w-fit">Transport operations</Badge>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" asChild><Link href="/dashboard/transport/requests"><Inbox data-icon="inline-start" /> View requests</Link></Button>{(isDepartmentHead || isTransportManager) && <Button variant="outline" asChild><Link href="/dashboard/transport/nonregional"><Inbox data-icon="inline-start" /> Non-regional requisitions</Link></Button>}
+          <Button variant="outline" asChild><Link href="/dashboard/transport/requests"><Inbox data-icon="inline-start" /> View requests</Link></Button>{(isDepartmentHead || isHrExecutive || isTransportManager) && <Button variant="outline" asChild><Link href="/dashboard/transport/nonregional"><Inbox data-icon="inline-start" /> Non-regional requisitions</Link></Button>}
           {canCreateRequest && <Button onClick={openRequestForm} title="Create a regional transport request">
             <Plus data-icon="inline-start" /> New transport request
           </Button>}
@@ -200,16 +204,17 @@ export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, que
       </section>
 
       <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>New transport request</DialogTitle>
-            <DialogDescription>Capture the regional transport details for review and routing.</DialogDescription>
+            <DialogDescription>Complete the digital requisition. Your department and authorization details are prefilled for secure routing.</DialogDescription>
           </DialogHeader>
           <form className="flex flex-col gap-4" onSubmit={handleRequestSubmit}>
+              <div className="grid gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-4 sm:grid-cols-3"><div><p className="text-xs font-medium text-muted-foreground">Requester</p><p className="mt-1 font-medium">{requesterName || "Authenticated user"}</p></div><div><p className="text-xs font-medium text-muted-foreground">Department</p><p className="mt-1 font-medium">{requesterDepartment || "Department profile"}</p></div><div><p className="text-xs font-medium text-muted-foreground">Authorization</p><p className="mt-1 font-medium text-primary">Signature auto-populated</p></div></div>
               <div className="grid gap-2"><Label htmlFor="transport-purpose">Purpose</Label><Input id="transport-purpose" name="purpose" required placeholder="Staff bus, official travel, funeral, or programme" /></div>
               <div className="grid gap-2 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="transport-origin">Origin</Label><Input id="transport-origin" name="origin" required placeholder="Departure location" /></div><div className="grid gap-2"><Label htmlFor="transport-destination">Destination</Label><Input id="transport-destination" name="destination" required placeholder="Destination" /></div></div>
-              <div className="grid gap-2 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="transport-date">Event date</Label><Input id="transport-date" name="eventDate" required type="date" /></div><div className="grid gap-2"><Label htmlFor="transport-passengers">Passengers</Label><Input id="transport-passengers" name="passengerCount" required min="1" type="number" /></div></div>
-              <div className="grid gap-2"><Label htmlFor="transport-documents">Supporting documents</Label><div className="flex items-center gap-2 rounded-md border border-dashed p-3"><Paperclip className="size-4 text-muted-foreground" /><Input id="transport-documents" name="supportingDocuments" type="file" multiple accept="application/pdf,image/jpeg,image/png" className="cursor-pointer border-0 p-0 shadow-none" /></div><p className="text-xs text-muted-foreground">Attach approval letters, programme schedules, quotations, or other evidence. PDF, JPG, and PNG up to 5 MB each.</p></div>
+              <div className="grid gap-2 sm:grid-cols-3"><div className="grid gap-2"><Label htmlFor="transport-date">Date and time required</Label><Input id="transport-date" name="eventDate" required type="datetime-local" /></div><div className="grid gap-2"><Label htmlFor="transport-return">Date and time of return</Label><Input id="transport-return" name="returnDate" type="datetime-local" /></div><div className="grid gap-2"><Label htmlFor="transport-passengers">Passengers</Label><Input id="transport-passengers" name="passengerCount" required min="1" type="number" /></div></div>
+              <div className="grid gap-2 rounded-lg border border-dashed p-4"><p className="text-sm font-semibold">Transport use only</p><p className="text-xs text-muted-foreground">Recommended vehicle, driver, and final sign-off will be completed by Transport Management after MD approval.</p></div><div className="grid gap-2"><Label htmlFor="transport-documents">Supporting documents</Label><div className="flex items-center gap-2 rounded-md border border-dashed p-3"><Paperclip className="size-4 text-muted-foreground" /><Input id="transport-documents" name="supportingDocuments" type="file" multiple accept="application/pdf,image/jpeg,image/png" className="cursor-pointer border-0 p-0 shadow-none" /></div><p className="text-xs text-muted-foreground">Attach approval letters, programme schedules, quotations, or other evidence. PDF, JPG, and PNG up to 5 MB each.</p></div>
             <DialogFooter><Button type="button" variant="outline" onClick={() => setRequestOpen(false)}>Cancel</Button><Button type="submit">Submit request</Button></DialogFooter>
           </form>
         </DialogContent>
