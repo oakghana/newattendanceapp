@@ -37,7 +37,8 @@ export function canManageTransport(role?: string | null): boolean {
 }
 
 export function canCreateTransportRequest(role?: string | null): boolean {
-  return isRegionalHrRole(role) || isDepartmentHeadRole(role)
+  const normalizedRole = normalizeAppRole(role)
+  return isRegionalHrRole(role) || isDepartmentHeadRole(role) || ["hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
 }
 
 export function isRegionalHrRole(role?: string | null): boolean {

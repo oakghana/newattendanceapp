@@ -31,7 +31,7 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
       toast({ title: "Action failed", description: body?.error ?? "Please try again.", variant: "destructive" })
       return
     }
-    toast({ title: "Requisition updated" })
+    toast({ title: decision === "approve" ? "Approval completed" : decision === "assign_driver" ? "Driver assignment completed" : "Requisition updated", description: "The transport workflow has been updated successfully." })
     load()
   }
 
@@ -74,12 +74,12 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
       <header className="flex items-start gap-3">
         <div className="flex flex-col gap-1">
           <p className="text-sm font-medium text-primary">Non-regional transport</p>
-          <h1 className="text-3xl font-semibold tracking-tight">{role === "staff" || role === "department_head" ? "My transport requests" : "Transport requisitions"}</h1>
-          <p className="mt-1 text-muted-foreground">{role === "staff" || role === "department_head" ? "Track approval, download your approved request, and follow the assigned transport plan." : "Head Office, Awutu Stores, and Nsawam Archives."}</p>
+          <h1 className="text-3xl font-semibold tracking-tight">{role === "staff" || role === "department_head" || role === "hr_executive" || role === "hr_executive_officer" || role === "manager_hr" || role === "director_hr" ? "My transport requests" : "Transport requisitions"}</h1>
+          <p className="mt-1 text-muted-foreground">{role === "staff" || role === "department_head" || role === "hr_executive" || role === "hr_executive_officer" || role === "manager_hr" || role === "director_hr" ? "Track approval, download your approved request, and follow the assigned transport plan." : "Head Office, Awutu Stores, and Nsawam Archives."}</p>
         </div>
       </header>
 
-      {role === "department_head" && (
+      {["department_head", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(role) && (
         <a className="inline-flex w-fit items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground" href="/dashboard/transport/nonregional/new">
           New requisition
         </a>
@@ -106,7 +106,7 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
                   <p><strong>Required:</strong> {request.required_at}</p>
                 </div>
                 <p className="text-sm leading-6">{request.purpose}</p>
-                {request.md_decision === "approved" && (role === "staff" || role === "department_head") && (
+                {request.md_decision === "approved" && (role === "staff" || role === "department_head" || role === "hr_executive" || role === "hr_executive_officer" || role === "manager_hr" || role === "director_hr") && (
                   <section className="grid gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Transport assignment details">
                     <div><p className="text-xs font-medium text-muted-foreground">Assigned driver</p><p className="mt-1 font-medium">{request.driver ? `${request.driver.first_name ?? ""} ${request.driver.last_name ?? ""}`.trim() : "Awaiting assignment"}</p></div>
                     <div><p className="text-xs font-medium text-muted-foreground">Vehicle</p><p className="mt-1 font-medium">{request.recommended_vehicle || "Awaiting assignment"}</p></div>

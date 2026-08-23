@@ -10,9 +10,9 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
   const role = normalizeAppRole(profile?.role)
-  if (!["staff", "department_head", "managing_director", "transport_manager", "admin"].includes(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (!["staff", "department_head", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "managing_director", "transport_manager", "admin"].includes(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   let query = supabase.from("nonregional_transport_requisitions").select("*, requester:user_profiles!requester_id(first_name,last_name,email), driver:user_profiles!recommended_driver_id(first_name,last_name,email)").order("created_at", { ascending: false })
-  if (["staff", "department_head"].includes(role)) query = query.eq("requester_id", user.id)
+  if (["staff", "department_head", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(role)) query = query.eq("requester_id", user.id)
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const { data: drivers } = await supabase.from("user_profiles").select("id,first_name,last_name,assigned_location_id,geofence_locations!user_profiles_assigned_location_id_fkey(name)").eq("role", "driver").eq("is_active", true)
@@ -24,7 +24,9 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
-  if (!isDepartmentHeadRole(profile?.role) && !isAdminRole(profile?.role)) return NextResponse.json({ error: "Only Department Heads can submit this requisition." }, { status: 403 })
+  const submitterRole = normalizeAppRole(profile?.role)
+  const canSubmit = isDepartmentHeadRole(profile?.role) || ["hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(submitterRole)
+  if (!canSubmit && !isAdminRole(profile?.role)) return NextResponse.json({ error: "Only Department Heads or HR Executives can submit this requisition." }, { status: 403 })
   const body = await request.json()
   const required = ["department", "location", "origin", "destination", "purpose", "requiredAt", "personsRequiringTransport", "hodAuthorization"]
   if (required.some((key) => !String(body[key] ?? "").trim()) || !locations.has(String(body.location))) return NextResponse.json({ error: "Complete all requisition fields and select an approved location." }, { status: 400 })

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { toast } from "@/hooks/use-toast"
 
 export type TransportRequestRow = {
   id: string
@@ -82,6 +83,7 @@ export function TransportRequestRegister({ rows, canCreate, canAct, canHrRecords
     const result = await response.json().catch(() => ({}))
     setBusy(null)
     if (!response.ok) { setMessage(result.error ?? "Unable to update request."); return }
+    toast({ title: decision === "approve" || decision === "approve_hr_memo" ? "Approval completed" : "Request updated", description: "The transport workflow has been updated successfully." })
     window.location.reload()
   }
 

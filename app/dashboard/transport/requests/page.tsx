@@ -21,7 +21,7 @@ export default async function TransportRequestsPage() {
     .single()
   if (!profile || !profile.role || (!roles.has(normalize(profile.role)) && !isRegionalManagerRole(profile.role))) redirect("/dashboard")
   const normalizedRole = normalizeAppRole(profile.role)
-  const canCreate = isRegionalHrRole(profile.role)
+  const canCreate = isRegionalHrRole(profile.role) || ["department_head", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
   const canAct = isRegionalManagerRole(profile.role)
   const canHrRecords = ["hr_records", "hr_records_officer", "hr_records_manager"].includes(normalizedRole)
   const canManagingDirector = normalizedRole === "managing_director"
