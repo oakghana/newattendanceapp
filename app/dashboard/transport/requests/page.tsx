@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { TransportRequestRegister } from "@/components/transport/transport-request-register"
 import { TransportApprovalDashboard } from "@/components/transport/transport-approval-dashboard"
 import { createClient } from "@/lib/supabase/server"
-import { isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
+import { canCreateTransportRequest, canManageTransport, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 
 const roles = new Set(["admin", "administrator", "it_admin", "driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "director_hr", "manager_hr", "hr_executive", "hr_executive_officer"])
 const normalize = (value: string) => value.toLowerCase().trim().replace(/[\s-]+/g, "_")
@@ -19,7 +19,7 @@ export default async function TransportRequestsPage() {
     .select("role, region_id, assigned_location_id, geofence_locations!user_profiles_assigned_location_id_fkey(district_id, districts(region_id))")
     .eq("id", user.id)
     .single()
-  if (!profile || !profile.role || (!roles.has(normalize(profile.role)) && !isRegionalManagerRole(profile.role))) redirect("/dashboard")
+  if (!profile || !profile.role || (!roles.has(normalize(profile.role)) && !isRegionalManagerRole(profile.role) && !canManageTransport(profile.role) && !canCreateTransportRequest(profile.role))) redirect("/dashboard")
   const normalizedRole = normalizeAppRole(profile.role)
   const canCreate = isRegionalHrRole(profile.role) || ["department_head", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
   const canAct = isRegionalManagerRole(profile.role)

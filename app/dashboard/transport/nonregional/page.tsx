@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { normalizeAppRole } from "@/lib/role-capabilities"
+import { canCreateTransportRequest, canManageTransport, normalizeAppRole } from "@/lib/role-capabilities"
 import { NonRegionalRequisitionDashboard } from "@/components/transport/nonregional-requisition-dashboard"
 
 export default async function NonRegionalTransportPage() {
@@ -9,6 +9,6 @@ export default async function NonRegionalTransportPage() {
   if (!user) redirect("/auth/login")
   const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
   const role = normalizeAppRole(profile?.role)
-  if (!["staff", "department_head", "managing_director", "transport_manager", "admin"].includes(role)) redirect("/dashboard/transport")
+  if (!profile || !(role === "staff" || canCreateTransportRequest(profile.role) || canManageTransport(profile.role) || role === "managing_director")) redirect("/dashboard/transport")
   return <NonRegionalRequisitionDashboard role={role} />
 }
