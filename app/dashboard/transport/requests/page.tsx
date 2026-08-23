@@ -7,7 +7,7 @@ import { TransportApprovalDashboard } from "@/components/transport/transport-app
 import { createClient } from "@/lib/supabase/server"
 import { isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 
-const roles = new Set(["admin", "administrator", "it_admin", "driver", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "director_hr", "manager_hr", "hr_executive", "hr_executive_officer"])
+const roles = new Set(["admin", "administrator", "it_admin", "driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "director_hr", "manager_hr", "hr_executive", "hr_executive_officer"])
 const normalize = (value: string) => value.toLowerCase().trim().replace(/[\s-]+/g, "_")
 
 export default async function TransportRequestsPage() {
