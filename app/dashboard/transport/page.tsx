@@ -13,8 +13,16 @@ export default async function TransportPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
 
-  const { data: profile } = await supabase.from("user_profiles").select("role, first_name, last_name, department, location").eq("id", user.id).single()
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select(
+      "role, first_name, last_name, departments(name), geofence_locations!user_profiles_assigned_location_id_fkey(name)",
+    )
+    .eq("id", user.id)
+    .maybeSingle()
   const normalizedRole = normalizeAppRole(profile?.role)
+  const departmentName = (profile as { departments?: { name?: string | null } | null } | null)?.departments?.name ?? ""
+  const locationName = (profile as { geofence_locations?: { name?: string | null } | null } | null)?.geofence_locations?.name ?? ""
   const hasTransportAccess = TRANSPORT_ROLES.has(normalizedRole) || canManageTransport(profile?.role) || canCreateTransportRequest(profile?.role) || ["managing_director", "hr_executive", "hr_executive_officer", "department_head", "transport_manager"].includes(normalizedRole)
   if (!profile || !hasTransportAccess) redirect("/dashboard")
 
@@ -61,8 +69,8 @@ export default async function TransportPage() {
     <TransportWorkspace
       role={profile.role ?? normalizedRole}
       requesterName={[profile.first_name, profile.last_name].filter(Boolean).join(" ")}
-      requesterDepartment={profile.department ?? ""}
-      requesterLocation={profile.location ?? ""}
+      requesterDepartment={departmentName}
+      requesterLocation={locationName}
       pendingCount={pendingCount}
       totalCount={totalCount}
       queueRows={queueRows}
