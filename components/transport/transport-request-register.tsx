@@ -90,8 +90,8 @@ export function TransportRequestRegister({ rows, canCreate, canAct, canHrRecords
     const result = await response.json().catch(() => ({}))
     setBusy(null)
     if (!response.ok) { setMessage(result.error ?? "Unable to update request."); return }
-    toast({ title: decision === "approve" || decision === "approve_hr_memo" ? "Approval completed" : "Request updated", description: "The transport workflow has been updated successfully." })
-    window.location.reload()
+    toast({ title: decision === "approve" || decision === "approve_hr_memo" ? "Approval completed" : "Request updated", description: decision === "approve_hr_memo" ? "The HR Executive rejoinder was signed and released to the region." : "The transport workflow has been updated successfully.", duration: 5000 })
+    window.setTimeout(() => window.location.reload(), 900)
   }
 
   async function saveCorrection(event: React.FormEvent<HTMLFormElement>) {

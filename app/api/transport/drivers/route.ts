@@ -31,6 +31,8 @@ export async function PATCH(request: Request) {
   if (isDriver) {
     const { data: driver } = await supabase.from("transport_drivers").select("id, profile_id").eq("profile_id", user.id).maybeSingle()
     if (typeof body.license_document_url !== "string" || !body.license_document_url.startsWith("http")) return NextResponse.json({ error: "A valid license document is required." }, { status: 400 })
+    const metadataError = !Number.isInteger(Number(body.production_year)) || Number(body.production_year) < 1900 || Number(body.production_year) > new Date().getFullYear() || !Number.isInteger(Number(body.expiry_year)) || Number(body.expiry_year) < new Date().getFullYear() || !String(body.license_type ?? "").trim() || !String(body.issuing_authority ?? "").trim() || !String(body.obtained_at ?? "").trim()
+    if (metadataError) return NextResponse.json({ error: "License type, issuing authority, place obtained, production year, and expiry year are required." }, { status: 400 })
     const { data: driverProfile } = await supabase.from("user_profiles").select("id, first_name, last_name, employee_id").eq("id", user.id).maybeSingle()
     if (!driverProfile) return NextResponse.json({ error: "Your user profile could not be found." }, { status: 404 })
     const fullName = [driverProfile.first_name, driverProfile.last_name].filter(Boolean).join(" ") || "Driver"
@@ -39,8 +41,11 @@ export async function PATCH(request: Request) {
         profile_id: user.id,
         full_name: fullName,
         license_number: driverProfile.employee_id || `PENDING-${user.id.slice(0, 8)}`,
-        license_type: "Pending verification",
-        expiry_date: "2099-12-31",
+        license_type: String(body.license_type).trim(),
+        production_year: Number(body.production_year),
+        issuing_authority: String(body.issuing_authority).trim(),
+        obtained_at: String(body.obtained_at).trim(),
+        expiry_date: `${Number(body.expiry_year)}-12-31`,
         status: "active",
         verification_status: "pending",
         license_document_url: body.license_document_url,
@@ -51,7 +56,7 @@ export async function PATCH(request: Request) {
       }
       return NextResponse.json({ ok: true, driver: created })
     }
-    const { data: updated, error } = await supabase.from("transport_drivers").update({ license_document_url: body.license_document_url, updated_at: new Date().toISOString(), verification_status: "pending" }).eq("id", driver.id).eq("profile_id", user.id).select("*").single()
+    const { data: updated, error } = await supabase.from("transport_drivers").update({ license_document_url: body.license_document_url, license_type: String(body.license_type).trim(), production_year: Number(body.production_year), issuing_authority: String(body.issuing_authority).trim(), obtained_at: String(body.obtained_at).trim(), expiry_date: `${Number(body.expiry_year)}-12-31`, updated_at: new Date().toISOString(), verification_status: "pending" }).eq("id", driver.id).eq("profile_id", user.id).select("*").single()
     if (error) return NextResponse.json({ error: "Unable to save your license document." }, { status: 500 })
     return NextResponse.json({ ok: true, driver: updated })
   }

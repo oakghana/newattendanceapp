@@ -17,7 +17,7 @@ const modules = [
   { title: "Transport requests", description: "Create and track staff bus, official travel, funeral, and programme requests.", icon: Bus, href: "/dashboard/transport" },
   { title: "Approval queues", description: "Review requests routed to Regional HR, Regional Managers, HR Records, and management.", icon: Inbox, href: "/dashboard/transport/requests" },
   { title: "Driver licenses", description: "Monitor expiry dates and keep expired or suspended drivers out of assignments.", icon: IdCard, href: "/dashboard/transport/drivers", editableFor: "driver" },
-  { title: "Memo templates", description: "Prepare QCC/COCOBOD request, approval, rejection, and response memo formats.", icon: FileText, href: "/dashboard/transport/templates" },
+
 ]
 
 type QueueRow = { id: string; purpose: string; origin: string; destination: string; event_date: string | null; reference_number: string | null; request_type?: "regional" | "nonregional" }
