@@ -23,7 +23,7 @@ function isRegionalLeave(row: any) {
 }
 
 function canEditReference(row: any) {
-  if (row.entity === "transport") return ["hr_records_review", "referenced"].includes(String(row.workflow_stage || ""))
+  if (row.entity === "transport") return ["hr_records_review", "transport_manager_assignment", "referenced"].includes(String(row.workflow_stage || "")) && (row.request_type === "regional_transport" || row.workflow_stage !== "transport_manager_assignment")
   return !isRegionalLeave(row) && FINAL_APPROVED_STATUSES.has(String(row.status || "").toLowerCase())
 }
 
@@ -48,7 +48,8 @@ export default function HrRecordsPage() {
     setReferences((current) => {
       const next = { ...current }
       for (const row of [...(json.leave || []), ...(json.loans || []), ...(json.transport || [])]) {
-        const key = `${(json.leave || []).some((item: any) => item.id === row.id) ? "leave" : "loan"}-${row.id}`
+        const entity = (json.transport || []).some((item: any) => item.id === row.id) ? "transport" : (json.leave || []).some((item: any) => item.id === row.id) ? "leave" : "loan"
+        const key = `${entity}-${row.id}`
         next[key] = row.memo_reference || row.reference_number || ""
       }
       return next
@@ -63,7 +64,7 @@ export default function HrRecordsPage() {
     })
   }, [toast])
 
-  async function saveReference(entity: "leave" | "loan", id: string) {
+  async function saveReference(entity: "leave" | "loan" | "transport", id: string) {
     const key = `${entity}-${id}`
     const reference = (references[key] || "").trim()
     if (reference.length < 3) {
@@ -83,7 +84,7 @@ export default function HrRecordsPage() {
       const json = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(json.error || `Unable to save reference (${response.status})`)
       await loadQueue()
-      toast({ title: "Reference saved", description: `${entity === "loan" ? "Loan" : "Leave"} reference ${reference} was recorded and forwarded.` })
+      toast({ title: "Reference saved", description: `${entity === "loan" ? "Loan" : entity === "transport" ? "Transport memo" : "Leave"} reference ${reference} was recorded and forwarded.` })
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "Unable to save reference"
       setError(message)
@@ -148,7 +149,7 @@ const overdueRows = useMemo(() => [...data.leave, ...data.loans, ...data.transpo
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="bg-muted/50 text-muted-foreground"><tr><th className="px-5 py-3 font-medium">Staff requester</th><th className="px-5 py-3 font-medium">Subject</th><th className="px-5 py-3 font-medium">Type</th><th className="px-5 py-3 font-medium">Stage</th><th className="px-5 py-3 font-medium">Official reference</th><th className="px-5 py-3 font-medium">Reference recorded</th><th className="px-5 py-3 font-medium">Action</th></tr></thead>
             <tbody className="divide-y">
-                            {rows.map((row) => { const locked = Boolean(row.memo_reference_locked || row.memo_reference || row.reference_number); const ageDate = new Date(row.updated_at || row.submitted_at || row.created_at || 0); const overdue = !locked && ageDate.getTime() > 0 && Date.now() - ageDate.getTime() > 3 * 24 * 60 * 60 * 1000; return <tr key={`${row.entity}-${row.id}`} className={overdue ? "bg-red-50 text-red-950" : undefined}>
+                            {rows.map((row) => { const locked = row.entity === "transport" ? row.workflow_stage === "referenced" : Boolean(row.memo_reference_locked || row.memo_reference || row.reference_number); const ageDate = new Date(row.updated_at || row.submitted_at || row.created_at || 0); const overdue = !locked && ageDate.getTime() > 0 && Date.now() - ageDate.getTime() > 3 * 24 * 60 * 60 * 1000; return <tr key={`${row.entity}-${row.id}`} className={overdue ? "bg-red-50 text-red-950" : undefined}>
 <td className="px-5 py-4"><div className="font-medium">{row.requester_name || "Unknown staff"}</div><div className="text-xs text-muted-foreground">Staff ID: {row.staff_id || "Not assigned"}</div><div className="text-xs text-muted-foreground">{row.staff_category || "Staff"} · {row.department || "Department not assigned"}</div><div className="text-xs text-muted-foreground">{row.location_name || "Location not assigned"}</div></td><td className="px-5 py-4"><div className="max-w-xs font-medium">{row.request_subject || row.label}</div><div className="text-xs capitalize text-muted-foreground">{row.label}</div></td><td className="px-5 py-4 capitalize">{row.entity}</td><td className="px-5 py-4 text-muted-foreground">{overdue ? <span className="mr-2 inline-flex rounded-full bg-red-600 px-2 py-0.5 text-[11px] font-semibold text-white">Over 3 days</span> : null}{row.status === "pending_hr_records_reference" || row.workflow_stage === "pending_hr_records_reference" ? "Awaiting HR Records memo reference" : row.status === "pending_hr_leave_processing" || row.workflow_stage === "pending_hr_leave_processing" ? "Awaiting HR Leave Office adjustment" : row.workflow_stage || row.status || "Pending"}</td><td className="px-5 py-4"><input aria-label={`Official reference for ${row.label}`} value={references[`${row.entity}-${row.id}`] ?? row.reference ?? ""} onChange={(event) => setReferences((current) => ({ ...current, [`${row.entity}-${row.id}`]: event.target.value }))} readOnly={!canEditReference(row)} disabled={!canEditReference(row) || saving === `${row.entity}-${row.id}`} className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:bg-muted" /></td><td className="px-5 py-4 text-muted-foreground">{row.memo_reference_locked_at ? new Date(row.memo_reference_locked_at).toLocaleString() : locked ? "Reference recorded" : "Not recorded"}</td><td className="px-5 py-4"><button type="button" disabled={!canEditReference(row) || saving === `${row.entity}-${row.id}`} onClick={() => void saveReference(row.entity, row.id)} className="rounded-md bg-primary px-3 py-2 font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50">{saving === `${row.entity}-${row.id}` ? "Saving…" : locked ? "Update reference" : "Save & forward"}</button></td></tr> })}
               {rows.length === 0 ? <tr><td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">No approved requests are waiting for an official reference.</td></tr> : null}
             </tbody>

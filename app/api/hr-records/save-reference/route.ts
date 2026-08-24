@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
   const isCorrection = Boolean(row.memo_reference_locked)
   if (isRegionalLeave) return NextResponse.json({ error: "Regional HR memo references are read-only for HR Records." }, { status: 403 })
   if (entity !== "transport" && !hrRecordsCanReference(row.status, entity)) return NextResponse.json({ error: `Request is not finally approved and ready for HR Records reference assignment (${row.status || "unknown"}).` }, { status: 409 })
-  if (entity === "transport" && !["hr_records_review", "referenced"].includes(String(row.workflow_stage || ""))) return NextResponse.json({ error: "Transport request is not awaiting HR Records reference assignment." }, { status: 409 })
+  if (entity === "transport" && !["hr_records_review", "transport_manager_assignment", "referenced"].includes(String(row.workflow_stage || ""))) return NextResponse.json({ error: "Transport request is not awaiting HR Records reference assignment." }, { status: 409 })
 
   const { data: duplicate, error: duplicateError } = await admin.from(table).select("id").neq("id", id).ilike(referenceColumn, reference).limit(1).maybeSingle()
   if (duplicateError) return NextResponse.json({ error: duplicateError.message }, { status: 500 })
