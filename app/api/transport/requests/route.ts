@@ -51,17 +51,19 @@ export async function PATCH(request: Request) {
     if (!((isManagingDirector && ["approve", "reject"].includes(decision)) || (isHrExecutive && ["approve_hr_memo", "reject"].includes(decision)))) return NextResponse.json({ error: "Bulk approval is not available for this role or decision." }, { status: 403 })
     if (bulkIds.length > 100) return NextResponse.json({ error: "Select no more than 100 requests at a time." }, { status: 400 })
     const requiredStage = isManagingDirector ? "managing_director_approval" : "hr_executive_signing"
-    const { data: selectedRows, error: selectedError } = await supabase.from("transport_requests").select("id, workflow_stage, memo_subject, memo_body").in("id", bulkIds)
+    const { data: selectedRows, error: selectedError } = await supabase.from("transport_requests").select("id, request_type, workflow_stage, memo_subject, memo_body").in("id", bulkIds)
     if (selectedError) return NextResponse.json({ error: selectedError.message }, { status: 500 })
     if (!selectedRows || selectedRows.length !== bulkIds.length) return NextResponse.json({ error: "One or more selected requests could not be found." }, { status: 404 })
     const invalid = selectedRows.find((row) => row.workflow_stage !== requiredStage || (isHrExecutive && (!row.memo_subject || !row.memo_body)))
+    const mixedWorkflowTypes = isHrExecutive && new Set(selectedRows.map((row) => row.request_type === "regional_transport" ? "regional" : "nonregional")).size > 1
+    if (mixedWorkflowTypes) return NextResponse.json({ error: "Process regional and non-regional signed memos separately because they use different handoff queues." }, { status: 409 })
     if (invalid) return NextResponse.json({ error: "Every selected request must be in the current approval queue and have a saved memo." }, { status: 409 })
     const now = new Date().toISOString()
     const signer = isHrExecutive ? (await supabase.from("approval_signature_registry").select("signature_data_url").eq("user_id", user.id).eq("is_active", true).maybeSingle()).data : null
-    const update = isManagingDirector
-      ? { status: "pending_hr_executive", workflow_stage: "hr_executive_signing", updated_at: now }
-      : decision === "approve_hr_memo"
-        ? { status: "approved", workflow_stage: "transport_manager_assignment", hr_executive_handoff_by: user.id, hr_executive_handoff_at: now, memo_amendments: JSON.stringify({ text: String(body.memoAmendments ?? ""), hr_executive_signer_id: user.id, hr_executive_signed_at: now, hr_executive_signature_data_url: signer?.signature_data_url ?? null }), updated_at: now }
+const update = isManagingDirector
+    ? { status: "pending_hr_executive", workflow_stage: "hr_executive_signing", updated_at: now }
+    : decision === "approve_hr_memo"
+      ? { status: "approved", workflow_stage: selectedRows.some((row) => row.request_type === "regional_transport") ? "hr_records_review" : "transport_manager_assignment", hr_executive_handoff_by: user.id, hr_executive_handoff_at: now, memo_amendments: JSON.stringify({ text: String(body.memoAmendments ?? ""), hr_executive_signer_id: user.id, hr_executive_signed_at: now, hr_executive_signature_data_url: signer?.signature_data_url ?? null }), updated_at: now }
         : { status: "rejected", workflow_stage: "closed", updated_at: now }
     const { error: updateError } = await supabase.from("transport_requests").update(update).in("id", bulkIds).eq("workflow_stage", requiredStage)
     if (updateError) return NextResponse.json({ error: `Unable to process selected requests: ${updateError.message}` }, { status: 500 })
@@ -70,7 +72,7 @@ export async function PATCH(request: Request) {
   }
   const requestId = String(body.id ?? "")
   if (!requestId) return NextResponse.json({ error: "A request id is required." }, { status: 400 })
-  const { data: row } = await supabase.from("transport_requests").select("id, purpose, origin, destination, event_date, passenger_count, assigned_region_id, linked_district_id, origin_location_id, workflow_stage, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, hr_records_amended_by, hr_records_amended_at").eq("id", requestId).single()
+  const { data: row } = await supabase.from("transport_requests").select("id, request_type, purpose, origin, destination, event_date, passenger_count, assigned_region_id, linked_district_id, origin_location_id, workflow_stage, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, hr_records_amended_by, hr_records_amended_at").eq("id", requestId).single()
   if (!row) return NextResponse.json({ error: "Transport request not found." }, { status: 404 })
   const assignedLocation = profile.geofence_locations as { district_id?: string | null; districts?: { region_id?: string | null } | null } | null
   if (isManager) {
@@ -91,7 +93,7 @@ export async function PATCH(request: Request) {
   let update: Record<string, unknown>
   if (decision === "preview_memo") update = { memo_subject: String(body.memoSubject ?? row.memo_subject ?? `Request for vehicle support: ${row.purpose}`), memo_body: String(body.memoBody ?? row.memo_body ?? ""), memo_reference: String(body.memoReference ?? row.memo_reference ?? ""), memo_date: String(body.memoDate ?? row.memo_date ?? new Date().toISOString().slice(0, 10)), updated_at: new Date().toISOString() }
   else if (decision === "save_memo") { const enteredSubject = String(body.memoSubject ?? row.memo_subject ?? row.purpose).trim().replace(/^\s*(re:\s*)+/i, ""); const memoSubject = isHrExecutive ? `RE: ${enteredSubject}` : enteredSubject; update = { memo_reference: String(body.memoReference ?? "").trim(), memo_date: String(body.memoDate ?? "").trim(), memo_subject: memoSubject, memo_body: String(body.memoBody ?? "").trim(), memo_amendments: String(body.memoAmendments ?? "").trim(), ...(isHrExecutive ? {} : { hr_records_amended_by: user.id, hr_records_amended_at: new Date().toISOString() }), updated_at: new Date().toISOString() } }
-  else if (decision === "approve_hr_memo") { if (!row.memo_subject || !row.memo_body) return NextResponse.json({ error: "Open and save the edited memo before approving it." }, { status: 409 }); const { data: signer } = await supabase.from("user_profiles").select("signature_data_url").eq("id", user.id).single(); update = { status: "approved", workflow_stage: "transport_manager_assignment", hr_executive_signer_id: user.id, hr_executive_signed_at: new Date().toISOString(), hr_executive_signature_data_url: signer?.signature_data_url ?? null, hr_executive_handoff_by: user.id, hr_executive_handoff_at: new Date().toISOString(), updated_at: new Date().toISOString() } }
+  else if (decision === "approve_hr_memo") { if (!row.memo_subject || !row.memo_body) return NextResponse.json({ error: "Open and save the edited memo before approving it." }, { status: 409 }); const { data: signer } = await supabase.from("user_profiles").select("signature_data_url").eq("id", user.id).single(); update = { status: "approved", workflow_stage: row.request_type === "regional_transport" ? "hr_records_review" : "transport_manager_assignment", hr_executive_signer_id: user.id, hr_executive_signed_at: new Date().toISOString(), hr_executive_signature_data_url: signer?.signature_data_url ?? null, hr_executive_handoff_by: user.id, hr_executive_handoff_at: new Date().toISOString(), updated_at: new Date().toISOString() } }
   else if (decision === "send_to_hr_executive") update = { status: "approved", workflow_stage: "hr_records_review", hr_executive_handoff_by: user.id, hr_executive_handoff_at: new Date().toISOString(), updated_at: new Date().toISOString() }
   else if (decision === "endorse") { const { data: signer } = await supabase.from("approval_signature_registry").select("signature_data_url").eq("user_id", user.id).eq("is_active", true).maybeSingle(); const signedAt = new Date().toISOString(); update = { status: "endorsed", workflow_stage: "managing_director_approval", memo_amendments: JSON.stringify({ text: row.memo_amendments ?? "", regional_manager_signer_id: user.id, regional_manager_signed_at: signedAt, regional_manager_signature_data_url: signer?.signature_data_url ?? null }), updated_at: signedAt } }
   else if (decision === "deny" || decision === "reject") update = { status: "rejected", workflow_stage: "closed", updated_at: new Date().toISOString() }
