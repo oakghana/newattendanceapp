@@ -71,7 +71,7 @@ export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, que
       const uploaded = await uploadResponse.json()
       documents.push({ name: file.name, url: uploaded.url, type: file.type, size: file.size })
     }
-    const isNonRegionalRequester = isDepartmentHead || isHrExecutive
+    const isNonRegionalRequester = isDepartmentHead
     const response = await fetch(isNonRegionalRequester ? "/api/transport/nonregional" : "/api/transport/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(isNonRegionalRequester ? { requisitionDate: form.get("eventDate"), department: requesterDepartment, location: requesterLocation || "QCC Head Office", origin: form.get("origin"), destination: form.get("destination"), requiredAt: form.get("eventDate"), returnAt: form.get("returnDate"), personsRequiringTransport: form.get("passengerCount"), purpose: form.get("purpose"), hodAuthorization: requesterName } : { purpose: form.get("purpose"), origin: form.get("origin"), destination: form.get("destination"), eventDate: form.get("eventDate"), passengerCount: form.get("passengerCount"), supportingDocuments: documents }) })
     if (!response.ok) {
       const errorBody = await response.json().catch(() => null)
@@ -79,7 +79,7 @@ export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, que
       return
     }
     setRequestOpen(false)
-    toast({ title: "Transport request submitted", description: isDepartmentHead || isHrExecutive ? "Your non-regional requisition is now awaiting Managing Director approval." : "Your request has been added to the request register for Regional HR review." })
+    toast({ title: "Transport request submitted", description: isDepartmentHead || isHrExecutive ? "Your non-regional requisition is now awaiting Managing Director approval." : "Regional HR will route your request to the Regional Manager for endorsement." })
     router.push("/dashboard/transport/requests")
     router.refresh()
   }
@@ -207,10 +207,10 @@ export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, que
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>New transport request</DialogTitle>
-            <DialogDescription>Complete the digital requisition. Your department and authorization details are prefilled for secure routing.</DialogDescription>
+            <DialogDescription>{isDepartmentHead ? "Complete the digital requisition. Your Department Head authorization is required before Managing Director review." : "Complete the digital requisition. Regional HR will route it to the Regional Manager for endorsement."}</DialogDescription>
           </DialogHeader>
           <form className="flex flex-col gap-4" onSubmit={handleRequestSubmit}>
-              <div className="grid gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-4 sm:grid-cols-3"><div><p className="text-xs font-medium text-muted-foreground">Requester</p><p className="mt-1 font-medium">{requesterName || "Authenticated user"}</p></div><div><p className="text-xs font-medium text-muted-foreground">Department</p><p className="mt-1 font-medium">{requesterDepartment || "Department profile"}</p></div><div><p className="text-xs font-medium text-muted-foreground">Authorization</p><p className="mt-1 font-medium text-primary">Signature auto-populated</p></div></div>
+              <div className={`grid gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-4 ${isDepartmentHead ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}><div><p className="text-xs font-medium text-muted-foreground">Requester</p><p className="mt-1 font-medium">{requesterName || "Authenticated user"}</p></div><div><p className="text-xs font-medium text-muted-foreground">Department</p><p className="mt-1 font-medium">{requesterDepartment || "Department profile"}</p></div>{isDepartmentHead && <div><p className="text-xs font-medium text-muted-foreground">Authorization</p><p className="mt-1 font-medium text-primary">Department Head signature required</p></div>}</div>
               <div className="grid gap-2"><Label htmlFor="transport-purpose">Purpose</Label><Input id="transport-purpose" name="purpose" required placeholder="Staff bus, official travel, funeral, or programme" /></div>
               <div className="grid gap-2 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="transport-origin">Origin</Label><Input id="transport-origin" name="origin" required placeholder="Departure location" /></div><div className="grid gap-2"><Label htmlFor="transport-destination">Destination</Label><Input id="transport-destination" name="destination" required placeholder="Destination" /></div></div>
               <div className="grid gap-2 sm:grid-cols-3"><div className="grid gap-2"><Label htmlFor="transport-date">Date and time required</Label><Input id="transport-date" name="eventDate" required type="datetime-local" /></div><div className="grid gap-2"><Label htmlFor="transport-return">Date and time of return</Label><Input id="transport-return" name="returnDate" type="datetime-local" /></div><div className="grid gap-2"><Label htmlFor="transport-passengers">Passengers</Label><Input id="transport-passengers" name="passengerCount" required min="1" type="number" /></div></div>
