@@ -7,7 +7,7 @@ import { TransportApprovalDashboard } from "@/components/transport/transport-app
 import { createClient } from "@/lib/supabase/server"
 import { canCreateTransportRequest, canManageTransport, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 
-const roles = new Set(["admin", "administrator", "it_admin", "driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "director_hr", "manager_hr", "hr_executive", "hr_executive_officer"])
+const roles = new Set(["admin", "administrator", "it_admin", "driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "hr", "managing_director", "director_hr", "manager_hr", "hr_executive", "hr_executive_officer"])
 const normalize = (value: string) => value.toLowerCase().trim().replace(/[\s-]+/g, "_")
 
 export default async function TransportRequestsPage() {
@@ -21,11 +21,11 @@ export default async function TransportRequestsPage() {
     .single()
   if (!profile || !profile.role || (!roles.has(normalize(profile.role)) && !isRegionalManagerRole(profile.role) && !canManageTransport(profile.role) && !canCreateTransportRequest(profile.role))) redirect("/dashboard")
   const normalizedRole = normalizeAppRole(profile.role)
-  const canCreate = isRegionalHrRole(profile.role) || ["department_head", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
+  const canCreate = isRegionalHrRole(profile.role) || ["department_head", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
   const canAct = isRegionalManagerRole(profile.role)
   const canHrRecords = ["hr_records", "hr_records_officer", "hr_records_manager"].includes(normalizedRole)
   const canManagingDirector = normalizedRole === "managing_director"
-  const canHrExecutive = ["hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
+  const canHrExecutive = ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
   const assignedLocation = profile.geofence_locations as { district_id?: string | null; districts?: { region_id?: string | null } | null } | null
   const locationId = profile.assigned_location_id ?? null
   const districtId = assignedLocation?.district_id ?? null

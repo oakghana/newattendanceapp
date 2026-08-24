@@ -37,7 +37,7 @@ type TransportWorkspaceProps = {
 export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, queueRows = [], regionalPendingCount = 0, nonRegionalPendingCount = 0, requesterName = "", requesterDepartment = "", requesterLocation = "" }: TransportWorkspaceProps) {
   const normalizedRole = role.toLowerCase().trim().replace(/[\s-]+/g, "_")
   const isManagingDirector = ["managing_director", "director"].includes(normalizedRole)
-  const isHrExecutive = ["hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
+  const isHrExecutive = ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
   const isRegionalHr = ["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isDriver = ["driver", "drivers"].includes(normalizedRole)
   const canManage = ["admin", "administrator", "it_admin", "it_admin_role", "regional_manager", "transport_manager"].includes(normalizedRole)
