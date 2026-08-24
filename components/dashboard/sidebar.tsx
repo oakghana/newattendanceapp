@@ -960,8 +960,11 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
+                  side="right"
                   align="end"
-                  className="w-64 shadow-lg border-border bg-background"
+                  sideOffset={10}
+                  collisionPadding={12}
+                  className="z-[200] w-64 shadow-lg border-border bg-background"
                 >
                   <DropdownMenuLabel className="font-semibold">
                     {profile ? `${profile.first_name} ${profile.last_name}` : "Loading..."}
