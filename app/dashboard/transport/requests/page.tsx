@@ -30,7 +30,7 @@ export default async function TransportRequestsPage() {
   const locationId = profile.assigned_location_id ?? null
   const districtId = assignedLocation?.district_id ?? null
   const regionId = profile.region_id ?? assignedLocation?.districts?.region_id ?? null
-  let requestsQuery = supabase.from("transport_requests").select("id, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at").order("created_at", { ascending: false }).limit(200)
+  let requestsQuery = supabase.from("transport_requests").select("id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at").order("created_at", { ascending: false }).limit(200)
   if (isRegionalManagerRole(profile.role)) {
     if (locationId) requestsQuery = requestsQuery.or(`origin_location_id.eq.${locationId},origin_location_id.is.null`)
     if (!locationId && districtId) requestsQuery = requestsQuery.eq("linked_district_id", districtId)
