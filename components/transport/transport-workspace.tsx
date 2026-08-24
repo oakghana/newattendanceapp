@@ -43,7 +43,7 @@ export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, que
   const canManage = ["admin", "administrator", "it_admin", "it_admin_role", "regional_manager", "transport_manager"].includes(normalizedRole)
   const isDepartmentHead = normalizedRole === "department_head"
   const isTransportManager = normalizedRole === "transport_manager"
-  const canCreateRequest = isRegionalHr || isDepartmentHead || isHrExecutive || isTransportManager
+  const canCreateRequest = isRegionalHr || isDepartmentHead || isHrExecutive
   const isRegionalManager = isRegionalManagerRole(normalizedRole)
   const canEditDriverLicense = isRegionalHr || isTransportManager
   const canViewDriverLicense = isRegionalHr || isRegionalManager || isDriver || isTransportManager || canManage
@@ -72,7 +72,7 @@ export function TransportWorkspace({ role, pendingCount = 0, totalCount = 0, que
       documents.push({ name: file.name, url: uploaded.url, type: file.type, size: file.size })
     }
     const isNonRegionalRequester = isDepartmentHead || isHrExecutive
-    const response = await fetch(isNonRegionalRequester ? "/api/transport/nonregional" : "/api/transport/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(isNonRegionalRequester ? { requisitionDate: form.get("eventDate"), department: requesterDepartment, location: requesterLocation || "QCC Head Office", origin: form.get("origin"), destination: form.get("destination"), requiredAt: form.get("eventDate"), returnAt: form.get("returnDate"), personsRequiringTransport: form.get("passengerCount"), purpose: form.get("purpose"), hodAuthorization: requesterName, hodSignatureDataUrl: `AUTO:${requesterName}` } : { purpose: form.get("purpose"), origin: form.get("origin"), destination: form.get("destination"), eventDate: form.get("eventDate"), passengerCount: form.get("passengerCount"), supportingDocuments: documents }) })
+    const response = await fetch(isNonRegionalRequester ? "/api/transport/nonregional" : "/api/transport/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(isNonRegionalRequester ? { requisitionDate: form.get("eventDate"), department: requesterDepartment, location: requesterLocation || "QCC Head Office", origin: form.get("origin"), destination: form.get("destination"), requiredAt: form.get("eventDate"), returnAt: form.get("returnDate"), personsRequiringTransport: form.get("passengerCount"), purpose: form.get("purpose"), hodAuthorization: requesterName } : { purpose: form.get("purpose"), origin: form.get("origin"), destination: form.get("destination"), eventDate: form.get("eventDate"), passengerCount: form.get("passengerCount"), supportingDocuments: documents }) })
     if (!response.ok) {
       const errorBody = await response.json().catch(() => null)
       toast({ title: "Unable to submit request", description: errorBody?.error ?? "The request could not be saved. Please try again.", variant: "destructive", duration: 6000 })

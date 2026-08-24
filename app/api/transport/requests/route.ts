@@ -26,7 +26,9 @@ export async function POST(request: Request) {
   const passengerCount = Number(body.passengerCount)
   const supportingDocuments = Array.isArray(body.supportingDocuments) ? body.supportingDocuments.slice(0, 10).map((document: unknown) => { const item = document as Record<string, unknown>; return { name: String(item.name ?? "supporting-document"), url: String(item.url ?? ""), type: String(item.type ?? "application/octet-stream"), size: Number(item.size ?? 0) } }).filter((document: { url: string }) => document.url) : []
   if (!purpose || !origin || !destination || !eventDate || !Number.isInteger(passengerCount) || passengerCount < 1) return NextResponse.json({ error: "Complete all required request details." }, { status: 400 })
-  const { data, error } = await supabase.from("transport_requests").insert({ requester_id: user.id, request_type: "regional_transport", purpose, origin, destination, event_date: eventDate, passenger_count: passengerCount, status: "submitted", workflow_stage: "regional_manager_endorsement", supporting_documents: supportingDocuments, assigned_region_id: assignedRegionId, linked_district_id: linkedDistrictId, origin_location_id: originLocationId }).select("id").single()
+  const { data: signer } = await supabase.from("user_profiles").select("signature_data_url").eq("id", user.id).single()
+  const signedAt = new Date().toISOString()
+  const { data, error } = await supabase.from("transport_requests").insert({ requester_id: user.id, request_type: "regional_transport", purpose, origin, destination, event_date: eventDate, passenger_count: passengerCount, status: "submitted", workflow_stage: "regional_manager_endorsement", supporting_documents: supportingDocuments, assigned_region_id: assignedRegionId, linked_district_id: linkedDistrictId, origin_location_id: originLocationId, regional_hr_signer_id: user.id, regional_hr_signed_at: signedAt, regional_hr_signature_data_url: signer?.signature_data_url ?? null }).select("id").single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ id: data.id }, { status: 201 })
 }

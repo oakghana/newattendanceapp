@@ -31,6 +31,15 @@ export type TransportRequestRow = {
   regional_manager_signer_id?: string | null
 regional_manager_signed_at?: string | null
   regional_manager_signature_data_url?: string | null
+  regional_hr_signer_id?: string | null
+  regional_hr_signed_at?: string | null
+  regional_hr_signature_data_url?: string | null
+  department_head_signer_id?: string | null
+  department_head_signed_at?: string | null
+  department_head_signature_data_url?: string | null
+  transport_manager_signer_id?: string | null
+  transport_manager_signed_at?: string | null
+  transport_manager_signature_data_url?: string | null
   managing_director_signer_id?: string | null
   managing_director_signed_at?: string | null
   managing_director_signature_data_url?: string | null
