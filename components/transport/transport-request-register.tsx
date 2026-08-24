@@ -62,8 +62,9 @@ export function TransportRequestRegister({ rows, canCreate, canAct, canHrRecords
     setBulkBusy(true); setMessage(null)
     const response = await fetch("/api/transport/requests", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: [...selectedIds], decision }) })
     const result = await response.json().catch(() => ({})); setBulkBusy(false)
-    if (!response.ok) { setMessage(result.error ?? "Unable to process selected requests."); return }
-    window.location.reload()
+    if (!response.ok) { const errorMessage = result.error ?? "Unable to process selected requests."; setMessage(errorMessage); toast({ title: "Bulk action failed", description: errorMessage, variant: "destructive", duration: 6000 }); return }
+    toast({ title: decision === "approve_hr_memo" ? "Rejoinders signed" : "Requests processed", description: "The selected transport requests were updated successfully." })
+    window.setTimeout(() => window.location.reload(), 900)
   }
   const visibleRows = rows.filter((row) => `${row.reference_number ?? ""} ${row.purpose} ${row.origin} ${row.destination}`.toLowerCase().includes(query.toLowerCase()) && (status === "all" || (row.status ?? "submitted") === status))
   const mdQueue = visibleRows.filter((row) => row.workflow_stage === "managing_director_approval")
@@ -89,7 +90,7 @@ export function TransportRequestRegister({ rows, canCreate, canAct, canHrRecords
     const response = await fetch("/api/transport/requests", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, decision, comment }) })
     const result = await response.json().catch(() => ({}))
     setBusy(null)
-    if (!response.ok) { setMessage(result.error ?? "Unable to update request."); return }
+    if (!response.ok) { const errorMessage = result.error ?? "Unable to update request."; setMessage(errorMessage); toast({ title: "Action failed", description: errorMessage, variant: "destructive", duration: 6000 }); return }
     toast({ title: decision === "approve" || decision === "approve_hr_memo" ? "Approval completed" : "Request updated", description: decision === "approve_hr_memo" ? "The HR Executive rejoinder was signed and released to the region." : "The transport workflow has been updated successfully.", duration: 5000 })
     window.setTimeout(() => window.location.reload(), 900)
   }
@@ -102,7 +103,7 @@ export function TransportRequestRegister({ rows, canCreate, canAct, canHrRecords
     const response = await fetch("/api/transport/requests", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editing.id, decision: "correct", purpose: form.get("purpose"), origin: form.get("origin"), destination: form.get("destination"), eventDate: form.get("eventDate"), passengerCount: form.get("passengerCount"), comment: form.get("comment") }) })
     const result = await response.json().catch(() => ({}))
     setBusy(null)
-    if (!response.ok) { setMessage(result.error ?? "Unable to save correction."); return }
+    if (!response.ok) { const errorMessage = result.error ?? "Unable to save correction."; setMessage(errorMessage); toast({ title: "Correction failed", description: errorMessage, variant: "destructive", duration: 6000 }); return }
     window.location.reload()
   }
 
@@ -114,7 +115,7 @@ export function TransportRequestRegister({ rows, canCreate, canAct, canHrRecords
     const response = await fetch("/api/transport/requests", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: memoPreview.id, decision: "save_memo", memoReference: form.get("memoReference"), memoDate: form.get("memoDate"), memoSubject: form.get("memoSubject"), memoBody: form.get("memoBody"), memoAmendments: form.get("memoAmendments") }) })
     const result = await response.json().catch(() => ({}))
     setBusy(null)
-    if (!response.ok) { setMessage(result.error ?? "Unable to save memo."); return }
+    if (!response.ok) { const errorMessage = result.error ?? "Unable to save memo."; setMessage(errorMessage); toast({ title: "Memo save failed", description: errorMessage, variant: "destructive", duration: 6000 }); return }
     window.location.reload()
   }
 
