@@ -235,7 +235,7 @@ assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
 
     // For user_ids without profiles, try to get email from auth.users
     const missingProfileIds = userIds.filter(id => !userMap.has(id))
-    let authUserMap = new Map<string, { email?: string | null }>()
+    const authUserMap = new Map<string, { email?: string | null }>()
     if (missingProfileIds.length > 0) {
       try {
         const adminClient = await createAdminClient()
