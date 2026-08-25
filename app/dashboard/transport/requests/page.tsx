@@ -30,7 +30,7 @@ export default async function TransportRequestsPage() {
   const locationId = profile.assigned_location_id ?? null
   const districtId = assignedLocation?.district_id ?? null
   const regionId = profile.region_id ?? assignedLocation?.districts?.region_id ?? null
-  let requestsQuery = supabase.from("transport_requests").select("id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url").order("created_at", { ascending: false }).limit(200)
+  let requestsQuery = supabase.from("transport_requests").select("id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at").order("created_at", { ascending: false }).limit(200)
   if (isRegionalManagerRole(profile.role)) {
     if (locationId) requestsQuery = requestsQuery.or(`origin_location_id.eq.${locationId},origin_location_id.is.null`)
     if (!locationId && districtId) requestsQuery = requestsQuery.eq("linked_district_id", districtId)
@@ -38,10 +38,7 @@ export default async function TransportRequestsPage() {
     requestsQuery = requestsQuery.in("workflow_stage", ["regional_manager_endorsement", "hr_records_review", "hr_executive_signing", "approved", "referenced", "completed", "closed"])
   }
   const { data: requests, error: requestsError } = await requestsQuery
-  const signerIds = (requests ?? []).map((request) => request.hr_executive_signer_id).filter((id): id is string => Boolean(id))
-  const { data: signerProfiles } = signerIds.length ? await supabase.from("user_profiles").select("id, first_name, last_name, position, signature_data_url").in("id", signerIds) : { data: [] as { id: string; first_name?: string | null; last_name?: string | null; position?: string | null; signature_data_url?: string | null }[] }
-  const signatures = new Map((signerProfiles ?? []).map((signer) => [signer.id, signer]))
-  const requestsWithSignatures = (requests ?? []).map((request) => { const signer = request.hr_executive_signer_id ? signatures.get(request.hr_executive_signer_id) : null; return { ...request, hr_executive_signer_name: signer ? `${signer.first_name ?? ""} ${signer.last_name ?? ""}`.trim() : null, hr_executive_signer_position: signer?.position ?? null, hr_executive_signature_data_url: request.hr_executive_signature_data_url ?? signer?.signature_data_url ?? null } })
+  const requestsWithSignatures = requests ?? []
 
   const pendingCount = requests?.filter((request) => canManagingDirector ? request.workflow_stage === "managing_director_approval" : canHrExecutive ? request.workflow_stage === "hr_executive_signing" : false).length ?? 0
 
