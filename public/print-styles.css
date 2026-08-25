@@ -1,5 +1,7 @@
 /* Print-friendly styles for leave memos and signatures */
 
+@page { size: A4; margin: 16mm; }
+
 @media print {
   /* Hide non-essential UI elements */
   .print-hide,
