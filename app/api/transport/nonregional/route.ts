@@ -8,11 +8,15 @@ export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
+  const { data: profile } = await supabase.from("user_profiles").select("role, region_id, assigned_location_id, geofence_locations!user_profiles_assigned_location_id_fkey(name)").eq("id", user.id).single()
   const role = normalizeAppRole(profile?.role)
-  if (!["staff", "department_head", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "managing_director", "transport_manager", "admin"].includes(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (!profile || !["staff", "department_head", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "managing_director", "transport_manager", "admin", "driver"].includes(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   let query = supabase.from("nonregional_transport_requisitions").select("*, requester:user_profiles!requester_id(first_name,last_name,email), driver:user_profiles!recommended_driver_id(first_name,last_name,email)").order("created_at", { ascending: false })
-  if (["staff", "department_head", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(role)) query = query.eq("requester_id", user.id)
+  if (role === "driver") {
+    const locationName = (profile.geofence_locations as { name?: string } | null)?.name
+    if (locationName) query = query.or(`driver_id.eq.${user.id},location.eq.${locationName}`)
+    else query = query.eq("driver_id", user.id)
+  } else if (["staff", "department_head", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(role)) query = query.eq("requester_id", user.id)
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const { data: drivers } = await supabase.from("user_profiles").select("id,first_name,last_name,assigned_location_id,geofence_locations!user_profiles_assigned_location_id_fkey(name)").eq("role", "driver").eq("is_active", true)
