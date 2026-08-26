@@ -716,6 +716,9 @@ export function StaffManagement() {
                   <SelectItem value="it-admin">IT Admin</SelectItem>
                   <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>
                   <SelectItem value="manager_hr">Manager HR</SelectItem>
+  <SelectItem value="managing_director">Managing Director</SelectItem>
+  <SelectItem value="driver">Driver</SelectItem>
+  <SelectItem value="transport_manager">Transport Manager</SelectItem>
                   <SelectItem value="nsp">NSP</SelectItem>
                   <SelectItem value="regional_hr">Regional HR Officer</SelectItem>
                   <SelectItem value="regional_manager">Regional Manager</SelectItem>
@@ -917,6 +920,8 @@ export function StaffManagement() {
                                 {isAdministrator && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
                                 {isAdministrator && <SelectItem value="manager_hr">Manager HR</SelectItem>}
                                 {isAdministrator && <SelectItem value="managing_director">Managing Director</SelectItem>}
+                                {isAdministrator && <SelectItem value="driver">Driver</SelectItem>}
+                                {isAdministrator && <SelectItem value="transport_manager">Transport Manager</SelectItem>}
                                 <SelectItem value="nsp">NSP</SelectItem>
                                 {isAdministrator && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
                                 {isAdministrator && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
@@ -1185,6 +1190,8 @@ export function StaffManagement() {
                             {isAdministrator && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
                             {isAdministrator && <SelectItem value="manager_hr">Manager HR</SelectItem>}
                             {isAdministrator && <SelectItem value="managing_director">Managing Director</SelectItem>}
+                            {isAdministrator && <SelectItem value="driver">Driver</SelectItem>}
+                                {isAdministrator && <SelectItem value="transport_manager">Transport Manager</SelectItem>}
                             <SelectItem value="nsp">NSP</SelectItem>
                             {isAdministrator && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
                             {isAdministrator && <SelectItem value="regional_manager">Regional Manager</SelectItem>}

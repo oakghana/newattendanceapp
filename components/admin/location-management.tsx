@@ -33,7 +33,9 @@ import {
   WifiOff,
   Power,
   Home,
+  Download,
 } from "lucide-react"
+import * as XLSX from "xlsx"
 import { generateQRCode, generateSignature, type QRCodeData } from "@/lib/qr-code"
 
 interface GeofenceLocation {
@@ -100,6 +102,40 @@ export function LocationManagement() {
       window.removeEventListener("offline", handleOffline)
     }
   }, [])
+
+  const exportLocationsToExcel = useCallback(() => {
+    const query = searchQuery.trim().toLowerCase()
+    const filteredLocations = locations.filter((location) =>
+      `${location.name} ${location.address} ${location.location_type} ${location.parent_location?.name || ""}`
+        .toLowerCase()
+        .includes(query),
+    )
+
+    const rows = filteredLocations.map((location) => ({
+      "Location Name": location.name,
+      "Location Type": location.location_type || "",
+      "Linked Regional Office": location.parent_location?.name || "Not linked",
+      "Address": location.address,
+      Latitude: location.latitude,
+      Longitude: location.longitude,
+      "Radius (meters)": location.radius_meters,
+      Status: location.is_active ? "Active" : "Inactive",
+      "Check-in Start": location.check_in_start_time || "",
+      "Check-out End": location.check_out_end_time || "",
+      "Working Hours": location.working_hours_description || "",
+    }))
+
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+    worksheet["!cols"] = [
+      { wch: 28 }, { wch: 18 }, { wch: 30 }, { wch: 42 },
+      { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 12 },
+      { wch: 16 }, { wch: 16 }, { wch: 28 },
+    ]
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Location Linkage")
+    XLSX.writeFile(workbook, `qcc-location-linkage-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    toast({ title: "Excel export ready", description: `Exported ${rows.length} location${rows.length === 1 ? "" : "s"}.` })
+  }, [locations, searchQuery, toast])
 
   const checkLocationPermission = async () => {
     if ("permissions" in navigator) {
@@ -1005,6 +1041,10 @@ export function LocationManagement() {
     <p className="text-sm text-muted-foreground">
       {locations.filter((location) => `${location.name} ${location.address} ${location.location_type} ${location.parent_location?.name || ""}`.toLowerCase().includes(searchQuery.trim().toLowerCase())).length} of {locations.length} locations
     </p>
+  <Button type="button" variant="outline" onClick={exportLocationsToExcel} disabled={loading || locations.length === 0} className="w-full sm:w-auto">
+  <Download data-icon="inline-start" />
+  Export to Excel
+  </Button>
   </div>
   
   <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">

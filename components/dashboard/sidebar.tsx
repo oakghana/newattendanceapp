@@ -47,9 +47,10 @@ import {
   Mail,
   Stamp,
   ScrollText,
+  Bus,
 } from "lucide-react"
 import Image from "next/image"
-import { canAccessMemoConsole, normalizeAppRole } from "@/lib/role-capabilities"
+import { canAccessMemoConsole, isAttendanceOnlyRole, normalizeAppRole } from "@/lib/role-capabilities"
 
 interface SidebarProps {
   user: {
@@ -60,6 +61,7 @@ interface SidebarProps {
     first_name: string
     last_name: string
     employee_id: string
+    profile_image_url?: string | null
     role: string
     departments?: {
       name: string
@@ -72,7 +74,7 @@ interface SidebarProps {
 
 const EXEC_ROLES = ["managing_director", "secretary"] as const
 const ALL_STAFF_ROLES = [
-  "admin", "it-admin", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "department_head",
+  "admin", "it-admin", "driver", "transport_manager", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "department_head",
   "staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "director_hr", "manager_hr",
   "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern",
   "contract", "managing_director", "secretary", "hr_records", "hr_records_officer", "hr_records_manager",
@@ -186,6 +188,19 @@ const navigationItems = [
     icon: MapPin,
     roles: ["admin", "it-admin"],
     category: "admin",
+  },
+  {
+    title: "Transport Management",
+    href: "/dashboard/transport",
+    icon: Bus,
+    roles: ["admin", "administrator", "it-admin", "it_admin", "driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "department_head", "hr_executive", "hr_executive_officer", "director_hr", "manager_hr"],
+    category: "admin",
+    subItems: [
+      { title: "Requests", href: "/dashboard/transport" },
+      { title: "My Approvals", href: "/dashboard/transport/requests" },
+      { title: "Driver Licenses", href: "/dashboard/transport/drivers" },
+      { title: "Non-regional requisitions", href: "/dashboard/transport/nonregional" },
+    ],
   },
 
   {
@@ -427,8 +442,10 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
   // the shared helper so values such as "it admin", "IT-ADMIN", and "it_admin"
   // resolve to the same effective role.
   const normalizedRole = normalizeAppRole(profile?.role)
-  const effectiveRole = normalizedRole === "audit_staff" ? "staff" : normalizedRole
+  const isProtectedAdministrator = String(user?.email || "").trim().toLowerCase() === "ohemengappiah@qccgh.com"
+  const effectiveRole = isProtectedAdministrator ? "admin" : normalizedRole === "audit_staff" ? "staff" : normalizedRole
   const isItAdmin = effectiveRole === "it-admin"
+  const isAttendanceOnly = isAttendanceOnlyRole(effectiveRole)
 
   // A handful of "main" category items are intentionally restricted to specific
   // roles (e.g. Disbursement Confirmation is only for Accounts/Loan Office staff,
@@ -451,6 +468,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
   ])
 
   const filteredNavItems = allNavigationItems.filter((item) => {
+    if (isAttendanceOnly) return item.href === "/dashboard/attendance"
     // Disbursement confirmation belongs only to Accounts/Loan Office workflows.
     // Explicitly deny it for HR Records and HR Leave Office even if a legacy
     // "main" navigation fallback would otherwise make it visible.
@@ -462,6 +480,9 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
     }
     if (isItAdmin && item.category === "admin") {
       return ["/dashboard/leave-management", "/dashboard/staff"].includes(item.href)
+    }
+    if (["driver", "transport_manager"].includes(effectiveRole) && ["/dashboard/leave-management", "/dashboard/loan-app", "/dashboard/transport"].includes(item.href)) {
+      return true
     }
     if (item.href === "/dashboard/device-violations") {
       return effectiveRole === "admin"
@@ -502,6 +523,11 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
       title: "Staff & Access",
       icon: Users,
       hrefs: ["/dashboard/staff", "/dashboard/staff-activation", "/dashboard/data-management", "/dashboard/locations"],
+    },
+    {
+      title: "Transport Management",
+      icon: Bus,
+      hrefs: ["/dashboard/transport", "/dashboard/transport/requests", "/dashboard/transport/drivers", "/dashboard/transport/nonregional"],
     },
     {
       title: "Security & System",
@@ -934,8 +960,11 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
+                  side="right"
                   align="end"
-                  className="w-64 shadow-lg border-border bg-background"
+                  sideOffset={10}
+                  collisionPadding={12}
+                  className="z-[200] w-64 shadow-lg border-border bg-background"
                 >
                   <DropdownMenuLabel className="font-semibold">
                     {profile ? `${profile.first_name} ${profile.last_name}` : "Loading..."}

@@ -6,7 +6,9 @@
 // API role mapping: converts UI roles to database storage format
 export const API_ROLE_MAPPINGS: Record<string, string> = {
   'accounts_executive': 'accounts',
-  'hr_executive': 'hr_leave_office'
+  'hr_executive': 'hr_leave_office',
+  'driver': 'driver',
+  'managing_director': 'managing_director'
 };
 
 // Reverse mapping: converts database roles back to UI display format

@@ -100,13 +100,7 @@ export async function POST(request: NextRequest) {
         const location = locationMap.get(record.check_in_location_id)
         return !profile?.employee_id || !profile.first_name || !profile.last_name || !location?.name || !record.check_in_time || !record.status
       })
-      if (incompleteRecords.length > 0) {
-        return NextResponse.json({
-          error: "Export stopped because some attendance records are missing authoritative staff, location, date, or status data.",
-          incompleteRecordCount: incompleteRecords.length,
-          recordIds: incompleteRecords.slice(0, 20).map((record) => record.id),
-        }, { status: 422 })
-      }
+      const incompleteRecordCount = incompleteRecords.length
 
       const exportData = attendanceRecords.map((record) => {
         const userProfile = userProfileMap.get(record.user_id)

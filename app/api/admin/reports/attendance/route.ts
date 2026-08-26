@@ -235,7 +235,7 @@ assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
 
     // For user_ids without profiles, try to get email from auth.users
     const missingProfileIds = userIds.filter(id => !userMap.has(id))
-    let authUserMap = new Map<string, { email?: string | null }>()
+    const authUserMap = new Map<string, { email?: string | null }>()
     if (missingProfileIds.length > 0) {
       try {
         const adminClient = await createAdminClient()
@@ -345,14 +345,11 @@ assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
       const fullName = `${profile?.first_name || ""} ${profile?.last_name || ""}`.trim()
       return !fullName || !profile?.employee_id || !profile?.departments?.name || !location?.name || !record.check_in_time || !record.status
     })
-    if (incompleteReportRecords.length > 0) {
-      return NextResponse.json({
-        success: false,
-        error: "Attendance report data is incomplete. Missing staff, employee ID, department, location, date, or status records must be corrected before viewing this report.",
-        incompleteRecordCount: incompleteReportRecords.length,
-        recordIds: incompleteReportRecords.slice(0, 20).map((record) => record.id),
-      }, { status: 422 })
-    }
+    const reportWarnings = incompleteReportRecords.length > 0 ? {
+      incompleteRecordCount: incompleteReportRecords.length,
+      recordIds: incompleteReportRecords.slice(0, 20).map((record) => record.id),
+      message: "Some attendance rows have incomplete staff, department, location, date, or status details. The report remains available with fallback labels.",
+    } : null
 
     // Calculate summary statistics
     // Calculate total matching records (without pagination) via a dedicated count query.
@@ -457,6 +454,7 @@ assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
             statusCounts,
             departmentStats,
           },
+          warnings: reportWarnings,
         },
       },
       {

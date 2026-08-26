@@ -329,8 +329,9 @@ export function AttendanceReports({
       }
       return localPart.charAt(0).toUpperCase() + localPart.slice(1)
     }
-    // For records without a profile, show location-based label
+    // Keep orphaned attendance rows identifiable instead of presenting them as an unnamed staff member.
     const location = record.check_in_location?.name || record.check_in_location_name || record.geofence_locations?.name
+    if (location && record.user_id) return `Staff ${record.user_id.slice(0, 8)} at ${location}`
     if (location) return `Staff at ${location}`
     if (record.user_id) return `Staff (ID: ${record.user_id.slice(0, 8)})`
     return 'Unknown Staff'

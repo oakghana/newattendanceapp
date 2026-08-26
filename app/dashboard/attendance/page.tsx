@@ -31,11 +31,13 @@ export default function AttendancePage() {
     let isMounted = true
 
     const loadAttendanceData = async () => {
+      let authUser: any = null
       try {
         const supabase = createClient()
 
         // Check authentication
-        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
+        const { data: authData, error: authError } = await supabase.auth.getUser()
+        authUser = authData.user
 
         if (!isMounted) return
 
@@ -94,8 +96,11 @@ export default function AttendancePage() {
           setLocations(allLocations || [])
         }
       } catch (error) {
+        console.error('[v0] Attendance data load failed:', error)
+        // A data/query failure must not be treated as an expired session.
+        // Redirecting here caused valid driver sessions to loop back to login.
         if (isMounted) {
-          router.push('/auth/login')
+          setUser(authUser ?? null)
         }
       } finally {
         if (isMounted) {

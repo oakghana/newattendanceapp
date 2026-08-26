@@ -16,17 +16,19 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const entity = body.entity === "loan" ? "loan" : "leave"
+  const entity = body.entity === "loan" ? "loan" : body.entity === "transport" ? "transport" : "leave"
   const id = String(body.id || "").trim()
   const reference = normalizeReference(body.reference)
   if (!id) return NextResponse.json({ error: "A request id is required." }, { status: 400 })
   if (reference.length < MIN_REFERENCE_LENGTH) return NextResponse.json({ error: "Reference must contain at least 3 characters." }, { status: 400 })
 
-  const table = entity === "loan" ? "loan_requests" : "leave_plan_requests"
+  const table = entity === "loan" ? "loan_requests" : entity === "transport" ? "transport_requests" : "leave_plan_requests"
   const referenceColumn = entity === "loan" ? "reference_number" : "memo_reference"
   const selectColumns = entity === "loan"
     ? `id, status, workflow_stage, memo_reference_locked, ${referenceColumn}`
-    : `id, status, workflow_route, workflow_stage, memo_reference_locked, ${referenceColumn}`
+    : entity === "transport"
+      ? `id, status, workflow_stage, ${referenceColumn}`
+      : `id, status, workflow_route, workflow_stage, memo_reference_locked, ${referenceColumn}`
   const { data: rowData, error: fetchError } = await admin.from(table).select(selectColumns).eq("id", id).maybeSingle()
   const row = rowData as any
   if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 })
@@ -49,7 +51,8 @@ export async function POST(request: NextRequest) {
   // already-locked request should skip re-locking and re-advancing the stage.
   const isCorrection = Boolean(row.memo_reference_locked)
   if (isRegionalLeave) return NextResponse.json({ error: "Regional HR memo references are read-only for HR Records." }, { status: 403 })
-  if (!hrRecordsCanReference(row.status, entity)) return NextResponse.json({ error: `Request is not finally approved and ready for HR Records reference assignment (${row.status || "unknown"}).` }, { status: 409 })
+  if (entity !== "transport" && !hrRecordsCanReference(row.status, entity)) return NextResponse.json({ error: `Request is not finally approved and ready for HR Records reference assignment (${row.status || "unknown"}).` }, { status: 409 })
+  if (entity === "transport" && !["hr_records_review", "transport_manager_assignment", "referenced"].includes(String(row.workflow_stage || ""))) return NextResponse.json({ error: "Transport request is not awaiting HR Records reference assignment." }, { status: 409 })
 
   const { data: duplicate, error: duplicateError } = await admin.from(table).select("id").neq("id", id).ilike(referenceColumn, reference).limit(1).maybeSingle()
   if (duplicateError) return NextResponse.json({ error: duplicateError.message }, { status: 500 })
@@ -70,13 +73,15 @@ export async function POST(request: NextRequest) {
   // status (hr_approved, approved, regional_manager_approved, referenced, etc.)
   // are left untouched — a reference correction must never rewind their stage.
   const nextStatus =
-    entity === "loan"
+    entity === "loan" || entity === "transport"
       ? "referenced"
       : currentStatus === "pending_hr_records_reference"
         ? "hr_approved"
         : currentStatus
-  const nextWorkflowStage = entity === "loan" ? "referenced" : undefined
-  const update = isCorrection
+  const nextWorkflowStage = entity === "loan" || entity === "transport" ? "referenced" : undefined
+  const update = entity === "transport"
+    ? { [referenceColumn]: reference, status: nextStatus, workflow_stage: nextWorkflowStage, updated_at: now }
+    : isCorrection
     ? { [referenceColumn]: reference, updated_at: now }
     : {
         [referenceColumn]: reference,
@@ -87,7 +92,7 @@ export async function POST(request: NextRequest) {
         status: nextStatus,
         updated_at: now,
       }
-  const { data: updated, error: updateError } = await admin.from(table).update(update).eq("id", id).select("id, status, workflow_stage, memo_reference_locked").maybeSingle()
+  const { data: updated, error: updateError } = await admin.from(table).update(update).eq("id", id).select(entity === "transport" ? "id, status, workflow_stage, memo_reference" : "id, status, workflow_stage, memo_reference_locked").maybeSingle()
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
   if (!updated) return NextResponse.json({ error: "Reference was locked by another action. Refresh and try again." }, { status: 409 })
 
