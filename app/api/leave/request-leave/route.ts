@@ -4,7 +4,7 @@ import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays 
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { getNextQccReference } from "@/lib/reference-number"
 import { calculateAnnualLeaveBreakdown } from "@/lib/annual-leave-calculator"
-import { isRegionalHrLeaveOfficeRole, resolveRegionalHrOffice, resolveSelfLeaveRoute, resolveStaffAssignments, routeLeave } from "@/lib/hr-workflow"
+import { getAssignmentGuidance, isRegionalHrLeaveOfficeRole, resolveRegionalHrOffice, resolveSelfLeaveRoute, resolveStaffAssignments, routeLeave } from "@/lib/hr-workflow"
 
 const NON_ANNUAL_REQUIRES_APPROVED_ANNUAL = new Set([
   "sick",
@@ -281,11 +281,101 @@ export async function POST(request: NextRequest) {
         })
     const isSelfLeaveWorkflow = leaveRoute.route === "self_leave"
     const isRegionalWorkflow = leaveRoute.route === "regional"
+    const isHrLeaveOffice = normalizedRole === "hr_leave_office" || isRegionalHrLeaveOfficeRole(normalizedRole)
     if (!shouldAutoApprove && isRegionalWorkflow && !regionalOffice?.user_id) {
+      const regionalGuidance = getAssignmentGuidance(locationName, "leave")
       return NextResponse.json(
-        { error: "This regional leave request cannot be submitted until a Regional HR Office is assigned to the staff member's location.", code: "REGIONAL_HR_ASSIGNMENT_REQUIRED" },
+        {
+          error: "This regional leave request cannot be submitted until a Regional HR Office is assigned to the staff member's location.",
+          code: "REGIONAL_HR_ASSIGNMENT_REQUIRED",
+          title: regionalGuidance.title,
+          contactRole: regionalGuidance.contactRole,
+        },
         { status: 409 },
       )
+    }
+
+    // Resolve the HOD/manager reviewer for the legacy (non-regional, non-self-leave) workflow
+    // BEFORE inserting the leave request, so a missing assignment blocks submission
+    // cleanly instead of leaving an orphaned leave_requests row.
+    const legacyHodIds: string[] = []
+    if (!shouldAutoApprove && !isHrLeaveOffice && !isRegionalWorkflow && !isSelfLeaveWorkflow) {
+      const { data: linkageRows } = await admin
+        .from("loan_hod_linkages")
+        .select("hod_user_id")
+        .eq("staff_user_id", user.id)
+        .limit(20)
+
+      for (const row of linkageRows || []) {
+        const id = (row as any)?.hod_user_id
+        if (id && !legacyHodIds.includes(id)) legacyHodIds.push(id)
+      }
+
+      if (legacyHodIds.length === 0) {
+        const { data: staffProfile } = await admin
+          .from("user_profiles")
+          .select("department_id, region_id, first_name, last_name, assigned_location_id")
+          .eq("id", user.id)
+          .maybeSingle()
+
+        if (isRegionalWorkflow && (staffProfile as any)?.region_id) {
+          const { data: regionalManagers } = await admin
+            .from("user_profiles")
+            .select("id")
+            .eq("region_id", (staffProfile as any).region_id)
+            .eq("role", "regional_manager")
+            .eq("is_active", true)
+            .limit(5)
+
+          for (const manager of regionalManagers || []) {
+            const id = (manager as any)?.id
+            if (id && !legacyHodIds.includes(id)) legacyHodIds.push(id)
+          }
+        }
+
+        if (legacyHodIds.length === 0 && (staffProfile as any)?.department_id) {
+          const { data: deptHods } = await admin
+            .from("user_profiles")
+            .select("id, role")
+            .eq("department_id", (staffProfile as any).department_id)
+            .in("role", ["department_head", "manager_hr", "director_hr"])
+            .eq("is_active", true)
+            .limit(20)
+
+          for (const hod of deptHods || []) {
+            const id = (hod as any)?.id
+            if (id && !legacyHodIds.includes(id)) legacyHodIds.push(id)
+          }
+        }
+
+        if (legacyHodIds.length === 0 && (staffProfile as any)?.assigned_location_id) {
+          const { data: rmList } = await admin
+            .from("user_profiles")
+            .select("id")
+            .eq("assigned_location_id", (staffProfile as any).assigned_location_id)
+            .eq("role", "regional_manager")
+            .eq("is_active", true)
+            .limit(5)
+
+          for (const rm of rmList || []) {
+            const id = (rm as any)?.id
+            if (id && !legacyHodIds.includes(id)) legacyHodIds.push(id)
+          }
+        }
+      }
+
+      if (legacyHodIds.length === 0) {
+        const hodGuidance = getAssignmentGuidance(locationName, "leave")
+        return NextResponse.json(
+          {
+            error: hodGuidance.description,
+            code: "HOD_ASSIGNMENT_REQUIRED",
+            title: hodGuidance.title,
+            contactRole: hodGuidance.contactRole,
+          },
+          { status: 409 },
+        )
+      }
     }
     const initialStatus = shouldAutoApprove
       ? "approved"
@@ -379,91 +469,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Regional requests start with Regional HR Office adjustment and must not notify HOD.
-    const isHrLeaveOffice = normalizedRole === "hr_leave_office" || isRegionalHrLeaveOfficeRole(normalizedRole)
-
+    // (isHrLeaveOffice and the HOD/manager reviewer resolution for this route were
+    // already computed pre-insert as `legacyHodIds` — reused here.)
     if (!shouldAutoApprove && !isHrLeaveOffice && !isRegionalWorkflow && !isSelfLeaveWorkflow) {
       try {
-        const hodIds: string[] = []
-
-        // 1. Primary: explicit linkage table (same as loan workflow)
-        const { data: linkageRows } = await admin
-          .from("loan_hod_linkages")
-          .select("hod_user_id")
-          .eq("staff_user_id", user.id)
-          .limit(20)
-
-        for (const row of linkageRows || []) {
-          const id = (row as any)?.hod_user_id
-          if (id && !hodIds.includes(id)) hodIds.push(id)
-        }
-
-        // 2. Fallback: department_head, manager_hr, director_hr in same department
-        if (hodIds.length === 0) {
-          const { data: staffProfile } = await admin
-            .from("user_profiles")
-            .select("department_id, region_id, first_name, last_name, assigned_location_id")
-            .eq("id", user.id)
-            .maybeSingle()
-
-          // Regional leave, including annual leave, is reviewed by the Regional HR Office first.
-          // Exceptions (manager-grade annual, maternity, paternity, and part leave) stay on the legacy workflow.
-          if (isRegionalWorkflow && (staffProfile as any)?.region_id) {
-            const { data: regionalManagers } = await admin
-              .from("user_profiles")
-              .select("id")
-              .eq("region_id", (staffProfile as any).region_id)
-              .eq("role", "regional_manager")
-              .eq("is_active", true)
-              .limit(5)
-
-            for (const manager of regionalManagers || []) {
-              const id = (manager as any)?.id
-              if (id && !hodIds.includes(id)) hodIds.push(id)
-            }
-          }
-
-          if (hodIds.length === 0 && (staffProfile as any)?.department_id) {
-            // Fetch all possible HOD roles (department_head, manager_hr, director_hr)
-            const { data: deptHods } = await admin
-              .from("user_profiles")
-              .select("id, role")
-              .eq("department_id", (staffProfile as any).department_id)
-              .in("role", ["department_head", "manager_hr", "director_hr"])
-              .eq("is_active", true)
-              .limit(20)
-
-            for (const hod of deptHods || []) {
-              const id = (hod as any)?.id
-              if (id && !hodIds.includes(id)) hodIds.push(id)
-            }
-          }
-
-          // Fallback: regional_manager at the same location
-          if (hodIds.length === 0 && (staffProfile as any)?.assigned_location_id) {
-            const { data: rmList } = await admin
-              .from("user_profiles")
-              .select("id")
-              .eq("assigned_location_id", (staffProfile as any).assigned_location_id)
-              .eq("role", "regional_manager")
-              .eq("is_active", true)
-              .limit(5)
-
-            for (const rm of rmList || []) {
-              const id = (rm as any)?.id
-              if (id && !hodIds.includes(id)) hodIds.push(id)
-            }
-          }
-        }
-
-        if (hodIds.length === 0) {
-          return NextResponse.json(
-            {
-              error:
-                "No HOD/manager routing found for your profile. Please contact HR/Admin to complete staff-to-HOD linkage before submitting leave.",
-            },
-            { status: 400 },
-          )
-        }
+        const hodIds: string[] = legacyHodIds
 
         const leaveNotifications = hodIds.map((hodId) => ({
           leave_request_id: leaveRequest.id,

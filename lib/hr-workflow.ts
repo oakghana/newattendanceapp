@@ -500,3 +500,28 @@ export function regionalSecretaryRoles(role: string | null | undefined) {
   const normalized = normalizeWorkflowRole(role)
   return ["secretary", "admin", "administrator", "hr_records", "hr_records_officer", "hr_records_manager", "regional_hr_leave_office", "regional_hr", "regional_leave_office"].includes(normalized)
 }
+
+/**
+ * When a staff member has no resolvable reviewer yet (no HOD for
+ * non-regional/head-office staff, no Regional HR/Manager assignment for
+ * regional staff), leave and loan requests cannot be routed for approval.
+ * This produces the copy shown to the requester so they know exactly who to
+ * see to complete their assignment before trying again.
+ */
+export type AssignmentGuidance = {
+  contactRole: "Regional IT Head" | "IT Manager"
+  title: string
+  description: string
+}
+
+export function getAssignmentGuidance(locationName: string | null | undefined, kind: "leave" | "loan"): AssignmentGuidance {
+  const isNonRegional = isExcludedLocation(locationName)
+  const contactRole: AssignmentGuidance["contactRole"] = isNonRegional ? "IT Manager" : "Regional IT Head"
+  const noun = kind === "leave" ? "leave" : "loan"
+  const assignmentKind = isNonRegional ? "Head of Department" : "Regional HR/Manager"
+  return {
+    contactRole,
+    title: "Assignment Setup Required",
+    description: `Your account isn't linked to a ${assignmentKind} yet, so this ${noun} request can't be routed for approval. Please see your ${contactRole} to complete your assignment, then try again.`,
+  }
+}
