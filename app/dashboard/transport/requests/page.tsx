@@ -33,7 +33,8 @@ export default async function TransportRequestsPage() {
   const regionId = profile.region_id ?? assignedLocation?.districts?.region_id ?? null
   const profileRegion = profile.regions as { name?: string | null } | null
   const assignedLocationName = (profile.geofence_locations as { name?: string | null } | null)?.name?.trim() ?? ""
-  const regionalOfficeName = profileRegion?.name?.trim() || (assignedLocationName && !/accra|head office/i.test(assignedLocationName) ? assignedLocationName : "Regional Office")
+  const rawRegionalName = profileRegion?.name?.trim() || (assignedLocationName && !/accra|head office/i.test(assignedLocationName) ? assignedLocationName : "")
+  const regionalOfficeName = rawRegionalName ? rawRegionalName.replace(/\s+Regional\s+Office$/i, "").replace(/\s+Region$/i, "").trim() + " Regional Office" : "Regional Office"
   let requestsQuery = supabase.from("transport_requests").select("id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url").order("created_at", { ascending: false }).limit(200)
   if (isRegionalManagerRole(profile.role)) {
     if (locationId) requestsQuery = requestsQuery.or(`origin_location_id.eq.${locationId},origin_location_id.is.null`)
