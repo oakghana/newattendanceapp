@@ -195,38 +195,46 @@ export async function GET(request: NextRequest) {
       const adminClient = await createAdminClient()
       const { data: profiles, error: profileError } = await adminClient
         .from("user_profiles")
-        .select(`
-          id,
-          first_name,
-          last_name,
-          email,
-          employee_id,
-          department_id,
-          assigned_location_id,
-          departments (
-            id,
-            name,
-            code
-          ),
-assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
-              id,
-              name,
-              address,
-              district_id,
-              location_type,
-              parent_location_id,
-              districts (
-                id,
-                name
-              )
-            )
-        `)
+        .select("id, first_name, last_name, email, employee_id, department_id, assigned_location_id")
         .in("id", userIds)
-      
+
       if (profileError) {
-        console.error("[v0] Reports API - Error fetching user profiles:", profileError)
+        console.error("[v0] Reports API - Error fetching scalar user profiles:", {
+          message: profileError.message,
+          code: profileError.code,
+          details: profileError.details,
+        })
       }
-      userProfiles = profiles || []
+
+      userProfiles = (profiles || []).map((profile: any) => ({
+        ...profile,
+        first_name: typeof profile.first_name === "string" ? profile.first_name.trim() : profile.first_name,
+        last_name: typeof profile.last_name === "string" ? profile.last_name.trim() : profile.last_name,
+        employee_id: typeof profile.employee_id === "string" ? profile.employee_id.trim() : profile.employee_id,
+      }))
+
+      const departmentIds = [...new Set(userProfiles.map((profile: any) => profile.department_id).filter(Boolean))]
+      const locationIds = [...new Set(userProfiles.map((profile: any) => profile.assigned_location_id).filter(Boolean))]
+
+      const [{ data: departments, error: departmentError }, { data: locations, error: locationError }] = await Promise.all([
+        departmentIds.length
+          ? adminClient.from("departments").select("id, name, code").in("id", departmentIds)
+          : Promise.resolve({ data: [], error: null }),
+        locationIds.length
+          ? adminClient.from("geofence_locations").select("id, name, address, district_id, location_type, parent_location_id").in("id", locationIds)
+          : Promise.resolve({ data: [], error: null }),
+      ])
+
+      if (departmentError) console.error("[v0] Reports API - Optional department enrichment failed:", departmentError)
+      if (locationError) console.error("[v0] Reports API - Optional location enrichment failed:", locationError)
+
+      const departmentMap = new Map((departments || []).map((department: any) => [department.id, department]))
+      const locationMap = new Map((locations || []).map((location: any) => [location.id, location]))
+      userProfiles = userProfiles.map((profile: any) => ({
+        ...profile,
+        departments: profile.department_id ? departmentMap.get(profile.department_id) || null : null,
+        assigned_location: profile.assigned_location_id ? locationMap.get(profile.assigned_location_id) || null : null,
+      }))
     }
 
     console.log("[v0] Reports API - Fetched", userProfiles.length, "user profiles for", userIds.length, "unique user IDs")
