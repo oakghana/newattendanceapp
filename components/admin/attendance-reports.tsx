@@ -297,7 +297,7 @@ export function AttendanceReports({
     if (!p) return null
     const first = (p as any).first_name || null
     const last = (p as any).last_name || null
-    if (first || last) return `${first || ''} ${last || ''}`.trim()
+    if (first || last) return `${String(first || '').trim()} ${String(last || '').trim()}`.trim()
     // Some profiles may store a single full name field
     const full = (p as any).full_name || (p as any).name || (p as any).display_name || null
     if (full) return String(full).trim()

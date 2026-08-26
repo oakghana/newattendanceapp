@@ -59,6 +59,17 @@ export async function GET(request: NextRequest) {
       .from("attendance_records")
       .select(`
         *,
+        user_profiles:user_profiles!attendance_records_user_id_fkey (
+          id,
+          first_name,
+          last_name,
+          email,
+          employee_id,
+          department_id,
+          assigned_location_id,
+          departments ( id, name, code ),
+          assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey ( id, name, address, location_type, district_id )
+        ),
         check_in_location:geofence_locations!check_in_location_id (
           id,
           name,
@@ -287,7 +298,7 @@ assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
     }
 
     const enrichedRecords = filteredRecords.map((record) => {
-      const userProfile = userMap.get(record.user_id) || null
+      const userProfile = userMap.get(record.user_id) || (record.user_profiles as any) || null
 
       // Determine if check-in/check-out was outside assigned location
       const isCheckInOutsideLocation =
