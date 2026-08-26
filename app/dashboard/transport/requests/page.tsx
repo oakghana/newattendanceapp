@@ -37,7 +37,20 @@ export default async function TransportRequestsPage() {
     else if (!locationId && !districtId && regionId) requestsQuery = requestsQuery.eq("assigned_region_id", regionId)
     requestsQuery = requestsQuery.in("workflow_stage", ["regional_manager_endorsement", "hr_records_review", "hr_executive_signing", "approved", "referenced", "completed", "closed"])
   }
-  const { data: requests, error: requestsError } = await requestsQuery
+  let { data: requests, error: requestsError } = await requestsQuery
+  if (requestsError) {
+    console.error("[v0] Transport request query failed:", requestsError.message)
+    let fallbackQuery = supabase.from("transport_requests").select("id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments").order("created_at", { ascending: false }).limit(200)
+    if (isRegionalManagerRole(profile.role)) {
+      if (locationId) fallbackQuery = fallbackQuery.or(`origin_location_id.eq.${locationId},origin_location_id.is.null`)
+      if (!locationId && districtId) fallbackQuery = fallbackQuery.eq("linked_district_id", districtId)
+      else if (!locationId && !districtId && regionId) fallbackQuery = fallbackQuery.eq("assigned_region_id", regionId)
+      fallbackQuery = fallbackQuery.in("workflow_stage", ["regional_manager_endorsement", "hr_records_review", "hr_executive_signing", "approved", "referenced", "completed", "closed"])
+    }
+    const fallback = await fallbackQuery
+    requests = fallback.data?.map((request) => ({ ...request, regional_manager_signer_id: null, regional_manager_signed_at: null, hr_records_amended_at: null, hr_executive_signer_id: null, hr_executive_signed_at: null, hr_executive_signature_data_url: null })) ?? null
+    requestsError = fallback.error
+  }
   const requestsWithSignatures = requests ?? []
 
   const pendingCount = requests?.filter((request) => canManagingDirector ? request.workflow_stage === "managing_director_approval" : canHrExecutive ? request.workflow_stage === "hr_executive_signing" : false).length ?? 0
