@@ -99,11 +99,10 @@ export function TransportRequestRegister({ rows, canCreate, canAct, canHrRecords
       .replace(/\s+Office$/i, "")
       .replace(/\s+Region$/i, "")
       .trim()
-    return normalized ? `${normalized} Region` : ""
+    if (!normalized || /^(regional|head)$/i.test(normalized)) return ""
+    return `${normalized} Region`
   }
-  const memoRegionalLocation = requestRegionName && !/accra|head office/i.test(requestRegionName)
-    ? formatRecipientRegion(requestRegionName)
-    : formatRecipientRegion(regionalOfficeName) || regionalOfficeName
+  const memoRegionalLocation = formatRecipientRegion(requestRegionName) || formatRecipientRegion(regionalOfficeName) || "Regional Office"
   const memoIntro = isResponseMemo ? "Management has approved transportation support for the official wedding ceremony of a staff member in the Konongo District Office. The approved vehicle support is for the transportation of 100 passengers from Kumasi to Konongo on 22 August 2026. Kindly make the necessary arrangements to facilitate the approved transportation. You can count on our usual cooperation." : "We respectfully submit this request for your consideration and approval. The details of the request are as follows:"
   const memoPreviewLabel = memoPreview?.workflow_stage === "hr_records_review" ? "HR Records review and reference" : memoPreview?.workflow_stage === "hr_executive_signing" ? "HR Executive signing response" : memoPreview?.workflow_stage === "managing_director_approval" ? "Managing Director approval" : "Transport request memo"
   const cleanSubject = (memoPreview?.memo_subject ?? memoPreview?.purpose ?? "").replace(/^\s*(re:\s*)+/i, "").trim()
