@@ -59,17 +59,6 @@ export async function GET(request: NextRequest) {
       .from("attendance_records")
       .select(`
         *,
-        user_profiles:user_profiles!attendance_records_user_id_fkey (
-          id,
-          first_name,
-          last_name,
-          email,
-          employee_id,
-          department_id,
-          assigned_location_id,
-          departments ( id, name, code ),
-          assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey ( id, name, address, location_type, district_id )
-        ),
         check_in_location:geofence_locations!check_in_location_id (
           id,
           name,
@@ -190,8 +179,8 @@ export async function GET(request: NextRequest) {
     const { data: attendanceRecords, error } = await query.order("check_in_time", { ascending: false }).range(startIndex, endIndex)
 
     if (error) {
-      console.error("[v0] Reports API - Attendance query error:", error)
-      return NextResponse.json({ error: "Failed to fetch attendance report" }, { status: 500 })
+      console.error("[v0] Reports API - Attendance query error:", { message: error.message, code: error.code, details: error.details, hint: error.hint })
+      return NextResponse.json({ error: "Failed to fetch attendance report", details: error.message }, { status: 500 })
     }
 
     console.log("[v0] Reports API - Found", attendanceRecords.length, "attendance records")
