@@ -33,8 +33,11 @@ export default async function TransportRequestsPage() {
   const regionId = profile.region_id ?? assignedLocation?.districts?.region_id ?? null
   const profileRegion = profile.regions as { name?: string | null } | null
   const assignedLocationName = (profile.geofence_locations as { name?: string | null } | null)?.name?.trim() ?? ""
-  const rawRegionalName = profileRegion?.name?.trim() || (assignedLocationName && !/accra|head office/i.test(assignedLocationName) ? assignedLocationName : "")
-  const regionalOfficeName = rawRegionalName ? rawRegionalName.replace(/\s+Regional\s+Office$/i, "").replace(/\s+Region$/i, "").trim() + " Regional Office" : "Regional Office"
+  const locationRegionAliases: Record<string, string> = { kumasi: "Ashanti", "kumasi regional office": "Ashanti", accra: "Greater Accra", "accra regional office": "Greater Accra", takoradi: "Western", cape: "Central", sunyani: "Bono", tamale: "Northern", bolgatanga: "Upper East", wa: "Upper West", koforidua: "Eastern", ho: "Volta" }
+  const locationKey = assignedLocationName.toLowerCase().replace(/\s+/g, " ").trim()
+  const locationRegionName = Object.entries(locationRegionAliases).find(([key]) => locationKey.includes(key))?.[1] ?? ""
+  const rawRegionalName = profileRegion?.name?.trim() || locationRegionName
+  const regionalOfficeName = rawRegionalName && !/accra|head office/i.test(rawRegionalName) ? rawRegionalName.replace(/\s+Regional\s+Office$/i, "").replace(/\s+Region$/i, "").trim() + " Regional Office" : "Regional Office"
   let requestsQuery = supabase.from("transport_requests").select("id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url, assigned_region:geofence_locations!transport_requests_assigned_region_id_fkey(name)").order("created_at", { ascending: false }).limit(200)
   if (isRegionalManagerRole(profile.role)) {
     if (locationId) requestsQuery = requestsQuery.or(`origin_location_id.eq.${locationId},origin_location_id.is.null`)
