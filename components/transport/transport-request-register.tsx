@@ -22,7 +22,7 @@ export type TransportRequestRow = {
   reference_number: string | null
   supporting_documents: { name?: string; url?: string }[] | null
   assigned_region_id?: string | null
-  assigned_region?: { name?: string | null }[] | { name?: string | null } | null
+  assigned_region?: { name?: string | null; districts?: { region_id?: string | null; regions?: { name?: string | null } | { name?: string | null }[] | null } | { region_id?: string | null; regions?: { name?: string | null } | { name?: string | null }[] | null }[] | null }[] | { name?: string | null; districts?: { region_id?: string | null; regions?: { name?: string | null } | { name?: string | null }[] | null } | { region_id?: string | null; regions?: { name?: string | null } | { name?: string | null }[] | null }[] | null } | null
   linked_district_id?: string | null
   origin_location_id?: string | null
   memo_reference?: string | null
@@ -92,7 +92,11 @@ export function TransportRequestRegister({ rows, canCreate, canAct, canHrRecords
   const isResponseMemo = memoView === "rejoinder"
   const memoRecipient = isResponseMemo ? "THE REGIONAL MANAGER" : "THE MANAGING DIRECTOR"
   const assignedRegion = memoPreview?.assigned_region
-  const requestRegionName = (Array.isArray(assignedRegion) ? assignedRegion[0]?.name : assignedRegion?.name)?.trim() ?? ""
+  const assignedRegionLocation = Array.isArray(assignedRegion) ? assignedRegion[0] : assignedRegion
+  const assignedDistrict = assignedRegionLocation?.districts
+  const assignedDistrictRegion = Array.isArray(assignedDistrict) ? assignedDistrict[0] : assignedDistrict
+  const linkedRegion = assignedDistrictRegion?.regions
+  const requestRegionName = (Array.isArray(linkedRegion) ? linkedRegion[0]?.name : linkedRegion?.name)?.trim() ?? ""
   const formatRecipientRegion = (value: string) => {
     const normalized = value
       .replace(/\s+Regional\s+Office$/i, "")
