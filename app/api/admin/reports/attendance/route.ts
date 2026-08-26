@@ -87,9 +87,9 @@ export async function GET(request: NextRequest) {
     const safeStatus = status && status !== "undefined" && status !== "all" ? status : null
 
     if (normalizedRole === "staff") {
-      query = query.eq("staff_user_id", user.id)
+      query = query.eq("user_id", user.id)
     } else if (userId) {
-      query = query.eq("staff_user_id", userId)
+      query = query.eq("user_id", userId)
     }
 
     // ── Role-based data scoping ─────────────────────────────────────────────
@@ -147,9 +147,9 @@ export async function GET(request: NextRequest) {
         .eq("department_id", profile.department_id)
       const deptUserIds = (deptUsers || []).map((u: any) => u.id)
       if (deptUserIds.length > 0) {
-        query = query.in("staff_user_id", deptUserIds)
+        query = query.in("user_id", deptUserIds)
       } else {
-        query = query.eq("staff_user_id", "00000000-0000-0000-0000-000000000000")
+        query = query.eq("user_id", "00000000-0000-0000-0000-000000000000")
       }
     } else if (safeDepartmentId && normalizedRole !== "staff") {
       const { data: deptUsers } = await adminClientForScope
@@ -158,9 +158,9 @@ export async function GET(request: NextRequest) {
         .eq("department_id", safeDepartmentId)
       const deptUserIds = (deptUsers || []).map((u: any) => u.id)
       if (deptUserIds.length > 0) {
-        query = query.in("staff_user_id", deptUserIds)
+        query = query.in("user_id", deptUserIds)
       } else {
-        query = query.eq("staff_user_id", "00000000-0000-0000-0000-000000000000")
+        query = query.eq("user_id", "00000000-0000-0000-0000-000000000000")
       }
     }
 
@@ -185,7 +185,7 @@ export async function GET(request: NextRequest) {
 
     console.log("[v0] Reports API - Found", attendanceRecords.length, "attendance records")
 
-    const userIds = [...new Set(attendanceRecords.map((record) => record.staff_user_id))]
+    const userIds = [...new Set(attendanceRecords.map((record) => record.user_id))]
 
     // Ensure we have a non-empty array to query
     let userProfiles: any[] = []
@@ -258,7 +258,7 @@ assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
 
     if (safeDistrictId) {
       filteredRecords = filteredRecords.filter((record) => {
-        const user = userMap.get(record.staff_user_id)
+        const user = userMap.get(record.user_id)
         return (
           user?.assigned_location?.district_id === safeDistrictId ||
           record.check_in_location?.district_id === safeDistrictId
@@ -287,7 +287,7 @@ assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
     }
 
     const enrichedRecords = filteredRecords.map((record) => {
-      const userProfile = userMap.get(record.staff_user_id) || (record.user_profiles as any) || null
+      const userProfile = userMap.get(record.user_id) || null
 
       // Determine if check-in/check-out was outside assigned location
       const isCheckInOutsideLocation =
@@ -299,14 +299,14 @@ assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
         record.check_out_location_id !== userProfile.assigned_location_id
 
       // If no profile, try to get email from auth.users
-      const authUser = authUserMap.get(record.staff_user_id)
+      const authUser = authUserMap.get(record.user_id)
       const enrichedProfile = userProfile || (authUser ? { email: authUser.email } : null)
       
       // Log if we have a record without profile
       if (!userProfile && !authUser) {
         console.warn('[v0] Reports API - Record has no profile or auth data:', {
           recordId: record.id,
-          userId: record.staff_user_id,
+          userId: record.user_id,
           hasLateness: !!record.lateness_reason,
           hasEarlyCheckout: !!record.early_checkout_reason
         })
@@ -363,9 +363,9 @@ assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
         .lte("check_in_time", `${endDate}T23:59:59`)
 
       if (normalizedRole === "staff") {
-        countQuery = countQuery.eq("staff_user_id", user.id)
+        countQuery = countQuery.eq("user_id", user.id)
       } else if (userId) {
-        countQuery = countQuery.eq("staff_user_id", userId)
+        countQuery = countQuery.eq("user_id", userId)
       }
       // Mirror location scoping
       if (profile.role === "regional_manager" && regionalScopedLocationIds?.length) {
@@ -389,7 +389,7 @@ assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
         if (deptUserIdsCount.length > 0) {
           countQuery = countQuery.in("user_id", deptUserIdsCount)
         } else {
-          countQuery = countQuery.eq("staff_user_id", "00000000-0000-0000-0000-000000000000")
+          countQuery = countQuery.eq("user_id", "00000000-0000-0000-0000-000000000000")
         }
       }
 
