@@ -17,6 +17,10 @@ export function isRegionalHrRole(role?: string | null): boolean {
   return REGIONAL_HR_ROLES.includes(normalizeAppRole(role) as (typeof REGIONAL_HR_ROLES)[number])
 }
 
+export function isRegionalManagerRole(role?: string | null): boolean {
+  return normalizeAppRole(role) === "regional_manager"
+}
+
 export function isAdminRole(role?: string | null): boolean {
   return ADMIN_ROLES.includes(normalizeAppRole(role) as (typeof ADMIN_ROLES)[number])
 }
