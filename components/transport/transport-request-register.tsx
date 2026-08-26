@@ -22,6 +22,7 @@ export type TransportRequestRow = {
   reference_number: string | null
   supporting_documents: { name?: string; url?: string }[] | null
   assigned_region_id?: string | null
+  assigned_region?: { name?: string | null }[] | { name?: string | null } | null
   linked_district_id?: string | null
   origin_location_id?: string | null
   memo_reference?: string | null
@@ -90,7 +91,9 @@ export function TransportRequestRegister({ rows, canCreate, canAct, canHrRecords
   const openMemoPreview = (row: TransportRequestRow, view: "original" | "rejoinder" = "rejoinder") => { void downloadMemo(row); setMemoView(view) }
   const isResponseMemo = memoView === "rejoinder"
   const memoRecipient = isResponseMemo ? "THE REGIONAL MANAGER" : "THE MANAGING DIRECTOR"
-  const memoRegionalLocation = regionalOfficeName
+  const assignedRegion = memoPreview?.assigned_region
+  const requestRegionName = (Array.isArray(assignedRegion) ? assignedRegion[0]?.name : assignedRegion?.name)?.trim() ?? ""
+  const memoRegionalLocation = requestRegionName && !/accra|head office/i.test(requestRegionName) ? requestRegionName.replace(/\s+Regional\s+Office$/i, "").replace(/\s+Region$/i, "").trim() + " Regional Office" : regionalOfficeName
   const memoIntro = isResponseMemo ? "Management has approved transportation support for the official wedding ceremony of a staff member in the Konongo District Office. The approved vehicle support is for the transportation of 100 passengers from Kumasi to Konongo on 22 August 2026. Kindly make the necessary arrangements to facilitate the approved transportation. You can count on our usual cooperation." : "We respectfully submit this request for your consideration and approval. The details of the request are as follows:"
   const memoPreviewLabel = memoPreview?.workflow_stage === "hr_records_review" ? "HR Records review and reference" : memoPreview?.workflow_stage === "hr_executive_signing" ? "HR Executive signing response" : memoPreview?.workflow_stage === "managing_director_approval" ? "Managing Director approval" : "Transport request memo"
   const cleanSubject = (memoPreview?.memo_subject ?? memoPreview?.purpose ?? "").replace(/^\s*(re:\s*)+/i, "").trim()
