@@ -141,9 +141,10 @@ export function SignaturePad({ value, onChange }: SignaturePadProps) {
 
 function drawHologramOverlay(ctx: CanvasRenderingContext2D, width: number, height: number, hologram: string) {
   ctx.save()
-  ctx.globalAlpha = 0.07
-  ctx.fillStyle = "#0ea5e9"
-  ctx.font = "bold 14px monospace"
+  // Keep the hologram visibly embedded in every signature to deter reuse while preserving the signer’s mark.
+  ctx.globalAlpha = 0.22
+  ctx.fillStyle = "#0284c7"
+  ctx.font = "bold 15px monospace"
   ctx.translate(width * 0.62, height * 0.72)
   ctx.rotate((-18 * Math.PI) / 180)
   ctx.fillText(hologram, 0, 0)

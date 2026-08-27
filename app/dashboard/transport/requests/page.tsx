@@ -38,7 +38,7 @@ export default async function TransportRequestsPage() {
   const locationRegionName = Object.entries(locationRegionAliases).find(([key]) => locationKey.includes(key))?.[1] ?? ""
   const rawRegionalName = locationRegionName || (assignedLocationName && !/accra|head office/i.test(assignedLocationName) ? assignedLocationName : "") || profileRegion?.name?.trim() || ""
   const regionalOfficeName = rawRegionalName ? rawRegionalName.replace(/\s+Regional\s+Office$/i, "").replace(/\s+Region$/i, "").trim() + " Regional Office" : "Regional Office"
-  let requestsQuery = supabase.from("transport_requests").select("id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url, assigned_region:geofence_locations!transport_requests_assigned_region_id_fkey(name)").order("created_at", { ascending: false }).limit(200)
+  let requestsQuery = supabase.from("transport_requests").select("id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url, assigned_region:geofence_locations!transport_requests_assigned_region_id_fkey(name, districts(region_id, regions(name)))").order("created_at", { ascending: false }).limit(200)
   if (isRegionalManagerRole(profile.role)) {
     if (locationId) requestsQuery = requestsQuery.or(`origin_location_id.eq.${locationId},origin_location_id.is.null`)
     if (!locationId && districtId) requestsQuery = requestsQuery.eq("linked_district_id", districtId)
@@ -59,7 +59,56 @@ export default async function TransportRequestsPage() {
     requests = fallback.data?.map((request) => ({ ...request, assigned_region: [], regional_manager_signer_id: null, regional_manager_signed_at: null, hr_records_amended_at: null, hr_executive_signer_id: null, hr_executive_signed_at: null, hr_executive_signature_data_url: null })) ?? null
     requestsError = fallback.error
   }
-  const requestsWithSignatures = requests ?? []
+  // Resolve HR Executive signatures server-side, batched, the same way leave administration does it
+  // (user_profiles.signature_data_url first, approval_signature_registry as fallback) — no per-row client fetch delay.
+  const rawRequests = requests ?? []
+  // The HR Executive signer id / signature are persisted inside the memo_amendments JSON payload,
+  // so read there first and fall back to the top-level columns.
+  const readSignedAmendments = (request: { memo_amendments?: string | null }) => {
+    try {
+      const amendments = request.memo_amendments ? (JSON.parse(request.memo_amendments) as Record<string, unknown>) : {}
+      return {
+        signerId: typeof amendments.hr_executive_signer_id === "string" ? amendments.hr_executive_signer_id : null,
+        signatureUrl: typeof amendments.hr_executive_signature_data_url === "string" ? amendments.hr_executive_signature_data_url : null,
+      }
+    } catch {
+      return { signerId: null, signatureUrl: null }
+    }
+  }
+  const hrExecutiveSignerIds = [...new Set(rawRequests.map((request) => request.hr_executive_signer_id ?? readSignedAmendments(request).signerId).filter(Boolean))] as string[]
+  const hrExecutivePreviewIds = canHrExecutive && !hrExecutiveSignerIds.includes(user.id) ? [user.id] : []
+  const hrSignatureLookupIds = [...new Set([...hrExecutiveSignerIds, ...hrExecutivePreviewIds])]
+  const hrExecutiveProfileMap: Record<string, { first_name?: string | null; last_name?: string | null; position?: string | null; signature_data_url?: string | null }> = {}
+  const hrExecutiveRegistrySignatureMap: Record<string, string> = {}
+  if (hrSignatureLookupIds.length > 0) {
+    const [{ data: hrProfiles }, { data: hrSignatureRegistry }] = await Promise.all([
+      supabase.from("user_profiles").select("id, first_name, last_name, position, signature_data_url").in("id", hrSignatureLookupIds),
+      supabase.from("approval_signature_registry").select("user_id, signature_data_url").in("user_id", hrSignatureLookupIds).eq("is_active", true).order("created_at", { ascending: false }),
+    ])
+    for (const hrProfile of hrProfiles ?? []) hrExecutiveProfileMap[hrProfile.id] = hrProfile
+    for (const signatureRow of hrSignatureRegistry ?? []) {
+      if (!hrExecutiveRegistrySignatureMap[signatureRow.user_id] && signatureRow.signature_data_url) hrExecutiveRegistrySignatureMap[signatureRow.user_id] = signatureRow.signature_data_url
+    }
+  }
+  const resolveHrExecutiveSignature = (signerId: string | null | undefined) => {
+    if (!signerId) return null
+    return hrExecutiveProfileMap[signerId]?.signature_data_url || hrExecutiveRegistrySignatureMap[signerId] || null
+  }
+  const requestsWithSignatures = rawRequests.map((request) => {
+    const signed = readSignedAmendments(request)
+    const signerId = request.hr_executive_signer_id ?? signed.signerId
+    const resolvedSignature = request.hr_executive_signature_data_url || signed.signatureUrl || resolveHrExecutiveSignature(signerId)
+    const previewSignerId = signerId ?? (canHrExecutive ? user.id : null)
+    const previewProfile = previewSignerId ? hrExecutiveProfileMap[previewSignerId] : null
+    const previewSignature = resolvedSignature || (previewSignerId ? resolveHrExecutiveSignature(previewSignerId) : null)
+    return {
+      ...request,
+      hr_executive_signature_data_url: resolvedSignature,
+      hr_executive_signature_preview_url: previewSignature,
+      hr_executive_signer_display_name: signerId ? `${hrExecutiveProfileMap[signerId]?.first_name ?? ""} ${hrExecutiveProfileMap[signerId]?.last_name ?? ""}`.trim() || null : previewProfile ? `${previewProfile.first_name ?? ""} ${previewProfile.last_name ?? ""}`.trim() || null : null,
+      hr_executive_signer_display_position: signerId ? hrExecutiveProfileMap[signerId]?.position ?? null : previewProfile?.position ?? null,
+    }
+  })
 
   const pendingCount = requests?.filter((request) => canManagingDirector ? request.workflow_stage === "managing_director_approval" : canHrExecutive ? request.workflow_stage === "hr_executive_signing" : false).length ?? 0
 
@@ -67,6 +116,6 @@ export default async function TransportRequestsPage() {
     {canManagingDirector && <TransportApprovalDashboard role="managing_director" pendingCount={pendingCount} totalCount={requests?.length ?? 0} />}
     {canHrExecutive && <TransportApprovalDashboard role="hr_executive" pendingCount={pendingCount} totalCount={requests?.length ?? 0} />}
     <header className="flex flex-col gap-5 border-b pb-6 md:flex-row md:items-end md:justify-between"><div className="flex items-start gap-3"><div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Bus /></div><div><p className="text-sm font-medium text-primary">Transport Management</p><h1 className="text-3xl font-semibold tracking-tight text-balance">Transport request register</h1><p className="mt-1 max-w-2xl text-muted-foreground leading-6">Track every request from submission through Regional HR review, approval, and fulfilment.</p></div></div><div className="flex flex-wrap gap-2"><Button variant="outline" asChild><Link href="/dashboard/transport"><ArrowLeft data-icon="inline-start" /> Back to transport</Link></Button>{canCreate && <Button asChild><Link href="/dashboard/transport"><Plus data-icon="inline-start" /> New transport request</Link></Button>}</div></header>
-    {requestsError && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">Transport requests could not be loaded. Please refresh and try again.</div>}<TransportRequestRegister rows={requestsWithSignatures} canCreate={canCreate} canAct={canAct} canHrRecords={canHrRecords} canManagingDirector={canManagingDirector} canHrExecutive={canHrExecutive} regionalOfficeName={regionalOfficeName} />
+    {requestsError && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">Transport requests could not be loaded. Please refresh and try again.</div>}<TransportRequestRegister rows={requestsWithSignatures} canCreate={canCreate} canAct={canAct} canHrRecords={canHrRecords} canManagingDirector={canManagingDirector} canHrExecutive={canHrExecutive} regionalOfficeName={regionalOfficeName} currentUserId={user.id} />
   </main>
 }

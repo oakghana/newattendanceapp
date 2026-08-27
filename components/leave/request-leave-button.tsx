@@ -14,9 +14,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { SearchableSelect } from "@/components/ui/searchable-select"
-import { Calendar, Loader2, Info } from "lucide-react"
+import { Calendar, Loader2, Info, UserCog } from "lucide-react"
 import { useEffect } from "react"
 import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays } from "@/lib/leave-policy"
+import { useToast } from "@/hooks/use-toast"
 
 interface AnnualEntitlementInfo {
   annualLeaveDays: number
@@ -34,6 +35,7 @@ interface LeaveTypeOption {
 }
 
 export function RequestLeaveButton() {
+  const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
@@ -154,7 +156,24 @@ export function RequestLeaveButton() {
         // location.reload()
       } else {
         const err = await resp.json()
-        alert(err.error || "Failed to submit leave request")
+        const assignmentCodes = ["HOD_ASSIGNMENT_REQUIRED", "REGIONAL_HR_ASSIGNMENT_REQUIRED"]
+        if (assignmentCodes.includes(err.code)) {
+          toast({
+            title: err.title || "Assignment Setup Required",
+            description: (
+              <div className="flex items-start gap-2.5">
+                <UserCog className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <span>{err.error}</span>
+              </div>
+            ),
+          })
+        } else {
+          toast({
+            title: "Could not submit request",
+            description: err.error || "Failed to submit leave request",
+            variant: "destructive",
+          })
+        }
       }
     } catch (e) {
       console.error(e)

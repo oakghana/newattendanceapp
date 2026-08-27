@@ -22,6 +22,9 @@ const IDLE_EVENTS: Array<keyof WindowEventMap> = [
   "scroll",
   "wheel",
   "pointerdown",
+  "click",
+  "input",
+  "focus",
 ]
 
 
@@ -42,28 +45,40 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     if (!user) return
 
     const supabase = createClient()
-    let idleTimer: ReturnType<typeof setTimeout> | null = null
     let signedOut = false
+    let lastActivityAt = Date.now()
+    let idleCheckTimer: ReturnType<typeof setInterval> | null = null
 
     const signOutForInactivity = async () => {
-      if (signedOut) return
+      if (signedOut || document.hidden) return
       signedOut = true
       await supabase.auth.signOut()
       router.replace("/auth/login?reason=idle")
     }
 
-    const resetIdleTimer = () => {
-      if (signedOut) return
-      if (idleTimer) clearTimeout(idleTimer)
-      idleTimer = setTimeout(signOutForInactivity, IDLE_TIMEOUT_MS)
+    const markActive = () => {
+      if (!signedOut) lastActivityAt = Date.now()
     }
 
-    IDLE_EVENTS.forEach((eventName) => window.addEventListener(eventName, resetIdleTimer, { passive: true }))
-    resetIdleTimer()
+    const checkIdleState = () => {
+      if (!signedOut && !document.hidden && Date.now() - lastActivityAt >= IDLE_TIMEOUT_MS) {
+        void signOutForInactivity()
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) markActive()
+    }
+
+    IDLE_EVENTS.forEach((eventName) => window.addEventListener(eventName, markActive, { passive: true }))
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    idleCheckTimer = setInterval(checkIdleState, 10_000)
+    markActive()
 
     return () => {
-      if (idleTimer) clearTimeout(idleTimer)
-      IDLE_EVENTS.forEach((eventName) => window.removeEventListener(eventName, resetIdleTimer))
+      if (idleCheckTimer) clearInterval(idleCheckTimer)
+      IDLE_EVENTS.forEach((eventName) => window.removeEventListener(eventName, markActive))
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
   }, [router, user])
 

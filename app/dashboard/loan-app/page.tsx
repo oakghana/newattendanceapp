@@ -28,7 +28,7 @@ import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { GOOD_FD_THRESHOLD, isPoorFdScore } from "@/lib/loan-workflow"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
-import { Activity, AlertCircle, BarChart3, Calculator, CheckCircle2, ChevronDown, Clock, Download, Edit3, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Save, Upload, Users, Wallet, XCircle } from "lucide-react"
+import { Activity, AlertCircle, BarChart3, Calculator, CheckCircle2, ChevronDown, Clock, Download, Edit3, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Save, Upload, UserCog, Users, Wallet, XCircle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type LoanType = {
@@ -2274,7 +2274,19 @@ export default function LoanAppPage() {
     })
     const result = await res.json()
     if (!res.ok) {
-      toast({ title: "Could not save request", description: result.error || "Try again", variant: "destructive" })
+      if (result.code === "LOAN_HOD_ASSIGNMENT_REQUIRED") {
+        toast({
+          title: result.title || "Assignment Setup Required",
+          description: (
+            <div className="flex items-start gap-2.5">
+              <UserCog className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <span>{result.error}</span>
+            </div>
+          ),
+        })
+      } else {
+        toast({ title: "Could not save request", description: result.error || "Try again", variant: "destructive" })
+      }
       return
     }
 

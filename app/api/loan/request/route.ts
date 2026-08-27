@@ -4,7 +4,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { isSchemaIssue, normalizeRole, requestIsEditable } from "@/lib/loan-workflow"
 import { getNextQccReference } from "@/lib/reference-number"
-import { resolveStaffAssignments } from "@/lib/hr-workflow"
+import { getAssignmentGuidance, resolveStaffAssignments } from "@/lib/hr-workflow"
 
 const LOAN_REQUEST_SUBMISSION_ENABLED = true
 
@@ -428,13 +428,16 @@ export async function POST(request: NextRequest) {
     const assignedHodId = assignedHodIds[0] || null
 
     if (!assignedHodId) {
+      const loanGuidance = getAssignmentGuidance(assignment.locationName, "loan")
       return NextResponse.json(
         {
-          error: "No HOD reviewer found",
-          message:
-            "This loan cannot be submitted until a Department Head, Regional Manager, or linked HOD is assigned for first-level review.",
+          error: loanGuidance.description,
+          message: loanGuidance.description,
+          code: "LOAN_HOD_ASSIGNMENT_REQUIRED",
+          title: loanGuidance.title,
+          contactRole: loanGuidance.contactRole,
         },
-        { status: 400 },
+        { status: 409 },
       )
     }
 
