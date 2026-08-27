@@ -59,7 +59,42 @@ export default async function TransportRequestsPage() {
     requests = fallback.data?.map((request) => ({ ...request, assigned_region: [], regional_manager_signer_id: null, regional_manager_signed_at: null, hr_records_amended_at: null, hr_executive_signer_id: null, hr_executive_signed_at: null, hr_executive_signature_data_url: null })) ?? null
     requestsError = fallback.error
   }
-  const requestsWithSignatures = requests ?? []
+  // Resolve HR Executive signatures server-side, batched, the same way leave administration does it
+  // (user_profiles.signature_data_url first, approval_signature_registry as fallback) — no per-row client fetch delay.
+  const rawRequests = requests ?? []
+  const hrExecutiveSignerIds = [...new Set(rawRequests.map((request) => request.hr_executive_signer_id).filter(Boolean))] as string[]
+  const hrExecutivePreviewIds = canHrExecutive && !hrExecutiveSignerIds.includes(user.id) ? [user.id] : []
+  const hrSignatureLookupIds = [...new Set([...hrExecutiveSignerIds, ...hrExecutivePreviewIds])]
+  const hrExecutiveProfileMap: Record<string, { first_name?: string | null; last_name?: string | null; position?: string | null; signature_data_url?: string | null }> = {}
+  const hrExecutiveRegistrySignatureMap: Record<string, string> = {}
+  if (hrSignatureLookupIds.length > 0) {
+    const [{ data: hrProfiles }, { data: hrSignatureRegistry }] = await Promise.all([
+      supabase.from("user_profiles").select("id, first_name, last_name, position, signature_data_url").in("id", hrSignatureLookupIds),
+      supabase.from("approval_signature_registry").select("user_id, signature_data_url").in("user_id", hrSignatureLookupIds).eq("is_active", true).order("created_at", { ascending: false }),
+    ])
+    for (const hrProfile of hrProfiles ?? []) hrExecutiveProfileMap[hrProfile.id] = hrProfile
+    for (const signatureRow of hrSignatureRegistry ?? []) {
+      if (!hrExecutiveRegistrySignatureMap[signatureRow.user_id] && signatureRow.signature_data_url) hrExecutiveRegistrySignatureMap[signatureRow.user_id] = signatureRow.signature_data_url
+    }
+  }
+  const resolveHrExecutiveSignature = (signerId: string | null | undefined) => {
+    if (!signerId) return null
+    return hrExecutiveProfileMap[signerId]?.signature_data_url || hrExecutiveRegistrySignatureMap[signerId] || null
+  }
+  const requestsWithSignatures = rawRequests.map((request) => {
+    const signerId = request.hr_executive_signer_id ?? null
+    const resolvedSignature = request.hr_executive_signature_data_url || resolveHrExecutiveSignature(signerId)
+    const previewSignerId = signerId ?? (canHrExecutive ? user.id : null)
+    const previewProfile = previewSignerId ? hrExecutiveProfileMap[previewSignerId] : null
+    const previewSignature = resolvedSignature || (previewSignerId ? resolveHrExecutiveSignature(previewSignerId) : null)
+    return {
+      ...request,
+      hr_executive_signature_data_url: resolvedSignature,
+      hr_executive_signature_preview_url: previewSignature,
+      hr_executive_signer_display_name: signerId ? `${hrExecutiveProfileMap[signerId]?.first_name ?? ""} ${hrExecutiveProfileMap[signerId]?.last_name ?? ""}`.trim() || null : previewProfile ? `${previewProfile.first_name ?? ""} ${previewProfile.last_name ?? ""}`.trim() || null : null,
+      hr_executive_signer_display_position: signerId ? hrExecutiveProfileMap[signerId]?.position ?? null : previewProfile?.position ?? null,
+    }
+  })
 
   const pendingCount = requests?.filter((request) => canManagingDirector ? request.workflow_stage === "managing_director_approval" : canHrExecutive ? request.workflow_stage === "hr_executive_signing" : false).length ?? 0
 
