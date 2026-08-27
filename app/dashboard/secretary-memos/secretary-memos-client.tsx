@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
@@ -534,7 +535,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, transport
                       <div className="flex items-center gap-2 flex-wrap"><span className="font-semibold text-sm text-slate-900 truncate">{memo.memo_subject || memo.purpose || "Transport request"}</span>{memo.memo_reference && <span className="text-xs text-slate-400 font-mono">{memo.memo_reference}</span>}</div>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap text-xs text-slate-500"><span>{memo.origin || "—"} → {memo.destination || "—"}</span><span className="text-slate-300">·</span><span>{memo.passenger_count ?? "—"} passengers</span><span className="text-slate-300">·</span><span>{fmtDate(memo.event_date)}</span></div>
                     </div>
-                    <div className="flex items-center gap-3 flex-shrink-0"><Badge className="text-xs border bg-emerald-100 text-emerald-800 border-emerald-200 font-medium">{memo.workflow_stage.replace(/_/g, " ")}</Badge><span className="text-xs text-slate-500">{memo.hr_executive_signed_at ? "HR signed" : "Approved"}</span></div>
+                    <div className="flex items-center gap-2 flex-shrink-0"><Badge className="text-xs border bg-emerald-100 text-emerald-800 border-emerald-200 font-medium">{memo.workflow_stage.replace(/_/g, " ")}</Badge><span className="hidden lg:inline text-xs text-slate-500">{memo.hr_executive_signed_at ? "HR signed" : "Approved"}</span><Link href={`/dashboard/transport/requests?requestId=${encodeURIComponent(memo.id)}`} className="inline-flex items-center gap-1 rounded-md border border-teal-200 px-2.5 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50" title="Open the response memo, then print or save it as PDF"><Printer className="h-3.5 w-3.5" /> Print / Save PDF</Link><Link href={`/dashboard/transport/requests?requestId=${encodeURIComponent(memo.id)}`} className="inline-flex items-center justify-center rounded-md border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50" title="Open transport memo"><Download className="h-3.5 w-3.5" /><span className="sr-only">Download transport memo</span></Link></div>
                   </div>
                 ))}
               </div>
