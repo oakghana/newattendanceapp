@@ -62,7 +62,20 @@ export default async function TransportRequestsPage() {
   // Resolve HR Executive signatures server-side, batched, the same way leave administration does it
   // (user_profiles.signature_data_url first, approval_signature_registry as fallback) — no per-row client fetch delay.
   const rawRequests = requests ?? []
-  const hrExecutiveSignerIds = [...new Set(rawRequests.map((request) => request.hr_executive_signer_id).filter(Boolean))] as string[]
+  // The HR Executive signer id / signature are persisted inside the memo_amendments JSON payload,
+  // so read there first and fall back to the top-level columns.
+  const readSignedAmendments = (request: { memo_amendments?: string | null }) => {
+    try {
+      const amendments = request.memo_amendments ? (JSON.parse(request.memo_amendments) as Record<string, unknown>) : {}
+      return {
+        signerId: typeof amendments.hr_executive_signer_id === "string" ? amendments.hr_executive_signer_id : null,
+        signatureUrl: typeof amendments.hr_executive_signature_data_url === "string" ? amendments.hr_executive_signature_data_url : null,
+      }
+    } catch {
+      return { signerId: null, signatureUrl: null }
+    }
+  }
+  const hrExecutiveSignerIds = [...new Set(rawRequests.map((request) => request.hr_executive_signer_id ?? readSignedAmendments(request).signerId).filter(Boolean))] as string[]
   const hrExecutivePreviewIds = canHrExecutive && !hrExecutiveSignerIds.includes(user.id) ? [user.id] : []
   const hrSignatureLookupIds = [...new Set([...hrExecutiveSignerIds, ...hrExecutivePreviewIds])]
   const hrExecutiveProfileMap: Record<string, { first_name?: string | null; last_name?: string | null; position?: string | null; signature_data_url?: string | null }> = {}
@@ -82,8 +95,9 @@ export default async function TransportRequestsPage() {
     return hrExecutiveProfileMap[signerId]?.signature_data_url || hrExecutiveRegistrySignatureMap[signerId] || null
   }
   const requestsWithSignatures = rawRequests.map((request) => {
-    const signerId = request.hr_executive_signer_id ?? null
-    const resolvedSignature = request.hr_executive_signature_data_url || resolveHrExecutiveSignature(signerId)
+    const signed = readSignedAmendments(request)
+    const signerId = request.hr_executive_signer_id ?? signed.signerId
+    const resolvedSignature = request.hr_executive_signature_data_url || signed.signatureUrl || resolveHrExecutiveSignature(signerId)
     const previewSignerId = signerId ?? (canHrExecutive ? user.id : null)
     const previewProfile = previewSignerId ? hrExecutiveProfileMap[previewSignerId] : null
     const previewSignature = resolvedSignature || (previewSignerId ? resolveHrExecutiveSignature(previewSignerId) : null)
