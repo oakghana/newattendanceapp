@@ -54,6 +54,25 @@ interface LeaveMemo {
   } | null
 }
 
+interface TransportMemo {
+  id: string
+  request_type: string | null
+  purpose: string | null
+  origin: string | null
+  destination: string | null
+  event_date: string | null
+  passenger_count: number | null
+  status: string
+  workflow_stage: string
+  reference_number: string | null
+  created_at: string
+  memo_reference: string | null
+  memo_date: string | null
+  memo_subject: string | null
+  hr_executive_signer_id: string | null
+  hr_executive_signed_at: string | null
+}
+
 interface ApprovedMemo {
   id: string
   request_number: string
@@ -80,6 +99,7 @@ interface Props {
   }
   loanMemos: LoanMemo[]
   leaveMemos: LeaveMemo[]
+  transportMemos: TransportMemo[]
   approvedMemos?: ApprovedMemo[]
   regionalScope?: boolean
 }
@@ -113,8 +133,8 @@ const LEAVE_STATUS_MAP: Record<string, { label: string; color: string }> = {
   hod_approved: { label: "HOD Approved", color: "bg-teal-100 text-teal-800 border-teal-200" },
 }
 
-export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedMemos = [], regionalScope = false }: Props) {
-  const [tab, setTab] = useState<"loans" | "leave" | "approved">("loans")
+export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, transportMemos, approvedMemos = [], regionalScope = false }: Props) {
+  const [tab, setTab] = useState<"loans" | "leave" | "transport" | "approved">("loans")
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [deptFilter, setDeptFilter] = useState("all")
@@ -236,6 +256,14 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
     })
   }, [loanMemos, search, statusFilter, deptFilter, locationFilter])
 
+  const filteredTransportMemos = useMemo(() => {
+    const q = search.toLowerCase()
+    return transportMemos.filter((m) => {
+      const text = [m.reference_number, m.memo_reference, m.purpose, m.origin, m.destination].filter(Boolean).join(" ").toLowerCase()
+      return (!q || text.includes(q)) && (statusFilter === "all" || m.workflow_stage === statusFilter)
+    })
+  }, [transportMemos, search, statusFilter])
+
   const filteredLeaveMemos = useMemo(() => {
     const q = search.toLowerCase()
     return leaveMemos.filter((m) => {
@@ -329,6 +357,19 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
               </span>
             </button>
             <button
+              onClick={() => { setTab("transport"); setStatusFilter("all") }}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all",
+                tab === "transport" ? "bg-teal-700 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50",
+              )}
+            >
+              <FileText className="h-4 w-4" />
+              Transport Memos
+              <span className={cn("text-xs rounded-full px-2 py-0.5 tabular-nums", tab === "transport" ? "bg-white/20" : "bg-teal-100 text-teal-700")}>
+                {transportMemos.length}
+              </span>
+            </button>
+            <button
               onClick={() => { setTab("approved"); setStatusFilter("all") }}
               className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all",
@@ -349,7 +390,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
           <div className="flex-1 relative min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
-              placeholder={tab === "loans" ? "Search staff name or reference..." : "Search staff name or leave type..."}
+              placeholder={tab === "loans" ? "Search staff name or reference..." : tab === "transport" ? "Search transport memo or destination..." : "Search staff name or leave type..."}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9 bg-white border-slate-200"
@@ -398,6 +439,13 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                 <option value="staff_receiving_funds">Funds Disbursed</option>
                 <option value="partially_recovered">Partially Recovered</option>
                 <option value="fully_recovered">Fully Recovered</option>
+              </>
+            ) : tab === "transport" ? (
+              <>
+                <option value="approved">Approved</option>
+                <option value="referenced">Referenced</option>
+                <option value="completed">Completed</option>
+                <option value="closed">Closed</option>
               </>
             ) : (
               <>
@@ -463,6 +511,32 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                     </div>
                   )
                 })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Transport Memos Table */}
+        {tab === "transport" && (
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+              <span className="text-sm font-semibold text-slate-700">{filteredTransportMemos.length} transport memo{filteredTransportMemos.length !== 1 ? "s" : ""}</span>
+              <span className="text-xs text-slate-400">Location-scoped read-only view</span>
+            </div>
+            {filteredTransportMemos.length === 0 ? (
+              <div className="py-16 text-center text-slate-400"><FileText className="h-10 w-10 mx-auto mb-3 text-slate-200" /><p className="text-sm font-medium">No transport memos match your search.</p></div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {filteredTransportMemos.map((memo) => (
+                  <div key={memo.id} className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 transition-colors">
+                    <div className="h-9 w-9 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center flex-shrink-0"><FileText className="h-4 w-4" /></div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap"><span className="font-semibold text-sm text-slate-900 truncate">{memo.memo_subject || memo.purpose || "Transport request"}</span>{memo.memo_reference && <span className="text-xs text-slate-400 font-mono">{memo.memo_reference}</span>}</div>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap text-xs text-slate-500"><span>{memo.origin || "—"} → {memo.destination || "—"}</span><span className="text-slate-300">·</span><span>{memo.passenger_count ?? "—"} passengers</span><span className="text-slate-300">·</span><span>{fmtDate(memo.event_date)}</span></div>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0"><Badge className="text-xs border bg-emerald-100 text-emerald-800 border-emerald-200 font-medium">{memo.workflow_stage.replace(/_/g, " ")}</Badge><span className="text-xs text-slate-500">{memo.hr_executive_signed_at ? "HR signed" : "Approved"}</span></div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

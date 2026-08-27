@@ -92,6 +92,39 @@ export default async function SecretaryMemosPage() {
 
   const leaveProfileMap = new Map((leaveProfiles || []).map((p: any) => [p.id, p]))
 
+  // Transport memos follow the same location scope as leave memos. Regional secretaries
+  // receive only requests from their assigned locations/regions; non-regional secretaries
+  // receive all regional transport memos.
+  const { data: rawTransportMemos } = await admin
+    .from("transport_requests")
+    .select("id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, created_at, requester_id, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, hr_executive_signer_id, hr_executive_signed_at")
+    .in("workflow_stage", ["approved", "referenced", "completed", "closed"])
+    .order("created_at", { ascending: false })
+    .limit(300)
+
+  const visibleTransportMemos = (rawTransportMemos || []).filter((memo: any) => {
+    if (scopedStaffIds) return memo.requester_id ? scopedStaffIds.includes(memo.requester_id) : visibility.locationIds.includes(memo.origin_location_id)
+    return true
+  })
+  const transportMemos = visibleTransportMemos.map((memo: any) => ({
+    id: memo.id,
+    request_type: memo.request_type,
+    purpose: memo.purpose,
+    origin: memo.origin,
+    destination: memo.destination,
+    event_date: memo.event_date,
+    passenger_count: memo.passenger_count,
+    status: memo.status,
+    workflow_stage: memo.workflow_stage,
+    reference_number: memo.reference_number,
+    created_at: memo.created_at,
+    memo_reference: memo.memo_reference,
+    memo_date: memo.memo_date,
+    memo_subject: memo.memo_subject,
+    hr_executive_signer_id: memo.hr_executive_signer_id,
+    hr_executive_signed_at: memo.hr_executive_signed_at,
+  }))
+
   // Normalise to the shape the client expects
   const leaveMemos = visibleRawLeaveMemos.map((leave: any) => ({
     id: leave.id,
@@ -177,6 +210,7 @@ export default async function SecretaryMemosPage() {
       profile={profile}
       loanMemos={visibleLoanMemos}
       leaveMemos={leaveMemos || []}
+      transportMemos={transportMemos}
       approvedMemos={approvedMemos}
       regionalScope={visibility.isRegional}
     />
