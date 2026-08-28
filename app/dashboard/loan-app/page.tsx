@@ -182,6 +182,7 @@ type WorkflowResponse = {
     hrOffice: LoanRequest[]
     directorHr: LoanRequest[]
     directorGoodFd: LoanRequest[]
+    hrExecutive: LoanRequest[]
     allLoans: LoanRequest[]
   }
 }
@@ -1275,7 +1276,7 @@ export default function LoanAppPage() {
       accounts: data?.inbox?.accounts?.length || 0,
       committee: data?.inbox?.committee?.length || 0,
       hr: data?.inbox?.hrOffice?.length || 0,
-      director: data?.inbox?.directorHr?.length || 0,
+      director: data?.inbox?.hrExecutive?.length || 0,
       all: activeLoansCount,
       archived: archivedLoansCount,
       mine: data?.myTasks?.length || 0,
@@ -1605,8 +1606,8 @@ export default function LoanAppPage() {
     [data?.inbox?.hrOffice, hrSearch, hrStatus, hrSort, hrLocation, hrDept],
   )
   const filteredDirector = useMemo(
-    () => filterAndSortRows(data?.inbox?.directorHr || [], directorSearch, directorStatus, directorSort, directorLocation, directorDept),
-    [data?.inbox?.directorHr, directorSearch, directorStatus, directorSort, directorLocation, directorDept],
+    () => filterAndSortRows(data?.inbox?.hrExecutive || [], directorSearch, directorStatus, directorSort, directorLocation, directorDept),
+    [data?.inbox?.hrExecutive, directorSearch, directorStatus, directorSort, directorLocation, directorDept],
   )
 
   const filteredMyTasks = useMemo(() => {

@@ -201,7 +201,7 @@ export async function GET() {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id, departments(name, code), geofence_locations!assigned_location_id(name, address, districts(name))")
+      .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id, staff_category, years_of_service, date_of_appointment, departments(name, code), geofence_locations!assigned_location_id(name, address, districts(name))")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -283,8 +283,12 @@ export async function GET() {
     
     console.log("[v0] Workflow API - Final yearsOfService:", yearsOfService)
 
+    // Provide safe defaults for missing welfare fields
+    if (!staffCategory) staffCategory = "Staff"
+    if (!yearsOfService) yearsOfService = 0
+    
     // Normalise staffCategory to Title Case and only derive from position when NOT explicitly set in DB
-    if (staffCategory) {
+    if (staffCategory && staffCategory !== "Staff") {
       const raw = staffCategory.toLowerCase().trim()
       if (raw === "senior" || raw === "senior staff") staffCategory = "Senior"
       else if (raw === "junior" || raw === "junior staff") staffCategory = "Junior"
@@ -488,7 +492,7 @@ export async function GET() {
 
     const myRequestIds = (myRes.data || []).map((r: any) => r.id)
 
-    const [hodRes, loanOfficeRes, accountsRes, accountsSignedRes, committeeRes, hrRes, directorRes, directorGoodFdRes, allLoansRes, timelinesRes, myTasksRes] = await Promise.all([
+    const [hodRes, loanOfficeRes, accountsRes, accountsSignedRes, committeeRes, hrRes, directorRes, directorGoodFdRes, allLoansRes, timelinesRes, myTasksRes, hrExecutiveRes] = await Promise.all([
       hodPromise,
       showLoanOffice
         ? admin.from("loan_requests").select("*").in("status", ["hod_approved", "pending_hr_loan_office"]).order("created_at", { ascending: false })
@@ -530,41 +534,11 @@ export async function GET() {
       myRequestIds.length > 0
         ? admin.from("loan_request_timeline").select("*").in("loan_request_id", myRequestIds).order("created_at", { ascending: true })
         : Promise.resolve({ data: [], error: null } as any),
-      (async () => {
-        // First, get all staff members where the current user is a linked HOD
-        const { data: hodLinkages } = await admin
-          .from("loan_hod_linkages")
-          .select("staff_user_id")
-          .eq("hod_user_id", user.id)
-        
-        const linkedStaffIds = hodLinkages?.map((l) => l.staff_user_id) || []
-        
-        // Then query loans where user is reviewer OR is linked as HOD to staff
-        const orConditions: string[] = [
-          `hod_reviewer_id.eq.${user.id}`,
-          `loan_office_reviewer_id.eq.${user.id}`,
-          `accounts_reviewer_id.eq.${user.id}`,
-          `committee_reviewer_id.eq.${user.id}`,
-          `hr_officer_id.eq.${user.id}`,
-          `director_hr_id.eq.${user.id}`,
-        ]
-        
-        // If user has linked HOD relationships, also include pending_hod loans for those staff
-        if (linkedStaffIds.length > 0) {
-          orConditions.push(`and(user_id.in.(${linkedStaffIds.join(",")}),status.eq.pending_hod)`)
-        }
-        
-        const query = admin
-          .from("loan_requests")
-          .select("*")
-          .or(orConditions.join(","))
-          .order("updated_at", { ascending: false })
-        
-        return query
-      })(),
+      // HR Executive queue - all pending_hr_executive_review requests
+      admin.from("loan_requests").select("*").eq("status", "pending_hr_executive_review").order("created_at", { ascending: false }),
     ])
 
-    const responses = [hodRes, loanOfficeRes, accountsRes, accountsSignedRes, committeeRes, hrRes, directorRes, directorGoodFdRes, allLoansRes, timelinesRes, myTasksRes]
+    const responses = [hodRes, loanOfficeRes, accountsRes, accountsSignedRes, committeeRes, hrRes, directorRes, directorGoodFdRes, allLoansRes, timelinesRes, myTasksRes, hrExecutiveRes]
     const schemaError = responses.find((r: any) => r?.error && isSchemaIssue(r.error))
     if (schemaError) {
       return NextResponse.json(
@@ -587,6 +561,7 @@ export async function GET() {
             hrOffice: [],
             directorHr: [],
             directorGoodFd: [],
+            hrExecutive: [],
             allLoans: [],
           },
         },
@@ -610,6 +585,7 @@ export async function GET() {
       ...(directorGoodFdRes.data || []),
       ...(allLoansRes.data || []),
       ...(myRes.data || []),
+      ...(hrExecutiveRes.data || []),
     ]
     const uniqueUserIds = Array.from(new Set(allInboxRows.map((r: any) => r.user_id).filter(Boolean))) as string[]
     let staffProfileMap: Map<string, any> = new Map()
@@ -790,22 +766,22 @@ export async function GET() {
       degraded: false,
       profile: {
         id: (profile as any).id,
-        firstName: (profile as any).first_name,
-        lastName: (profile as any).last_name,
-        employeeId: (profile as any).employee_id,
-        email: (profile as any).email || user.email,
-        role: (profile as any).role,
-        position: (profile as any).position,
-        staffCategory,
-        yearsOfService,
-        dateOfAppointment,
+        firstName: (profile as any).first_name || "Not set",
+        lastName: (profile as any).last_name || "Not set",
+        employeeId: (profile as any).employee_id || "Not set",
+        email: (profile as any).email || user.email || "Not set",
+        role: (profile as any).role || "Not assigned",
+        position: (profile as any).position || "Not set",
+        staffCategory: staffCategory || "Not assigned",
+        yearsOfService: yearsOfService || 0,
+        dateOfAppointment: dateOfAppointment || null,
         departmentId: (profile as any).department_id,
         assignedLocationId: (profile as any).assigned_location_id,
-        departmentName: (profile as any)?.departments?.name || null,
-        assignedLocationName: (profile as any)?.geofence_locations?.name || null,
-        assignedLocationAddress: (profile as any)?.geofence_locations?.address || null,
-        assignedDistrictName: (profile as any)?.geofence_locations?.districts?.name || null,
-        linkedHodName,
+        departmentName: (profile as any)?.departments?.name || "Not assigned",
+        assignedLocationName: (profile as any)?.geofence_locations?.name || "Not assigned",
+        assignedLocationAddress: (profile as any)?.geofence_locations?.address || "Not set",
+        assignedDistrictName: (profile as any)?.geofence_locations?.districts?.name || "Not assigned",
+        linkedHodName: linkedHodName || "Not yet assigned",
         currentHodProfile,
       },
       role,
@@ -836,6 +812,7 @@ export async function GET() {
         hrOffice: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(hrRes.data || [])))),
         directorHr: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(directorRes.data || [])))),
         directorGoodFd: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(directorGoodFdRes.data || [])))),
+        hrExecutive: attachDirectorName(attachAccountsReviewerName(attachName(hrExecutiveRes.data || []))),
         allLoans: attachDirectorName(attachAccountsReviewerName(attachName(allLoansRes.data || []))),
       },
     })
