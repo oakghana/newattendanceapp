@@ -33,21 +33,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify user role - only HOD/RM and HR can create recalls
+    // Verify user role - Staff, HOD, RM, HR Leave Office, and HR Executive can create recalls
     const normalizedRole = String(user_role || "").toLowerCase().replace(/[-\s]+/g, "_")
-    const isAuthorized = [
+    const ALLOWED_RECALL_ROLES = [
+      "staff",
       "department_head",
+      "hod",
       "regional_manager",
+      "rm",
+      "hr_leave_office",
+      "hr_office",
       "hr_officer",
+      "hr_executive",
       "manager_hr",
       "director_hr",
       "hr_director",
       "admin",
-    ].includes(normalizedRole)
+    ]
 
-    if (!isAuthorized) {
+    if (!ALLOWED_RECALL_ROLES.includes(normalizedRole)) {
       return NextResponse.json(
-        { error: "Only HOD/RM and HR users can create leave recall requests" },
+        { error: `Recall can only be initiated by Staff, HOD, RM, HR Leave Office, or HR Executive. Your role: ${user_role}` },
         { status: 403 }
       )
     }

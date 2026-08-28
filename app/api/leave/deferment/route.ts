@@ -33,10 +33,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // ROLE VALIDATION: Only allow specific roles to initiate deferment
+    const ALLOWED_DEFERMENT_ROLES = ['staff', 'hod', 'rm', 'hr_leave_office', 'hr_executive', 'director_hr']
+    const normalizedRole = String(user_role || '').toLowerCase().replace(/[-\s]+/g, '_')
+    
+    if (!ALLOWED_DEFERMENT_ROLES.includes(normalizedRole)) {
+      return NextResponse.json(
+        { error: `Deferment can only be initiated by Staff, HOD, RM, HR Leave Office, or HR Executive. Your role: ${user_role}` },
+        { status: 403 }
+      )
+    }
+
     // Verify the original leave request exists and get its details
     const { data: leaveRequest, error: leaveError } = await supabase
       .from("leave_plan_requests")
-      .select("*, user_profiles!leave_plan_requests_user_id_fkey(id, first_name, last_name, employee_id)")
+      .select("*, user_profiles!leave_plan_requests_user_id_fkey(id, first_name, last_name, employee_id, position)")
       .eq("id", leave_plan_request_id)
       .single()
 
@@ -59,6 +70,28 @@ export async function POST(request: NextRequest) {
     if (!leaveRequest.preferred_start_date || !leaveRequest.preferred_end_date) {
       return NextResponse.json(
         { error: "Cannot defer leave without valid start and end dates" },
+        { status: 400 }
+      )
+    }
+
+    // TWO-YEAR LIMIT VALIDATION: Deferment cannot exceed two calendar years
+    const leaveYear = leaveRequest.leave_year_period ? parseInt(String(leaveRequest.leave_year_period).split('/')[0]) : new Date().getFullYear()
+    const requestedDefermentYear = parseInt(deferral_year)
+    const yearsToDefer = requestedDefermentYear - leaveYear
+    
+    if (yearsToDefer > 2) {
+      return NextResponse.json(
+        { 
+          error: `Deferment cannot exceed two calendar years. Leave year: ${leaveYear}, Requested deferment year: ${requestedDefermentYear} (${yearsToDefer} years). Maximum allowed: 2 years.`,
+          maxAllowedYear: leaveYear + 2
+        },
+        { status: 400 }
+      )
+    }
+
+    if (yearsToDefer < 0) {
+      return NextResponse.json(
+        { error: "Deferment year must be in the future" },
         { status: 400 }
       )
     }
