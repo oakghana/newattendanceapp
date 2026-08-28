@@ -1052,6 +1052,9 @@ export default function LoanAppPage() {
   const [selectedStaffForLink, setSelectedStaffForLink] = useState("")
   const [selectedHodsForLink, setSelectedHodsForLink] = useState<string[]>([])
   const [linkageRequestNote, setLinkageRequestNote] = useState("")
+  const [linkageEditOpen, setLinkageEditOpen] = useState(false)
+  const [linkageEditStaffId, setLinkageEditStaffId] = useState("")
+  const [linkageEditHodId, setLinkageEditHodId] = useState("")
   const [linkageSearch, setLinkageSearch] = useState("")
   const [linkageLocationFilter, setLinkageLocationFilter] = useState("all")
   const [linkageDepartmentFilter, setLinkageDepartmentFilter] = useState("all")
@@ -1246,6 +1249,7 @@ export default function LoanAppPage() {
     (["loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) ||
     (normalizedRole === "manager_hr" && !userDeptIsAccounts)
   const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
+  const canManageLoanAdministration = Boolean(isAdmin)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
   const templateOptions = useMemo(
     () => (registryData?.templates || []).filter((template) => template.workflow_domain === selectedTemplateDomain),
@@ -2799,12 +2803,19 @@ export default function LoanAppPage() {
       }
 
   const editLinkageFromCard = (staffUserId: string, hodUserId: string) => {
-    setStaffLocationFilter("all")
-    setStaffDepartmentFilter("all")
-    setStaffSearchFilter("")
-    setSelectedStaffForLink(staffUserId)
-    setSelectedHodsForLink([hodUserId])
-    toast({ title: "Linkage loaded", description: "You can now edit this linkage in the Single Staff HOD Linkage form." })
+    setLinkageEditStaffId(staffUserId)
+    setLinkageEditHodId(hodUserId)
+    setLinkageEditOpen(true)
+  }
+
+  const saveLinkageEdit = async () => {
+    if (!linkageEditStaffId || !linkageEditHodId) return
+    await runLookupAction({
+      action: "upsert_hod_linkage",
+      staff_user_id: linkageEditStaffId,
+      hod_user_id: linkageEditHodId,
+    }, "Staff HOD linkage updated")
+    setLinkageEditOpen(false)
   }
 
       const generateMemoPdf = async (row: LoanRequest, memoText: string, sigText: string) => {
@@ -6392,7 +6403,7 @@ export default function LoanAppPage() {
               variant="outline"
               className="border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
               onClick={() => runLookupAction({ action: "auto_link_by_location" }, "Auto-link by location completed")}
-              disabled={lookupLoading || !canDirectLinkageUpdate}
+              disabled={lookupLoading || !canManageLoanAdministration}
             >
               Auto-link Staff to HOD by Location
             </Button>
@@ -6480,6 +6491,7 @@ export default function LoanAppPage() {
                     />
                   </div>
                 </div>
+                <div className="flex flex-wrap items-center gap-3">
                 <Button
                   onClick={() => runLookupAction({
                     action: "update_loan_type",
@@ -6496,6 +6508,19 @@ export default function LoanAppPage() {
                 >
                   Save Loan Type Setup
                 </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={!selectedLoanType || !setupIsActive}
+                  onClick={() => {
+                    if (window.confirm(`Disable ${setupLoanLabel || selectedLoanType}? Existing requests will be preserved.`)) {
+                      void runLookupAction({ action: "delete_loan_type", loan_key: selectedLoanType }, "Loan type disabled")
+                    }
+                  }}
+                >
+                  Delete Loan Type
+                </Button>
+                </div>
               </CardContent>
             </Card>
 
@@ -6860,13 +6885,13 @@ export default function LoanAppPage() {
                         <div><strong>Address:</strong> {staff?.geofence_locations?.address || "N/A"}</div>
                         {(staff as any)?.departments?.name && <div><strong>Dept:</strong> {(staff as any).departments.name}</div>}
                       </div>
-                      {canDirectLinkageUpdate && (
-                        <div className="mt-3">
-                          <Button size="sm" variant="outline" onClick={() => editLinkageFromCard(link.staff_user_id, link.hod_user_id)}>
-                            Edit This Linkage
-                          </Button>
-                        </div>
-                      )}
+{canManageLoanAdministration && (
+  <div className="mt-3">
+  <Button size="sm" variant="outline" onClick={() => editLinkageFromCard(link.staff_user_id, link.hod_user_id)}>
+  Edit This Linkage
+  </Button>
+  </div>
+  )}
                     </div>
                   )
                 })}
@@ -6891,6 +6916,41 @@ export default function LoanAppPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+      <Dialog open={linkageEditOpen} onOpenChange={setLinkageEditOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Relink Staff HOD</DialogTitle>
+            <DialogDescription>Select a replacement HOD for this staff member. The same location and role rules will be checked before saving.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-2">
+            <div className="flex flex-col gap-2">
+              <Label>Staff member</Label>
+              <SearchableSelect
+                value={linkageEditStaffId}
+                onChange={setLinkageEditStaffId}
+                placeholder="Select staff"
+                searchPlaceholder="Search staff..."
+                options={(lookupData?.staff || []).map((s) => ({ value: s.id, label: `${s.first_name} ${s.last_name} (${s.employee_id || "N/A"})` }))}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>New HOD / Regional Manager</Label>
+              <SearchableSelect
+                value={linkageEditHodId}
+                onChange={setLinkageEditHodId}
+                placeholder="Select HOD"
+                searchPlaceholder="Search HOD..."
+                options={(lookupData?.hods || []).map((h) => ({ value: h.id, label: `${h.first_name} ${h.last_name} (${h.role})` }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLinkageEditOpen(false)}>Cancel</Button>
+            <Button onClick={() => void saveLinkageEdit()} disabled={!linkageEditStaffId || !linkageEditHodId}>Save Relink</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Action Modal ──────────────────────��─────────────────────── */}
       <Dialog open={actionModal.open} onOpenChange={(o) => setActionModal((s) => ({ ...s, open: o }))}>

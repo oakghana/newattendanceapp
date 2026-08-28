@@ -32,6 +32,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [otpSent, setOtpSent] = useState(false)
+  const [otpCooldownUntil, setOtpCooldownUntil] = useState<number | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const router = useRouter()
 
@@ -352,6 +353,10 @@ export default function LoginPage() {
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault()
     const supabase = createClient()
+    if (otpCooldownUntil && Date.now() < otpCooldownUntil) {
+      showFieldError("Email", "OTP sending is temporarily limited. Please wait a few minutes or use password login.")
+      return
+    }
     setIsLoading(true)
     setError(null)
     setSuccessMessage(null)
@@ -428,7 +433,8 @@ export default function LoginPage() {
         console.error("[v0] Supabase OTP error:", otpResult.error.message)
 
         if (otpResult.error.message.includes("Email rate limit exceeded")) {
-          showFieldError("Email", "Too many OTP requests. Please wait 5 minutes before trying again.")
+          setOtpCooldownUntil(Date.now() + 5 * 60 * 1000)
+          showFieldError("Email", "Too many OTP requests. Please wait 5 minutes or use password login.")
         } else if (
           otpResult.error.message.includes("User not found") ||
           otpResult.error.message.includes("Signups not allowed")
@@ -720,9 +726,9 @@ export default function LoginPage() {
                     <Button
                       type="submit"
                       className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? "Sending..." : "Send OTP Code 📲"}
+disabled={isLoading}
+  >
+  {isLoading ? "Sending..." : "Send OTP Code 📲"}
                     </Button>
                   </form>
                 ) : (

@@ -2332,6 +2332,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   setLeaveYearPeriod(getDefaultSelectedLeaveYearPeriod())
       setTypedSignature(""); setUploadedSigUrl(null); setDrawnSigUrl(null)
       setActiveTab("my-leaves")
+      if (leaveType === "annual" && typeof window !== "undefined") {
+        window.dispatchEvent(new Event("leave-plan-submitted"))
+      }
       await loadData()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Submission failed")
@@ -4890,7 +4893,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                         hrExecDeferRecallData.deferments.map((item: any) => {
                           const staffName = item.user_profiles
                             ? `${item.user_profiles.first_name || ""} ${item.user_profiles.last_name || ""}`.trim()
-                            : "��"
+                            : "����"
                           const dept = item.user_profiles?.departments?.name || "—"
                           const decision = item.hr_office_decision || item.hr_decision
                           const isPending = !decision
