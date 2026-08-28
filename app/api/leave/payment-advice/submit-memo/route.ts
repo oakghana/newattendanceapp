@@ -197,6 +197,10 @@ export async function POST(request: NextRequest) {
         staff_rank_label: staffRankLabel, // Actual rank name (e.g., "Senior Officer", "Manager", "Accounts Officer")
         staff_location_name: staff.location_name || staff.assigned_location_name || "HQ", // Beneficiary location name
         staff_location_id: staff.location_id || staff.assigned_location_id || null,
+        // CRITICAL: Include calculated days in memo body so memo generator uses correct values
+        approved_days: undefined, // Will be set after calculation below
+        travelling_days_added: staff.travelling_days_added || 0,
+        calculated_days: staff.calculated_days || 0,
         selectedSigner: {
           id: selectedSigner.id || "",
           name: selectedSigner.name || "",
@@ -226,39 +230,60 @@ export async function POST(request: NextRequest) {
 
       // Only insert if we have required fields
       if (staff.leave_plan_request_id && staff.user_id) {
-        // Validate and format dates to ensure they're not NaN
+        // CRITICAL: Use ONLY the database source of truth for dates
+        // preferred_start_date and preferred_end_date come directly from leave_plan_requests table
+        // This ensures all memos for the same leave request show identical dates
         let leave_start = null
         let leave_end = null
         
-        // Try multiple date field sources
-        const startDateCandidates = [staff.leave_start_date, staff.preferred_start_date, staff.start_date]
-        const endDateCandidates = [staff.leave_end_date, staff.preferred_end_date, staff.end_date]
-        
-        for (const dateStr of startDateCandidates) {
-          if (dateStr && dateStr !== "NaN" && dateStr !== "NaN-NaN-N") {
-            const parsed = new Date(dateStr)
-            if (!isNaN(parsed.getTime())) {
-              leave_start = dateStr
-              break
-            }
+        // Use preferred_start_date as the source of truth (from database leave_plan_requests table)
+        if (staff.preferred_start_date && staff.preferred_start_date !== "NaN" && staff.preferred_start_date !== "NaN-NaN-NaN") {
+          const parsed = new Date(staff.preferred_start_date)
+          if (!isNaN(parsed.getTime())) {
+            leave_start = staff.preferred_start_date
           }
         }
         
-        for (const dateStr of endDateCandidates) {
-          if (dateStr && dateStr !== "NaN" && dateStr !== "NaN-NaN-N") {
-            const parsed = new Date(dateStr)
-            if (!isNaN(parsed.getTime())) {
-              leave_end = dateStr
-              break
-            }
+        // Use preferred_end_date as the source of truth (from database leave_plan_requests table)
+        if (staff.preferred_end_date && staff.preferred_end_date !== "NaN" && staff.preferred_end_date !== "NaN-NaN-NaN") {
+          const parsed = new Date(staff.preferred_end_date)
+          if (!isNaN(parsed.getTime())) {
+            leave_end = staff.preferred_end_date
           }
         }
         
-        // CRITICAL: Always use adjusted_days (HR Leave Office approved days) as the source of truth
-        // This prevents disparities where different memos show different days for the same leave request
-        const approvedDaysForMemo = staff.adjusted_days || staff.approved_days || staff.requested_days || 0
+        // Log if dates are missing (indicates data quality issue)
+        if (!leave_start || !leave_end) {
+          console.warn("[v0] Missing leave dates for staff:", {
+            name: staff.full_name,
+            leave_plan_request_id: staff.leave_plan_request_id,
+            preferred_start_date: staff.preferred_start_date,
+            preferred_end_date: staff.preferred_end_date,
+            leave_start,
+            leave_end
+          })
+        }
         
-        memoRecords.push({
+        // CRITICAL: Use approved_days FIRST - it contains the calculated days from dates
+        // Never use hardcoded adjusted_days which may contain incorrect database values
+        // This ensures memos show actual days calculated from FROM and TO dates, not hardcoded database values
+        const approvedDaysForMemo = staff.approved_days || staff.requested_days || 0
+        
+        console.log("[v0] Days used in memo:", {
+          staff_name: staff.full_name,
+          approved_days: staff.approved_days,
+          calculated_days: staff.calculated_days,
+          adjusted_days: staff.adjusted_days,
+          requested_days: staff.requested_days,
+          chosen_for_memo: approvedDaysForMemo,
+          source: "staff.approved_days (calculated from dates)"
+        })
+        
+        // Set the approved_days in memoBody so it's included in the serialized JSON
+        memoBody.approved_days = approvedDaysForMemo
+        memoBody.travelling_days_added = staff.travelling_days_added || 0
+        
+        const memoRecord = {
           leave_plan_request_id: staff.leave_plan_request_id,
           staff_id: staff.user_id,
           staff_name: staff.full_name || "",
@@ -273,7 +298,22 @@ export async function POST(request: NextRequest) {
           status: "ready_for_review",
           // CRITICAL: Store the list of HR executives who can approve this memo
           assigned_signers: assignedSigners,
+        }
+        
+        // Log memo data for consistency verification across multiple memos
+        console.log("[v0] Creating payment memo with database values:", {
+          staff_name: staff.full_name,
+          leave_period_start: leave_start,
+          leave_period_end: leave_end,
+          approved_days: approvedDaysForMemo,
+          source_verification: {
+            preferred_start_date: staff.preferred_start_date,
+            preferred_end_date: staff.preferred_end_date,
+            adjusted_days: staff.adjusted_days,
+          }
         })
+        
+        memoRecords.push(memoRecord)
       } else {
         console.log("[v0] Staff validation failed:", {
           name: staff.full_name,

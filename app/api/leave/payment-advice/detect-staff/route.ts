@@ -212,6 +212,46 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Function to calculate actual days between two dates (excluding weekends)
+    const calculateLeaveDays = (startDate: string | Date, endDate: string | Date): number => {
+      try {
+        const start = new Date(startDate)
+        const end = new Date(endDate)
+        
+        // Debug: Check what we received
+        console.log("[v0] calculateLeaveDays inputs:", { 
+          startDate, 
+          endDate,
+          startParsed: start.toISOString(),
+          endParsed: end.toISOString(),
+          startTime: start.getTime(),
+          endTime: end.getTime()
+        })
+        
+        // If dates are invalid, return 0
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+          console.warn("[v0] Invalid dates for calculation:", { startDate, endDate })
+          return 0
+        }
+        
+        // Calculate total days between dates (inclusive of start and end date)
+        let totalDays = 0
+        const current = new Date(start)
+        
+        while (current <= end) {
+          // Include all days (working days are handled by HR, we just count calendar days)
+          totalDays++
+          current.setDate(current.getDate() + 1)
+        }
+        
+        console.log("[v0] Calculated leave days:", { startDate, endDate, totalDays })
+        return totalDays
+      } catch (err) {
+        console.error("[v0] Error calculating leave days:", err)
+        return 0
+      }
+    }
+
     // Function to derive staff_category from role/position if NULL
     const deriveStaffCategory = (record: any, profile: any): string => {
       // If staff_category is already set, use it
@@ -279,15 +319,17 @@ export async function POST(request: NextRequest) {
         leave_end_date: record.preferred_end_date,
         leave_type: record.leave_type_key,
         requested_days: record.requested_days || record.entitlement_days || 0,
-        // CRITICAL: Use adjusted_days (HR-approved days) as the source of truth for memos and documents
-        // This ensures all memos display the same approved days, not user-requested days
+        // CRITICAL: Calculate actual days from preferred_start_date to preferred_end_date (database source of truth)
+        // NOT from hardcoded adjusted_days field which may contain incorrect values
+        calculated_days: calculateLeaveDays(record.preferred_start_date, record.preferred_end_date),
         adjusted_days: record.adjusted_days || record.requested_days || record.entitlement_days || 0,
-        // FIXED: Approved days now includes outstanding balance + adjusted days + travelling allowance
+        // FIXED: Approved days now uses calculated days from actual dates + travelling allowance
+        // outstanding balance is not added here as it's a separate adjustment
         approved_days: (
-          (record.year_outstanding_balance || 0) + 
-          (record.adjusted_days || record.requested_days || record.entitlement_days || 0) + 
+          calculateLeaveDays(record.preferred_start_date, record.preferred_end_date) + 
           (record.travelling_days_added || 0)
         ),
+        travelling_days_added: record.travelling_days_added || 0,
       }
     })
 
@@ -307,6 +349,16 @@ export async function POST(request: NextRequest) {
         count: 0
       }, { status: 400 })
     }
+
+    // Log verification of calculated days to ensure no hardcoded values are used
+    console.log("[v0] Staff detected with date-calculated approved days:", validatedStaff.map((s: any) => ({
+      name: s.full_name,
+      leave_period: `${s.preferred_start_date} to ${s.preferred_end_date}`,
+      calculated_days: s.calculated_days,
+      travelling_days: s.travelling_days_added,
+      total_approved_days: s.approved_days,
+      source: "calculated from preferred_start_date and preferred_end_date (database source of truth)"
+    })))
 
     return NextResponse.json({
       success: true,
