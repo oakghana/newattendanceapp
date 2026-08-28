@@ -20,8 +20,11 @@ import { Eye, EyeOff, Lock, Mail, CheckCircle2, AlertCircle } from "lucide-react
 import { getPasswordEnforcementMessage, isPasswordChangeRequired } from "@/lib/security"
 import { isHrLeaveOfficeRole, isHrApproverRole, isManagerRole } from "@/lib/leave-planning"
 import { DEFAULT_RUNTIME_FLAGS, type RuntimeFlags } from "@/lib/runtime-flags"
+import { useEffect } from "react"
 
 const DEVICE_SHARING_WARNING_STORAGE_KEY = "qcc_pending_device_sharing_warning"
+const OTP_RATE_LIMIT_STORAGE_KEY = "qcc_otp_last_sent_time"
+const OTP_RATE_LIMIT_SECONDS = 300 // 5 minutes
 
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState("")
@@ -33,9 +36,32 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [otpSent, setOtpSent] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [otpCooldownSeconds, setOtpCooldownSeconds] = useState(0)
   const router = useRouter()
 
   const { showFieldError, showSuccess, showError, showWarning } = useNotifications()
+
+  // Handle OTP rate limit countdown
+  useEffect(() => {
+    const interval = setInterval(() => {
+      try {
+        const lastSentTime = window.localStorage.getItem(OTP_RATE_LIMIT_STORAGE_KEY)
+        if (lastSentTime) {
+          const elapsedSeconds = Math.floor((Date.now() - parseInt(lastSentTime)) / 1000)
+          const remainingSeconds = Math.max(0, OTP_RATE_LIMIT_SECONDS - elapsedSeconds)
+          setOtpCooldownSeconds(remainingSeconds)
+
+          if (remainingSeconds === 0) {
+            window.localStorage.removeItem(OTP_RATE_LIMIT_STORAGE_KEY)
+          }
+        }
+      } catch {
+        // Ignore storage errors
+      }
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   const persistPendingDeviceSharingWarning = (message: string) => {
     try {
@@ -359,12 +385,35 @@ export default function LoginPage() {
     try {
       if (!otpEmail.trim()) {
         showFieldError("Email", "Please enter your email address")
+        setIsLoading(false)
         return
       }
 
       if (!otpEmail.includes("@") || !otpEmail.includes(".")) {
         showFieldError("Email", "Please enter a valid email address")
+        setIsLoading(false)
         return
+      }
+
+      // Check if user is in OTP rate limit cooldown
+      try {
+        const lastSentTime = window.localStorage.getItem(OTP_RATE_LIMIT_STORAGE_KEY)
+        if (lastSentTime) {
+          const elapsedSeconds = Math.floor((Date.now() - parseInt(lastSentTime)) / 1000)
+          const remainingSeconds = OTP_RATE_LIMIT_SECONDS - elapsedSeconds
+          if (remainingSeconds > 0) {
+            showWarning(
+              `Please wait ${remainingSeconds} seconds before requesting another OTP code.`,
+              "Rate Limit - Too Many Requests"
+            )
+            setIsLoading(false)
+            return
+          } else {
+            window.localStorage.removeItem(OTP_RATE_LIMIT_STORAGE_KEY)
+          }
+        }
+      } catch {
+        // Ignore storage errors and continue
       }
 
       console.log("[v0] Attempting to validate email:", otpEmail)
@@ -428,7 +477,7 @@ export default function LoginPage() {
         console.error("[v0] Supabase OTP error:", otpResult.error.message)
 
         if (otpResult.error.message.includes("Email rate limit exceeded")) {
-          showFieldError("Email", "Too many OTP requests. Please wait 5 minutes before trying again.")
+          showWarning("Too many OTP requests. Please wait a few minutes before trying again.", "OTP Rate Limit")
         } else if (
           otpResult.error.message.includes("User not found") ||
           otpResult.error.message.includes("Signups not allowed")
@@ -440,12 +489,21 @@ export default function LoginPage() {
         } else if (otpResult.error.message.includes("Invalid email")) {
           showFieldError("Email", "Invalid email format. Please check your email address.")
         } else {
-          showFieldError("Email", `Failed to send OTP: ${otpResult.error.message}`)
+          showError(`Failed to send OTP: ${otpResult.error.message}`, "OTP Error")
         }
         return
       }
 
       console.log("[v0] OTP sent successfully")
+      
+      // Store the OTP send time for rate limiting
+      try {
+        window.localStorage.setItem(OTP_RATE_LIMIT_STORAGE_KEY, Date.now().toString())
+        setOtpCooldownSeconds(OTP_RATE_LIMIT_SECONDS)
+      } catch {
+        // Ignore storage errors
+      }
+      
       setOtpSent(true)
       showSuccess(
         emailValidated
@@ -720,9 +778,9 @@ export default function LoginPage() {
                     <Button
                       type="submit"
                       className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
-                      disabled={isLoading}
+                      disabled={isLoading || otpCooldownSeconds > 0}
                     >
-                      {isLoading ? "Sending..." : "Send OTP Code 📲"}
+                      {isLoading ? "Sending..." : otpCooldownSeconds > 0 ? `Wait ${otpCooldownSeconds}s` : "Send OTP Code 📲"}
                     </Button>
                   </form>
                 ) : (
