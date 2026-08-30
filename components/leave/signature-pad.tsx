@@ -34,8 +34,12 @@ export function SignaturePad({ value, onChange }: SignaturePadProps) {
 
     if (value) {
       const img = new Image()
+      img.crossOrigin = "anonymous"
       img.onload = () => {
         ctx.drawImage(img, 0, 0, cssWidth, cssHeight)
+        drawHologramOverlay(ctx, cssWidth, cssHeight, hologram)
+      }
+      img.onerror = () => {
         drawHologramOverlay(ctx, cssWidth, cssHeight, hologram)
       }
       img.src = value
