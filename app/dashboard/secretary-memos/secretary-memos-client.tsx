@@ -70,6 +70,8 @@ interface RegionalTransportMemo {
   memo_date: string | null
   memo_subject: string | null
   memo_body: string | null
+  memo_amendments?: string | null
+  signed_memo_url?: string | null
 }
 
 interface ApprovedMemo {
@@ -195,6 +197,30 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
   }
 
   const exportRegionalTransportMemo = async (memo: RegionalTransportMemo, print = false) => {
+    if (!memo.memo_reference) return
+    let signedUrl = memo.signed_memo_url || null
+    try {
+      const amendments = memo.memo_amendments ? JSON.parse(memo.memo_amendments) as Record<string, unknown> : {}
+      signedUrl = signedUrl || (typeof amendments.signed_memo_url === "string" ? amendments.signed_memo_url : null) || (typeof amendments.memo_pdf_url === "string" ? amendments.memo_pdf_url : null) || (typeof amendments.document_url === "string" ? amendments.document_url : null)
+    } catch { /* malformed optional metadata must not break the console */ }
+    if (!signedUrl) {
+      window.alert("The signed HR Executive memo link is not available for this reference yet.")
+      return
+    }
+    if (print) {
+      const win = window.open(signedUrl, "_blank", "noopener,noreferrer")
+      if (win) win.addEventListener("load", () => win.print(), { once: true })
+      return
+    }
+    const link = document.createElement("a")
+    link.href = signedUrl
+    link.download = `regional-transport-memo-${memo.memo_reference.replace(/[^a-z0-9_-]/gi, "_")}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+  }
+
+  const legacyExportRegionalTransportMemo = async (memo: RegionalTransportMemo, print = false) => {
     const subject = memo.memo_subject || `Regional Transport Request: ${memo.purpose}`
     const body = memo.memo_body || `Approval is granted for transportation support for ${memo.passenger_count} passenger(s) from ${memo.origin} to ${memo.destination} on ${fmtDate(memo.event_date)}.`
     if (print) {
@@ -695,8 +721,10 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                   <div className="h-10 w-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0"><Bus className="h-5 w-5" /></div>
                   <div className="flex-1 min-w-0"><div className="font-semibold text-sm text-slate-900 truncate">{memo.memo_subject || memo.purpose}</div><div className="text-xs text-slate-500 mt-1">{memo.memo_reference || memo.reference_number || "No reference"} · {memo.origin} → {memo.destination} · {fmtDate(memo.event_date)}</div></div>
                   <Badge className={cn("text-xs border", memo.status === "approved" || memo.workflow_stage === "hr_records_review" ? "bg-emerald-100 text-emerald-800 border-emerald-200" : "bg-amber-100 text-amber-800 border-amber-200")}>{memo.status === "approved" || memo.workflow_stage === "hr_records_review" ? "Approved" : "Pending"}</Badge>
-                  <button onClick={() => void exportRegionalTransportMemo(memo)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"><Download className="h-3.5 w-3.5" /> Download</button>
-                  <button onClick={() => void exportRegionalTransportMemo(memo, true)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold"><Printer className="h-3.5 w-3.5" /> Print</button>
+                  {memo.memo_reference && memo.signed_memo_url && <>
+                    <button onClick={() => void exportRegionalTransportMemo(memo)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"><Download className="h-3.5 w-3.5" /> Download signed memo</button>
+                    <button onClick={() => void exportRegionalTransportMemo(memo, true)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold"><Printer className="h-3.5 w-3.5" /> Print signed memo</button>
+                  </>}
                 </div>
               ))}
             </div>

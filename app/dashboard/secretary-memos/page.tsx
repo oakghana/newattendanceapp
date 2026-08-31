@@ -159,12 +159,22 @@ export default async function SecretaryMemosPage() {
   // Do NOT include regular leave memos here — those belong in the Leave Memos tab only
   const { data: regionalTransportRows } = await admin
     .from("transport_requests")
-    .select("id, reference_number, purpose, origin, destination, event_date, passenger_count, workflow_stage, status, created_at, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, assigned_region_id, linked_district_id, origin_location_id")
+    .select("id, reference_number, purpose, origin, destination, event_date, passenger_count, workflow_stage, status, created_at, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, supporting_documents, assigned_region_id, linked_district_id, origin_location_id")
     .eq("request_type", "regional_transport")
     .order("created_at", { ascending: false })
     .limit(300)
 
-  const visibleRegionalTransportRows = (regionalTransportRows || []).filter((row: any) => {
+  const visibleRegionalTransportRows = (regionalTransportRows || []).map((row: any) => {
+    let signedMemoUrl: string | null = null
+    const documents = Array.isArray(row.supporting_documents) ? row.supporting_documents : []
+    const signedDocument = documents.find((document: any) => /signed|memo|pdf/i.test(String(document?.name || "")) && document?.url)
+    if (signedDocument?.url) signedMemoUrl = String(signedDocument.url)
+    try {
+      const amendments = row.memo_amendments ? JSON.parse(row.memo_amendments) : {}
+      signedMemoUrl = signedMemoUrl || amendments.signed_memo_url || amendments.memo_pdf_url || amendments.document_url || null
+    } catch { /* optional metadata */ }
+    return { ...row, signed_memo_url: signedMemoUrl }
+  }).filter((row: any) => {
     const isApproved = row.status === "approved" || row.workflow_stage === "hr_records_review"
     // HR Records is the central memo office: it must see every regional
     // transport request, including pending/not-approved requests.
