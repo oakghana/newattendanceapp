@@ -30,6 +30,7 @@ export default async function SecretaryMemosPage() {
   const scopedStaffIds = effectiveVisibility.staffIds
   const isHrRecords = ["hr_records", "hr_records_officer", "hr_records_manager"].includes(normalizedRole)
   const isRegionalManager = normalizedRole === "regional_manager"
+  const isRhedOffice = ["regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
 
   // Fetch approved loan memos (HR Executive approved stage and above)
   // Includes: awaiting_director_hr (HR signed, awaiting MD), approved_director (MD approved), staff_receiving_funds, partially_recovered
@@ -160,14 +161,18 @@ export default async function SecretaryMemosPage() {
     .from("transport_requests")
     .select("id, reference_number, purpose, origin, destination, event_date, passenger_count, workflow_stage, status, created_at, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, assigned_region_id, linked_district_id, origin_location_id")
     .eq("request_type", "regional_transport")
-    .in("workflow_stage", ["hr_records_review", "approved", "referenced", "completed", "closed"])
     .order("created_at", { ascending: false })
     .limit(300)
 
   const visibleRegionalTransportRows = (regionalTransportRows || []).filter((row: any) => {
-    if (isRegionalManager) return Boolean(row.origin_location_id && effectiveVisibility.locationIds.includes(row.origin_location_id))
-    if (visibility.regionIds.length === 0) return false
-    return Boolean((row.assigned_region_id && effectiveVisibility.regionIds.includes(row.assigned_region_id)) || (row.origin_location_id && effectiveVisibility.locationIds.includes(row.origin_location_id)))
+    const isApproved = row.status === "approved" || row.workflow_stage === "hr_records_review"
+    // HR Records is the central memo office: it must see every regional
+    // transport request, including pending/not-approved requests.
+    if (isHrRecords) return true
+    // RHED office secretaries see approved regional transport memos across the region.
+    if (isRhedOffice) return isApproved && Boolean((row.assigned_region_id && effectiveVisibility.regionIds.includes(row.assigned_region_id)) || (row.origin_location_id && effectiveVisibility.locationIds.includes(row.origin_location_id)))
+    // Regional users and managers see approved requests from their location only.
+    return isApproved && Boolean(row.origin_location_id && effectiveVisibility.locationIds.includes(row.origin_location_id))
   })
 
   const approvedMemos = visibleApprovedLoanMemos.map((loan: any) => {
