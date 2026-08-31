@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import {
   Banknote,
+  Bus,
   Calendar,
   CheckCircle2,
   Clock,
@@ -54,6 +55,23 @@ interface LeaveMemo {
   } | null
 }
 
+interface RegionalTransportMemo {
+  id: string
+  reference_number: string | null
+  purpose: string
+  origin: string
+  destination: string
+  event_date: string
+  passenger_count: number
+  workflow_stage: string
+  status: string
+  created_at: string
+  memo_reference: string | null
+  memo_date: string | null
+  memo_subject: string | null
+  memo_body: string | null
+}
+
 interface ApprovedMemo {
   id: string
   request_number: string
@@ -81,6 +99,7 @@ interface Props {
   loanMemos: LoanMemo[]
   leaveMemos: LeaveMemo[]
   approvedMemos?: ApprovedMemo[]
+  regionalTransportMemos?: RegionalTransportMemo[]
   regionalScope?: boolean
 }
 
@@ -113,8 +132,8 @@ const LEAVE_STATUS_MAP: Record<string, { label: string; color: string }> = {
   hod_approved: { label: "HOD Approved", color: "bg-teal-100 text-teal-800 border-teal-200" },
 }
 
-export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedMemos = [], regionalScope = false }: Props) {
-  const [tab, setTab] = useState<"loans" | "leave" | "approved">("loans")
+export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedMemos = [], regionalTransportMemos = [], regionalScope = false }: Props) {
+  const [tab, setTab] = useState<"loans" | "leave" | "approved" | "transport">("loans")
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [deptFilter, setDeptFilter] = useState("all")
@@ -173,6 +192,26 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
     } finally {
       setDownloadingId(null)
     }
+  }
+
+  const exportRegionalTransportMemo = async (memo: RegionalTransportMemo, print = false) => {
+    const subject = memo.memo_subject || `Regional Transport Request: ${memo.purpose}`
+    const body = memo.memo_body || `Approval is granted for transportation support for ${memo.passenger_count} passenger(s) from ${memo.origin} to ${memo.destination} on ${fmtDate(memo.event_date)}.`
+    if (print) {
+      const win = window.open("", "_blank", "noopener,noreferrer")
+      if (!win) { window.alert("Allow pop-ups to print the memo."); return }
+      win.document.write(`<html><head><title>${subject}</title><style>body{font-family:Arial,sans-serif;max-width:760px;margin:48px auto;line-height:1.6;color:#172033}h1{font-size:20px;text-align:center}p{white-space:pre-wrap}.meta{border-bottom:1px solid #ccd3df;padding-bottom:16px;margin-bottom:24px}</style></head><body><h1>${subject}</h1><div class="meta">Reference: ${memo.memo_reference || memo.reference_number || "—"}<br>Date: ${fmtDate(memo.memo_date || memo.event_date)}</div><p>${body}</p></body></html>`)
+      win.document.close(); win.focus(); win.print()
+      return
+    }
+    const { jsPDF } = await import("jspdf")
+    const pdf = new jsPDF()
+    pdf.setFontSize(16); pdf.text(subject, 20, 25)
+    pdf.setFontSize(10); pdf.text(`Reference: ${memo.memo_reference || memo.reference_number || "—"}`, 20, 36)
+    pdf.text(`Date: ${fmtDate(memo.memo_date || memo.event_date)}`, 20, 43)
+    pdf.setFontSize(12)
+    pdf.splitTextToSize(body, 170).forEach((line: string, index: number) => pdf.text(line, 20, 60 + index * 7))
+    pdf.save(`regional-transport-memo-${memo.memo_reference || memo.reference_number || memo.id}.pdf`)
   }
 
   const openLeaveMemo = async (memo: LeaveMemo, print = false) => {
@@ -344,6 +383,11 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                 {approvedMemos.length}
               </span>
             </button>
+            {regionalTransportMemos.length > 0 && (
+              <button onClick={() => { setTab("transport"); setStatusFilter("all") }} className={cn("flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all", tab === "transport" ? "bg-amber-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50")}>
+                <Bus className="h-4 w-4" /> Transport Memos <span className={cn("text-xs rounded-full px-2 py-0.5", tab === "transport" ? "bg-white/20" : "bg-amber-100 text-amber-700")}>{regionalTransportMemos.length}</span>
+              </button>
+            )}
           </div>
 
           <div className="flex-1 relative min-w-[200px]">
@@ -640,6 +684,23 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
               </div>
             )}
           </>
+        )}
+
+        {tab === "transport" && (
+          <div className="rounded-2xl border border-amber-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-amber-100 flex items-center justify-between"><span className="text-sm font-semibold text-slate-700">{regionalTransportMemos.length} regional transport memo{regionalTransportMemos.length !== 1 ? "s" : ""}</span><span className="text-xs text-slate-400">Approved HR Executive memos</span></div>
+            <div className="divide-y divide-slate-100">
+              {regionalTransportMemos.map((memo) => (
+                <div key={memo.id} className="flex items-center gap-4 px-5 py-4 hover:bg-amber-50/40">
+                  <div className="h-10 w-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0"><Bus className="h-5 w-5" /></div>
+                  <div className="flex-1 min-w-0"><div className="font-semibold text-sm text-slate-900 truncate">{memo.memo_subject || memo.purpose}</div><div className="text-xs text-slate-500 mt-1">{memo.memo_reference || memo.reference_number || "No reference"} · {memo.origin} → {memo.destination} · {fmtDate(memo.event_date)}</div></div>
+                  <Badge className="text-xs border bg-emerald-100 text-emerald-800 border-emerald-200">Approved</Badge>
+                  <button onClick={() => void exportRegionalTransportMemo(memo)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"><Download className="h-3.5 w-3.5" /> Download</button>
+                  <button onClick={() => void exportRegionalTransportMemo(memo, true)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold"><Printer className="h-3.5 w-3.5" /> Print</button>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
       </div>
