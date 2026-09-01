@@ -63,7 +63,7 @@ export function AnnualLeaveCompliancePanel() {
           </AlertTitle>
           <AlertDescription className="text-amber-800 mt-2">
             <p className="mb-3">
-              You have until <strong>1st September</strong> to submit your annual leave plan for the {new Date().getFullYear()}/{new Date().getFullYear() + 1} year.
+              You have until <strong>1st October</strong> to submit your annual leave plan for the {new Date().getFullYear()}/{new Date().getFullYear() + 1} year.
             </p>
             <p className="mb-3 text-sm">
               🔔 Your leave payment processing depends on submitting an approved leave plan. Submit now to ensure timely processing.
@@ -94,7 +94,7 @@ export function AnnualLeaveCompliancePanel() {
             🔒 Annual Leave Planning is Locked
           </AlertTitle>
           <AlertDescription className="text-red-800 text-sm mt-2">
-            Annual leave submission closed on 1st September. You cannot modify leave plans for this year. 
+            Annual leave submission closed on 1st October. You cannot modify leave plans for this year.
             Planning will re-open on 1st January for the next year.
           </AlertDescription>
         </Alert>

@@ -8,19 +8,19 @@ function getActiveLeaveYearPeriod(ref: Date = new Date()) {
   return ref.getMonth() >= 9 ? `${year}/${year + 1}` : `${year - 1}/${year}`
 }
 
-/** Days before Sep 1 to start the compliance window. */
+/** Days before Oct 1 to start the compliance window. */
 const COMPLIANCE_WINDOW_DAYS = 14
 
 function isInComplianceWindow(today: Date = new Date()): boolean {
   const year = today.getFullYear()
-  const sep1 = new Date(year, 8, 1) // Sep 1
+  const sep1 = new Date(year, 9, 1) // Oct 1
   const windowStart = new Date(sep1)
   windowStart.setDate(windowStart.getDate() - COMPLIANCE_WINDOW_DAYS)
   return today >= windowStart && today < sep1
 }
 
 function daysUntilSep1(today: Date = new Date()): number {
-  const sep1 = new Date(today.getFullYear(), 8, 1)
+  const sep1 = new Date(today.getFullYear(), 9, 1)
   return Math.max(0, Math.ceil((sep1.getTime() - today.getTime()) / 86400000))
 }
 
@@ -37,7 +37,7 @@ export async function GET() {
     const currentPeriod = getActiveLeaveYearPeriod(today)
 
     if (!inWindow) {
-      return NextResponse.json({ in_window: false, days_until_sep1: daysLeft, current_period: currentPeriod, has_submission: null })
+      return NextResponse.json({ in_window: false, days_until_oct1: daysLeft, current_period: currentPeriod, has_submission: null })
     }
 
     // Check if the user already submitted an annual leave plan for the current cycle
@@ -53,7 +53,7 @@ export async function GET() {
 
     return NextResponse.json({
       in_window: true,
-      days_until_sep1: daysLeft,
+      days_until_oct1: daysLeft,
       current_period: currentPeriod,
       has_submission: !!existing,
       submission: existing ?? null,
@@ -113,8 +113,8 @@ export async function POST(request: NextRequest) {
       recipient_id: s.id,
       type: "annual_leave_compliance_reminder",
       title: `${urgency}: Annual Leave Plan Required`,
-      message: `📅 You have ${daysLeft} day${daysLeft !== 1 ? "s" : ""} left to submit your Annual Leave Plan for ${currentPeriod}. Submissions close on 1st September. Your leave grant payment processing depends on an approved plan — submit now via Leave Planning.`,
-      data: { leave_year_period: currentPeriod, days_until_deadline: daysLeft, deadline: "September 1" },
+      message: `📅 You have ${daysLeft} day${daysLeft !== 1 ? "s" : ""} left to submit your Annual Leave Plan for ${currentPeriod}. Submissions close on 1st October. Your leave grant payment processing depends on an approved plan — submit now via Leave Planning.`,
+      data: { leave_year_period: currentPeriod, days_until_deadline: daysLeft, deadline: "October 1" },
       is_read: false,
     }))
 

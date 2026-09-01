@@ -26,7 +26,7 @@ export function AnnualLeaveLockedShield({ isLocked, children }: AnnualLeaveLocke
           🔒 Annual Leave Planning Locked
         </AlertTitle>
         <AlertDescription className="text-red-800 text-sm mt-2">
-          Annual leave planning is locked after 1st September. You cannot modify or create new annual leave plans for this year.
+          Annual leave planning is locked after 1st October. You cannot modify or create new annual leave plans for this year.
           Planning will re-open on 1st January for the next calendar year.
         </AlertDescription>
       </Alert>

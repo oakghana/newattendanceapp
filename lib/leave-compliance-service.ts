@@ -20,15 +20,15 @@ interface LeaveComplianceCheckResult {
 }
 
 /**
- * Check if today is within 14 days before September 1
+ * Check if today is within 14 days before 1st October
  * (Annual leave submission period)
  */
 export function isAnnualLeaveReminderPeriod(): boolean {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   
-  // Calculate September 1st of the current or next year
-  let septemberFirst = new Date(today.getFullYear(), 8, 1) // Month is 0-indexed, so 8 = September
+  // Calculate October 1st of the current or next year
+  let septemberFirst = new Date(today.getFullYear(), 9, 1) // Month is 0-indexed, so 8 = October
   if (today > septemberFirst) {
     septemberFirst = new Date(today.getFullYear() + 1, 8, 1)
   }
@@ -45,8 +45,8 @@ export function daysUntilAnnualLeaveDeadline(): number {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  // Calculate September 1st of current or next year (same logic as isAnnualLeaveReminderPeriod)
-  let septemberFirst = new Date(today.getFullYear(), 8, 1) // Month 8 = September (0-indexed)
+  // Calculate October 1st of current or next year (same logic as isAnnualLeaveReminderPeriod)
+  let septemberFirst = new Date(today.getFullYear(), 9, 1) // Month 8 = October (0-indexed)
   if (today >= septemberFirst) {
     septemberFirst = new Date(today.getFullYear() + 1, 8, 1)
   }
@@ -68,7 +68,7 @@ export async function isAnnualLeaveLocked(
   const currentYear = today.getFullYear()
   
   // Check if past Sept 1
-  const septemberFirst = new Date(currentYear, 8, 1) // Month is 0-indexed
+  const septemberFirst = new Date(currentYear, 9, 1) // Month is 0-indexed
   septemberFirst.setHours(0, 0, 0, 0)
   
   if (today >= septemberFirst) {
@@ -151,7 +151,7 @@ export async function getAnnualLeaveReminders(userId: string, admin: any) {
   return {
     reminders: [{
       type: 'annual_leave_deadline',
-      message: `📅 You have ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left to submit your Annual Leave Plan for the ${new Date().getFullYear()}/${new Date().getFullYear() + 1} year. Submissions close on 1st September.`,
+      message: `📅 You have ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left to submit your Annual Leave Plan for the ${new Date().getFullYear()}/${new Date().getFullYear() + 1} year. Submissions close on 1st October.`,
       severity: daysLeft <= 3 ? 'high' : daysLeft <= 7 ? 'medium' : 'low',
       action_url: '/dashboard/leave-management?tab=leave-planning',
       action_label: 'Submit Now',
