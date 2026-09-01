@@ -20,22 +20,22 @@ interface LeaveComplianceCheckResult {
 }
 
 /**
- * Check if today is within 14 days before September 1
+ * Check if today is within 14 days before 1st October
  * (Annual leave submission period)
  */
 export function isAnnualLeaveReminderPeriod(): boolean {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   
-  // Calculate September 1st of the current or next year
-  let septemberFirst = new Date(today.getFullYear(), 8, 1) // Month is 0-indexed, so 8 = September
-  if (today > septemberFirst) {
-    septemberFirst = new Date(today.getFullYear() + 1, 8, 1)
+  // Calculate October 1st of the current or next year
+  let octoberFirst = new Date(today.getFullYear(), 9, 1) // Month is 0-indexed, so 8 = October
+  if (today > octoberFirst) {
+    octoberFirst = new Date(today.getFullYear() + 1, 9, 1)
   }
   
-  const reminderStart = subDays(septemberFirst, 14)
+  const reminderStart = subDays(octoberFirst, 14)
   
-  return today >= reminderStart && today < septemberFirst
+  return today >= reminderStart && today < octoberFirst
 }
 
 /**
@@ -45,13 +45,13 @@ export function daysUntilAnnualLeaveDeadline(): number {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  // Calculate September 1st of current or next year (same logic as isAnnualLeaveReminderPeriod)
-  let septemberFirst = new Date(today.getFullYear(), 8, 1) // Month 8 = September (0-indexed)
-  if (today >= septemberFirst) {
-    septemberFirst = new Date(today.getFullYear() + 1, 8, 1)
+  // Calculate October 1st of current or next year (same logic as isAnnualLeaveReminderPeriod)
+  let octoberFirst = new Date(today.getFullYear(), 9, 1) // Month 8 = October (0-indexed)
+  if (today >= octoberFirst) {
+    octoberFirst = new Date(today.getFullYear() + 1, 9, 1)
   }
   
-  const diff = differenceInDays(septemberFirst, today)
+  const diff = differenceInDays(octoberFirst, today)
   
   return Math.max(0, diff)
 }
@@ -68,10 +68,10 @@ export async function isAnnualLeaveLocked(
   const currentYear = today.getFullYear()
   
   // Check if past Sept 1
-  const septemberFirst = new Date(currentYear, 8, 1) // Month is 0-indexed
-  septemberFirst.setHours(0, 0, 0, 0)
+  const octoberFirst = new Date(currentYear, 9, 1) // Month is 0-indexed
+  octoberFirst.setHours(0, 0, 0, 0)
   
-  if (today >= septemberFirst) {
+  if (today >= octoberFirst) {
     return true
   }
   
@@ -151,7 +151,7 @@ export async function getAnnualLeaveReminders(userId: string, admin: any) {
   return {
     reminders: [{
       type: 'annual_leave_deadline',
-      message: `📅 You have ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left to submit your Annual Leave Plan for the ${new Date().getFullYear()}/${new Date().getFullYear() + 1} year. Submissions close on 1st September.`,
+      message: `📅 You have ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left to submit your Annual Leave Plan for the ${new Date().getFullYear()}/${new Date().getFullYear() + 1} year. Submissions close on 1st October.`,
       severity: daysLeft <= 3 ? 'high' : daysLeft <= 7 ? 'medium' : 'low',
       action_url: '/dashboard/leave-management?tab=leave-planning',
       action_label: 'Submit Now',

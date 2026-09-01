@@ -9,7 +9,7 @@ import { checkAndEscalateNonResumption } from '@/lib/leave-resumption-service'
  * 
  * This endpoint should be called by a cron job (e.g., GitHub Actions, external cron service)
  * once per day to:
- * 1. Send daily reminders to staff during the 14-day pre-Sept 1 period
+ * 1. Send daily reminders to staff during the 14-day pre-Oct 1 period
  * 2. Escalate overdue manager endorsements and notify HR
  * 
  * Requires: Authorization header with secret token
@@ -32,13 +32,13 @@ export async function POST(request: NextRequest) {
     // ─── Step 1: Send annual leave reminders ───────────────────────────────
     const today = new Date()
     const currentYear = today.getFullYear()
-    const septemberFirst = new Date(currentYear, 8, 1)
-    septemberFirst.setHours(0, 0, 0, 0)
+    const octoberFirst = new Date(currentYear, 9, 1)
+    octoberFirst.setHours(0, 0, 0, 0)
     
-    const reminderStart = new Date(septemberFirst)
+    const reminderStart = new Date(octoberFirst)
     reminderStart.setDate(reminderStart.getDate() - 14)
     
-    const isReminderPeriod = today >= reminderStart && today < septemberFirst
+    const isReminderPeriod = today >= reminderStart && today < octoberFirst
 
     let remindersSent = 0
     if (isReminderPeriod) {
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
 
           // If not submitted, send reminder
           if (!submitted || submitted.length === 0) {
-            const daysLeft = Math.ceil((septemberFirst.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+            const daysLeft = Math.ceil((octoberFirst.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
             
             try {
               await notifyStaffOfLeaveReminder({

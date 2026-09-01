@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     const today = new Date().toISOString().split("T")[0]
     const { data: existingRecord, error: checkError } = await supabase
       .from("attendance_records")
-      .select("id, check_in_time, check_out_time")
+      .select("id, check_in_time, check_out_time, work_hours")
       .eq("user_id", user.id)
       .gte("check_in_time", `${today}T00:00:00`)
       .lt("check_in_time", `${today}T23:59:59`)

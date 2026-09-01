@@ -11,21 +11,26 @@ export default async function SecretaryMemosPage() {
 
   const { data: profile } = await admin
     .from("user_profiles")
-    .select("id, role, first_name, last_name, profile_image_url, departments(name)")
+    .select("id, role, first_name, last_name, profile_image_url, region_id, assigned_location_id, departments(name)")
     .eq("id", user.id)
     .maybeSingle()
 
   // The proxy has already validated the role. Administrators and secretaries
   // may use the memo console without being sent back to the login screen.
   const normalizedRole = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-  const canUseMemoConsole = regionalSecretaryRoles(normalizedRole) || ["hr_records", "hr_records_officer", "hr_records_manager"].includes(normalizedRole)
+  const canUseMemoConsole = regionalSecretaryRoles(normalizedRole) || ["hr_records", "hr_records_officer", "hr_records_manager", "regional_manager"].includes(normalizedRole)
   if (!profile || !canUseMemoConsole) {
     redirect("/dashboard/attendance")
   }
 
   const visibility = await resolveMemoVisibilityScope(admin, user.id, normalizedRole)
-  const scopedStaffIds = visibility.staffIds
+  const effectiveVisibility = normalizedRole === "regional_manager"
+    ? { ...visibility, regionIds: profile.region_id ? [profile.region_id] : [], locationIds: profile.assigned_location_id ? [profile.assigned_location_id] : [] }
+    : visibility
+  const scopedStaffIds = effectiveVisibility.staffIds
   const isHrRecords = ["hr_records", "hr_records_officer", "hr_records_manager"].includes(normalizedRole)
+  const isRegionalManager = normalizedRole === "regional_manager"
+  const isRhedOffice = ["regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
 
   // Fetch approved loan memos (HR Executive approved stage and above)
   // Includes: awaiting_director_hr (HR signed, awaiting MD), approved_director (MD approved), staff_receiving_funds, partially_recovered
@@ -152,6 +157,34 @@ export default async function SecretaryMemosPage() {
   // MD Approved tab: ONLY loans that the MD has actually stamped (md_approved_at set)
   // and leave payment advice that the MD has approved (md_approved payment_advice_memos)
   // Do NOT include regular leave memos here — those belong in the Leave Memos tab only
+  const { data: regionalTransportRows } = await admin
+    .from("transport_requests")
+    .select("id, reference_number, purpose, origin, destination, event_date, passenger_count, workflow_stage, status, created_at, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, supporting_documents, assigned_region_id, linked_district_id, origin_location_id")
+    .eq("request_type", "regional_transport")
+    .order("created_at", { ascending: false })
+    .limit(300)
+
+  const visibleRegionalTransportRows = (regionalTransportRows || []).map((row: any) => {
+    let signedMemoUrl: string | null = null
+    const documents = Array.isArray(row.supporting_documents) ? row.supporting_documents : []
+    const signedDocument = documents.find((document: any) => /signed|memo|pdf/i.test(String(document?.name || "")) && document?.url)
+    if (signedDocument?.url) signedMemoUrl = String(signedDocument.url)
+    try {
+      const amendments = row.memo_amendments ? JSON.parse(row.memo_amendments) : {}
+      signedMemoUrl = signedMemoUrl || amendments.signed_memo_url || amendments.memo_pdf_url || amendments.document_url || null
+    } catch { /* optional metadata */ }
+    return { ...row, signed_memo_url: signedMemoUrl }
+  }).filter((row: any) => {
+    const isApproved = row.status === "approved" || row.workflow_stage === "hr_records_review"
+    // HR Records is the central memo office: it must see every regional
+    // transport request, including pending/not-approved requests.
+    if (isHrRecords) return true
+    // RHED office secretaries see approved regional transport memos across the region.
+    if (isRhedOffice) return isApproved && Boolean((row.assigned_region_id && effectiveVisibility.regionIds.includes(row.assigned_region_id)) || (row.origin_location_id && effectiveVisibility.locationIds.includes(row.origin_location_id)))
+    // Regional users and managers see approved requests from their location only.
+    return isApproved && Boolean(row.origin_location_id && effectiveVisibility.locationIds.includes(row.origin_location_id))
+  })
+
   const approvedMemos = visibleApprovedLoanMemos.map((loan: any) => {
     const profile = loan.user_profiles
     const resolvedName =
@@ -178,6 +211,7 @@ export default async function SecretaryMemosPage() {
       loanMemos={visibleLoanMemos}
       leaveMemos={leaveMemos || []}
       approvedMemos={approvedMemos}
+      regionalTransportMemos={visibleRegionalTransportRows}
       regionalScope={visibility.isRegional}
     />
   )
