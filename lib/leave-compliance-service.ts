@@ -28,14 +28,14 @@ export function isAnnualLeaveReminderPeriod(): boolean {
   today.setHours(0, 0, 0, 0)
   
   // Calculate October 1st of the current or next year
-  let septemberFirst = new Date(today.getFullYear(), 9, 1) // Month is 0-indexed, so 8 = October
-  if (today > septemberFirst) {
-    septemberFirst = new Date(today.getFullYear() + 1, 8, 1)
+  let octoberFirst = new Date(today.getFullYear(), 9, 1) // Month is 0-indexed, so 8 = October
+  if (today > octoberFirst) {
+    octoberFirst = new Date(today.getFullYear() + 1, 9, 1)
   }
   
-  const reminderStart = subDays(septemberFirst, 14)
+  const reminderStart = subDays(octoberFirst, 14)
   
-  return today >= reminderStart && today < septemberFirst
+  return today >= reminderStart && today < octoberFirst
 }
 
 /**
@@ -46,12 +46,12 @@ export function daysUntilAnnualLeaveDeadline(): number {
   today.setHours(0, 0, 0, 0)
 
   // Calculate October 1st of current or next year (same logic as isAnnualLeaveReminderPeriod)
-  let septemberFirst = new Date(today.getFullYear(), 9, 1) // Month 8 = October (0-indexed)
-  if (today >= septemberFirst) {
-    septemberFirst = new Date(today.getFullYear() + 1, 8, 1)
+  let octoberFirst = new Date(today.getFullYear(), 9, 1) // Month 8 = October (0-indexed)
+  if (today >= octoberFirst) {
+    octoberFirst = new Date(today.getFullYear() + 1, 9, 1)
   }
   
-  const diff = differenceInDays(septemberFirst, today)
+  const diff = differenceInDays(octoberFirst, today)
   
   return Math.max(0, diff)
 }
@@ -68,10 +68,10 @@ export async function isAnnualLeaveLocked(
   const currentYear = today.getFullYear()
   
   // Check if past Sept 1
-  const septemberFirst = new Date(currentYear, 9, 1) // Month is 0-indexed
-  septemberFirst.setHours(0, 0, 0, 0)
+  const octoberFirst = new Date(currentYear, 9, 1) // Month is 0-indexed
+  octoberFirst.setHours(0, 0, 0, 0)
   
-  if (today >= septemberFirst) {
+  if (today >= octoberFirst) {
     return true
   }
   

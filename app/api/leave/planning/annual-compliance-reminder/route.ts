@@ -19,7 +19,7 @@ function isInComplianceWindow(today: Date = new Date()): boolean {
   return today >= windowStart && today < sep1
 }
 
-function daysUntilSep1(today: Date = new Date()): number {
+function daysUntilOct1(today: Date = new Date()): number {
   const sep1 = new Date(today.getFullYear(), 9, 1)
   return Math.max(0, Math.ceil((sep1.getTime() - today.getTime()) / 86400000))
 }
@@ -33,7 +33,7 @@ export async function GET() {
 
     const today = new Date()
     const inWindow = isInComplianceWindow(today)
-    const daysLeft = daysUntilSep1(today)
+    const daysLeft = daysUntilOct1(today)
     const currentPeriod = getActiveLeaveYearPeriod(today)
 
     if (!inWindow) {
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, skipped: true, reason: "Outside compliance window" })
     }
 
-    const daysLeft = daysUntilSep1(today)
+    const daysLeft = daysUntilOct1(today)
     const currentPeriod = getActiveLeaveYearPeriod(today)
     const admin = await createAdminClient()
 
