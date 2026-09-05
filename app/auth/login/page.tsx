@@ -4,7 +4,6 @@ import type React from "react"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 import { clearAttendanceCache } from "@/lib/utils/attendance-cache"
 import { clearGeolocationCache } from "@/lib/geolocation"
-import { getDeviceInfo } from "@/lib/device-info"
 
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -16,12 +15,19 @@ import { useRouter } from "next/navigation"
 import { useState } from "react"
 import Image from "next/image"
 import { useNotifications } from "@/components/ui/notification-system"
-import { Eye, EyeOff, Lock, Mail, CheckCircle2, AlertCircle } from "lucide-react"
+import { ArrowLeft, CheckCircle2, Eye, EyeOff, KeyRound, Lock, Mail, ShieldCheck } from "lucide-react"
 import { getPasswordEnforcementMessage, isPasswordChangeRequired } from "@/lib/security"
-import { isHrLeaveOfficeRole, isHrApproverRole, isManagerRole } from "@/lib/leave-planning"
 import { DEFAULT_RUNTIME_FLAGS, type RuntimeFlags } from "@/lib/runtime-flags"
 
 const DEVICE_SHARING_WARNING_STORAGE_KEY = "qcc_pending_device_sharing_warning"
+
+type ApprovalCheck = {
+  approved: boolean
+  error: string | null
+  firstName: string | null
+  passwordChangedAt: string | null
+  role: string | null
+}
 
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState("")
@@ -29,21 +35,11 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [otpEmail, setOtpEmail] = useState("")
   const [otp, setOtp] = useState("")
-  const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [otpSent, setOtpSent] = useState(false)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const router = useRouter()
 
   const { showFieldError, showSuccess, showError, showWarning } = useNotifications()
-
-  const persistPendingDeviceSharingWarning = (message: string) => {
-    try {
-      window.sessionStorage.setItem(DEVICE_SHARING_WARNING_STORAGE_KEY, message)
-    } catch {
-      // Ignore storage failures and continue login flow.
-    }
-  }
 
   const clearPendingDeviceSharingWarning = () => {
     try {
@@ -72,18 +68,15 @@ export default function LoginPage() {
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Unknown error" }))
         // Don't throw error - login should continue even if logging fails
         return
       }
-
-      const result = await response.json()
-    } catch (error) {
+    } catch {
       // Don't throw error - login should continue even if logging fails
     }
   }
 
-  const checkUserApproval = async (userId: string) => {
+  const checkUserApproval = async (userId: string): Promise<ApprovalCheck> => {
     try {
       const supabase = createClient()
       const { data, error } = await supabase
@@ -94,22 +87,22 @@ export default function LoginPage() {
 
       if (error) {
         console.error("Error checking user approval:", error)
-        return { approved: false, error: "Failed to verify account status" }
+        return { approved: false, error: "Failed to verify account status", firstName: null, passwordChangedAt: null, role: null }
       }
 
       if (!data) {
-        return { approved: false, error: "User profile not found. Please contact administrator." }
+        return { approved: false, error: "User profile not found. Please contact administrator.", firstName: null, passwordChangedAt: null, role: null }
       }
 
       return {
         approved: data.is_active,
-        name: `${data.first_name} ${data.last_name}`,
+        firstName: data.first_name || null,
         passwordChangedAt: data.password_changed_at || null,
         role: data.role,
         error: data.is_active ? null : "Your account is pending admin approval. Please wait for activation.",
       }
-      } catch (error) {
-        return { approved: false, error: "Failed to verify account status" }
+    } catch {
+      return { approved: false, error: "Failed to verify account status", firstName: null, passwordChangedAt: null, role: null }
     }
   }
 
@@ -128,7 +121,6 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    setError(null)
     clearPendingDeviceSharingWarning()
 
     try {
@@ -290,32 +282,15 @@ export default function LoginPage() {
         clearAttendanceCache()
         clearGeolocationCache()
 
-        // Check if user is MD or Secretary for executive welcome overlay
-        const checkExecutiveRole = async () => {
-          try {
-            const supabase = createClient()
-            const { data: profile } = await supabase
-              .from("user_profiles")
-              .select("first_name, role")
-              .eq("id", data.user.id)
-              .maybeSingle()
-            
-            const role = String(profile?.role || "").toLowerCase()
-            const isExecutive = role === "managing_director" || role === "secretary"
-            
-            if (isExecutive) {
-              const name = profile?.first_name || "Executive"
-              const title = role === "managing_director" ? "Welcome, Managing Director" : "Welcome, Secretary"
-              showSuccess(`${title}, ${name}!`, "Executive Access")
-            } else {
-              showSuccess("Login successful! Redirecting to dashboard...", "Welcome Back")
-            }
-          } catch (err) {
-            showSuccess("Login successful! Redirecting to dashboard...", "Welcome Back")
-          }
+        const role = String(approvalCheck.role || "").toLowerCase()
+        const isExecutive = role === "managing_director" || role === "secretary"
+        if (isExecutive) {
+          const name = approvalCheck.firstName || "Executive"
+          const title = role === "managing_director" ? "Welcome, Managing Director" : "Welcome, Secretary"
+          showSuccess(`${title}, ${name}!`, "Executive Access")
+        } else {
+          showSuccess("Login successful! Redirecting to dashboard...", "Welcome Back")
         }
-        
-        await checkExecutiveRole()
 
         // Confirm the browser client can read the session before navigating. This
         // prevents the redirect from racing Supabase's cookie persistence.
@@ -349,26 +324,27 @@ export default function LoginPage() {
     }
   }
 
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const supabase = createClient()
+  const handleSendOtp = async (event?: React.SyntheticEvent) => {
+    event?.preventDefault()
     setIsLoading(true)
-    setError(null)
-    setSuccessMessage(null)
 
     try {
-      if (!otpEmail.trim()) {
+      const email = otpEmail.trim().toLowerCase()
+
+      if (!email) {
         showFieldError("Email", "Please enter your email address")
         return
       }
 
-      if (!otpEmail.includes("@") || !otpEmail.includes(".")) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         showFieldError("Email", "Please enter a valid email address")
         return
       }
 
-      console.log("[v0] Attempting to validate email:", otpEmail)
+      setOtpEmail(email)
+      console.log("[v0] Attempting to validate email:", email)
       let validationError: string | null = null
+      let emailValidated = false
 
       try {
         const controller = new AbortController()
@@ -380,7 +356,7 @@ export default function LoginPage() {
             "Content-Type": "application/json",
             Accept: "application/json",
           },
-          body: JSON.stringify({ email: otpEmail }),
+          body: JSON.stringify({ email }),
           signal: controller.signal,
         })
 
@@ -412,32 +388,45 @@ export default function LoginPage() {
       }
 
       // Proceed with OTP sending (either validation passed or we're using fallback)
-      console.log("[v0] Sending OTP to:", otpEmail)
-
-      const otpResult = await supabase.auth.signInWithOtp({
-        email: otpEmail,
-        options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
-          shouldCreateUser: false,
-        },
+      console.log("[v0] Sending OTP to:", email)
+      const supabase = createClient()
+      let deliveryTimeoutId: number | undefined
+      const deliveryTimeout = new Promise<never>((_, reject) => {
+        deliveryTimeoutId = window.setTimeout(
+          () => reject(new Error("The OTP delivery request timed out. Check your connection and try again.")),
+          15000,
+        )
       })
+      const otpResult = await Promise.race([
+        supabase.auth.signInWithOtp({
+          email,
+          options: {
+            emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
+            shouldCreateUser: false,
+          },
+        }),
+        deliveryTimeout,
+      ])
+      if (deliveryTimeoutId !== undefined) {
+        window.clearTimeout(deliveryTimeoutId)
+      }
 
       console.log("[v0] Supabase OTP result:", otpResult)
 
       if (otpResult.error) {
-        console.error("[v0] Supabase OTP error:", otpResult.error.message)
+        const otpErrorMessage = otpResult.error.message.toLowerCase()
 
-        if (otpResult.error.message.includes("Email rate limit exceeded")) {
+        if (otpErrorMessage.includes("email rate limit exceeded")) {
           showFieldError("Email", "Too many OTP requests. Please wait 5 minutes before trying again.")
         } else if (
-          otpResult.error.message.includes("User not found") ||
-          otpResult.error.message.includes("Signups not allowed")
+          otpErrorMessage.includes("user not found") ||
+          otpErrorMessage.includes("signups not allowed")
         ) {
           showFieldError(
             "Email",
             "This email is not registered in the system. Please use password login or contact your administrator.",
           )
-        } else if (otpResult.error.message.includes("Invalid email")) {
+        } else if (otpErrorMessage.includes("invalid email")) {
           showFieldError("Email", "Invalid email format. Please check your email address.")
         } else {
           showFieldError("Email", `Failed to send OTP: ${otpResult.error.message}`)
@@ -454,10 +443,14 @@ export default function LoginPage() {
         "OTP Sent",
       )
     } catch (error: unknown) {
-      console.error("[v0] OTP send error:", error)
-      if (error instanceof Error) {
+      const otpErrorMessage = error instanceof Error ? error.message.toLowerCase() : ""
+      if (otpErrorMessage.includes("email rate limit exceeded")) {
+        showFieldError("Email", "Too many OTP requests. Please wait 5 minutes before trying again.")
+      } else if (error instanceof Error) {
+        console.error("[v0] OTP send error:", error)
         showError(`Failed to send OTP: ${error.message}. Please try again or use password login.`, "OTP Error")
       } else {
+        console.error("[v0] OTP send error:", error)
         showError("Failed to send OTP. Please try again or use password login.", "OTP Error")
       }
     } finally {
@@ -467,9 +460,7 @@ export default function LoginPage() {
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault()
-    const supabase = createClient()
     setIsLoading(true)
-    setError(null)
     clearPendingDeviceSharingWarning()
 
     try {
@@ -489,6 +480,7 @@ export default function LoginPage() {
       }
 
       console.log("[v0] Verifying OTP:", otp.substring(0, 2) + "****") // Log first 2 digits only for security
+      const supabase = createClient()
       let data: any = null
       let error: any = null
       
@@ -561,7 +553,15 @@ export default function LoginPage() {
           return
         }
 
+        const { data: persistedSession } = await supabase.auth.getSession()
+        if (!persistedSession.session) {
+          showError("Your code was accepted, but the session could not be saved. Please try again.", "Session Error")
+          return
+        }
+
         await logLoginActivity(data.user.id, "otp_login_success", true, "otp")
+        clearAttendanceCache()
+        clearGeolocationCache()
 
         console.log("[v0] OTP verification successful")
         showSuccess("OTP verified successfully! Redirecting to dashboard...", "Login Successful")
@@ -582,12 +582,14 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30 p-3 sm:p-4 fade-in">
-      <div className="w-full max-w-md scale-in">
-        <Card className="backdrop-blur-xl bg-background/95 shadow-2xl border border-border/40 hover:border-border/60 transition-all duration-300 rounded-2xl">
-          <CardHeader className="text-center space-y-5 pb-6 sm:pb-8 px-4 sm:px-8 pt-8 sm:pt-10 border-b border-border/20">
+    <div className="relative isolate min-h-screen overflow-hidden bg-[linear-gradient(135deg,hsl(var(--background))_0%,hsl(var(--background))_45%,hsl(var(--muted))_100%)] p-4 sm:p-6">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-[radial-gradient(ellipse_at_top,hsl(var(--primary)/0.14),transparent_68%)]" />
+      <div className="relative flex min-h-[calc(100vh-2rem)] items-center justify-center sm:min-h-[calc(100vh-3rem)] fade-in">
+      <div className="w-full max-w-lg scale-in">
+        <Card className="gap-0 overflow-hidden rounded-xl border border-border/70 bg-card/95 py-0 shadow-[0_24px_70px_-28px_hsl(var(--foreground)/0.45)] backdrop-blur-xl">
+          <CardHeader className="block space-y-4 border-b border-border/60 px-5 pb-5 pt-7 text-center sm:px-9 sm:pt-8">
             <div className="flex justify-center">
-              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-primary/10 to-primary/5 border-2 border-primary/30 flex items-center justify-center shadow-lg hover:shadow-xl transition-shadow scale-in ring-4 ring-primary/5">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-primary/25 bg-primary/5 shadow-lg ring-4 ring-primary/5 sm:h-24 sm:w-24">
                 <Image
                   src="/images/qcc-logo.png"
                   alt="QCC Logo - Quality Control Company Limited"
@@ -599,16 +601,16 @@ export default function LoginPage() {
               </div>
             </div>
             <div className="space-y-1 slide-up">
-              <div className="text-center mb-3">
-                <p className="text-sm text-primary font-medium mb-2">Akwaaba! 👋</p>
+              <div className="mb-3 text-center">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Welcome to QCC</p>
               </div>
-              <CardTitle className="text-lg sm:text-xl font-bold text-primary tracking-wide line-clamp-2">LEAVE | ATTENDANCE | LOAN APP</CardTitle>
-              <CardDescription className="text-xs text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
-                Sign in with your Staff Number, Email or use OTP to get started.
+              <CardTitle className="text-xl font-bold tracking-normal text-foreground sm:text-2xl">QCC Staff Portal</CardTitle>
+              <CardDescription className="mx-auto max-w-sm text-sm leading-6 text-muted-foreground">
+                Attendance, leave and loan services in one secure workspace.
               </CardDescription>
             </div>
           </CardHeader>
-          <CardContent className="px-4 sm:px-8 pb-6 sm:pb-8">
+          <CardContent className="px-5 pb-7 pt-6 sm:px-9 sm:pb-9">
             <Tabs defaultValue="password" className="w-full">
               <TabsList className="grid w-full grid-cols-2 bg-muted/40 p-1 rounded-xl h-11 sm:h-12 transition-all border border-border/20">
                 <TabsTrigger
@@ -699,11 +701,12 @@ export default function LoginPage() {
                 </form>
               </TabsContent>
 
-              <TabsContent value="otp" className="space-y-6 mt-6">
+              <TabsContent value="otp" className="space-y-6 mt-6 fade-in">
                 {!otpSent ? (
                   <form onSubmit={handleSendOtp} className="space-y-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="otpEmail" className="text-sm font-medium text-foreground">
+                    <div className="space-y-2.5">
+                      <Label htmlFor="otpEmail" className="flex items-center gap-2 text-sm font-medium text-foreground">
+                        <Mail className="h-4 w-4 text-primary/70" />
                         Corporate Email Address
                       </Label>
                       <Input
@@ -713,22 +716,23 @@ export default function LoginPage() {
                         value={otpEmail}
                         onChange={(e) => setOtpEmail(e.target.value)}
                         required
-                        className="h-12 border-border focus:border-primary focus:ring-primary bg-input focus-enhanced"
+                        className="h-12 rounded-lg border-border/50 bg-input/60 text-base focus:border-primary focus:ring-2 focus:ring-primary/20"
                       />
-                      <p className="text-xs text-muted-foreground">We'll send a one-time code to your registered work email. Check your inbox! 📬</p>
+                      <p className="text-xs leading-5 text-muted-foreground">We will send a six-digit code to your registered work email.</p>
                     </div>
                     <Button
                       type="submit"
-                      className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
+                      className="h-12 w-full gap-2 rounded-lg bg-primary font-semibold text-primary-foreground shadow-md transition-all hover:bg-primary/90 hover:shadow-lg"
                       disabled={isLoading}
                     >
-                      {isLoading ? "Sending..." : "Send OTP Code 📲"}
+                      {isLoading ? "Sending code..." : <><KeyRound className="h-4 w-4" /> Send secure code</>}
                     </Button>
                   </form>
                 ) : (
                   <form onSubmit={handleVerifyOtp} className="space-y-6">
                     <div className="space-y-4">
-                      <Label htmlFor="otp" className="text-sm font-medium text-foreground">
+                      <Label htmlFor="otp" className="flex items-center gap-2 text-sm font-medium text-foreground">
+                        <ShieldCheck className="h-4 w-4 text-primary/70" />
                         Enter OTP Code
                       </Label>
                       <div className="flex justify-center">
@@ -761,34 +765,34 @@ export default function LoginPage() {
                           </InputOTPGroup>
                         </InputOTP>
                       </div>
-                      <p className="text-xs text-muted-foreground text-center">
-                        Enter the 6-digit code we sent to {otpEmail}. Check spam too if you don't see it! 🔍
+                      <p className="text-center text-xs leading-5 text-muted-foreground">
+                        Enter the six-digit code sent to <span className="font-medium text-foreground">{otpEmail}</span>. Check spam if it is not in your inbox.
                       </p>
                     </div>
                     <Button
                       type="submit"
-                      className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
+                      className="h-12 w-full gap-2 rounded-lg bg-primary font-semibold text-primary-foreground shadow-md transition-all hover:bg-primary/90 hover:shadow-lg"
                       disabled={isLoading || otp.length !== 6}
                     >
-                      {isLoading ? "Verifying..." : "Verify & Sign In"}
+                      {isLoading ? "Verifying..." : <><ShieldCheck className="h-4 w-4" /> Verify and sign in</>}
                     </Button>
                     <div className="flex gap-2">
                       <Button
                         type="button"
                         variant="outline"
-                        className="flex-1 h-12 border-border text-foreground hover:bg-muted bg-transparent"
+                        className="h-12 flex-1 gap-1.5 border-border text-foreground hover:bg-muted bg-transparent"
                         onClick={() => {
                           setOtpSent(false)
                           setOtp("")
                           setSuccessMessage(null)
                         }}
                       >
-                        Back to Email
+                        <ArrowLeft className="h-4 w-4" /> Edit email
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
-                        className="flex-1 h-12 border-primary text-primary hover:bg-primary hover:text-primary-foreground bg-transparent"
+                        className="h-12 flex-1 border-primary text-primary hover:bg-primary hover:text-primary-foreground bg-transparent"
                         onClick={handleSendOtp}
                         disabled={isLoading}
                       >
@@ -801,16 +805,17 @@ export default function LoginPage() {
             </Tabs>
 
             <div className="mt-8 text-center">
-              <p className="text-sm text-muted-foreground">No account yet? Contact your IT Manager or Regional IT Head to get set up.</p>
+              <p className="text-sm leading-6 text-muted-foreground">Need access? Contact your IT Manager or Regional IT Head.</p>
             </div>
 
-          <div className="mt-6 text-center border-t border-border pt-6">
+          <div className="mt-6 border-t border-border/60 pt-6 text-center">
             <p className="text-sm font-medium text-foreground">Quality Control Company Limited</p>
-            <p className="text-xs text-muted-foreground mt-1">Intranet Portal — Built & managed by your IT Department with ❤️</p>
-            <p className="inline-flex items-center mt-3 rounded-full border border-primary/30 bg-primary px-4 py-1.5 text-xs font-semibold tracking-wide text-primary-foreground shadow-[0_4px_0_hsl(var(--primary)/0.45),0_6px_12px_hsl(var(--primary)/0.18)] transition-transform hover:-translate-y-0.5">🚀 V.2.1-19-08-26</p>
+            <p className="mt-1 text-xs text-muted-foreground">Intranet Portal, managed by the IT Department</p>
+            <p className="mt-3 inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">🚀 V.2.2-5-09-26</p>
           </div>
           </CardContent>
         </Card>
+      </div>
       </div>
     </div>
   )

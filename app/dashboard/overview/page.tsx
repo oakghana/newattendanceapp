@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { DashboardOverviewClient } from "./dashboard-overview-client"
+import { normalizeAppRole } from "@/lib/role-capabilities"
 
 export default async function DashboardOverviewPage() {
   const supabase = await createClient()
@@ -24,6 +25,7 @@ export default async function DashboardOverviewPage() {
     `)
     .eq("id", user.id)
     .maybeSingle()
+  const normalizedRole = normalizeAppRole(profile?.role)
 
   // Get today's attendance
   const today = new Date().toISOString().split("T")[0]
@@ -55,13 +57,29 @@ export default async function DashboardOverviewPage() {
 
   // Get pending MD approvals (HR-approved loan memos awaiting MD stamp)
   let pendingMdApprovals = 0
-  if (profile?.role === "managing_director" || profile?.role === "admin") {
+  let pendingTransportApprovals = 0
+  if (normalizedRole === "managing_director" || normalizedRole === "admin") {
     const { count } = await supabase
       .from("loan_requests")
       .select("*", { count: "exact", head: true })
       .eq("status", "approved_director")
       .is("md_approved_at", null)
     pendingMdApprovals = count || 0
+
+    const [{ count: regionalTransportCount }, { count: nonRegionalTransportCount }] = await Promise.all([
+      supabase
+        .from("transport_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("request_type", "regional_transport")
+        .eq("workflow_stage", "managing_director_approval"),
+      supabase
+        .from("nonregional_transport_requisitions")
+        .select("id", { count: "exact", head: true })
+        .eq("md_decision", "pending")
+        .neq("status", "awaiting_hod_approval")
+        .neq("hod_decision", "pending"),
+    ])
+    pendingTransportApprovals = (regionalTransportCount || 0) + (nonRegionalTransportCount || 0)
   }
 
   return (
@@ -72,6 +90,7 @@ export default async function DashboardOverviewPage() {
       monthlyAttendance={monthCount || 0}
       pendingApprovals={pendingApprovals}
       pendingMdApprovals={pendingMdApprovals}
+      pendingTransportApprovals={pendingTransportApprovals}
     />
   )
 }

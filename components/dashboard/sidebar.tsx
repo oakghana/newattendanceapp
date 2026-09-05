@@ -193,7 +193,7 @@ const navigationItems = [
     title: "Transport Management",
     href: "/dashboard/transport",
     icon: Bus,
-    roles: ["admin", "administrator", "it-admin", "it_admin", "driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "department_head", "hr_executive", "hr_executive_officer", "director_hr", "manager_hr"],
+    roles: ["admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "department_head", "hr_executive", "hr_executive_officer", "director_hr", "manager_hr"],
     category: "admin",
     subItems: [
       { title: "Requests", href: "/dashboard/transport" },
@@ -1044,7 +1044,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
-                className="w-64 shadow-lg border-border bg-background"
+                className="z-[200] w-64 shadow-lg border-border bg-background"
               >
                 <DropdownMenuLabel className="font-semibold">My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator className="bg-border/50" />

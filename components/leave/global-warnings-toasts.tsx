@@ -26,6 +26,7 @@ interface Warning {
   icon?: React.ReactNode
   dismissible?: boolean
   actionId?: string
+  canConfirmResumption?: boolean
 }
 
 export function GlobalWarningsToasts() {
@@ -54,6 +55,7 @@ export function GlobalWarningsToasts() {
         const managementResponse = await fetch('/api/leave/resumption-notices', { cache: 'no-store' })
         const managementPayload = managementResponse.ok ? await managementResponse.json() : { notices: [] }
         const managementNotices: ManagementNotice[] = Array.isArray(managementPayload.notices) ? managementPayload.notices : []
+        const canConfirmResumption = ['hod', 'department_head', 'regional_manager'].includes(String(managementPayload.role || ''))
 
         // A live attendance session is the employee's evidence of resumption.
         // Do not show a non-resumption warning after they have checked in.
@@ -103,6 +105,7 @@ export function GlobalWarningsToasts() {
             severity: notice.state === 'overdue' ? 'high' : 'medium',
             dismissible: true,
             actionId: notice.leave_request_id,
+            canConfirmResumption,
           })
         })
 
@@ -287,7 +290,7 @@ export function GlobalWarningsToasts() {
                     View Memo
                   </Button>
                 )}
-                  {warning.type === 'resumption_notice' && (
+                  {warning.type === 'resumption_notice' && warning.canConfirmResumption && (
                   <Button
                     size="sm"
                     type="button"

@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Clock, Calendar, Users, TrendingUp, UserCheck, AlertCircle, Banknote, FileText, ArrowRight, Stamp, Star } from "lucide-react"
+import { Clock, Calendar, Users, TrendingUp, UserCheck, AlertCircle, Banknote, FileText, ArrowRight, Stamp, Star, Bus } from "lucide-react"
 import Link from "next/link"
 import { MobileAppDownload } from "@/components/ui/mobile-app-download"
 import { PWAInstallToast } from "@/components/pwa/pwa-install-toast"
@@ -19,10 +19,11 @@ interface DashboardOverviewClientProps {
   monthlyAttendance: number
   pendingApprovals: number
   pendingMdApprovals?: number
+  pendingTransportApprovals?: number
 }
 
 // ── MD Executive Dashboard ────────────────────────────────────────────────────
-function MdExecutiveDashboard({ profile, pendingMdApprovals = 0 }: { profile: any; pendingMdApprovals: number }) {
+function MdExecutiveDashboard({ profile, pendingMdApprovals = 0, pendingTransportApprovals = 0 }: { profile: any; pendingMdApprovals: number; pendingTransportApprovals: number }) {
   const fullName = `${profile?.first_name ?? ""} ${profile?.last_name ?? ""}`.trim()
   const initials = [(profile?.first_name ?? "")[0], (profile?.last_name ?? "")[0]].join("").toUpperCase()
   const hour = new Date().getHours()
@@ -115,6 +116,27 @@ function MdExecutiveDashboard({ profile, pendingMdApprovals = 0 }: { profile: an
         </div>
       )}
 
+      {pendingTransportApprovals > 0 && (
+        <Link href="/dashboard/transport/requests">
+          <div className="group relative overflow-hidden rounded-2xl border border-lime-200 bg-lime-50 px-6 py-5 shadow-sm transition-all hover:border-lime-300 hover:shadow-md">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-lime-600 shadow-lg transition-transform group-hover:scale-105">
+                  <Bus className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <p className="text-base font-bold text-slate-900">
+                    {pendingTransportApprovals} transport request{pendingTransportApprovals === 1 ? "" : "s"} need{pendingTransportApprovals === 1 ? "s" : ""} your approval
+                  </p>
+                  <p className="mt-0.5 text-sm text-slate-500">Regional and HOD-cleared non-regional requests are ready for your decision.</p>
+                </div>
+              </div>
+              <ArrowRight className="h-5 w-5 shrink-0 text-lime-700 transition-transform group-hover:translate-x-1" />
+            </div>
+          </div>
+        </Link>
+      )}
+
       {/* Quick links */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Link href="/dashboard/md-approvals">
@@ -139,6 +161,18 @@ function MdExecutiveDashboard({ profile, pendingMdApprovals = 0 }: { profile: an
               <p className="text-xs text-slate-500 mt-0.5">Full loan workflow view</p>
             </div>
             <ArrowRight className="h-4 w-4 text-slate-300 group-hover:translate-x-0.5 transition-all" />
+          </div>
+        </Link>
+        <Link href="/dashboard/transport/requests">
+          <div className="group flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 transition-all hover:border-lime-200 hover:shadow-sm">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 transition-colors group-hover:bg-lime-100">
+              <Bus className="h-5 w-5 text-slate-600 group-hover:text-lime-700" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-slate-900">Transport approval desk</p>
+              <p className="mt-0.5 text-xs text-slate-500">{pendingTransportApprovals} request{pendingTransportApprovals === 1 ? "" : "s"} awaiting decision</p>
+            </div>
+            <ArrowRight className="h-4 w-4 text-slate-300 transition-all group-hover:translate-x-0.5 group-hover:text-lime-600" />
           </div>
         </Link>
       </div>
@@ -250,10 +284,11 @@ export function DashboardOverviewClient({
   monthlyAttendance,
   pendingApprovals,
   pendingMdApprovals = 0,
+  pendingTransportApprovals = 0,
 }: DashboardOverviewClientProps) {
   // MD gets their own executive hub
   if (profile?.role === "managing_director") {
-    return <MdExecutiveDashboard profile={profile} pendingMdApprovals={pendingMdApprovals} />
+    return <MdExecutiveDashboard profile={profile} pendingMdApprovals={pendingMdApprovals} pendingTransportApprovals={pendingTransportApprovals} />
   }
 
   // Secretary gets their own memo console

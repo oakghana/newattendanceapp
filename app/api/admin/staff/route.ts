@@ -127,9 +127,18 @@ export async function GET(request: NextRequest) {
         updated_at
       `, { count: 'exact' })
 
-    // Regional managers only see staff assigned to their own location (all departments)
+    // Regional managers see staff at their regional office and all child district/facility locations
     if (requestingProfile?.role === "regional_manager" && requestingProfile?.assigned_location_id) {
-      query = query.eq("assigned_location_id", requestingProfile.assigned_location_id)
+      const rmLocationId = requestingProfile.assigned_location_id
+      const { data: childLocations } = await adminDb
+        .from("geofence_locations")
+        .select("id")
+        .eq("parent_location_id", rmLocationId)
+        .eq("is_active", true)
+      const scopeLocationIds = Array.from(
+        new Set([rmLocationId, ...((childLocations || []).map((row: any) => String(row.id)).filter(Boolean))]),
+      )
+      query = query.in("assigned_location_id", scopeLocationIds)
     }
 
     if (departmentFilter && departmentFilter !== "all") {
@@ -574,12 +583,14 @@ export async function POST(request: NextRequest) {
 
     console.log("[v0] Staff API - Staff member created successfully")
 
-    // Auto-link IT department staff to the IT department HOD
+    // Auto-link staff to HOD: IT dept → IT HOD; regional/district → parent Regional Manager
     try {
       const newDeptId = (newProfile as any)?.department_id
       const newDeptName = String((newProfile as any)?.departments?.name || "").toLowerCase()
       const newDeptCode = String((newProfile as any)?.departments?.code || "").toLowerCase()
       const isItDept = newDeptName.includes("information") || newDeptName.includes(" it ") || newDeptCode === "it" || newDeptCode.startsWith("it")
+      const assignedLocationId = (newProfile as any)?.assigned_location_id || assigned_location_id || null
+      const locationName = String((newProfile as any)?.geofence_locations?.name || "")
       
       if (isItDept && newDeptId) {
         // Find the IT department head
@@ -604,9 +615,36 @@ export async function POST(request: NextRequest) {
           )
           console.log("[v0] Staff API - Auto-linked IT staff to verified IT department HOD:", verifiedItHod.id)
         }
+      } else if (assignedLocationId) {
+        let resolvedLocationName = locationName
+        if (!resolvedLocationName) {
+          const { data: locRow } = await adminSupabase
+            .from("geofence_locations")
+            .select("name")
+            .eq("id", assignedLocationId)
+            .maybeSingle()
+          resolvedLocationName = String(locRow?.name || "")
+        }
+        if (!isNonRegionalLocation(resolvedLocationName)) {
+          const { findRegionalManagersForLocation } = await import("@/lib/regional-manager-scope")
+          const managers = await findRegionalManagersForLocation(adminSupabase, assignedLocationId, { limit: 1 })
+          if (managers[0]?.id && managers[0].id !== authUser.user.id) {
+            await adminSupabase.from("loan_hod_linkages").upsert(
+              {
+                staff_user_id: authUser.user.id,
+                hod_user_id: managers[0].id,
+                location_id: assignedLocationId,
+                created_by: user.id,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "staff_user_id", ignoreDuplicates: false },
+            )
+            console.log("[v0] Staff API - Auto-linked regional staff to Regional Manager:", managers[0].id)
+          }
+        }
       }
     } catch (linkErr) {
-      console.error("[v0] Staff API - IT auto-link failed (non-fatal):", linkErr)
+      console.error("[v0] Staff API - HOD auto-link failed (non-fatal):", linkErr)
     }
 
     // write an audit log for creation

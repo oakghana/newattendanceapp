@@ -3,6 +3,11 @@
 import { useState, useEffect, useCallback } from "react"
 import { displayRole } from "@/lib/role-mapping"
 import { isNonRegionalLocation, normalizeLocationName } from "@/lib/location-mappings"
+import {
+  isRegionalManagerLocationMatch,
+  resolveRegionalOfficeIdFromLocation,
+  type LocationHierarchyRow,
+} from "@/lib/regional-manager-scope"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -84,7 +89,38 @@ interface Location {
   address: string
   latitude: number
   longitude: number
+  location_type?: string | null
+  parent_location_id?: string | null
+  district_id?: string | null
 }
+
+const ROLE_OPTIONS = [
+  ["accounts", "Accounts"],
+  ["accounts_executive", "Accounts Executive"],
+  ["accounts_loan_office", "Accounts Loan Office"],
+  ["admin", "Admin"],
+  ["audit_staff", "Audit Staff"],
+  ["chief_driver", "Chief Driver"],
+  ["contract", "Contract"],
+  ["department_head", "Department Head"],
+  ["director_hr", "Director HR"],
+  ["driver", "Driver"],
+  ["hr_executive", "HR Executive"],
+  ["hr_leave_office", "HR Leave Office"],
+  ["hr_loan_office", "HR Loan Office"],
+  ["hr_records", "HR Records Office"],
+  ["intern", "Intern"],
+  ["it-admin", "IT Admin"],
+  ["loan_office", "Loan Office (Legacy)"],
+  ["manager_hr", "Manager HR"],
+  ["managing_director", "Managing Director"],
+  ["nsp", "NSP"],
+  ["regional_hr", "Regional HR Officer"],
+  ["regional_manager", "Regional Manager"],
+  ["secretary", "Secretary"],
+  ["staff", "Staff"],
+  ["transport_manager", "Transport Manager"],
+] as const
 
 export function StaffManagement() {
   const [staff, setStaff] = useState<StaffMember[]>([])
@@ -95,6 +131,7 @@ export function StaffManagement() {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("")
   const [selectedDepartment, setSelectedDepartment] = useState("all")
   const [selectedRole, setSelectedRole] = useState("all")
+  const [roleSearch, setRoleSearch] = useState("")
   const [page, setPage] = useState(1)
   const [limit] = useState(50)
   const [totalPages, setTotalPages] = useState(1)
@@ -539,8 +576,23 @@ export function StaffManagement() {
   const [hodLinkLoading, setHodLinkLoading] = useState(false)
   const [hodLinkError, setHodLinkError] = useState<string | null>(null)
   const [hodSearchQuery, setHodSearchQuery] = useState<string>("")
+  const [autoLinkLoading, setAutoLinkLoading] = useState(false)
 
   const [hodCandidates, setHodCandidates] = useState<StaffMember[]>([])
+  const [hodRecommendedIds, setHodRecommendedIds] = useState<string[]>([])
+
+  const filterHodCandidates = (candidates: StaffMember[], query: string) => {
+    const q = query.trim().toLowerCase()
+    if (!q) return candidates
+    return candidates.filter((h) =>
+      `${h.first_name} ${h.last_name}`.toLowerCase().includes(q) ||
+      (h.email && h.email.toLowerCase().includes(q)) ||
+      (h.employee_id && h.employee_id.toLowerCase().includes(q)) ||
+      (h.role && h.role.replace(/_/g, " ").toLowerCase().includes(q)) ||
+      (h.departments?.name && h.departments.name.toLowerCase().includes(q)) ||
+      (h.geofence_locations?.name && h.geofence_locations.name.toLowerCase().includes(q)),
+    )
+  }
 
   const openHodLinkDialog = async (member: StaffMember) => {
     setHodLinkStaff(member)
@@ -550,7 +602,7 @@ export function StaffManagement() {
       // Fetch all roles that act as head of department in parallel
       const [resDH, resRM, resMHR, resDHR] = await Promise.all([
         authenticatedFetch("/api/admin/staff?role=department_head&limit=200"),
-        authenticatedFetch("/api/admin/staff?role=regional_manager&limit=1000"),
+        authenticatedFetch("/api/admin/staff?role=regional_manager&limit=200"),
         authenticatedFetch("/api/admin/staff?role=manager_hr&limit=200"),
         authenticatedFetch("/api/admin/staff?role=director_hr&limit=200"),
       ])
@@ -570,32 +622,86 @@ export function StaffManagement() {
       const isDepartmentHead = (candidate: StaffMember) => roleKey(candidate) === "department head"
       const candidateIsNonRegional = (candidate: StaffMember) => isNonRegionalLocation(candidate.geofence_locations?.name)
 
-      // Non-regional staff may link to ANY Department Head based at a
-      // non-regional location (Head Office, Awutu Stores, Nsawam Archive
-      // Center, etc.) — not just one at the exact same assigned location.
-      // Same-location HODs are sorted first for convenience.
-      // Regional staff may link only to the Regional Manager assigned to the
-      // staff member's exact location. The server applies the same rule.
-      const all = isNonRegionalStaff
-        ? dh.filter((candidate) => isDepartmentHead(candidate) && candidateIsNonRegional(candidate))
-        : rm.filter((candidate) => isRegionalManager(candidate) && sameLocation(candidate))
+      const locationsById = new Map<string, LocationHierarchyRow>(
+        (locations || []).map((loc) => [
+          String(loc.id),
+          {
+            id: String(loc.id),
+            name: loc.name,
+            location_type: loc.location_type ?? null,
+            parent_location_id: loc.parent_location_id ?? null,
+            district_id: loc.district_id ?? null,
+          },
+        ]),
+      )
+      const staffLocRow =
+        (staffLocationId && locationsById.get(staffLocationId)) ||
+        (staffLocationId
+          ? {
+              id: staffLocationId,
+              name: member.geofence_locations?.name || null,
+              location_type: null,
+              parent_location_id: null,
+              district_id: null,
+            }
+          : null)
+      const regionalOfficeId = resolveRegionalOfficeIdFromLocation(staffLocRow, locationsById)
+      const coversStaffRegion = (candidate: StaffMember) =>
+        isRegionalManagerLocationMatch(staffLocationId, staffLocRow, candidateLocationId(candidate), locationsById)
+
+      // Every HOD-capable staff member is selectable regardless of location so
+      // admins can always find and link someone. Ranking (not filtering) applies
+      // the business preference: location first for regional/district staff,
+      // department first for non-regional staff.
+      const atRegionalOffice = (candidate: StaffMember) =>
+        Boolean(regionalOfficeId && candidateLocationId(candidate) === String(regionalOfficeId))
+      const staffDepartmentId = String(member.department_id || member.departments?.id || "")
+      const sameDepartment = (candidate: StaffMember) =>
+        Boolean(
+          staffDepartmentId &&
+            String(candidate.department_id || candidate.departments?.id || "") === staffDepartmentId,
+        )
+
+      // Higher score = better match. Used for ordering and for the "Recommended" badge.
+      const score = (candidate: StaffMember) => {
+        if (isNonRegionalStaff) {
+          if (isDepartmentHead(candidate) && sameDepartment(candidate)) return 5
+          if (isDepartmentHead(candidate) && candidateIsNonRegional(candidate)) return 4
+          if (sameDepartment(candidate)) return 3
+          if (isDepartmentHead(candidate)) return 2
+          return 1
+        }
+        if (isRegionalManager(candidate) && sameLocation(candidate)) return 5
+        if (isRegionalManager(candidate) && atRegionalOffice(candidate)) return 4
+        if (isRegionalManager(candidate) && coversStaffRegion(candidate)) return 3
+        if (isRegionalManager(candidate)) return 2
+        return 1
+      }
+
       const seen = new Set<string>()
-      const unique = all.filter((s) => {
-        if (seen.has(s.id)) return false
-        seen.add(s.id)
-        return true
-      }).sort((a, b) => {
-        // Same-location candidates are shown first for both non-regional
-        // Department Heads and regional Regional Managers.
-        const localPriority = Number(sameLocation(b)) - Number(sameLocation(a))
-        if (localPriority !== 0) return localPriority
-        const regionalPriority = Number(isRegionalManager(b)) - Number(isRegionalManager(a))
-        if (regionalPriority !== 0) return regionalPriority
-        return `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
-      })
+      const unique = [...rm, ...dh, ...mhr, ...dhr]
+        .filter((s) => {
+          if (!s?.id || s.id === member.id || s.is_active === false || seen.has(s.id)) return false
+          seen.add(s.id)
+          return true
+        })
+        .sort((a, b) => {
+          const scoreDiff = score(b) - score(a)
+          if (scoreDiff !== 0) return scoreDiff
+          return `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
+        })
       setHodCandidates(unique)
+      setHodRecommendedIds(unique.filter((c) => score(c) >= 4).map((c) => c.id))
+
+      // Auto-select when exactly one strongly-matching candidate exists and nothing is linked yet.
+      const existingLinks = ((member as any).hod_links || []).map((hod: any) => String(hod.id))
+      const topMatches = unique.filter((c) => score(c) === 5)
+      if (topMatches.length === 1 && existingLinks.length === 0) {
+        setHodLinkHodIds([topMatches[0].id])
+      }
     } catch {
       setHodCandidates([])
+      setHodRecommendedIds([])
     }
   }
 
@@ -629,6 +735,25 @@ export function StaffManagement() {
       setHodLinkError(e?.message || "Network error")
     } finally {
       setHodLinkLoading(false)
+    }
+  }
+
+  const handleAutoLinkUnassignedStaff = async () => {
+    setAutoLinkLoading(true)
+    try {
+      const response = await authenticatedFetch("/api/loan/lookups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "auto_link_unassigned_staff_to_hr_executive" }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.success) throw new Error(result.error || "Unable to link unassigned staff")
+      showSuccess(`${result.linked || 0} staff member(s) linked to an HR Executive`, "Staff linkage updated")
+      await fetchStaff()
+    } catch (error) {
+      showError(error instanceof Error ? error.message : "Unable to link unassigned staff", "Staff linkage failed")
+    } finally {
+      setAutoLinkLoading(false)
     }
   }
 
@@ -702,33 +827,19 @@ export function StaffManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
-                  <SelectItem value="accounts">Accounts</SelectItem>
-                  <SelectItem value="accounts_loan_office">Accounts Loan Office</SelectItem>
-                  <SelectItem value="audit_staff">Audit Staff</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="contract">Contract</SelectItem>
-                  <SelectItem value="department_head">Department Head</SelectItem>
-                  <SelectItem value="director_hr">Director HR</SelectItem>
-                  <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>
-                  <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>
-                  <SelectItem value="hr_records">HR Records Office</SelectItem>
-                  <SelectItem value="intern">Intern</SelectItem>
-                  <SelectItem value="it-admin">IT Admin</SelectItem>
-                  <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>
-                  <SelectItem value="manager_hr">Manager HR</SelectItem>
-  <SelectItem value="managing_director">Managing Director</SelectItem>
-  <SelectItem value="driver">Driver</SelectItem>
-  <SelectItem value="transport_manager">Transport Manager</SelectItem>
-                  <SelectItem value="nsp">NSP</SelectItem>
-                  <SelectItem value="regional_hr">Regional HR Officer</SelectItem>
-                  <SelectItem value="regional_manager">Regional Manager</SelectItem>
-                  <SelectItem value="staff">Staff</SelectItem>
+                  {ROLE_OPTIONS.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
 
             {/* Action Buttons */}
             <div className="flex gap-3">
+              {canManageStaffLinks && (
+                <Button type="button" variant="outline" onClick={handleAutoLinkUnassignedStaff} disabled={autoLinkLoading}>
+                  <Link2 className="mr-2 h-4 w-4" />
+                  {autoLinkLoading ? "Linking..." : "Link unassigned staff"}
+                </Button>
+              )}
               <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" className="shadow-sm hover:shadow-md transition-shadow bg-transparent">
@@ -893,42 +1004,14 @@ export function StaffManagement() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {isItAdmin ? (
-                              // IT-Admin may only create limited roles
-                              <>
-                                <SelectItem value="staff">Staff</SelectItem>
-                                <SelectItem value="nsp">NSP</SelectItem>
-                            <SelectItem value="contract">Contract</SelectItem>
-                            <SelectItem value="department_head">Department Head</SelectItem>
-                            <SelectItem value="regional_manager">Regional Manager</SelectItem>
-                          </>
-                            ) : (
-                              <>
-                                {isAdministrator && <SelectItem value="accounts">Accounts</SelectItem>}
-                                {isAdministrator && <SelectItem value="accounts_executive">Accounts Executive</SelectItem>}
-                                <SelectItem value="audit_staff">Audit Staff</SelectItem>
-                                {isAdministrator && <SelectItem value="admin">Admin</SelectItem>}
-                                <SelectItem value="contract">Contract</SelectItem>
-                                <SelectItem value="department_head">Department Head</SelectItem>
-                                {isAdministrator && <SelectItem value="director_hr">Director HR</SelectItem>}
-                                {isAdministrator && <SelectItem value="hr_executive">HR Executive</SelectItem>}
-                                {isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
-                                {isAdministrator && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
-                                {isAdministrator && <SelectItem value="hr_records">HR Records Office</SelectItem>}
-                                <SelectItem value="intern">Intern</SelectItem>
-                                {canManageStaffLinks && <SelectItem value="it-admin">IT Admin</SelectItem>}
-                                {isAdministrator && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
-                                {isAdministrator && <SelectItem value="manager_hr">Manager HR</SelectItem>}
-                                {isAdministrator && <SelectItem value="managing_director">Managing Director</SelectItem>}
-                                {isAdministrator && <SelectItem value="driver">Driver</SelectItem>}
-                                {isAdministrator && <SelectItem value="transport_manager">Transport Manager</SelectItem>}
-                                <SelectItem value="nsp">NSP</SelectItem>
-                                {isAdministrator && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
-                                {isAdministrator && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
-                                {isAdministrator && <SelectItem value="secretary">Secretary</SelectItem>}
-                                <SelectItem value="staff">Staff</SelectItem>
-                              </>
-                            )}
+                            <div className="sticky top-0 z-10 bg-popover p-2">
+                              <Input value={roleSearch} onChange={(event) => setRoleSearch(event.target.value)} placeholder="Search roles..." className="h-8" />
+                            </div>
+                            {ROLE_OPTIONS.filter(([value, label]) => {
+                              const allowedForItAdmin = ["staff", "nsp", "contract", "department_head", "regional_manager"].includes(value)
+                              const allowed = isItAdmin ? allowedForItAdmin : isAdministrator || !["accounts", "accounts_executive", "admin", "director_hr", "driver", "chief_driver", "hr_executive", "hr_leave_office", "hr_loan_office", "hr_records", "loan_office", "manager_hr", "managing_director", "regional_hr", "regional_manager", "secretary", "transport_manager"].includes(value) || (value === "it-admin" && canManageStaffLinks)
+                              return allowed && `${label} ${value}`.toLowerCase().includes(roleSearch.toLowerCase())
+                            }).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
                           </SelectContent>
                       </Select>
                     </div>
@@ -1191,6 +1274,7 @@ export function StaffManagement() {
                             {isAdministrator && <SelectItem value="manager_hr">Manager HR</SelectItem>}
                             {isAdministrator && <SelectItem value="managing_director">Managing Director</SelectItem>}
                             {isAdministrator && <SelectItem value="driver">Driver</SelectItem>}
+                            {isAdministrator && <SelectItem value="chief_driver">Chief Driver</SelectItem>}
                                 {isAdministrator && <SelectItem value="transport_manager">Transport Manager</SelectItem>}
                             <SelectItem value="nsp">NSP</SelectItem>
                             {isAdministrator && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
@@ -1490,6 +1574,7 @@ export function StaffManagement() {
           setHodSearchQuery("")
           setHodLinkHodIds([])
           setHodLinkError(null)
+          setHodRecommendedIds([])
         }
       }}>
         <DialogContent className="max-w-md">
@@ -1498,8 +1583,8 @@ export function StaffManagement() {
             <DialogDescription>
               {hodLinkStaff && (hodLinkStaff.geofence_locations?.name ? `Location: ${hodLinkStaff.geofence_locations.name}. ` : "")}
               {hodLinkStaff && isNonRegionalLocation(hodLinkStaff.geofence_locations?.name)
-                ? "Any Department Head at a non-regional location (Head Office, Awutu Stores, Nsawam Archive Center, etc.) can be assigned, regardless of department. "
-                : "Only the Regional Manager assigned to this regional location is available. "}
+                ? "Department Heads in the same department are recommended first, but any Department Head or Regional Manager can be linked. "
+                : "Regional Managers at this location or its parent regional office are recommended first, but any Regional Manager or Department Head can be linked. "}
               Select one HOD for <strong>{hodLinkStaff?.first_name} {hodLinkStaff?.last_name}</strong>. Uncheck the selected HOD to remove the assignment.
             </DialogDescription>
           </DialogHeader>
@@ -1508,43 +1593,29 @@ export function StaffManagement() {
               <Alert variant="destructive"><AlertDescription>{hodLinkError}</AlertDescription></Alert>
             )}
             <div className="space-y-2.5">
-              <Label htmlFor="hod-search" className="text-sm font-medium">Search {hodLinkStaff && isNonRegionalLocation(hodLinkStaff.geofence_locations?.name) ? "Department Head" : "Regional Manager"}</Label>
+              <Label htmlFor="hod-search" className="text-sm font-medium">Search Regional Manager or Department Head</Label>
               <Input
                 id="hod-search"
-                placeholder="Search by name, staff ID, or department..."
+                placeholder="Search by name, staff ID, role, department, or location..."
                 value={hodSearchQuery}
                 onChange={(e) => setHodSearchQuery(e.target.value.toLowerCase())}
                 className="h-10"
               />
               <p className="text-xs text-muted-foreground">
                 {hodCandidates.length > 0
-                  ? `Found ${hodCandidates.filter((h) => 
-                      `${h.first_name} ${h.last_name}`.toLowerCase().includes(hodSearchQuery) ||
-                      (h.employee_id && h.employee_id.includes(hodSearchQuery)) ||
-                      (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
-                    ).length} of ${hodCandidates.length} HODs`
-                  : `No eligible ${hodLinkStaff && isNonRegionalLocation(hodLinkStaff.geofence_locations?.name) ? "Department Heads" : "Regional Managers"} found${hodLinkStaff && !isNonRegionalLocation(hodLinkStaff.geofence_locations?.name) ? " for this exact location" : ""}.`}
+                  ? `Found ${filterHodCandidates(hodCandidates, hodSearchQuery).length} of ${hodCandidates.length} HODs`
+                  : "No Regional Managers or Department Heads are available yet."}
               </p>
             </div>
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Select {hodLinkStaff && isNonRegionalLocation(hodLinkStaff.geofence_locations?.name) ? "Department Head" : "Regional Manager"}</Label>
+              <Label className="text-sm font-medium">Select HOD</Label>
               <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
-                {hodCandidates.filter((h) =>
-                  hodSearchQuery === "" ||
-                  `${h.first_name} ${h.last_name}`.toLowerCase().includes(hodSearchQuery) ||
-                  (h.employee_id && h.employee_id.includes(hodSearchQuery)) ||
-                  (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
-                ).length === 0 ? (
+                {filterHodCandidates(hodCandidates, hodSearchQuery).length === 0 ? (
                   <p className="text-sm text-muted-foreground italic py-4 text-center">
-                    {hodSearchQuery ? "No matching eligible candidates found" : `No eligible ${hodLinkStaff && isNonRegionalLocation(hodLinkStaff.geofence_locations?.name) ? "Department Heads" : "Regional Managers"} found${hodLinkStaff && !isNonRegionalLocation(hodLinkStaff.geofence_locations?.name) ? " for this exact location" : ""}.`}
+                    {hodSearchQuery ? "No matching candidates found" : "No Regional Managers or Department Heads are available yet."}
                   </p>
                 ) : (
-                  hodCandidates.filter((h) =>
-                    hodSearchQuery === "" ||
-                    `${h.first_name} ${h.last_name}`.toLowerCase().includes(hodSearchQuery) ||
-                    (h.employee_id && h.employee_id.includes(hodSearchQuery)) ||
-                    (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
-                  ).map((hod) => (
+                  filterHodCandidates(hodCandidates, hodSearchQuery).map((hod) => (
                     <div key={hod.id} className="flex items-center gap-2 p-2 hover:bg-muted rounded cursor-pointer">
                       <input
                         type="checkbox"
@@ -1560,10 +1631,16 @@ export function StaffManagement() {
                         className="h-4 w-4 rounded"
                       />
                       <label htmlFor={`hod-${hod.id}`} className="flex-1 cursor-pointer text-sm">
-                        <div className="font-medium">{hod.first_name} {hod.last_name}</div>
+                        <div className="font-medium flex items-center gap-2">
+                          <span>{hod.first_name} {hod.last_name}</span>
+                          {hodRecommendedIds.includes(hod.id) && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Recommended</Badge>
+                          )}
+                        </div>
                         <div className="text-xs text-muted-foreground">
                           {hod.employee_id && `ID: ${hod.employee_id} • `}
-                          {hod.role.replace("_", " ")} {hod.departments?.name ? `• ${hod.departments.name}` : ""}
+                          {hod.role.replace(/_/g, " ")} {hod.departments?.name ? `• ${hod.departments.name}` : ""}
+                          {hod.geofence_locations?.name ? ` • ${hod.geofence_locations.name}` : ""}
                         </div>
                       </label>
                     </div>

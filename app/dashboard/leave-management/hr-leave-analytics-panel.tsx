@@ -177,6 +177,7 @@ export function HrLeaveAnalyticsPanel() {
   const [data, setData] = useState<any>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedLocation, setSelectedLocation] = useState<string>("all")
+  const [showRecords, setShowRecords] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -190,6 +191,7 @@ export function HrLeaveAnalyticsPanel() {
       }
       setData(json)
       setSelectedLocation("all") // reset filter on new load
+      setShowRecords(false)
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "Failed to load leave analytics")
       setData(null)
@@ -289,45 +291,42 @@ export function HrLeaveAnalyticsPanel() {
   return (
     <div className="space-y-6">
       {/* ── Header ── */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-900 p-6 shadow-xl text-white">
-        {/* Decorative circles */}
-        <div className="pointer-events-none absolute -top-16 -right-16 h-64 w-64 rounded-full bg-purple-500/10" />
-        <div className="pointer-events-none absolute -bottom-8 -left-8 h-48 w-48 rounded-full bg-indigo-500/10" />
-
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="rounded-lg bg-white/10 p-1.5">
-                <TrendingUp className="w-4 h-4 text-purple-300" />
+            <div className="flex items-center gap-2">
+              <div className="rounded-md bg-emerald-50 p-2">
+                <TrendingUp className="h-4 w-4 text-emerald-700" />
               </div>
-              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-purple-300">HR Leave Intelligence</span>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Leave Analytics</h2>
+                <p className="text-xs text-slate-500">Approved leave activity and current staffing availability</p>
+              </div>
             </div>
-            <h2 className="text-2xl font-bold tracking-tight text-white">Leave Analytics Dashboard</h2>
-            <p className="mt-1 text-sm text-slate-300">Executive insights · Quality Control Company Limited</p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="ghost"
-              className="h-8 border border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+              className="h-8 border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               onClick={load} disabled={loading}>
               <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />
               {loading ? "Loading…" : "Refresh"}
             </Button>
             <Button size="sm" variant="ghost"
-              className="h-8 border border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+              className="h-8 border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               onClick={() => downloadCsv(records, `${rangeLabel}.csv`)}
               disabled={!records.length}
               title={selectedLocation !== "all" ? `Export ${records.length} records for ${selectedLocation}` : `Export all ${records.length} records`}>
               <Download className="w-3.5 h-3.5 mr-1.5" /> CSV
             </Button>
             <Button size="sm" variant="ghost"
-              className="h-8 border border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+              className="h-8 border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               onClick={() => downloadPdf(records, `${rangeLabel}.pdf`, "Leave Analytics Report", rangeStart, rangeEnd, selectedLocation)}
               disabled={!records.length}
               title={selectedLocation !== "all" ? `Export PDF for ${selectedLocation}` : "Export PDF for all regions"}>
               <FileText className="w-3.5 h-3.5 mr-1.5" /> PDF
             </Button>
             <Button size="sm" variant="ghost"
-              className="h-8 border border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+              className="h-8 border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               onClick={() => void sendFiveDayResumeReminders()}
               disabled={sendingReminder}>
               <Clock className={`w-3.5 h-3.5 mr-1.5 ${sendingReminder ? "animate-pulse" : ""}`} />
@@ -337,35 +336,35 @@ export function HrLeaveAnalyticsPanel() {
         </div>
 
         {/* Date range + location filter controls */}
-        <div className="relative mt-5 flex flex-wrap items-end gap-3">
+        <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4">
           <div className="space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">From</p>
-            <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/8 px-3 py-2 backdrop-blur-sm">
-              <Calendar className="w-3.5 h-3.5 text-purple-300 shrink-0" />
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">From</p>
+            <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+              <Calendar className="h-3.5 w-3.5 shrink-0 text-slate-500" />
               <input type="date" value={range.start}
                 onChange={e => setRange(r => ({ ...r, start: e.target.value }))}
-                className="bg-transparent text-sm text-white outline-none w-32 [color-scheme:dark]" />
+                className="w-32 bg-transparent text-sm text-slate-800 outline-none" />
             </div>
           </div>
           <div className="space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">To</p>
-            <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/8 px-3 py-2 backdrop-blur-sm">
-              <Calendar className="w-3.5 h-3.5 text-purple-300 shrink-0" />
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">To</p>
+            <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+              <Calendar className="h-3.5 w-3.5 shrink-0 text-slate-500" />
               <input type="date" value={range.end}
                 onChange={e => setRange(r => ({ ...r, end: e.target.value }))}
-                className="bg-transparent text-sm text-white outline-none w-32 [color-scheme:dark]" />
+                className="w-32 bg-transparent text-sm text-slate-800 outline-none" />
             </div>
           </div>
 
           {/* Location / Region Filter */}
           <div className="space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Region / Location</p>
-            <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/8 px-3 py-2 backdrop-blur-sm">
-              <MapPin className="w-3.5 h-3.5 text-purple-300 shrink-0" />
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Region / Location</p>
+            <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+              <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-500" />
               <select
                 value={selectedLocation}
                 onChange={e => setSelectedLocation(e.target.value)}
-                className="bg-transparent text-sm text-white outline-none min-w-[160px] [color-scheme:dark] cursor-pointer"
+                className="min-w-[160px] cursor-pointer bg-transparent text-sm text-slate-800 outline-none"
               >
                 <option value="all">All Regions</option>
                 {allLocations.map(loc => (
@@ -376,7 +375,7 @@ export function HrLeaveAnalyticsPanel() {
           </div>
 
           <Button size="sm" onClick={load} disabled={loading}
-            className="h-9 bg-white text-indigo-900 hover:bg-purple-50 font-semibold shadow-sm">
+            className="h-9 bg-emerald-600 font-semibold text-white hover:bg-emerald-700">
             Apply Range
           </Button>
 
@@ -398,12 +397,12 @@ export function HrLeaveAnalyticsPanel() {
 
         {/* Filter summary line */}
         {!loading && analytics && (
-          <div className="relative mt-3 text-xs text-slate-400">
-            Showing <span className="text-white font-medium">{records.length}</span> record{records.length !== 1 ? "s" : ""}
+          <div className="mt-3 text-xs text-slate-500">
+            Showing <span className="font-medium text-slate-900">{records.length}</span> record{records.length !== 1 ? "s" : ""}
             {selectedLocation !== "all" && (
-              <> for <span className="text-purple-300 font-medium">{selectedLocation}</span></>
+              <> for <span className="font-medium text-slate-900">{selectedLocation}</span></>
             )}
-            {" "}· <span className="text-white font-medium">{fmt(rangeStart)}</span> to <span className="text-white font-medium">{fmt(rangeEnd)}</span>
+            {" "}· <span className="font-medium text-slate-900">{fmt(rangeStart)}</span> to <span className="font-medium text-slate-900">{fmt(rangeEnd)}</span>
           </div>
         )}
       </div>
@@ -535,6 +534,18 @@ export function HrLeaveAnalyticsPanel() {
 
           {/* ── Full Records ── */}
           {records.length > 0 && (
+            <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-slate-800">Detailed leave records</p>
+                <p className="text-xs text-slate-500">Open this only when you need to inspect individual staff entries.</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => setShowRecords((current) => !current)}>
+                {showRecords ? "Hide records" : `Show ${records.length} records`}
+              </Button>
+            </div>
+          )}
+
+          {records.length > 0 && showRecords && (
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
                 <div className="flex items-center gap-2">

@@ -206,7 +206,7 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json()
-    const { review_id, review_status, fd_verification_memo, review_decision } = body
+    const { review_id, review_status, fd_verification_memo, review_decision, adjusted_fd_score, adjustment_reason } = body
 
     if (!review_id || !review_status) {
       return NextResponse.json({ error: "Missing required fields: review_id, review_status" }, { status: 400 })
@@ -217,13 +217,30 @@ export async function PATCH(request: Request) {
     // First, fetch the current loan to preserve original fd_note with calculation details
     const { data: currentLoan, error: fetchError } = await admin
       .from("loan_requests")
-      .select("fd_note, staff_full_name, fd_score, fd_good, loan_type_key, loan_type_label")
+      .select("fd_note, staff_full_name, fd_score, fd_good, loan_type_key, loan_type_label, status")
       .eq("id", review_id)
       .single()
 
     if (fetchError) {
       console.error("[v0] Error fetching current loan:", fetchError)
       return NextResponse.json({ error: "Failed to fetch loan details", details: fetchError.message }, { status: 500 })
+    }
+
+    if (!["pending_accounts_fd_review", "fd_review_pending", "sent_to_accounts"].includes(String(currentLoan.status || ""))) {
+      return NextResponse.json({ error: "This FD is no longer pending Accounts Executive review." }, { status: 400 })
+    }
+
+    const originalScore = Number(currentLoan.fd_score)
+    const hasAdjustment = adjusted_fd_score !== undefined && adjusted_fd_score !== null && adjusted_fd_score !== ""
+    const finalScore = hasAdjustment ? Number(adjusted_fd_score) : originalScore
+    if (!Number.isFinite(finalScore) || finalScore < 0 || finalScore > 100) {
+      return NextResponse.json({ error: "FD score must be a whole percentage between 0 and 100." }, { status: 400 })
+    }
+
+    const normalizedFinalScore = Math.round(finalScore)
+    const scoreChanged = normalizedFinalScore !== Math.round(originalScore)
+    if (scoreChanged && !String(adjustment_reason || "").trim()) {
+      return NextResponse.json({ error: "Provide an adjustment reason when changing the FD score." }, { status: 400 })
     }
 
     // Block illegal rejections: exempt loan types and scores >= threshold
@@ -237,28 +254,41 @@ export async function PATCH(request: Request) {
           { status: 400 },
         )
       }
-      if (!canRejectFdByScore(currentLoan?.fd_score, currentLoan?.loan_type_key, currentLoan?.fd_good, currentLoan?.loan_type_label)) {
+      if (!canRejectFdByScore(normalizedFinalScore, currentLoan?.loan_type_key, normalizedFinalScore >= GOOD_FD_THRESHOLD, currentLoan?.loan_type_label)) {
         return NextResponse.json(
           {
-            error: `FD score ${currentLoan?.fd_score}% is at or above the ${GOOD_FD_THRESHOLD}% threshold and cannot be rejected.`,
+            error: `FD score ${normalizedFinalScore}% is at or above the ${GOOD_FD_THRESHOLD}% threshold and cannot be rejected.`,
           },
           { status: 400 },
         )
       }
     }
 
+    const isExemptLoan = isFdExemptLoanType(currentLoan?.loan_type_key, currentLoan?.loan_type_label)
+    const finalFdGood = normalizedFinalScore >= GOOD_FD_THRESHOLD
+    if (isApproved && !finalFdGood && !isExemptLoan) {
+      return NextResponse.json(
+        { error: `FD score must be at least ${GOOD_FD_THRESHOLD}% before forwarding this loan to HR. Adjust the verified score with a reason or reject it.` },
+        { status: 400 },
+      )
+    }
+
     // Preserve original calculation in fd_note, add approval decision at the end
     const originalNote = currentLoan?.fd_note || ""
     const approvalMemo = [fd_verification_memo, review_decision].filter(Boolean).join(" | ")
+    const adjustmentMemo = scoreChanged
+      ? `FD SCORE ADJUSTMENT: ${Math.round(originalScore)}% -> ${normalizedFinalScore}%. Reason: ${String(adjustment_reason).trim()}`
+      : ""
     const updatedNote = originalNote 
-      ? `${originalNote}\n\n--- Accounts Executive Review (${new Date().toLocaleDateString()}) ---\n${approvalMemo}`
-      : approvalMemo
+      ? `${originalNote}\n\n--- Accounts Executive Review (${new Date().toLocaleDateString()}) ---\n${[adjustmentMemo, approvalMemo].filter(Boolean).join("\n")}`
+      : [adjustmentMemo, approvalMemo].filter(Boolean).join("\n")
 
     // Update the loan_requests row directly
     const { data: updatedLoan, error: updateError } = await admin
       .from("loan_requests")
       .update({
-        fd_good: isApproved,
+        fd_score: normalizedFinalScore,
+        fd_good: finalFdGood,
         // Move to next stage: approved FD goes to HR loan office; rejected goes back
         status: isApproved ? "pending_hr_loan_office" : "fd_rejected",
         accounts_reviewer_id: user.id,
@@ -285,7 +315,7 @@ export async function PATCH(request: Request) {
         action_key: isApproved ? "fd_approved" : "fd_rejected",
         from_status: "pending_accounts_fd_review",
         to_status: isApproved ? "pending_hr_loan_office" : "fd_rejected",
-        note: review_decision || (isApproved ? "FD approved by Accounts Executive" : "FD rejected by Accounts Executive"),
+        note: [adjustmentMemo, review_decision || (isApproved ? "FD approved by Accounts Executive" : "FD rejected by Accounts Executive")].filter(Boolean).join(" | "),
       })
 
     if (timelineError) {

@@ -59,7 +59,7 @@ interface LeaveRequest {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtOrdinal(d?: string | null): string {
-  if (!d) return '—'
+  if (!d) return 'Date not recorded'
   const dt = new Date(d)
   if (isNaN(dt.getTime())) return d
   const day = dt.getDate()
@@ -70,14 +70,14 @@ function fmtOrdinal(d?: string | null): string {
 }
 
 function fmtShort(d?: string | null): string {
-  if (!d) return '—'
+  if (!d) return 'Date not recorded'
   const dt = new Date(d)
   if (isNaN(dt.getTime())) return d
   return dt.toLocaleDateString('en-GH', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 function nextWorkday(end?: string | null): string {
-  if (!end) return '—'
+  if (!end) return 'Return date not set'
   const dt = new Date(end)
   if (isNaN(dt.getTime())) return '—'
   dt.setDate(dt.getDate() + 1)
@@ -97,7 +97,7 @@ function leaveTypeLabel(key?: string): string {
 }
 
 function shortId(id?: string | null): string {
-  if (!id) return '—'
+  if (!id) return 'Reference not available'
   return id.replace(/-/g, '').substring(0, 8).toUpperCase()
 }
 
@@ -322,12 +322,12 @@ async function downloadSingleMemo(req: LeaveRequest) {
 // ── Compact list row (approved view) ─────────────────────────────────────────
 
 function ApprovedRow({ req }: { req: LeaveRequest }) {
-  const staffName = req.user_profiles?.full_name || req.staff_name || 'N/A'
-  const dept = req.user_profiles?.department_name || '—'
+  const staffName = req.user_profiles?.full_name || req.staff_name || 'Staff member'
+  const dept = req.user_profiles?.department_name || 'Department not assigned'
   const leaveType = leaveTypeLabel(req.leave_type_key || req.leave_type)
   const startDate = req.adjusted_start_date || req.start_date || req.preferred_start_date
   const endDate = req.adjusted_end_date || req.end_date || req.preferred_end_date
-  const approver = req.hr_approver_name || '—'
+  const approver = req.hr_approver_name || 'Approval officer not recorded'
 
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50 transition-colors text-[12.5px]">
@@ -349,8 +349,8 @@ function QccMemoCard({ req }: { req: LeaveRequest }) {
   const [downloading, setDownloading] = useState(false)
   const staffName = req.user_profiles?.full_name || req.staff_name || 'STAFF NAME'
   const serial = req.user_profiles?.employee_id || req.staff_id || shortId(req.id)
-  const position = req.user_profiles?.position || '—'
-  const dept = req.user_profiles?.department_name || '—'
+  const position = req.user_profiles?.position || 'Position not recorded'
+  const dept = req.user_profiles?.department_name || 'Department not assigned'
 
   const startDate = req.adjusted_start_date || req.start_date || req.preferred_start_date
   const endDate = req.adjusted_end_date || req.end_date || req.preferred_end_date
@@ -360,14 +360,14 @@ function QccMemoCard({ req }: { req: LeaveRequest }) {
   const entitledLabel = travelDays > 0
     ? `${baseDays} plus ${travelDays} travelling day${travelDays !== 1 ? 's' : ''}`
     : `${req.entitlement_days ?? grantedDays}`
-  const remarks = travelDays > 0 ? `${travelDays} travelling day(s) added` : '—'
+  const remarks = travelDays > 0 ? `${travelDays} travelling day(s) added` : 'No additional remarks'
 
   const leaveType = leaveTypeLabel(req.leave_type_key || req.leave_type)
   const yearLabel = buildYearLabel(req)
   const refNo = buildRefNo(req)
   const approvedDate = fmtOrdinal(req.hr_approved_at || req.created_at)
 
-  const signerName = req.hr_approver_name || '—'
+  const signerName = req.hr_approver_name || 'Approval officer not recorded'
   const signerPosition = req.hr_approver_position || 'HR MANAGER'
   const sigDataUrl = req.hr_approver_signature_data_url || req.hr_signature_data_url || null
   const sigText = req.hr_signature_text || null
@@ -535,7 +535,7 @@ function RequestCard({ req, idx }: { req: LeaveRequest; idx: number }) {
     if (daysPending > 3) return 'bg-amber-100 text-amber-800'
     return 'bg-green-100 text-green-800'
   }
-  const staffName = req.staff_name || req.user_profiles?.full_name || req.user_profiles?.first_name || 'N/A'
+  const staffName = req.staff_name || req.user_profiles?.full_name || req.user_profiles?.first_name || 'Staff member'
 
   return (
     <Card key={req.id || idx} className="border hover:border-primary/50 transition-colors">
@@ -545,7 +545,7 @@ function RequestCard({ req, idx }: { req: LeaveRequest; idx: number }) {
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-foreground">{staffName}</p>
               <p className="text-xs text-muted-foreground">
-                {req.user_profiles?.employee_id || req.staff_id || 'Staff'} • {req.user_profiles?.department_name || '—'}
+                {req.user_profiles?.employee_id || req.staff_id || 'Staff ID not recorded'} • {req.user_profiles?.department_name || req.user_profiles?.departments?.name || 'Department not assigned'}
               </p>
             </div>
             <div className="flex gap-2 shrink-0">
@@ -560,11 +560,11 @@ function RequestCard({ req, idx }: { req: LeaveRequest; idx: number }) {
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div className="flex items-center gap-2 text-muted-foreground">
               <Calendar className="h-4 w-4" />
-              <span>{req.start_date ? fmtShort(req.start_date) : 'N/A'}</span>
+              <span>{fmtShort(req.start_date || req.preferred_start_date)}</span>
             </div>
             <div className="flex items-center gap-2 text-muted-foreground">
               <Calendar className="h-4 w-4" />
-              <span>{req.end_date ? fmtShort(req.end_date) : 'N/A'}</span>
+              <span>{fmtShort(req.end_date || req.preferred_end_date)}</span>
             </div>
           </div>
           {req.status && <Badge variant="outline" className="text-xs">{req.status}</Badge>}
@@ -644,8 +644,8 @@ export function RequestDetailsModal({ open, onOpenChange, title, filter }: Reque
 
         setRequests(results.map((req: any) => ({
           ...req,
-          staff_name: req.staff_name || req.user_profiles?.full_name || req.user_profiles?.first_name || 'N/A',
-          staff_id: req.staff_id || req.user_profiles?.employee_id || 'N/A',
+          staff_name: req.staff_name || req.user_profiles?.full_name || req.user_profiles?.first_name || 'Staff member',
+          staff_id: req.staff_id || req.user_profiles?.employee_id || 'Staff ID not recorded',
         })))
       } catch (err) {
         setError(`Failed to load: ${err instanceof Error ? err.message : 'Unknown error'}`)

@@ -54,6 +54,7 @@ export function HrExecutiveLeaveModule({
   hasHodLinkage, initialStaffRequests, initialManagerNotifications, initialApprovedStaffRequests,
 }: HrExecutiveLeaveModuleProps) {
   const [activeTab, setActiveTab] = useState<Tab>("overview")
+  const [balanceView, setBalanceView] = useState<"balances" | "calendar">("balances")
 
   return (
     <div className="space-y-4">
@@ -90,16 +91,33 @@ export function HrExecutiveLeaveModule({
         )}
 
         {activeTab === "balance-calendar" && (
-          <div className="space-y-6">
-            <div className="flex items-center gap-2">
-              <BarChart className="h-5 w-5 text-teal-600" />
-              <div>
-                <h2 className="text-base font-semibold">Balance & Calendar</h2>
-                <p className="text-xs text-muted-foreground">Staff leave balances and team calendar overview</p>
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex items-center gap-2">
+                <BarChart className="h-5 w-5 text-teal-600" />
+                <div>
+                  <h2 className="text-base font-semibold">Leave Availability</h2>
+                  <p className="text-xs text-muted-foreground">Review leave balances or check the team calendar.</p>
+                </div>
+              </div>
+              <div className="flex w-full rounded-md border border-slate-200 bg-slate-50 p-1 sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setBalanceView("balances")}
+                  className={`flex-1 rounded px-3 py-1.5 text-xs font-medium sm:flex-none ${balanceView === "balances" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}
+                >
+                  Balances
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBalanceView("calendar")}
+                  className={`flex-1 rounded px-3 py-1.5 text-xs font-medium sm:flex-none ${balanceView === "calendar" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}
+                >
+                  Team calendar
+                </button>
               </div>
             </div>
-            <LeaveBalanceWidget />
-            <TeamCalendarView />
+            {balanceView === "balances" ? <LeaveBalanceWidget /> : <TeamCalendarView isHrOffice />}
           </div>
         )}
 

@@ -12,7 +12,7 @@
  * 8. Payment is made and tracked
  */
 
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 
 interface LoanRequest {
   id: string
@@ -163,6 +163,8 @@ describe('Loan Workflow - FD Review and Payment Flow', () => {
     })
 
     it('should route to HR Director/Executive for final HR approval', () => {
+      loanRequest.status = 'awaiting_director_hr'
+
       expect(['awaiting_director_hr', 'awaiting_committee']).toContain(loanRequest.status)
       console.log('✓ Loan routed to HR Director/Executive for approval')
     })

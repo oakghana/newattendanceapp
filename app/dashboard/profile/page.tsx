@@ -13,29 +13,28 @@ export default async function ProfilePage() {
     redirect("/auth/login")
   }
 
-  // Get user profile - use maybeSingle to handle non-existent profiles gracefully
+  // Keep the first read to the base row. Optional relationship joins can fail when
+  // legacy databases have different foreign-key names and should not blank the page.
   const { data: profile, error: profileError } = await supabase
     .from("user_profiles")
-    .select(`
-      *,
-      departments (
-        id,
-        name,
-        code
-      ),
-      assigned_location:assigned_location_id (
-        id,
-        name,
-        address,
-        district_id,
-        districts (
-          id,
-          name
-        )
-      )
-    `)
+    .select("*")
     .eq("id", user.id)
     .maybeSingle()
+
+  if (profile) {
+    if (profile.department_id) {
+      const { data: department } = await supabase.from("departments").select("id, name, code").eq("id", profile.department_id).maybeSingle()
+      if (department) profile.departments = department as any
+    }
+    if (profile.assigned_location_id) {
+      const { data: assignedLocation } = await supabase
+        .from("geofence_locations")
+        .select("id, name, address, district_id, districts (id, name)")
+        .eq("id", profile.assigned_location_id)
+        .maybeSingle()
+      if (assignedLocation) profile.assigned_location = assignedLocation as any
+    }
+  }
 
   // Resolve organization fields independently as a safety net for legacy/ambiguous Supabase relationships.
   if (profile?.assigned_location_id && !profile.assigned_location) {
@@ -75,24 +74,7 @@ export default async function ProfilePage() {
         role: "staff",
         is_active: true,
       })
-      .select(`
-        *,
-        departments (
-          id,
-          name,
-          code
-        ),
-        assigned_location:assigned_location_id (
-          id,
-          name,
-          address,
-          district_id,
-          districts (
-            id,
-            name
-          )
-        )
-      `)
+      .select("*")
       .single()
 
     // Ensure welfare fields are fetched if they exist

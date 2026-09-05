@@ -375,11 +375,17 @@ export function LeaveManagementClient({
 
       console.log("[v0] Signer assigned:", result.signer)
       closeSignerAssignDialog()
-      
-      // Refresh the relevant data
-  if (signerAssignType === "deferment" || signerAssignType === "recall") {
-    window.location.reload()
-  }
+
+      const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
+      const refreshResponse = await fetch(
+        `/api/leave/deferment-recall/all?type=all&user_id=${encodeURIComponent(userId)}&user_role=${encodeURIComponent(normalizedRole)}`,
+        { cache: "no-store" },
+      )
+      if (refreshResponse.ok) {
+        const refreshed = await refreshResponse.json()
+        setDefermentRequests(Array.isArray(refreshed.deferments) ? refreshed.deferments : [])
+        setRecallRequests(Array.isArray(refreshed.recalls) ? refreshed.recalls : [])
+      }
     } catch (error) {
       console.error("[v0] Error assigning signer:", error)
       toast({
@@ -1797,7 +1803,7 @@ export function LeaveManagementClient({
             <CardDescription className="text-slate-600">Manage your leave requests and submissions</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
               <Button
                 onClick={() => setSelectedTab("my-requests")}
                 className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
@@ -1855,6 +1861,20 @@ export function LeaveManagementClient({
                 <ArrowUpRight className="h-4 w-4" />
                 Recalls
               </Button>
+              {!canAccessPaymentAdvice && (
+                <Button
+                  onClick={() => setSelectedTab("payment-status")}
+                  className={`gap-2 rounded-xl px-4 py-2 font-semibold transition-all ${
+                    selectedTab === "payment-status"
+                      ? "bg-teal-600 text-white shadow-md hover:bg-teal-700"
+                      : "border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                  variant={selectedTab === "payment-status" ? "default" : "outline"}
+                >
+                  <FileText className="h-4 w-4" />
+                  Payment Status
+                </Button>
+              )}
               {(isRegionalHr || isRegionalManager) && (
                 <Button
                   onClick={() => setSelectedTab("pending-approvals")}
@@ -1904,9 +1924,9 @@ export function LeaveManagementClient({
         {/* Tab Content */}
         <div className="space-y-4">
           {selectedTab === "my-requests" && (
-            <div className="space-y-8">
+            <div className="space-y-4">
               {/* Summary Stats Row */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="hidden grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl p-4 border border-blue-200/50">
                   <div className="flex items-center gap-3">
                     <div className="p-2.5 bg-blue-500 rounded-lg">
@@ -1943,7 +1963,7 @@ export function LeaveManagementClient({
               </div>
 
               {/* Leave Requests Section */}
-              <Card className="border-0 shadow-sm bg-white/80 backdrop-blur">
+              <Card className="border-0 bg-white/80 shadow-sm backdrop-blur">
                 <CardHeader className="border-b border-slate-100 pb-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -1977,7 +1997,7 @@ export function LeaveManagementClient({
               </Card>
               
               {/* Deferment Requests Section */}
-              <Card className="border-0 shadow-sm bg-white/80 backdrop-blur">
+              <Card className="hidden border-0 bg-white/80 shadow-sm backdrop-blur">
                 <CardHeader className="border-b border-slate-100 pb-4">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-amber-100 rounded-lg">
@@ -2095,8 +2115,8 @@ export function LeaveManagementClient({
                 </CardContent>
               </Card>
 
-              {/* My Payment Advice Section */}
-              <Card className="border-0 shadow-sm bg-white/80 backdrop-blur">
+              {/* Payment Advice is available from the dedicated Payment tab. */}
+              {false && <Card className="border-0 shadow-sm bg-white/80 backdrop-blur">
                 <CardHeader className="border-b border-slate-100 pb-4">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-emerald-100 rounded-lg">
@@ -2111,13 +2131,13 @@ export function LeaveManagementClient({
                 <CardContent className="pt-4">
                   <StaffPaymentAdviceStatus />
                 </CardContent>
-              </Card>
+              </Card>}
 
               {/* Approved Deferments Section */}
-              <StaffApprovedDeferments />
+              <div className="hidden"><StaffApprovedDeferments /></div>
 
               {/* Recall Requests Section */}
-              <Card className="border-0 shadow-sm bg-white/80 backdrop-blur">
+              <Card className="hidden border-0 bg-white/80 shadow-sm backdrop-blur">
                 <CardHeader className="border-b border-slate-100 pb-4">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-rose-100 rounded-lg">
@@ -2255,7 +2275,7 @@ export function LeaveManagementClient({
           )}
 
           {/* Staff Deferment Approved Notifications — visible on my-requests tab */}
-          {selectedTab === "my-requests" && myDefermentMemos.length > 0 && (
+          {selectedTab === "deferrments" && myDefermentMemos.length > 0 && (
             <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50/50">
               <CardHeader className="border-b border-amber-200">
                 <CardTitle className="flex items-center gap-2 text-amber-800">
@@ -2297,7 +2317,7 @@ export function LeaveManagementClient({
           )}
 
           {/* Staff Recall Approved Notifications — visible on my-requests tab */}
-          {selectedTab === "my-requests" && myRecallMemos.length > 0 && (
+          {selectedTab === "recalls" && myRecallMemos.length > 0 && (
             <Card className="border border-rose-200 bg-gradient-to-br from-rose-50 to-pink-50/50">
               <CardHeader className="border-b border-rose-200">
                 <CardTitle className="flex items-center gap-2 text-rose-800">
@@ -3177,6 +3197,18 @@ export function LeaveManagementClient({
                   </div>
                 )}
               </CardContent>
+            </Card>
+          )}
+
+          {selectedTab === "payment-status" && !canAccessPaymentAdvice && (
+            <Card className="border border-emerald-200 bg-emerald-50/40 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg text-emerald-900">
+                  <FileText className="h-5 w-5" /> Payment Status
+                </CardTitle>
+                <CardDescription>Track payment advice created from your approved leave.</CardDescription>
+              </CardHeader>
+              <CardContent><StaffPaymentAdviceStatus /></CardContent>
             </Card>
           )}
 

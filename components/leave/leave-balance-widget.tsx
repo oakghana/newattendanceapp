@@ -124,6 +124,7 @@ export function LeaveBalanceWidget() {
         setLoading(false)
       })
       .catch((e) => {
+        if (e instanceof DOMException && e.name === "AbortError") return
         console.error("[v0] LeaveBalanceWidget error:", e)
         setError(e.message || "Failed to load leave balance")
         setLoading(false)
@@ -180,25 +181,25 @@ export function LeaveBalanceWidget() {
               <TrendingUp className="h-5 w-5 text-cyan-200" />
             </div>
             <div>
-              <CardTitle className="text-base font-semibold text-white">Leave Balance</CardTitle>
-              <p className="text-xs text-slate-300">Period {data.period}</p>
+              <CardTitle className="text-base font-semibold text-white">{data.showLeadershipMetrics ? "Leave Availability" : "Your Leave Balance"}</CardTitle>
+              <p className="text-xs text-slate-300">{data.showLeadershipMetrics ? "Staff currently on approved leave" : `Period ${data.period}`}</p>
             </div>
           </div>
           <div className="text-right">
-            <p className="text-2xl font-bold text-white">{totalUsed}</p>
-            <p className="text-xs text-slate-300">of {totalEntitlement} days used</p>
+            <p className="text-2xl font-bold text-white">{data.showLeadershipMetrics ? Number(data.totalActiveStaff || 0) : totalUsed}</p>
+            <p className="text-xs text-slate-300">{data.showLeadershipMetrics ? "staff on leave today" : `of ${totalEntitlement} days used`}</p>
             {data.showLeadershipMetrics && (
               <p className="text-[11px] text-cyan-200 mt-0.5">{Number(data.totalActiveStaff || 0)} staff currently on leave</p>
             )}
           </div>
         </div>
         {/* Overall progress bar */}
-        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+        {!data.showLeadershipMetrics && <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
           <div
             className="h-full rounded-full bg-cyan-400 transition-all duration-700"
             style={{ width: totalEntitlement > 0 ? `${Math.min(100, (totalUsed / totalEntitlement) * 100)}%` : "0%" }}
           />
-        </div>
+        </div>}
       </div>
 
       {/* Annual leave entitlement breakdown — staff-specific based on category and service */}
@@ -244,7 +245,9 @@ export function LeaveBalanceWidget() {
                     <div>
                       <p className="text-sm font-semibold text-slate-800">{balance.label}</p>
                       <p className="text-xs text-slate-400">
-                        {balance.used} used · {balance.entitlement} total
+                        {data.showLeadershipMetrics
+                          ? `${balance.active_staff_count || 0} staff currently on leave`
+                          : `${balance.used} used · ${balance.entitlement} total`}
                       </p>
                     </div>
                   </div>
@@ -255,7 +258,7 @@ export function LeaveBalanceWidget() {
                         isExhausted ? "border-red-200 bg-red-50 text-red-600" : col.badge
                       }`}
                     >
-                      {isExhausted ? "Exhausted" : `${balance.remaining}d left`}
+                      {data.showLeadershipMetrics ? "View staff" : isExhausted ? "Exhausted" : `${balance.remaining}d left`}
                     </Badge>
                     {data.showLeadershipMetrics && (
                       <button
@@ -275,12 +278,12 @@ export function LeaveBalanceWidget() {
                   </div>
                 </div>
                 {/* Per-type progress bar */}
-                <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                {!data.showLeadershipMetrics && <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${isExhausted ? "bg-red-400" : col.bar}`}
                     style={{ width: `${pct}%` }}
                   />
-                </div>
+                </div>}
               </div>
             )
           })}

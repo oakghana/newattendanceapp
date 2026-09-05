@@ -239,19 +239,56 @@ export async function GET(request: NextRequest) {
 
     console.log("[v0] Reports API - Fetched", userProfiles.length, "user profiles for", userIds.length, "unique user IDs")
 
-    const userMap = new Map(userProfiles.map((user) => [user.id, user]) || [])
+    const userMap = new Map<string, any>()
+    userProfiles.forEach((user) => {
+      userMap.set(user.id, user)
+    })
+
+    // Historical attendance may reference the identity exposed by the unified
+    // staff view rather than either user_profiles identity column.
+    const missingProfileIds = userIds.filter((id) => !userMap.has(id))
+    if (missingProfileIds.length > 0) {
+      const { data: unifiedStaff, error: unifiedStaffError } = await adminClientForScope
+        .from("unified_user_management")
+        .select("user_id, full_name, employee_id, department_name, position, assigned_location_id")
+        .in("user_id", missingProfileIds)
+
+      if (unifiedStaffError) {
+        console.warn("[v0] Reports API - Unified staff enrichment failed:", unifiedStaffError)
+      } else {
+        for (const staff of unifiedStaff || []) {
+          const fullName = String((staff as any).full_name || "").trim()
+          const nameParts = fullName.split(/\s+/).filter(Boolean)
+          const staffUserId = String((staff as any).user_id || "")
+          if (!staffUserId) continue
+          userMap.set(staffUserId, {
+            id: staffUserId,
+            user_id: staffUserId,
+            first_name: nameParts[0] || "",
+            last_name: nameParts.slice(1).join(" "),
+            employee_id: (staff as any).employee_id || null,
+            position: (staff as any).position || null,
+            assigned_location_id: (staff as any).assigned_location_id || null,
+            departments: (staff as any).department_name ? { name: (staff as any).department_name } : null,
+          })
+        }
+      }
+    }
 
     // For user_ids without profiles, try to get email from auth.users
-    const missingProfileIds = userIds.filter(id => !userMap.has(id))
-    const authUserMap = new Map<string, { email?: string | null }>()
-    if (missingProfileIds.length > 0) {
+    const unresolvedUserIds = userIds.filter(id => !userMap.has(id))
+    const authUserMap = new Map<string, { email?: string | null; full_name?: string | null }>()
+    if (unresolvedUserIds.length > 0) {
       try {
         const adminClient = await createAdminClient()
-        const { data: authUsers } = await adminClient.auth.admin.listUsers()
+        const { data: authUsers } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 })
         if (authUsers?.users) {
           authUsers.users.forEach((u) => {
-            if (missingProfileIds.includes(u.id)) {
-              authUserMap.set(u.id, { email: u.email })
+            if (unresolvedUserIds.includes(u.id)) {
+              authUserMap.set(u.id, {
+                email: u.email,
+                full_name: String(u.user_metadata?.full_name || u.user_metadata?.name || "").trim() || null,
+              })
             }
           })
         }
@@ -308,7 +345,7 @@ export async function GET(request: NextRequest) {
 
       // If no profile, try to get email from auth.users
       const authUser = authUserMap.get(record.user_id)
-      const enrichedProfile = userProfile || (authUser ? { email: authUser.email } : null)
+      const enrichedProfile = userProfile || (authUser ? { email: authUser.email, full_name: authUser.full_name } : null)
       
       // Log if we have a record without profile
       if (!userProfile && !authUser) {

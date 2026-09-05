@@ -47,7 +47,7 @@ import { ToastAction } from "@/components/ui/toast"
 import { clearAttendanceCache, shouldClearCache, setCachedDate } from "@/lib/utils/attendance-cache"
 import { cn } from "@/lib/utils"
 import { requiresLatenessReason, requiresEarlyCheckoutReason, isExemptFromAttendanceReasons, canCheckInAtTime, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckInDeadline, getCheckOutDeadline } from "@/lib/attendance-utils"
-import { validateMeaningfulText } from "@/lib/meaningful-text"
+import { validateAttendanceReason, countMeaningfulWords, hasExcessiveConsecutiveWhitespace, hasRepeatedConsecutiveCharacters } from "@/lib/meaningful-text"
 import { DeviceActivityHistory } from "@/components/attendance/device-activity-history"
 import { ActiveSessionTimer } from "@/components/attendance/active-session-timer"
 import {
@@ -266,6 +266,7 @@ export function AttendanceRecorder({
   const [recentCheckIn, setRecentCheckIn] = useState(false)
   const [recentCheckOut, setRecentCheckOut] = useState(false)
   const [localTodayAttendance, setLocalTodayAttendance] = useState(initialTodayAttendance)
+  const [attendanceStateResolved, setAttendanceStateResolved] = useState(Boolean(initialTodayAttendance))
   // Keep a ref always in sync so async closures see the latest value
   useEffect(() => { localTodayAttendanceRef.current = localTodayAttendance }, [localTodayAttendance])
   const [pendingDeviceSharingWarning, setPendingDeviceSharingWarning] = useState<string | null>(null)
@@ -480,6 +481,8 @@ export function AttendanceRecorder({
 
       if (data) {
         setLocalTodayAttendance(data)
+      } else {
+        setLocalTodayAttendance(null)
       }
     } catch (error) {
       console.error("[v0] Error in fetchTodayAttendance:", error)
@@ -710,6 +713,7 @@ export function AttendanceRecorder({
   useEffect(() => {
     fetchUserProfile()
     loadProximitySettings()
+    void fetchTodayAttendance().finally(() => setAttendanceStateResolved(true))
     const capabilities = detectWindowsLocationCapabilities()
     setWindowsCapabilities(capabilities)
     console.log("[v0] Windows location capabilities detected:", capabilities)
@@ -1333,7 +1337,7 @@ export function AttendanceRecorder({
           }
         }
 
-        const liveValidation = validateAttendanceLocation(
+        let liveValidation = validateAttendanceLocation(
           effectiveLocation,
           realTimeLocations,
           proximitySettings,
@@ -1342,6 +1346,21 @@ export function AttendanceRecorder({
 
         const sharedValidationAllowsCheckIn =
           locationValidation?.canCheckIn === true && !!locationValidation?.nearestLocation
+
+        // The continuous location state powers the visible badge. If a one-shot refresh
+        // briefly jumps outside the geofence, submit the same cached coordinates the badge
+        // already approved instead of sending a contradictory location to the API.
+        if (sharedValidationAllowsCheckIn && !liveValidation.canCheckIn && userLocation && effectiveLocation !== userLocation) {
+          effectiveLocation = userLocation
+          checkInData.latitude = effectiveLocation.latitude
+          checkInData.longitude = effectiveLocation.longitude
+          liveValidation = validateAttendanceLocation(
+            effectiveLocation,
+            realTimeLocations,
+            proximitySettings,
+            checkInRadius,
+          )
+        }
 
         const effectiveValidation = sharedValidationAllowsCheckIn
           ? {
@@ -1373,7 +1392,8 @@ export function AttendanceRecorder({
         } else {
           // Capture nearest location for failure logging even when out of range
           resolvedNearestLocation = effectiveValidation.nearestLocation ?? liveValidation.nearestLocation ?? null
-          throw new Error("You must be within 50m of a valid location to check in.")
+          const radiusLabel = checkInRadius ?? proximitySettings.checkInProximityRange ?? 50
+          throw new Error(`You must be within ${radiusLabel}m of a valid location to check in.`)
         }
       } else {
         const sharedValidationAllowsCheckIn =
@@ -1519,10 +1539,7 @@ export function AttendanceRecorder({
 
   const handleSendOffPremisesRequest = async () => {
     if (!pendingOffPremisesLocation) return
-    const reasonValidation = validateMeaningfulText(offPremisesReason, {
-      fieldLabel: "Off-premises reason",
-      minLength: 10,
-    })
+    const reasonValidation = validateAttendanceReason(offPremisesReason, "Off-premises reason")
     if (!isExemptFromAttendanceReasons(userProfile?.role) && !reasonValidation.ok) {
       toast({
         title: "Reason Required",
@@ -1614,7 +1631,7 @@ export function AttendanceRecorder({
       console.log("[v0] Sending off-premises check-in request:", payload)
 
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30_000)
+      const timeoutId = setTimeout(() => controller.abort(new DOMException("Request timed out after 30 seconds.", "TimeoutError")), 30_000)
 
       const response = await fetch("/api/attendance/check-in-outside-request", {
         method: "POST",
@@ -1771,6 +1788,14 @@ export function AttendanceRecorder({
       
       // OPTIMIZATION: Validate location ONCE
       let checkoutValidation = validateCheckoutLocation(locationData, realTimeLocations || [], checkOutRadius)
+
+      // Keep the coordinates used by the API aligned with the continuous in-range UI state
+      // when a transient one-shot GPS reading drifts outside the geofence.
+      if (!checkoutValidation.canCheckOut && locationValidation?.canCheckOut === true && userLocation) {
+        locationData = userLocation
+        checkoutLocationForFailure = locationData
+        checkoutValidation = validateCheckoutLocation(locationData, realTimeLocations || [], checkOutRadius)
+      }
 
       // [DEBUG] Log fresh GPS validation for device monitoring
       console.log("[v0] FRESH_CHECKOUT_VALIDATION", {
@@ -2195,6 +2220,7 @@ export function AttendanceRecorder({
         isOnLeave,
         hasMetMinimumTime: hoursWorked >= 7,
         hoursWorked,
+        dept: currentUserProfile?.departments,
       })
 
       if (!eligibleForAutoCheckout) return
@@ -2269,6 +2295,9 @@ export function AttendanceRecorder({
   useEffect(() => {
     // Auto check-in is disabled by default; admin must enable it via runtime controls
     if (!runtimeFlags.autoCheckInEnabled) return
+
+    // Never prompt for off-premises work until today's attendance record is known.
+    if (!attendanceStateResolved) return
 
     if (localTodayAttendance?.check_in_time || hasPendingOffPremisesRequest || isOnLeave) {
       autoCheckInAttemptedRef.current = false
@@ -2436,6 +2465,7 @@ export function AttendanceRecorder({
     }
   }, [
     runtimeFlags.autoCheckInEnabled,
+    attendanceStateResolved,
     localTodayAttendance?.check_in_time,
     hasPendingOffPremisesRequest,
     isOnLeave,
@@ -2581,21 +2611,39 @@ export function AttendanceRecorder({
     }
   }
 
-  const handleEarlyCheckoutConfirm = async () => {
-    const reasonValidation = validateMeaningfulText(earlyCheckoutReason, {
-      fieldLabel: "Early checkout reason",
-      minLength: 10,
-    })
 
-    if (earlyCheckoutReasonRequired) {
-      if (!reasonValidation.ok) {
+  const reasonFieldHint = "Use more than 20 alphabetic characters. Spaces, numbers, and punctuation do not count."
+  const reasonLiveStatus = (value: string) => {
+    if (hasExcessiveConsecutiveWhitespace(value)) {
+      return { ok: false, text: "Too many continuous spaces (max 3). Write real words." }
+    }
+    if (hasRepeatedConsecutiveCharacters(value)) {
+      return { ok: false, text: "Repeated consecutive characters are not allowed." }
+    }
+    const letters = value.replace(/[^a-z]/gi, "").length
+    if (letters >= 21) return { ok: true, text: `${letters} / 21 alphabetic characters ✓` }
+    return { ok: false, text: `${letters} / 21 alphabetic characters — please add more detail` }
+  }
+
+  const handleEarlyCheckoutConfirm = async () => {
+    let normalizedEarlyReason = ""
+    if (earlyCheckoutReasonRequired || earlyCheckoutReason.trim().length > 0) {
+      const reasonValidation = validateAttendanceReason(earlyCheckoutReason, "Early checkout reason")
+      if (earlyCheckoutReasonRequired && !reasonValidation.ok) {
         setFlashMessage({
           message: reasonValidation.error || "Please provide a valid reason for early checkout before proceeding.",
           type: "error",
         })
         return
       }
-
+      if (!earlyCheckoutReasonRequired && earlyCheckoutReason.trim().length > 0 && !reasonValidation.ok) {
+        setFlashMessage({
+          message: reasonValidation.error || "If you provide a reason, it must be detailed and meaningful.",
+          type: "error",
+        })
+        return
+      }
+      if (reasonValidation.ok) normalizedEarlyReason = reasonValidation.normalized
     }
 
     const prover = earlyCheckoutProvedBy.trim()
@@ -2607,7 +2655,7 @@ export function AttendanceRecorder({
       const { location, nearestLocation } = pendingCheckoutData
 
       // Use optimized checkout function with reason and prover
-      await performCheckoutAPI(location, nearestLocation, reasonValidation.normalized, prover || null, false, loginIssueRecoveryCheckout)
+      await performCheckoutAPI(location, nearestLocation, normalizedEarlyReason, prover || null, false, loginIssueRecoveryCheckout)
     } catch (error) {
       console.error("[v0] Early checkout error:", error)
       setFlashMessage({
@@ -2631,13 +2679,9 @@ export function AttendanceRecorder({
     const isDirectCheckout = pendingOffPremisesIsDirectCheckout
     const reasonValidation = isDirectCheckout
       ? { ok: true, normalized: "", error: null }
-      : validateMeaningfulText(offPremisesCheckoutReason, {
-          fieldLabel: "Off-premises checkout reason",
-          minLength: 20,
-          minWords: 20,
-        })
+      : validateAttendanceReason(offPremisesCheckoutReason, "Off-premises checkout reason")
     if (!reasonValidation.ok) {
-      toast({ title: "Reason required", description: reasonValidation.error || "Please provide a detailed reason of at least 20 words.", variant: "destructive" })
+      toast({ title: "Reason required", description: reasonValidation.error || "Please provide a detailed reason with more than 20 alphabetic characters.", variant: "destructive" })
       return
     }
     const { location, nearestLocation: nearestLocFromDialog } = pendingOffPremisesCheckoutData
@@ -2795,9 +2839,10 @@ export function AttendanceRecorder({
         fetchTodayAttendance()
       }, 1500)
     } catch (error) {
-      console.error("[v0] Off-premises checkout error:", error)
+      const timedOut = (error as any)?.name === "AbortError" || (error as any)?.name === "TimeoutError"
+      if (!timedOut) console.error("[v0] Off-premises checkout error:", error)
       const message =
-        (error as any)?.name === "AbortError"
+        timedOut
           ? "Request timed out after 30 seconds. Please check your internet and try again."
           : error instanceof Error
             ? error.message
@@ -2819,10 +2864,7 @@ export function AttendanceRecorder({
     }
   }
   const handleLatenessConfirm = async () => {
-  const reasonValidation = validateMeaningfulText(latenessReason, {
-    fieldLabel: "Late arrival reason",
-    minLength: 10,
-  })
+  const reasonValidation = validateAttendanceReason(latenessReason, "Late arrival reason")
   if (!isExemptFromAttendanceReasons(userProfile?.role) && !reasonValidation.ok) {
       setFlashMessage({
         message: reasonValidation.error || "Please provide a valid reason for your late arrival before proceeding.",
@@ -3246,7 +3288,7 @@ export function AttendanceRecorder({
                 Off-Premises Request
               </CardTitle>
               <CardDescription>
-                Please provide a reason for your off-premises check-in request.
+                Provide more than 20 alphabetic characters. Spaces, numbers, and punctuation do not count. Continuous spaces (more than 3) are not accepted.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -3269,7 +3311,7 @@ export function AttendanceRecorder({
                   maxLength={500}
                 />
                 <p className="text-xs text-muted-foreground">
-                  {offPremisesReason.length}/500 characters
+                  {reasonLiveStatus(offPremisesReason).text} · {offPremisesReason.length}/500
                 </p>
               </div>
 
@@ -3289,7 +3331,7 @@ export function AttendanceRecorder({
                 <Button
                   onClick={handleSendOffPremisesRequest}
                   className="flex-1 bg-blue-600 hover:bg-blue-700"
-                  disabled={isCheckingIn || offPremisesReason.trim().length === 0}
+                  disabled={isCheckingIn || !reasonLiveStatus(offPremisesReason).ok}
                 >
                   {isCheckingIn ? (
                     <>
@@ -3347,11 +3389,10 @@ export function AttendanceRecorder({
                     autoFocus
                   />
                   {(() => {
-                    const wordCount = offPremisesCheckoutReason.trim().split(/\s+/).filter(w => /[a-z]/i.test(w)).length
-                    const isEnough = wordCount >= 20
+                    const status = reasonLiveStatus(offPremisesCheckoutReason)
                     return (
-                      <p className={`text-xs ${isEnough ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
-                        {wordCount} / 20 words minimum{isEnough ? " ✓" : " — please add more detail"}
+                      <p className={`text-xs ${status.ok ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
+                        {status.text}
                       </p>
                     )
                   })()}
@@ -3369,7 +3410,7 @@ export function AttendanceRecorder({
                 <Button
                   onClick={handleOffPremisesCheckoutConfirm}
                   className={cn("flex-1 text-white", pendingOffPremisesIsDirectCheckout ? "bg-emerald-600 hover:bg-emerald-700" : "bg-orange-600 hover:bg-orange-700")}
-                  disabled={isLoading || (!pendingOffPremisesIsDirectCheckout && offPremisesCheckoutReason.trim().split(/\s+/).filter(w => /[a-z]/i.test(w)).length < 20)}
+                  disabled={isLoading || (!pendingOffPremisesIsDirectCheckout && !reasonLiveStatus(offPremisesCheckoutReason).ok)}
                 >
                   {isLoading ? (
                     <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{pendingOffPremisesIsDirectCheckout ? "Checking out..." : "Sending..."}</>
@@ -3549,7 +3590,7 @@ export function AttendanceRecorder({
                   </h3>
                   <p className="text-sm text-muted-foreground mt-0.5">
                     {checkoutReasonContext === "out_of_location"
-                      ? "You appear to be outside a registered QCC location. Please provide a brief reason to proceed."
+                      ? "You appear to be outside a registered QCC location. Provide more than 20 alphabetic characters (no space-padding)."
                       : getFormattedCheckoutTime()}
                   </p>
                 </div>
@@ -3575,7 +3616,7 @@ export function AttendanceRecorder({
                 />
                 {earlyCheckoutReasonRequired && (
                   <p className="text-xs text-muted-foreground">
-                    Shared with your supervisor and HR for review.
+                    More than 20 alphabetic characters required. No more than 3 continuous spaces. Shared with your supervisor and HR.
                   </p>
                 )}
               </div>
@@ -3604,7 +3645,7 @@ export function AttendanceRecorder({
                 <Button
                   onClick={handleEarlyCheckoutConfirm}
                   className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-                  disabled={isLoading || (earlyCheckoutReasonRequired && earlyCheckoutReason.trim().length === 0)}
+                  disabled={isLoading || (earlyCheckoutReasonRequired && !reasonLiveStatus(earlyCheckoutReason).ok)}
                 >
                   {isLoading ? (
                     <>
@@ -3633,7 +3674,7 @@ export function AttendanceRecorder({
                 Late Arrival Notice
               </CardTitle>
             <CardDescription>
-              You are checking in after 9:00 AM. Please provide a reason for your late arrival.
+              You are checking in after 9:00 AM. Provide more than 20 alphabetic characters.
             </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -3656,7 +3697,7 @@ export function AttendanceRecorder({
                   maxLength={500}
                 />
                 <p className="text-xs text-muted-foreground">
-                  {latenessReason.length}/500 characters
+                  {reasonLiveStatus(latenessReason).text} · {latenessReason.length}/500
                 </p>
               </div>
 
@@ -3672,7 +3713,7 @@ export function AttendanceRecorder({
                 <Button
                   onClick={handleLatenessConfirm}
                   className="flex-1 bg-orange-600 hover:bg-orange-700"
-                  disabled={isCheckingIn || latenessReason.trim().length === 0}
+                  disabled={isCheckingIn || !reasonLiveStatus(latenessReason).ok}
                 >
                   {isCheckingIn ? (
                     <>
@@ -3728,3 +3769,4 @@ export function AttendanceRecorder({
     </div>
   )
 }
+

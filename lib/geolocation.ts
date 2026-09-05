@@ -656,12 +656,13 @@ export function validateAttendanceLocation(
       const distance = Math.round(
         calculateDistance(userLocation.latitude, userLocation.longitude, location.latitude, location.longitude),
       )
-      // Use device-specific radius (location radius is ignored)
-      const withinRange = distance <= deviceProximityBase
+      // A location's configured geofence is the source of truth for its own boundary.
+      // Keep the device radius as an additional policy allowance for managed devices.
+      const withinRange = distance <= Math.max(deviceProximityBase, Number(location.radius_meters) || 0)
       return {
         location,
         distance,
-        effectiveRadius: deviceProximityBase,
+        effectiveRadius: Math.max(deviceProximityBase, Number(location.radius_meters) || 0),
         withinRange
       }
     })

@@ -53,6 +53,7 @@ interface AttendanceRecord {
     first_name?: string
     last_name?: string
     employee_id?: string
+    department_id?: string
     departments?: {
       id?: string
       name?: string
@@ -900,27 +901,9 @@ export function AttendanceReports({
   const applyClientFilters = (inputRecords: AttendanceRecord[]) => {
     let filtered = inputRecords
 
-    // Department filter
-    if (selectedDepartment !== "all") {
-      filtered = filtered.filter((r) => r.user_profiles?.departments?.id === selectedDepartment)
-    }
-
-    // Location filter
-    if (selectedLocation !== "all") {
-      filtered = filtered.filter(
-        (r) => r.check_in_location?.id === selectedLocation || r.check_out_location?.id === selectedLocation,
-      )
-    }
-
-    // District filter
-    if (selectedDistrict !== "all") {
-      filtered = filtered.filter((r) => r.user_profiles?.assigned_location?.districts?.id === selectedDistrict)
-    }
-
-    // Status filter
-    if (selectedStatus !== "all") {
-      filtered = filtered.filter((r) => r.status === selectedStatus)
-    }
+    // Department, location, district, and status are applied by the report API.
+    // Reapplying them here can hide valid rows when legacy profile relationships
+    // are returned in a different shape than the current UI expects.
 
     // Search filter
     if (searchQuery.trim()) {
@@ -1669,7 +1652,7 @@ export function AttendanceReports({
                     <div>
                       <h3 className="text-xl font-bold text-gray-900 dark:text-slate-100">Detailed Records</h3>
                       <p className="text-gray-600 dark:text-slate-300 mt-1">
-                        Showing {records.length} of {totalRecords.toLocaleString()} records
+                        Showing {sortedRecords.length} of {totalRecords.toLocaleString()} records
                       </p>
                     </div>
                       <Badge variant="secondary" className="px-4 py-2 dark:bg-slate-800 dark:text-slate-100">

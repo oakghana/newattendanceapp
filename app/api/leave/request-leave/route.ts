@@ -349,14 +349,8 @@ export async function POST(request: NextRequest) {
         }
 
         if (legacyHodIds.length === 0 && (staffProfile as any)?.assigned_location_id) {
-          const { data: rmList } = await admin
-            .from("user_profiles")
-            .select("id")
-            .eq("assigned_location_id", (staffProfile as any).assigned_location_id)
-            .eq("role", "regional_manager")
-            .eq("is_active", true)
-            .limit(5)
-
+          const { findRegionalManagersForLocation } = await import("@/lib/regional-manager-scope")
+          const rmList = await findRegionalManagersForLocation(admin, (staffProfile as any).assigned_location_id, { limit: 5 })
           for (const rm of rmList || []) {
             const id = (rm as any)?.id
             if (id && !legacyHodIds.includes(id)) legacyHodIds.push(id)

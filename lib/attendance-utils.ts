@@ -60,6 +60,18 @@ export function isExemptFromTimeRestrictions(dept?: DeptInfo, role?: string | nu
   return isManagerOrAdminRole(role) || isSecurityDept(dept) || isOperationalDept(dept) || isTransportDept(dept)
 }
 
+/**
+ * Security and Transport often work overnight past midnight.
+ * Never auto-close their open sessions at 23:59 / end-of-day — they must self check-out.
+ */
+export function isOvernightShiftDept(dept?: DeptInfo): boolean {
+  return isSecurityDept(dept) || isTransportDept(dept)
+}
+
+export function shouldSkipSystemAutoCheckout(dept?: DeptInfo): boolean {
+  return isOvernightShiftDept(dept)
+}
+
 export function isExemptFromAttendanceReasons(role?: string | null): boolean {
   return isManagerOrAdminRole(role)
 }
@@ -148,6 +160,7 @@ export function canAutoCheckoutOutOfRange({
   hasMetMinimumTime = true,
   hoursWorked = 0,
   minimumHours = 7,
+  dept,
 }: {
   now?: Date
   hasCheckedIn: boolean
@@ -157,7 +170,11 @@ export function canAutoCheckoutOutOfRange({
   hasMetMinimumTime?: boolean
   hoursWorked?: number
   minimumHours?: number
+  /** When Security/Transport, never auto-checkout — overnight shifts cross midnight */
+  dept?: DeptInfo
 }): boolean {
+  if (shouldSkipSystemAutoCheckout(dept)) return false
+
   const hours = now.getHours()
   const minutes = now.getMinutes()
   const isAfterCutoff = hours > 16 || (hours === 16 && minutes >= 0)

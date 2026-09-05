@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { BarChart3, CalendarRange, TrendingUp, Gift, Info, FileText, CheckCircle } from "lucide-react"
+import { BarChart3, CalendarRange, TrendingUp, Gift, Info, FileText, CheckCircle, CalendarDays } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { LeaveManagementClient } from "./leave-management-client"
 import { LeavePlanningClient } from "../leave-planning/leave-planning-client"
@@ -16,6 +16,7 @@ import { isHrLeaveOfficeRole, isRegionalHrOfficerRole } from "@/lib/leave-planni
 import { HrExecutiveLeaveModule } from "./hr-executive-leave-module"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 import { LoanOfficeLeaveModule } from "./loan-office-leave-module"
+import { ShiftSchedulingPanel } from "@/components/leave/shift-scheduling-panel"
 
 const HR_ANALYTICS_ROLES = ["hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr", "department_head", "regional_manager"]
 
@@ -67,6 +68,16 @@ export function LeaveManagementModuleClient({
   const isRegionalHR = isRegionalHrOfficerRole(normalizedRole) || (normalizedRole.includes("regional") && normalizedRole.includes("hr"))
   const isHrExecutive = ['hr_executive', 'hr_director', 'director_hr', 'manager_hr'].includes(normalizedRole)
   const isLoanOffice = normalizedRole === 'loan_office' || normalizedRole === 'hr_loan_office' || normalizedRole === 'accounts_loan_office'
+  const searchParams = useSearchParams()
+  const defaultTab = isRegionalHR ? "leave-planning" : "leave-management"
+  const requestedTab = searchParams.get("tab")
+  const shouldOpenApplyForm = requestedTab === "leave-planning"
+  const [activeTab, setActiveTab] = useState(() => requestedTab || defaultTab)
+
+  useEffect(() => {
+    const requestedTab = searchParams.get("tab")
+    if (requestedTab) setActiveTab(requestedTab)
+  }, [searchParams])
 
   // HR Executives get a simplified dedicated module instead of the full tab bar
   if (isHrExecutive) {
@@ -110,25 +121,10 @@ export function LeaveManagementModuleClient({
     )
   }
 
-  const searchParams = useSearchParams()
-  const defaultTab = isRegionalHR ? "leave-planning" : "leave-management"
-  const requestedTab = searchParams.get("tab")
-  const shouldOpenApplyForm = requestedTab === "leave-planning"
-  const [activeTab, setActiveTab] = useState(() => requestedTab || defaultTab)
-
-  // Links elsewhere in the app (e.g. the "Apply for Leave" button) point here
-  // with ?tab=leave-planning so they land directly on the Leave Center tab
-  // that contains the actual apply/review workflow, instead of bouncing back
-  // to the overview tab.
-  useEffect(() => {
-    const requestedTab = searchParams.get("tab")
-    if (requestedTab) setActiveTab(requestedTab)
-  }, [searchParams])
-
   return (
     <div className="space-y-6 w-full">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 w-full">
-        <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-3xl border border-slate-200 bg-slate-100/80 p-2 shadow-sm overflow-x-auto sm:overflow-visible">
+        <TabsList className="flex h-auto w-full flex-nowrap gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100/80 p-2 shadow-sm sm:flex-wrap sm:overflow-visible sm:rounded-3xl">
           {/* Regional HR uses this as the operational queue; other roles see the overview. */}
           {!isRegionalHR && <TabsTrigger value="leave-management" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-emerald-300 transition-all duration-300 ease-out data-[state=active]:border-emerald-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-emerald-500 data-[state=active]:to-emerald-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(16,185,129,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
             <Info className="h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-300 group-data-[state=active]:animate-pulse" /> 
@@ -144,6 +140,11 @@ export function LeaveManagementModuleClient({
               <span className="sm:hidden">Planning</span>
               <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-0 h-1 bg-blue-500 rounded-full transition-all duration-300 group-data-[state=active]:w-3/4" />
             </TabsTrigger>
+
+          <TabsTrigger value="shift-scheduling" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-teal-300 transition-all duration-300 ease-out data-[state=active]:border-teal-600 data-[state=active]:bg-teal-600 data-[state=active]:text-white min-w-fit">
+            <CalendarDays className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span>Shifts</span>
+          </TabsTrigger>
 
           {isHrLeaveOfficeRole(userRole) && !isRegionalHR && (
             <TabsTrigger value="outstanding-leave" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-green-300 transition-all duration-300 ease-out data-[state=active]:border-green-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-green-500 data-[state=active]:to-green-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(34,197,94,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
@@ -238,6 +239,10 @@ export function LeaveManagementModuleClient({
             />
           </TabsContent>
         )}
+
+        <TabsContent value="shift-scheduling" className="space-y-4 sm:space-y-6 w-full">
+          <ShiftSchedulingPanel userId={userId} />
+        </TabsContent>
 
         {/* Outstanding Leave Tab */}
         {isHrLeaveOfficeRole(userRole) && !isRegionalHR && (

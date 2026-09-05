@@ -397,17 +397,26 @@ export async function POST(request: NextRequest) {
     }
 
     if (assignedHodIds.length === 0 && (profile as any).assigned_location_id) {
-      const { data: locationHods } = await admin
-        .from("user_profiles")
-        .select("id, role")
-        .eq("assigned_location_id", (profile as any).assigned_location_id)
-        .in("role", ["regional_manager", "department_head"])
-        .eq("is_active", true)
-        .limit(20)
-
-      for (const hod of locationHods || []) {
-        const id = (hod as any)?.id
+      const { findRegionalManagersForLocation } = await import("@/lib/regional-manager-scope")
+      const regionalManagers = await findRegionalManagersForLocation(admin, (profile as any).assigned_location_id, { limit: 20 })
+      for (const manager of regionalManagers) {
+        const id = manager?.id
         if (id && !assignedHodIds.includes(id)) assignedHodIds.push(id)
+      }
+
+      if (assignedHodIds.length === 0) {
+        const { data: locationHods } = await admin
+          .from("user_profiles")
+          .select("id, role")
+          .eq("assigned_location_id", (profile as any).assigned_location_id)
+          .eq("role", "department_head")
+          .eq("is_active", true)
+          .limit(20)
+
+        for (const hod of locationHods || []) {
+          const id = (hod as any)?.id
+          if (id && !assignedHodIds.includes(id)) assignedHodIds.push(id)
+        }
       }
     }
 
@@ -764,14 +773,22 @@ export async function DELETE(request: NextRequest) {
 
     if (existingError || !existing) return NextResponse.json({ error: "Request not found" }, { status: 404 })
     if (role !== "admin" && existing.user_id !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    // Staff may delete only while HOD has not yet approved (pending HOD, or HOD rejected).
     if (role !== "admin" && !requestIsEditable(existing.status)) {
-      return NextResponse.json({ error: "Request can no longer be deleted at this stage" }, { status: 400 })
+      return NextResponse.json(
+        { error: "You can only delete a loan request before your HOD has approved it." },
+        { status: 400 },
+      )
     }
+
+    // Clear timeline first so orphan events never remain if FK cascade is absent.
+    const { error: timelineDeleteError } = await admin.from("loan_request_timeline").delete().eq("loan_request_id", id)
+    if (timelineDeleteError) throw timelineDeleteError
 
     const { error: deleteError } = await admin.from("loan_requests").delete().eq("id", id)
     if (deleteError) throw deleteError
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, deletedId: id })
   } catch (error: any) {
     console.error("loan request delete error", error)
     return NextResponse.json({ error: error?.message || "Failed to delete request" }, { status: 500 })

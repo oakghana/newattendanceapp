@@ -3,11 +3,10 @@ import { ArrowLeft, Bus, Plus } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { TransportRequestRegister } from "@/components/transport/transport-request-register"
-import { TransportApprovalDashboard } from "@/components/transport/transport-approval-dashboard"
 import { createClient } from "@/lib/supabase/server"
-import { canCreateTransportRequest, canManageTransport, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
+import { canCreateTransportRequest, canManageTransport, isChiefDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 
-const roles = new Set(["admin", "administrator", "it_admin", "driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "hr", "managing_director", "director_hr", "manager_hr", "hr_executive", "hr_executive_officer"])
+const roles = new Set(["admin", "administrator", "it_admin", "driver", "chief_driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "hr", "managing_director", "director_hr", "manager_hr", "hr_executive", "hr_executive_officer"])
 const normalize = (value: string) => value.toLowerCase().trim().replace(/[\s-]+/g, "_")
 
 export default async function TransportRequestsPage() {
@@ -22,8 +21,8 @@ export default async function TransportRequestsPage() {
   if (!profile || !profile.role || (!roles.has(normalize(profile.role)) && !isRegionalManagerRole(profile.role) && !canManageTransport(profile.role) && !canCreateTransportRequest(profile.role))) redirect("/dashboard")
   const normalizedRole = normalizeAppRole(profile.role)
   if (normalizedRole === "driver") redirect("/dashboard/transport/nonregional")
-  const canCreate = isRegionalHrRole(profile.role) || ["department_head", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
-  const canAct = isRegionalManagerRole(profile.role)
+  const canCreate = isChiefDriverRole(profile.role) || isRegionalHrRole(profile.role) || ["department_head", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
+  const canAct = isRegionalManagerRole(profile.role) || isChiefDriverRole(profile.role)
   const canHrRecords = ["hr_records", "hr_records_officer", "hr_records_manager"].includes(normalizedRole)
   const canManagingDirector = normalizedRole === "managing_director"
   const canHrExecutive = ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
@@ -38,7 +37,9 @@ export default async function TransportRequestsPage() {
   const locationRegionName = Object.entries(locationRegionAliases).find(([key]) => locationKey.includes(key))?.[1] ?? ""
   const rawRegionalName = locationRegionName || (assignedLocationName && !/accra|head office/i.test(assignedLocationName) ? assignedLocationName : "") || profileRegion?.name?.trim() || ""
   const regionalOfficeName = rawRegionalName ? rawRegionalName.replace(/\s+Regional\s+Office$/i, "").replace(/\s+Region$/i, "").trim() + " Regional Office" : "Regional Office"
-  let requestsQuery = supabase.from("transport_requests").select("id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url, assigned_region:geofence_locations!transport_requests_assigned_region_id_fkey(name, districts(region_id, regions(name)))").order("created_at", { ascending: false }).limit(200)
+  const requestFields = "id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url, assigned_region:geofence_locations!transport_requests_assigned_region_id_fkey(name, districts(region_id, regions(name)))"
+  let requestsQuery = supabase.from("transport_requests").select(requestFields).order("created_at", { ascending: false }).limit(200)
+  if (canHrExecutive) requestsQuery = requestsQuery.eq("request_type", "regional_transport")
   if (isRegionalManagerRole(profile.role)) {
     if (locationId) requestsQuery = requestsQuery.or(`origin_location_id.eq.${locationId},origin_location_id.is.null`)
     if (!locationId && districtId) requestsQuery = requestsQuery.eq("linked_district_id", districtId)
@@ -46,9 +47,21 @@ export default async function TransportRequestsPage() {
     requestsQuery = requestsQuery.in("workflow_stage", ["regional_manager_endorsement", "hr_records_review", "hr_executive_signing", "approved", "referenced", "completed", "closed"])
   }
   let { data: requests, error: requestsError } = await requestsQuery
+  const { data: ownRequests, error: ownRequestsError } = await supabase
+    .from("transport_requests")
+    .select(requestFields)
+    .eq("requester_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(200)
+  if (!ownRequestsError && ownRequests) {
+    const scopedRequests = requests ?? []
+    requests = [...scopedRequests, ...ownRequests.filter((request) => !scopedRequests.some((scopedRequest) => scopedRequest.id === request.id))]
+      .sort((left, right) => new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime())
+  }
   if (requestsError) {
     console.error("[v0] Transport request query failed:", requestsError.message)
-    let fallbackQuery = supabase.from("transport_requests").select("id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments").order("created_at", { ascending: false }).limit(200)
+    let fallbackQuery = supabase.from("transport_requests").select("id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments").order("created_at", { ascending: false }).limit(200)
+    if (canHrExecutive) fallbackQuery = fallbackQuery.eq("request_type", "regional_transport")
     if (isRegionalManagerRole(profile.role)) {
       if (locationId) fallbackQuery = fallbackQuery.or(`origin_location_id.eq.${locationId},origin_location_id.is.null`)
       if (!locationId && districtId) fallbackQuery = fallbackQuery.eq("linked_district_id", districtId)
@@ -56,7 +69,10 @@ export default async function TransportRequestsPage() {
       fallbackQuery = fallbackQuery.in("workflow_stage", ["regional_manager_endorsement", "hr_records_review", "hr_executive_signing", "approved", "referenced", "completed", "closed"])
     }
     const fallback = await fallbackQuery
-    requests = fallback.data?.map((request) => ({ ...request, assigned_region: [], regional_manager_signer_id: null, regional_manager_signed_at: null, hr_records_amended_at: null, hr_executive_signer_id: null, hr_executive_signed_at: null, hr_executive_signature_data_url: null })) ?? null
+    const fallbackRequests = fallback.data?.map((request) => ({ ...request, assigned_region: [], regional_manager_signer_id: null, regional_manager_signed_at: null, hr_executive_signer_id: null, hr_executive_signed_at: null, hr_executive_signature_data_url: null })) ?? []
+    const fallbackOwnRequests = ownRequests ?? []
+    requests = [...fallbackRequests, ...fallbackOwnRequests.filter((request) => !fallbackRequests.some((scopedRequest) => scopedRequest.id === request.id))]
+      .sort((left, right) => new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime())
     requestsError = fallback.error
   }
   // Resolve HR Executive signatures server-side, batched, the same way leave administration does it
@@ -103,19 +119,15 @@ export default async function TransportRequestsPage() {
     const previewSignature = resolvedSignature || (previewSignerId ? resolveHrExecutiveSignature(previewSignerId) : null)
     return {
       ...request,
-      hr_executive_signature_data_url: resolvedSignature,
+      // A preview signature must not make an unsigned request appear completed.
       hr_executive_signature_preview_url: previewSignature,
       hr_executive_signer_display_name: signerId ? `${hrExecutiveProfileMap[signerId]?.first_name ?? ""} ${hrExecutiveProfileMap[signerId]?.last_name ?? ""}`.trim() || null : previewProfile ? `${previewProfile.first_name ?? ""} ${previewProfile.last_name ?? ""}`.trim() || null : null,
       hr_executive_signer_display_position: signerId ? hrExecutiveProfileMap[signerId]?.position ?? null : previewProfile?.position ?? null,
     }
   })
 
-  const pendingCount = requests?.filter((request) => canManagingDirector ? request.workflow_stage === "managing_director_approval" : canHrExecutive ? request.workflow_stage === "hr_executive_signing" : false).length ?? 0
-
   return <main className="flex flex-col gap-6">
-    {canManagingDirector && <TransportApprovalDashboard role="managing_director" pendingCount={pendingCount} totalCount={requests?.length ?? 0} />}
-    {canHrExecutive && <TransportApprovalDashboard role="hr_executive" pendingCount={pendingCount} totalCount={requests?.length ?? 0} />}
-    <header className="flex flex-col gap-5 border-b pb-6 md:flex-row md:items-end md:justify-between"><div className="flex items-start gap-3"><div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Bus /></div><div><p className="text-sm font-medium text-primary">Transport Management</p><h1 className="text-3xl font-semibold tracking-tight text-balance">Transport request register</h1><p className="mt-1 max-w-2xl text-muted-foreground leading-6">Track every request from submission through Regional HR review, approval, and fulfilment.</p></div></div><div className="flex flex-wrap gap-2"><Button variant="outline" asChild><Link href="/dashboard/transport"><ArrowLeft data-icon="inline-start" /> Back to transport</Link></Button>{canCreate && <Button asChild><Link href="/dashboard/transport"><Plus data-icon="inline-start" /> New transport request</Link></Button>}</div></header>
+    <header className="flex flex-col gap-5 border-b pb-6 md:flex-row md:items-end md:justify-between"><div className="flex items-start gap-3"><div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Bus /></div><div><p className="text-sm font-medium text-primary">Transport Management</p><h1 className="text-3xl font-semibold tracking-tight text-balance">Transport request register</h1><p className="mt-1 max-w-2xl text-muted-foreground leading-6">Track every request from submission through Regional HR review, approval, and fulfilment.</p></div></div><div className="flex flex-wrap gap-2"><Button variant="outline" asChild><Link href="/dashboard/transport"><ArrowLeft data-icon="inline-start" /> Back to transport</Link></Button>{canHrExecutive && <Button className="bg-emerald-600 hover:bg-emerald-700" asChild><Link href="/dashboard/transport/nonregional/new"><Plus data-icon="inline-start" /> New non-regional request</Link></Button>}{canCreate && <Button variant={canHrExecutive ? "outline" : "default"} asChild><Link href="/dashboard/transport"><Plus data-icon="inline-start" /> New regional request</Link></Button>}</div></header>
     {requestsError && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">Transport requests could not be loaded. Please refresh and try again.</div>}<TransportRequestRegister rows={requestsWithSignatures} canCreate={canCreate} canAct={canAct} canHrRecords={canHrRecords} canManagingDirector={canManagingDirector} canHrExecutive={canHrExecutive} regionalOfficeName={regionalOfficeName} currentUserId={user.id} />
   </main>
 }

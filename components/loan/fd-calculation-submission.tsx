@@ -373,7 +373,7 @@ export function FDCalculationSubmission({
         </CardHeader>
         <CardContent className="p-0">
           <Tabs value={fdTab} onValueChange={setFdTab} className="w-full" orientation="vertical">
-            <TabsList className="w-full justify-start h-auto rounded-none border-b bg-transparent p-0">
+            <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-none border-b bg-transparent p-0">
               <TabsTrigger value="salary" className="rounded-none border-b-2 data-[state=active]:border-primary px-4 py-2 text-xs">
                 <DollarSign className="h-3.5 w-3.5 mr-2" /> Salary Info
               </TabsTrigger>
@@ -393,7 +393,7 @@ export function FDCalculationSubmission({
                 Excel formula: Consolidated = Annual ÷ 12 · Gross = Consolidated + Allowances · Installment = Loan ÷ Recovery Period ·
                 FD% = Net ÷ Gross
               </p>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="fd-salary" className="text-xs">
                     Salary Per Annum (GH&cent;) <span className="text-destructive">*</span>
@@ -492,7 +492,7 @@ export function FDCalculationSubmission({
                 </button>
                 {outstandingOpen && (
                   <div className="bg-muted/20 p-4 max-h-96 overflow-y-auto">
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {(Object.keys(OUTSTANDING_LOAN_LABELS) as Array<keyof OutstandingLoans>).map(key => (
                         <div key={key} className="space-y-1.5 p-2 rounded border border-border/40 bg-background/50 hover:bg-background transition-colors">
                           <Label className="text-[11px] text-muted-foreground leading-tight block font-medium">

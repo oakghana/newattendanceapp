@@ -4,6 +4,7 @@ import { validateCheckoutLocation, type LocationData } from "@/lib/geolocation"
 import { requiresEarlyCheckoutReason, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckOutDeadline, isSecurityDept, isOperationalDept, isTransportDept, isExemptFromAttendanceReasons } from "@/lib/attendance-utils"
 import { parseRuntimeFlags } from "@/lib/runtime-flags"
 import { checkLeaveOverdueBlock } from "@/lib/leave-resumption-service"
+import { validateAttendanceReason } from "@/lib/meaningful-text"
 
 export async function POST(request: NextRequest) {
   try {
@@ -846,38 +847,33 @@ export async function POST(request: NextRequest) {
         checkoutTime: checkOutTime.toISOString(),
         standardEndTime: checkOutEndTime,
       }
-      // Require early checkout reason
-      if (!early_checkout_reason || early_checkout_reason.trim().length === 0) {
-        return NextResponse.json({
-          error: "Early checkout reason is required when checking out before standard end time",
-          requiresEarlyCheckoutReason: true,
-          checkoutTime: checkOutTime.toLocaleTimeString(),
-          standardEndTime: checkOutEndTime,
-        }, { status: 400 })
+      // Require early checkout reason with more than 20 alphabetic characters.
+      {
+        const reasonValidation = validateAttendanceReason(early_checkout_reason, "Early checkout reason")
+        if (!reasonValidation.ok) {
+          return NextResponse.json({
+            error: reasonValidation.error || "Early checkout reason is required when checking out before standard end time",
+            requiresEarlyCheckoutReason: true,
+            checkoutTime: checkOutTime.toLocaleTimeString(),
+            standardEndTime: checkOutEndTime,
+          }, { status: 400 })
+        }
+        ;(body as any).__normalized_early_checkout_reason = reasonValidation.normalized
       }
     }
 
     if (requiresOutOfLocationReason) {
-      const reasonText = String(early_checkout_reason || "").trim()
-      const reasonWordCount = reasonText.split(/\s+/).filter(w => /[a-z]/i.test(w)).length
-      if (!reasonText) {
+      const reasonValidation = validateAttendanceReason(early_checkout_reason, "Out-of-location checkout reason")
+      if (!reasonValidation.ok) {
         return NextResponse.json(
           {
-            error: "A reason is required when checking out outside registered QCC locations.",
+            error: reasonValidation.error || "A detailed reason with more than 20 alphabetic characters is required when checking out outside registered QCC locations.",
             requiresOutOfLocationReason: true,
           },
           { status: 400 },
         )
       }
-      if (reasonWordCount < 20) {
-        return NextResponse.json(
-          {
-            error: `Your reason must be at least 20 words. Please give a full and concrete explanation of why you are not within your registered QCC location. You provided ${reasonWordCount} word${reasonWordCount === 1 ? "" : "s"}.`,
-            requiresOutOfLocationReason: true,
-          },
-          { status: 400 },
-        )
-      }
+      ;(body as any).__normalized_early_checkout_reason = reasonValidation.normalized
     }
 
     const checkoutData: Record<string, any> = {
@@ -939,8 +935,8 @@ export async function POST(request: NextRequest) {
       checkoutData.qr_check_out_timestamp = qr_timestamp
     }
 
-    if (early_checkout_reason) {
-      checkoutData.early_checkout_reason = early_checkout_reason
+    if ((body as any).__normalized_early_checkout_reason || early_checkout_reason) {
+      checkoutData.early_checkout_reason = (body as any).__normalized_early_checkout_reason || String(early_checkout_reason).trim()
       if (early_checkout_proved_by) checkoutData.early_checkout_proved_by = String(early_checkout_proved_by).trim()
       if (early_checkout_proved_by_id) checkoutData.early_checkout_proved_by_id = early_checkout_proved_by_id
     }

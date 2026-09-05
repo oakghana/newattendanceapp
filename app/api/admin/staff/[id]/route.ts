@@ -354,6 +354,37 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     console.log("[v0] Staff updated successfully:", updatedProfile)
 
+    // When assigned location changes (or is set), auto-link district/regional staff
+    // to the Regional Manager covering their parent regional office.
+    try {
+      const previousLocationId = String(targetProfile.assigned_location_id || "")
+      const nextLocationId = String(locationId || "")
+      const locationChanged = previousLocationId !== nextLocationId
+      if (locationChanged && nextLocationId) {
+        const { isNonRegionalLocation } = await import("@/lib/location-mappings")
+        const locationName = String((updatedProfile as any)?.geofence_locations?.name || "")
+        if (!isNonRegionalLocation(locationName)) {
+          const { findRegionalManagersForLocation } = await import("@/lib/regional-manager-scope")
+          const managers = await findRegionalManagersForLocation(adminSupabase, nextLocationId, { limit: 1 })
+          if (managers[0]?.id && managers[0].id !== id) {
+            await adminSupabase.from("loan_hod_linkages").upsert(
+              {
+                staff_user_id: id,
+                hod_user_id: managers[0].id,
+                location_id: nextLocationId,
+                created_by: user.id,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "staff_user_id", ignoreDuplicates: false },
+            )
+            console.log("[v0] Staff API PUT - Auto-linked regional staff to Regional Manager:", managers[0].id)
+          }
+        }
+      }
+    } catch (autoLinkErr) {
+      console.error("[v0] Staff API PUT - Regional HOD auto-link failed (non-fatal):", autoLinkErr)
+    }
+
     // Log the action
     await supabase.from("audit_logs").insert({
       user_id: user.id,

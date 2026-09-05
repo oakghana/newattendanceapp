@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
 
     let query = admin
       .from("leave_plan_requests")
-      .select("id, user_id, leave_type_key, preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, requested_days, adjusted_days, entitlement_days, leave_entitlement_days, travelling_days_added, status, reason, created_at, submitted_at, hod_reviewed_at, hr_approved_at")
+      .select("id, user_id, leave_type_key, preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, requested_days, adjusted_days, entitlement_days, travelling_days_added, status, reason, created_at, submitted_at, hod_reviewed_at, hr_approved_at")
       .eq("leave_type_key", "annual")
       .order("submitted_at", { ascending: false })
 
@@ -130,7 +130,7 @@ export async function GET(request: NextRequest) {
         "Approved/Adjusted End": item.adjusted_end_date || "",
         "Days Requested": item.requested_days ?? "",
         "Days Granted": item.adjusted_days ?? item.requested_days ?? "",
-        "Entitlement Days": item.leave_entitlement_days ?? item.entitlement_days ?? "",
+        "Entitlement Days": item.entitlement_days ?? "",
         "Travel Days": item.travelling_days_added ?? "",
         Status: item.status || "",
         Reason: item.reason || "",

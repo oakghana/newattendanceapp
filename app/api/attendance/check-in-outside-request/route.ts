@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/server"
 import { isExemptFromAttendanceReasons } from "@/lib/attendance-utils"
-import { validateMeaningfulText } from "@/lib/meaningful-text"
+import { validateAttendanceReason } from "@/lib/meaningful-text"
 import { parseRuntimeFlags } from "@/lib/runtime-flags"
 import { type NextRequest, NextResponse } from "next/server"
 
@@ -76,6 +76,23 @@ export async function POST(request: NextRequest) {
 
     const isPrivilegedExempt = isExemptFromAttendanceReasons(userProfile.role)
 
+    let normalizedReason = typeof reason === "string" ? reason : ""
+    const isAutoApprovedDirect = Boolean(body?.auto_approved) && finalRequestType === "checkout_direct"
+    if (!isPrivilegedExempt && !isAutoApprovedDirect) {
+      const reasonValidation = validateAttendanceReason(reason, finalRequestType === "checkout" ? "Off-premises check-out reason" : "Off-premises reason")
+      if (!reasonValidation.ok) {
+        return NextResponse.json(
+          { error: reasonValidation.error || "A meaningful reason with more than 20 alphabetic characters is required." },
+          { status: 400 },
+        )
+      }
+      normalizedReason = reasonValidation.normalized
+    } else if (reason && String(reason).trim() && !isAutoApprovedDirect) {
+      const reasonValidation = validateAttendanceReason(reason, "Reason")
+      if (reasonValidation.ok) normalizedReason = reasonValidation.normalized
+    }
+
+
     if (finalRequestType === 'checkout') {
       const { data: sysSettings } = await supabase.from("system_settings").select("settings").maybeSingle()
       const runtimeFlags = parseRuntimeFlags(sysSettings?.settings)
@@ -139,18 +156,7 @@ export async function POST(request: NextRequest) {
           )
         }
       }
-
-      const reasonValidation = validateMeaningfulText(reason, {
-        fieldLabel: 'Off-premises check-out reason',
-        minLength: 10,
-      })
-      if (!isPrivilegedExempt && !reasonValidation.ok) {
-        return NextResponse.json(
-          { error: reasonValidation.error || 'A meaningful reason is required for off-premises check-out requests.' },
-          { status: 400 }
-        )
-      }
-    }
+}
 
     // Resolve approvers as follows:
     //  - All admins should always receive notifications
@@ -295,7 +301,7 @@ export async function POST(request: NextRequest) {
           device_info: enrichedDeviceInfo,
           request_type: finalRequestType,
           google_maps_name: current_location.display_name || current_location.name,
-          reason: reason || null,
+          reason: normalizedReason || null,
           status: isAutoApprovedAudit ? "approved" : "pending",
         })
         .select()
@@ -324,7 +330,7 @@ export async function POST(request: NextRequest) {
         }
 
         // only include reason/request_type if DB likely supports them
-        if (!missingReason && reason) payload.reason = reason
+        if (!missingReason && normalizedReason) payload.reason = normalizedReason
         if (!missingRequestType) payload.request_type = finalRequestType
 
         const { data: retryRecord, error: retryError } = await supabase
@@ -353,8 +359,8 @@ export async function POST(request: NextRequest) {
       type: isCheckoutRequest ? "offpremises_checkout_request" : "offpremises_checkin_request",
       title: isCheckoutRequest ? "Off-Premises Check-Out Request" : "Off-Premises Check-In Request",
       message: isCheckoutRequest
-        ? `${userProfile.first_name} ${userProfile.last_name} is requesting to check out from outside registered QCC locations at ${current_location.display_name || current_location.name}. Reason: ${reason || 'Not provided'}. Please review this request.`
-        : `${userProfile.first_name} ${userProfile.last_name} is requesting to check in from outside their assigned location: ${current_location.display_name || current_location.name}. Reason: ${reason || 'Not provided'}. Please review and approve or deny.`,
+        ? `${userProfile.first_name} ${userProfile.last_name} is requesting to check out from outside registered QCC locations at ${current_location.display_name || current_location.name}. Reason: ${normalizedReason || 'Not provided'}. Please review this request.`
+        : `${userProfile.first_name} ${userProfile.last_name} is requesting to check in from outside their assigned location: ${current_location.display_name || current_location.name}. Reason: ${normalizedReason || 'Not provided'}. Please review and approve or deny.`,
       data: {
         request_id: requestRecord.id,
         staff_user_id: user_id,
@@ -363,7 +369,7 @@ export async function POST(request: NextRequest) {
         location_name: current_location.name,
         google_maps_name: current_location.display_name || current_location.name,
         coordinates: `${current_location.latitude}, ${current_location.longitude}`,
-        reason: reason || 'Not provided',
+        reason: normalizedReason || 'Not provided',
         off_grid_hours_before_request:
           typeof off_grid_hours_before_request === 'number' ? off_grid_hours_before_request : null,
       },

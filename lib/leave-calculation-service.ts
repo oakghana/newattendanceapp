@@ -177,12 +177,16 @@ export async function getEntitlementDays(
     // This will be called from the database via API
     // Default values for common leave types
     const defaults: { [key: string]: number } = {
-      annual: 38,
-      annual_leave: 38,
-      sick_leave: 14,
-      maternity_leave: 84, // Normal delivery baseline; CS/twins are resolved from request delivery type.
-      paternity_leave: 6,
-      compassionate_leave: 3,
+      annual: 30,
+      annual_leave: 30,
+      sick: 30,
+      sick_leave: 30,
+      maternity: 84, // Normal delivery baseline; CS/twins are resolved from request delivery type.
+      maternity_leave: 84,
+      paternity: 5,
+      paternity_leave: 5,
+      compassionate: 7,
+      compassionate_leave: 7,
     };
 
     return defaults[leaveType] || 0;

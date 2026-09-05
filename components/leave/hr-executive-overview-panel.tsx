@@ -53,9 +53,10 @@ export function HrExecutiveOverviewPanel({ onNavigateToTab }: HrExecutiveOvervie
       try {
         setLoading(true)
         
-        // Fetch pending leave requests from HR staff pending requests
-        const pendingRes = await fetch('/api/leave/hr-staff-pending-requests')
-        const pendingData = pendingRes.ok ? await pendingRes.json() : { requests: [], stats: {} }
+        // Match the HR Approvals tab exactly: only requests forwarded by the
+        // HR Leave Office are ready for this executive's final decision.
+        const pendingRes = await fetch('/api/leave/planning/hr-approve')
+        const pendingData = pendingRes.ok ? await pendingRes.json() : { requests: [] }
         
         // Fetch all leave requests to get approved and HOD pending counts
         const allRequestsRes = await fetch('/api/leave/requests?limit=1000')
@@ -70,7 +71,9 @@ export function HrExecutiveOverviewPanel({ onNavigateToTab }: HrExecutiveOvervie
         const approvedMemosData = approvedMemosRes.ok ? await approvedMemosRes.json() : { memos: [] }
         
         // Get requests data — endpoint returns { data, total }
-        const pendingRequests = pendingData.requests || []
+        const pendingRequests = (pendingData.requests || []).filter(
+          (request: any) => String(request.status || "").toLowerCase() === "hr_office_forwarded",
+        )
         const allRequests = allRequestsData.data || allRequestsData.records || []
 
         // Count approved leave — statuses set by hr-approve route and workflow

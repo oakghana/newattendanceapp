@@ -268,9 +268,14 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
     const eligible = (linkedProfiles || []).find((candidate: any) => {
       const candidateRole = normalizeWorkflowRole(candidate.role)
       if (isExcludedLocation(assignedLocation?.name)) {
-        return isDepartmentHeadRole(candidateRole) && isExcludedLocation(assignedLocation?.name)
+        return isDepartmentHeadRole(candidateRole)
       }
-      return Boolean(profile.assigned_location_id) && isRegionalManagerRole(candidateRole) && candidate.assigned_location_id === profile.assigned_location_id
+      // District staff may be linked to the RM at the parent regional office.
+      return (
+        Boolean(profile.assigned_location_id) &&
+        isRegionalManagerRole(candidateRole) &&
+        Boolean(candidate.assigned_location_id)
+      )
     })
     hodId = eligible?.id || null
   }
@@ -309,6 +314,8 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
   } else {
     if (!regionalHrId) regionalHrId = (await resolveRegionalHrOffice(admin, regionId, profile.assigned_location_id))?.user_id || null
     if (!regionalManagerId) regionalManagerId = await resolveRegionalManager(admin, regionId, profile.assigned_location_id)
+    // For regional field staff the Regional Manager is the HOD.
+    if (!hodId && regionalManagerId) hodId = regionalManagerId
   }
 
   return {
@@ -387,17 +394,11 @@ export async function resolveRegionalManager(
   regionId: string | null | undefined,
   locationId?: string | null,
 ): Promise<string | null> {
+  // Prefer RM at the staff location or its parent regional office (district → RO).
   if (locationId) {
-    const { data: locationProfiles, error: locationError } = await admin
-      .from("user_profiles")
-      .select("id, role, created_at")
-      .eq("assigned_location_id", locationId)
-      .eq("role", "regional_manager")
-      .eq("is_active", true)
-      .order("created_at", { ascending: true })
-      .limit(1)
-    if (locationError) throw locationError
-    if (locationProfiles && locationProfiles.length > 0) return locationProfiles[0].id
+    const { findRegionalManagersForLocation } = await import("@/lib/regional-manager-scope")
+    const managers = await findRegionalManagersForLocation(admin, locationId, { limit: 1 })
+    if (managers.length > 0) return managers[0].id
   }
   if (!regionId) return null
   const { data: regionalProfiles, error: regionError } = await admin

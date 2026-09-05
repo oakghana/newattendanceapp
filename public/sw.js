@@ -1,5 +1,5 @@
-const APP_VERSION = "1.9.1"
-const CACHE_VERSION = "2026-04-25"
+const APP_VERSION = "2.2.5"
+const CACHE_VERSION = "2026-09-05"
 const STATIC_CACHE = `qcc-static-${CACHE_VERSION}`
 const DYNAMIC_CACHE = `qcc-dynamic-${CACHE_VERSION}`
 

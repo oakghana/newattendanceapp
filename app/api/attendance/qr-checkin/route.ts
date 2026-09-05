@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 import { calculateDistance, getBrowserTolerance } from "@/lib/geolocation"
+import { shouldSkipSystemAutoCheckout } from "@/lib/attendance-utils"
 
 export async function POST(request: Request) {
   try {
@@ -79,10 +80,10 @@ export async function POST(request: Request) {
 
     const { data: existingAttendance, error: attendanceError } = await supabase
       .from("attendance_records")
-      .select("*")
+      .select("*, user_profiles!inner(departments(code, name))")
       .eq("user_id", user.id)
-      .gte("check_in_time", `${today}T00:00:00Z`)
-      .lt("check_in_time", `${today}T23:59:59Z`)
+      .is("check_out_time", null)
+      .order("check_in_time", { ascending: false })
       .maybeSingle()
 
     if (attendanceError) {
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
     if (existingAttendance && !existingAttendance.check_out_time) {
       const checkInDate = new Date(existingAttendance.check_in_time).toISOString().split("T")[0]
 
-      if (checkInDate !== today) {
+      if (checkInDate !== today && !shouldSkipSystemAutoCheckout(existingAttendance.user_profiles?.departments)) {
         console.log("[v0] Found unclosed attendance from previous day, auto-closing...")
 
         const previousDayEnd = new Date(`${checkInDate}T23:59:59Z`)
@@ -119,6 +120,11 @@ export async function POST(request: Request) {
         }
 
         console.log("[v0] Previous day auto-closed successfully")
+      } else if (checkInDate !== today) {
+        return NextResponse.json(
+          { error: "Your overnight attendance session is still open. Please check out before starting a new check-in." },
+          { status: 400 },
+        )
       } else {
         return NextResponse.json({ error: "Already checked in today" }, { status: 400 })
       }

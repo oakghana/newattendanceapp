@@ -24,7 +24,7 @@ export default async function DriverLicensesPage() {
     ? await supabase.from("transport_drivers").select("*").eq("profile_id", user.id).maybeSingle()
     : { data: null }
   const { data: assignedTasks } = isDriver
-    ? await supabase.from("nonregional_transport_requisitions").select("id, department, location, origin, destination, purpose, required_at, return_at, persons_requiring_transport, status, assigned_vehicle, recommended_driver_id").eq("recommended_driver_id", user.id).in("status", ["approved", "assigned", "in_progress", "completed"]).order("required_at", { ascending: true })
+    ? await supabase.from("nonregional_transport_requisitions").select("id, department, location, origin, destination, purpose, required_at, return_at, persons_requiring_transport, person_names, status, assigned_vehicle, recommended_driver_id").eq("recommended_driver_id", user.id).in("status", ["approved", "assigned", "in_progress", "completed"]).order("required_at", { ascending: true })
     : { data: [] as any[] }
   return <DriverLicenseWorkspace initialDrivers={isDriver ? (ownDriver ? [ownDriver] : []) : (drivers ?? [])} canVerify={!isDriver && (isRegionalHrRole(profile.role) || normalizedRole === "transport_manager")} role={isDriver ? "driver" : normalizedRole} assignedTasks={assignedTasks ?? []} />
 }

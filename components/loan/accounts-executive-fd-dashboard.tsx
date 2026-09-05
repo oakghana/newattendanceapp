@@ -14,6 +14,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 import { useToast } from '@/hooks/use-toast'
 
 interface FDReview {
@@ -198,7 +199,7 @@ function FDCalculationDetails({ fdNote }: { fdNote?: string }) {
           {data.net_to_gross_ratio && (
             <>
               <div><span className="text-emerald-700">Net/Gross Ratio:</span></div>
-              <div className="font-medium">{(data.net_to_gross_ratio * 100).toFixed(2)}%</div>
+              <div className="font-medium">{Number(data.net_to_gross_ratio).toFixed(2)}%</div>
             </>
           )}
           {data.total_outstanding_loans && (
@@ -249,6 +250,8 @@ export function AccountsExecutiveFDDashboard({
   const [selectedReview, setSelectedReview] = useState<FDReview | null>(null)
   const [verificationMemo, setVerificationMemo] = useState('')
   const [reviewDecision, setReviewDecision] = useState('')
+  const [adjustedFdScore, setAdjustedFdScore] = useState('')
+  const [adjustmentReason, setAdjustmentReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const { toast } = useToast()
 
@@ -341,6 +344,16 @@ export function AccountsExecutiveFDDashboard({
   const handleApprove = async () => {
     if (!selectedReview) return
 
+    const score = adjustedFdScore.trim() === '' ? Number(selectedReview.fd_score) : Number(adjustedFdScore)
+    if (!Number.isFinite(score) || score < 0 || score > 100) {
+      toast({ title: 'Invalid FD score', description: 'Enter a whole percentage between 0 and 100.', variant: 'destructive' })
+      return
+    }
+    if (Math.round(score) !== Math.round(Number(selectedReview.fd_score)) && !adjustmentReason.trim()) {
+      toast({ title: 'Adjustment reason required', description: 'Document why the generated FD score was adjusted.', variant: 'destructive' })
+      return
+    }
+
     try {
       setSubmitting(true)
       const res = await fetch('/api/loan/fd-review', {
@@ -351,6 +364,8 @@ export function AccountsExecutiveFDDashboard({
           review_status: 'approved',
           fd_verification_memo: verificationMemo,
           review_decision: reviewDecision,
+          adjusted_fd_score: Math.round(score),
+          adjustment_reason: adjustmentReason.trim(),
         }),
       })
 
@@ -361,6 +376,8 @@ export function AccountsExecutiveFDDashboard({
         setSelectedReview(null)
         setVerificationMemo('')
         setReviewDecision('')
+        setAdjustedFdScore('')
+        setAdjustmentReason('')
         fetchPendingReviews()
       } else {
         const errorMsg = data.details || data.error || 'Unknown error'
@@ -453,7 +470,7 @@ export function AccountsExecutiveFDDashboard({
             return (
             <Card key={review.id} className={`border-l-4 ${borderColor}`}>
               <CardContent className="pt-6">
-                <div className="flex items-start justify-between mb-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
                   <div>
                     <p className="font-semibold text-sm">
                       {review.staff_name || 'Unknown Staff'}
@@ -468,7 +485,7 @@ export function AccountsExecutiveFDDashboard({
                       </p>
                     )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 sm:justify-end">
                     {showAutoReject && (
                       <Badge variant="destructive" className="bg-red-50 text-red-700 border border-red-300">
                         <AlertCircle className="h-3 w-3 mr-1" />
@@ -492,7 +509,7 @@ export function AccountsExecutiveFDDashboard({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4 mb-4 p-3 bg-slate-50 rounded">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4 mb-4 p-3 bg-slate-50 rounded">
                   <div>
                     <p className="text-xs text-slate-500">FD Score (%)</p>
                     <p className={`font-bold text-lg ${poorFD ? 'text-red-600' : 'text-green-600'}`}>
@@ -558,7 +575,11 @@ export function AccountsExecutiveFDDashboard({
                     </Button>
                   )}
                   <Button
-                    onClick={() => setSelectedReview(review)}
+                    onClick={() => {
+                      setSelectedReview(review)
+                      setAdjustedFdScore(String(Math.round(Number(review.fd_score) || 0)))
+                      setAdjustmentReason('')
+                    }}
                     className="w-full"
                     variant={showAutoReject ? 'outline' : 'default'}
                   >
@@ -592,7 +613,7 @@ export function AccountsExecutiveFDDashboard({
           {selectedReview && (
             <div className="space-y-3">
               {/* Quick Info Row */}
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="bg-slate-50 p-3 rounded">
                   <p className="text-xs font-semibold text-slate-600">Staff</p>
                   <p className="text-sm font-medium truncate">{selectedReview.staff_name || 'N/A'}</p>
@@ -657,6 +678,30 @@ export function AccountsExecutiveFDDashboard({
               {/* Decision Section */}
               <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4 space-y-3">
                 <p className="font-semibold text-sm text-slate-900">Your Decision</p>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700">Verified FD Score (%)</label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={adjustedFdScore}
+                      onChange={e => setAdjustedFdScore(e.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700">Adjustment reason {Math.round(Number(adjustedFdScore) || 0) !== Math.round(Number(selectedReview.fd_score) || 0) ? '*' : '(if changed)'}</label>
+                    <Textarea
+                      placeholder="Required when the verified score differs from the generated score..."
+                      value={adjustmentReason}
+                      onChange={e => setAdjustmentReason(e.target.value)}
+                      className="mt-2 min-h-16 text-sm"
+                    />
+                  </div>
+                </div>
                 
                 <div>
                   <label className="text-xs font-semibold text-slate-700">Verification Findings *</label>
@@ -681,7 +726,7 @@ export function AccountsExecutiveFDDashboard({
             </div>
           )}
 
-          <DialogFooter className="gap-2 pt-4 border-t">
+          <DialogFooter className="flex-col-reverse gap-2 pt-4 border-t sm:flex-row">
             <Button
               variant="outline"
               onClick={() => setSelectedReview(null)}

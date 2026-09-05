@@ -87,7 +87,16 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       try {
         const supabase = createClient()
 
-        const { data, error } = await supabase.auth.getUser()
+        let { data, error } = await supabase.auth.getUser()
+        if (error || !data?.user) {
+          // Navigation can briefly race Supabase's browser token refresh. Retry once
+          // before treating the session as expired and sending the user to login.
+          const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession()
+          if (!refreshError && refreshed.session?.user) {
+            data = { user: refreshed.session.user }
+            error = null
+          }
+        }
         if (error || !data?.user) {
           router.push("/auth/login")
           return

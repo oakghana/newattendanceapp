@@ -13,11 +13,12 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { User, Mail, Phone, MapPin, Building, Save, Camera, Lock, Key, Calendar, Eye, EyeOff, Settings2, Shield, Bell, Pen } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
-import { clearAppCache } from "@/lib/cache-manager"
+import { clearAllDataAndLogout } from "@/lib/cache-manager"
 import { RequestLeaveButton } from "@/components/leave/request-leave-button"
 import { PersonalAttendanceHistory } from "@/components/attendance/personal-attendance-history"
 import { SecureInput } from "@/components/ui/secure-input"
 import { SignaturePad } from "@/components/leave/signature-pad"
+import { processSignatureImage } from "@/lib/process-signature-image"
 import { useToast } from "@/hooks/use-toast"
 import { getPasswordEnforcementMessage, validatePassword } from "@/lib/security"
 import { displayRole } from "@/lib/role-mapping"
@@ -896,14 +897,14 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                       <Input
                         type="file"
                         accept="image/*"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0]
                           if (file) {
-                            const reader = new FileReader()
-                            reader.onload = (event) => {
-                              setSignatureDataUrl(event.target?.result as string)
+                            try {
+                              setSignatureDataUrl(await processSignatureImage(file))
+                            } catch (error) {
+                              toast.error(error instanceof Error ? error.message : "Unable to process signature image.")
                             }
-                            reader.readAsDataURL(file)
                           }
                         }}
                         className="cursor-pointer"
@@ -1155,13 +1156,34 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-sm font-medium">Clear Cache</Label>
-                  <p className="text-xs text-muted-foreground">Remove cached data and reload the app</p>
+                  <p className="text-xs text-muted-foreground">
+                    Permanently delete cached data (including saved GPS coordinates), then sign out so your next
+                    check-in fetches your current location
+                  </p>
                 </div>
                 <Button variant="ghost" size="sm" onClick={async () => {
                   try {
-                    await clearAppCache()
-                    // reload to ensure a clean state
-                    window.location.reload()
+                    const confirmed = window.confirm(
+                      "This will permanently clear all cached data (including saved GPS locations) and sign you out. You will need to log in again. Continue?",
+                    )
+                    if (!confirmed) return
+
+                    const supabase = createClient()
+
+                    // Log the action
+                    await fetch("/api/auth/logout", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                    }).catch(console.error)
+
+                    // Sign out from Supabase
+                    await supabase.auth.signOut()
+
+                    // Clear all data, GPS/geolocation cache, cookies, and storage
+                    await clearAllDataAndLogout()
+
+                    // Force redirect to login with a clean slate
+                    window.location.href = "/auth/login"
                   } catch (e) {
                     console.error('Failed to clear cache from settings:', e)
                     alert('Failed to clear cache')

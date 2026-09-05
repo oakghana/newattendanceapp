@@ -23,10 +23,14 @@ export function isRegionalManagerRole(role?: string | null): boolean {
   return normalizeAppRole(role) === "regional_manager"
 }
 
-export const NON_REGIONAL_TRANSPORT_LOCATIONS = ["QCC Head Office", "Awutu Stores", "Nsawam Archives"] as const
+export const NON_REGIONAL_TRANSPORT_LOCATIONS = ["QCC Head Office", "HEAD OFFICE SWANZY ARCADE", "Awutu Stores", "Nsawam Archives"] as const
 
 export function isTransportManagerRole(role?: string | null): boolean {
   return normalizeAppRole(role) === "transport_manager"
+}
+
+export function isChiefDriverRole(role?: string | null): boolean {
+  return normalizeAppRole(role) === "chief_driver"
 }
 
 export function isDepartmentHeadRole(role?: string | null): boolean {
@@ -35,12 +39,48 @@ export function isDepartmentHeadRole(role?: string | null): boolean {
 
 export function canManageTransport(role?: string | null): boolean {
   const normalizedRole = normalizeAppRole(role)
-  return isRegionalHrRole(role) || isRegionalManagerRole(role) || isTransportManagerRole(role) || isAdminRole(role) || ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
+  return isRegionalHrRole(role) || isRegionalManagerRole(role) || isChiefDriverRole(role) || isTransportManagerRole(role) || isAdminRole(role) || ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
+}
+
+/** Fleet inventory edit (status, details, register): TM nationwide; RM / Regional HR regional only */
+export function canEditFleetInventory(role?: string | null): boolean {
+  const normalizedRole = normalizeAppRole(role)
+  return (
+    isTransportManagerRole(role) ||
+    isChiefDriverRole(role) ||
+    isRegionalManagerRole(role) ||
+    isRegionalHrRole(role) ||
+    isAdminRole(role) ||
+    ["it_admin", "it-admin"].includes(normalizedRole)
+  )
+}
+
+/** Fleet dashboards / read: editors + MD + department heads */
+export function canViewFleetInventory(role?: string | null): boolean {
+  const normalizedRole = normalizeAppRole(role)
+  return (
+    canEditFleetInventory(role) ||
+    isDepartmentHeadRole(role) ||
+    normalizedRole === "managing_director" ||
+    ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
+  )
+}
+
+/** Nationwide fleet (no region filter): Transport Manager, MD, admin */
+export function hasNationwideFleetScope(role?: string | null): boolean {
+  const normalizedRole = normalizeAppRole(role)
+  return (
+    isTransportManagerRole(role) ||
+    isAdminRole(role) ||
+    normalizedRole === "managing_director" ||
+    ["it_admin", "it-admin"].includes(normalizedRole)
+  )
 }
 
 export function canCreateTransportRequest(role?: string | null): boolean {
-  const normalizedRole = normalizeAppRole(role)
-  return isRegionalHrRole(role) || isDepartmentHeadRole(role) || ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
+  // Regional HR / Chief Driver create regional requests for RM → MD.
+  // Department Heads create non-regional requisitions (separate API).
+  return isRegionalHrRole(role) || isChiefDriverRole(role) || isDepartmentHeadRole(role)
 }
 
 export function isRegionalHrRole(role?: string | null): boolean {

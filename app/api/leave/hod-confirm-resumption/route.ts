@@ -74,65 +74,100 @@ export async function POST(req: NextRequest) {
     const staffUserId = leaveRequest.user_id
     const leaveEndDate = leaveRequest.preferred_end_date
 
-    // Find or create the leave_resumption_notifications record
-    // Match by user_id and leave_end_date
-    const { data: resumptions, error: searchErr } = await admin
+    // Approved leave processing creates the canonical record by leave request.
+    // Older records are matched by employee and leave end date as a fallback.
+    const { data: requestResumption, error: requestSearchErr } = await admin
       .from('leave_resumption_notifications')
-      .select('id, leave_request_id')
-      .eq('user_id', staffUserId)
-      .eq('leave_end_date', leaveEndDate)
+      .select('id')
+      .eq('leave_request_id', leave_plan_request_id)
+      .maybeSingle()
 
-    if (searchErr) {
-      return NextResponse.json(
-        { error: 'Failed to fetch resumption record' },
-        { status: 500 }
-      )
+    if (requestSearchErr) {
+      return NextResponse.json({ error: 'Failed to fetch resumption record' }, { status: 500 })
     }
 
-    let resumptionId = resumptions?.[0]?.id
+    const { data: legacyResumption, error: legacySearchErr } = requestResumption
+      ? { data: null, error: null }
+      : await admin
+          .from('leave_resumption_notifications')
+          .select('id')
+          .eq('user_id', staffUserId)
+          .eq('leave_end_date', leaveEndDate)
+          .maybeSingle()
 
-    // If no record exists, create one
+    if (legacySearchErr) {
+      return NextResponse.json({ error: 'Failed to fetch resumption record' }, { status: 500 })
+    }
+
+    const today = new Date().toISOString().split('T')[0]
+    let resumptionId = requestResumption?.id || legacyResumption?.id
+
     if (!resumptionId) {
-      const today = new Date().toISOString().split('T')[0]
       const { data: newResumption, error: createErr } = await admin
         .from('leave_resumption_notifications')
         .insert({
           user_id: staffUserId,
           leave_request_id: leave_plan_request_id,
           leave_end_date: leaveEndDate,
-          status: 'confirmed',
+          status: 'resumed',
+          days_overdue: 0,
+          first_check_in_date: today,
           first_hod_rm_check_in_date: today,
-          confirmation_status: 'hod_confirmed',
+          resumption_date: today,
+          confirmation_status: 'confirmed',
         })
         .select('id')
         .single()
 
       if (createErr || !newResumption) {
-        return NextResponse.json(
-          { error: 'Failed to create resumption record' },
-          { status: 500 }
-        )
+        return NextResponse.json({ error: createErr?.message || 'Failed to create resumption record' }, { status: 500 })
       }
 
       resumptionId = newResumption.id
     } else {
-      // Update existing record with HOD confirmation
-      const todayDate = new Date().toISOString().split('T')[0]
       const { error: updateErr } = await admin
         .from('leave_resumption_notifications')
         .update({
           leave_request_id: leave_plan_request_id,
-          first_hod_rm_check_in_date: todayDate,
-          confirmation_status: 'hod_confirmed',
+          status: 'resumed',
+          first_check_in_date: today,
+          first_hod_rm_check_in_date: today,
+          resumption_date: today,
+          confirmation_status: 'confirmed',
         })
         .eq('id', resumptionId)
 
       if (updateErr) {
-        return NextResponse.json(
-          { error: 'Failed to confirm resumption' },
-          { status: 500 }
-        )
+        return NextResponse.json({ error: updateErr.message || 'Failed to confirm resumption' }, { status: 500 })
       }
+    }
+
+    const { data: existingConfirmation, error: confirmationSearchErr } = await admin
+      .from('leave_resumption_confirmations')
+      .select('id')
+      .eq('leave_resumption_id', resumptionId)
+      .maybeSingle()
+
+    if (confirmationSearchErr) {
+      return NextResponse.json({ error: confirmationSearchErr.message || 'Failed to fetch confirmation record' }, { status: 500 })
+    }
+
+    const confirmationUpdate = {
+      hod_rm_user_id: user.id,
+      hod_rm_confirmation_status: 'confirmed',
+      hod_rm_confirmed_at: new Date().toISOString(),
+      final_status: 'confirmed',
+    }
+    const { error: confirmationError } = existingConfirmation
+      ? await admin.from('leave_resumption_confirmations').update(confirmationUpdate).eq('id', existingConfirmation.id)
+      : await admin.from('leave_resumption_confirmations').insert({
+          leave_resumption_id: resumptionId,
+          user_id: staffUserId,
+          ...confirmationUpdate,
+        })
+
+    if (confirmationError) {
+      return NextResponse.json({ error: confirmationError.message || 'Failed to record HOD/RM confirmation' }, { status: 500 })
     }
 
     return NextResponse.json({

@@ -1,4 +1,9 @@
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+
 /** @type {import('next').NextConfig} */
+const projectRoot = path.dirname(fileURLToPath(import.meta.url))
+
 const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
@@ -17,6 +22,9 @@ const nextConfig = {
   productionBrowserSourceMaps: false,
   poweredByHeader: false,
   reactStrictMode: true,
+  turbopack: {
+    root: projectRoot,
+  },
   experimental: {
     optimizePackageImports: [
       'lucide-react',
@@ -79,10 +87,6 @@ const nextConfig = {
     ]
   },
   compress: true,
-  swcMinify: true,
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
 }
 
 export default nextConfig

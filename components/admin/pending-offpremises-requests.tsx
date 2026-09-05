@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { AlertTriangle, MapPin, Clock, User, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
+import { AlertTriangle, MapPin, Clock, User, CheckCircle2, XCircle, Loader2, Search } from 'lucide-react'
 import { OffPremisesRequestModal } from './offpremises-request-modal'
 
 interface PendingRequest {
@@ -45,7 +45,8 @@ export function PendingOffPremisesRequests() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [managerProfile, setManagerProfile] = useState<any>(null)
-  const [activeTab, setActiveTab] = useState<string>('all')
+  const [activeTab, setActiveTab] = useState<string>('pending')
+  const [searchQuery, setSearchQuery] = useState('')
   const [compactMode, setCompactMode] = useState(false)
   const [quickSelectedRequest, setQuickSelectedRequest] = useState<PendingRequest | null>(null)
   const [processingId, setProcessingId] = useState<string | null>(null)
@@ -143,7 +144,18 @@ export function PendingOffPremisesRequests() {
   const pendingCount = allRequests.filter(r => r.status === 'pending').length
   const approvedCount = allRequests.filter(r => r.status === 'approved').length
   const rejectedCount = allRequests.filter(r => r.status === 'rejected').length
-  const filteredRequests = activeTab === 'all' ? allRequests : allRequests.filter(r => r.status === activeTab)
+  const today = new Date().toISOString().slice(0, 10)
+  const todayCount = allRequests.filter(r => String(r.created_at || '').slice(0, 10) === today).length
+  const statusRequests = activeTab === 'all'
+    ? allRequests
+    : activeTab === 'today'
+      ? allRequests.filter(r => String(r.created_at || '').slice(0, 10) === today)
+      : allRequests.filter(r => r.status === activeTab)
+  const filteredRequests = statusRequests.filter((request) => {
+    const searchText = [request.user_profiles?.first_name, request.user_profiles?.last_name, request.user_profiles?.email, request.user_profiles?.employee_id, request.google_maps_name, request.current_location_name]
+      .filter(Boolean).join(' ').toLowerCase()
+    return searchText.includes(searchQuery.trim().toLowerCase())
+  })
 
   const handleTabChange = (value: string) => {
     setActiveTab(value)
@@ -361,12 +373,15 @@ CREATE INDEX IF NOT EXISTS idx_pending_offpremises_created_at ON public.pending_
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-            <TabsList className={compactMode ? 'flex gap-2 overflow-x-auto mb-4' : 'grid w-full grid-cols-4 mb-4'}>
+            <TabsList className="mb-4 flex h-auto w-full gap-1 overflow-x-auto rounded-lg bg-muted p-1">
               <TabsTrigger value="all" className={compactMode ? 'whitespace-nowrap px-3 py-2 text-sm' : ''}>
                 All ({allRequests.length})
               </TabsTrigger>
               <TabsTrigger value="pending" className={compactMode ? 'whitespace-nowrap px-3 py-2 text-sm' : ''}>
                 Pending ({pendingCount})
+              </TabsTrigger>
+              <TabsTrigger value="today" className={compactMode ? 'whitespace-nowrap px-3 py-2 text-sm' : ''}>
+                Today ({todayCount})
               </TabsTrigger>
               <TabsTrigger value="approved" className={compactMode ? 'whitespace-nowrap px-3 py-2 text-sm' : ''}>
                 Approved ({approvedCount})
@@ -375,6 +390,11 @@ CREATE INDEX IF NOT EXISTS idx_pending_offpremises_created_at ON public.pending_
                 Rejected ({rejectedCount})
               </TabsTrigger>
             </TabsList>
+
+            <div className="relative mb-4 max-w-md">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search staff, ID, email, or location" className="h-9 w-full rounded-md border bg-background pl-9 pr-3 text-sm" />
+            </div>
 
             {filteredRequests.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
@@ -486,7 +506,8 @@ CREATE INDEX IF NOT EXISTS idx_pending_offpremises_created_at ON public.pending_
                               className="ml-4 flex-shrink-0"
                               onClick={(e) => {
                                 e.stopPropagation()
-                                handleRequestClick(request)
+                                setSelectedRequest(request)
+                                setIsModalOpen(true)
                               }}
                             >
                               Review

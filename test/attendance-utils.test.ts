@@ -77,6 +77,22 @@ describe("attendance-utils", () => {
     ).toBe(true)
   })
 
+  it("never automatically checks out Security or Transport staff working overnight", () => {
+    const overnight = new Date("2026-02-12T23:59:00")
+
+    for (const dept of [{ code: "security" }, { code: "transport" }]) {
+      expect(canAutoCheckoutOutOfRange({
+        now: overnight,
+        hasCheckedIn: true,
+        hasCheckedOut: false,
+        isOutOfRange: true,
+        isOnLeave: false,
+        hoursWorked: 8,
+        dept,
+      })).toBe(false)
+    }
+  })
+
   it("blocks automatic out-of-range checkout before 4 PM, before 7 hours, or after checkout", () => {
     const earlyTime = new Date("2026-02-12T15:59:00")
 

@@ -19,20 +19,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No signature provided" }, { status: 400 })
     }
 
-    const admin = await createAdminClient()
-
-    // Resolve userId - prefer explicit, fall back to session user
-    let userId = body.userId
-    if (!userId) {
-      const supabase = await createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        console.error("[v0] No authenticated user found")
-        return NextResponse.json({ error: "Unauthorized - no user session" }, { status: 401 })
-      }
-      userId = user.id
-      console.log("[v0] Using session user ID:", userId)
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      console.error("[v0] No authenticated user found")
+      return NextResponse.json({ error: "Unauthorized - no user session" }, { status: 401 })
     }
+
+    if (body.userId && body.userId !== user.id) {
+      return NextResponse.json({ error: "You can only save your own signature" }, { status: 403 })
+    }
+
+    const admin = await createAdminClient()
+    const userId = user.id
 
     console.log("[v0] Attempting to save signature for user:", userId)
 
@@ -41,7 +40,8 @@ export async function POST(request: NextRequest) {
       .from("approval_signature_registry")
       .select("id")
       .eq("user_id", userId)
-      .single()
+      .eq("workflow_domain", "leave")
+      .maybeSingle()
 
     if (checkError && checkError.code !== "PGRST116") {
       // PGRST116 = no rows returned, which is expected for new users
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
           workflow_domain: "leave",
           approval_stage: "hr_approval"
         })
-        .eq("user_id", userId)
+        .eq("id", existingSignature.id)
         .select()
         .single()
 
@@ -127,8 +127,11 @@ export async function GET(request: NextRequest) {
       .from("approval_signature_registry")
       .select("*")
       .eq("user_id", userId)
+      .eq("workflow_domain", "leave")
       .eq("is_active", true)
-      .single()
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
     if (error && error.code !== "PGRST116") {
       // PGRST116 = no rows returned

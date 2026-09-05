@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
-import { requiresLatenessReason, isExemptFromAttendanceReasons, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept } from "@/lib/attendance-utils"
+import { requiresLatenessReason, isExemptFromAttendanceReasons, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept, shouldSkipSystemAutoCheckout } from "@/lib/attendance-utils"
 import { trackLeaveResumption, checkLeaveOverdueBlock } from "@/lib/leave-resumption-service"
+import { validateAttendanceReason } from "@/lib/meaningful-text"
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -581,7 +582,12 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     let missedCheckoutWarning = null
-    if (yesterdayRecord && yesterdayRecord.check_in_time && !yesterdayRecord.check_out_time) {
+    if (
+      yesterdayRecord &&
+      yesterdayRecord.check_in_time &&
+      !yesterdayRecord.check_out_time &&
+      !shouldSkipSystemAutoCheckout(userProfile?.departments)
+    ) {
       // Auto check-out the previous day at 11:59 PM
       const autoCheckoutTime = new Date(`${yesterdayDate}T23:59:59`)
       const checkInTime = new Date(yesterdayRecord.check_in_time)
@@ -745,14 +751,27 @@ export async function POST(request: NextRequest) {
 
     const latenessRequired = requiresLatenessReason(checkInTime, userProfile?.departments, userProfile?.role)
     const attendanceReasonExempt = isExemptFromAttendanceReasons(userProfile?.role)
-    if (isLateArrival && latenessRequired && !attendanceReasonExempt && (!lateness_reason || lateness_reason.trim().length === 0)) {
-      return NextResponse.json({
-        error: "Lateness reason is required when checking in after 9:00 AM",
-        requiresLatenessReason: true,
-        checkInTime: checkInTime.toLocaleTimeString(),
-      }, { status: 400 })
+    let normalizedLatenessReason: string | null = null
+    if (isLateArrival && latenessRequired && !attendanceReasonExempt) {
+      const reasonValidation = validateAttendanceReason(lateness_reason, "Lateness reason")
+      if (!reasonValidation.ok) {
+        return NextResponse.json({
+          error: reasonValidation.error || "Lateness reason is required when checking in after the deadline",
+          requiresLatenessReason: true,
+          checkInTime: checkInTime.toLocaleTimeString(),
+        }, { status: 400 })
+      }
+      normalizedLatenessReason = reasonValidation.normalized
+    } else if (lateness_reason && String(lateness_reason).trim()) {
+      const reasonValidation = validateAttendanceReason(lateness_reason, "Lateness reason")
+      if (!reasonValidation.ok) {
+        return NextResponse.json({
+          error: reasonValidation.error || "Lateness reason is not valid",
+          requiresLatenessReason: true,
+        }, { status: 400 })
+      }
+      normalizedLatenessReason = reasonValidation.normalized
     }
-
     const attendanceData = {
       user_id: user.id,
       check_in_time: checkInTime.toISOString(),
@@ -776,8 +795,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Add lateness reason if provided
-    if (lateness_reason) {
-      attendanceData.lateness_reason = lateness_reason.trim()
+    if (normalizedLatenessReason) {
+      attendanceData.lateness_reason = normalizedLatenessReason
       if (lateness_proved_by) attendanceData.lateness_proved_by = String(lateness_proved_by).trim()
       if (lateness_proved_by_id) attendanceData.lateness_proved_by_id = lateness_proved_by_id
     }
@@ -938,3 +957,4 @@ export async function POST(request: NextRequest) {
 
 
 }
+

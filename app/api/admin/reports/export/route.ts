@@ -73,10 +73,12 @@ export async function POST(request: NextRequest) {
       const locationIds = [...new Set(attendanceRecords.map((record) => record.check_in_location_id).filter(Boolean))]
 
       // Fetch user profiles
-      const { data: userProfiles } = await supabase
+      const { data: directProfiles } = await adminClient
         .from("user_profiles")
         .select("id, first_name, last_name, employee_id, department_id")
         .in("id", userIds)
+
+      const userProfiles = directProfiles || []
 
       // Fetch departments
       const departmentIds = [...new Set(userProfiles?.map((profile) => profile.department_id).filter(Boolean) || [])]
@@ -88,7 +90,10 @@ export async function POST(request: NextRequest) {
         .select("id, name, address, district_id")
         .in("id", locationIds)
 
-      const userProfileMap = new Map(userProfiles?.map((profile) => [profile.id, profile]) || [])
+      const userProfileMap = new Map<string, (typeof userProfiles)[number]>()
+      userProfiles.forEach((profile) => {
+        userProfileMap.set(profile.id, profile)
+      })
       const departmentMap = new Map(departments?.map((dept) => [dept.id, dept]) || [])
       const locationMap = new Map(locations?.map((loc) => [loc.id, loc]) || [])
       const districtIds = [...new Set((locations || []).map((location) => location.district_id).filter(Boolean))]

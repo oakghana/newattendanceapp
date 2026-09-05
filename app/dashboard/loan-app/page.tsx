@@ -28,7 +28,7 @@ import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { GOOD_FD_THRESHOLD, isPoorFdScore } from "@/lib/loan-workflow"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
-import { Activity, AlertCircle, BarChart3, Calculator, CheckCircle2, ChevronDown, Clock, Download, Edit3, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Save, Upload, UserCog, Users, Wallet, XCircle } from "lucide-react"
+import { Activity, AlertCircle, BarChart3, Calculator, CheckCircle2, ChevronDown, Clock, Download, Edit3, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Save, Trash2, Upload, UserCog, Users, Wallet, XCircle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type LoanType = {
@@ -1051,6 +1051,7 @@ export default function LoanAppPage() {
   const [templateBody, setTemplateBody] = useState("")
   const [selectedStaffForLink, setSelectedStaffForLink] = useState("")
   const [selectedHodsForLink, setSelectedHodsForLink] = useState<string[]>([])
+  const [hodLinkSearch, setHodLinkSearch] = useState("")
   const [linkageRequestNote, setLinkageRequestNote] = useState("")
   const [linkageSearch, setLinkageSearch] = useState("")
   const [linkageLocationFilter, setLinkageLocationFilter] = useState("all")
@@ -2923,9 +2924,26 @@ export default function LoanAppPage() {
         doc.save(`${row.request_number || "memo"}-qcc-loan-memo.pdf`)
       }
 
-      const deleteLoanRequestById = async (id: string) => {
-    if (!isAdmin) {
+  const canStaffDeleteLoanRequest = (row: LoanRequest) =>
+    ["pending_hod", "hod_rejected"].includes(
+      String(row.status || "").trim().toLowerCase(),
+    )
+
+  const deleteLoanRequestById = async (id: string, options?: { allowStaffOwner?: boolean; status?: string }) => {
+    const allowStaffOwner = Boolean(options?.allowStaffOwner)
+    if (!isAdmin && !allowStaffOwner) {
       toast({ title: "Forbidden", description: "Only admin can delete selected loan requests.", variant: "destructive" })
+      return
+    }
+    if (!isAdmin && allowStaffOwner && options?.status && !canStaffDeleteLoanRequest({ status: options.status } as LoanRequest)) {
+      toast({
+        title: "Cannot delete",
+        description: "You can only delete a loan request before your HOD has approved it.",
+        variant: "destructive",
+      })
+      return
+    }
+    if (!window.confirm(isAdmin ? "Delete this loan request?" : "Delete this loan request? It will be removed only if your HOD has not approved it yet.")) {
       return
     }
     const res = await fetch("/api/loan/request", {
@@ -2940,6 +2958,7 @@ export default function LoanAppPage() {
     }
     toast({ title: "Deleted", description: "Loan request deleted." })
     setSelectedLoanIds((prev) => prev.filter((x) => x !== id))
+    if (editingId === id) resetForm()
     await loadData()
   }
 
@@ -3247,10 +3266,19 @@ export default function LoanAppPage() {
                     </div>
                   )}
                   <div className="flex gap-2 flex-wrap">
-                    {["pending_hod", "hod_rejected"].includes(row.status) && (
-                      <Button variant="outline" size="sm" onClick={() => beginEdit(row)}>
-                        View / Edit
-                      </Button>
+                    {canStaffDeleteLoanRequest(row) && (
+                      <>
+                        <Button variant="outline" size="sm" onClick={() => beginEdit(row)}>
+                          View / Edit
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => void deleteLoanRequestById(row.id, { allowStaffOwner: true, status: row.status })}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" /> Delete request
+                        </Button>
+                      </>
                     )}
                     {row.status === "approved_director" && (
                       <>
@@ -3371,6 +3399,22 @@ export default function LoanAppPage() {
                         >
                           <Download className="h-4 w-4" /> Download
                         </a>
+                      </div>
+                    )}
+
+                    {canStaffDeleteLoanRequest(req) && (
+                      <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-red-900">Withdraw this request</p>
+                          <p className="text-xs text-red-700">You can delete it only while your HOD has not approved it yet.</p>
+                        </div>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => void deleteLoanRequestById(req.id, { allowStaffOwner: true, status: req.status })}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" /> Delete request
+                        </Button>
                       </div>
                     )}
 
@@ -6525,16 +6569,29 @@ export default function LoanAppPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Select One or More HOD / Regional Managers</Label>
+                  <Input
+                    value={hodLinkSearch}
+                    onChange={(e) => setHodLinkSearch(e.target.value)}
+                    placeholder="Search HOD by name, staff ID, role, department or location..."
+                  />
                   <div className="max-h-56 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
-                    {(lookupData?.hods || []).map((h) => {
-                      const checked = selectedHodsForLink.includes(h.id)
-                      return (
-                        <label key={h.id} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm text-slate-800 shadow-sm">
-                          <span>{`${h.first_name} ${h.last_name} (${h.role})`}</span>
-                          <input type="checkbox" checked={checked} onChange={() => toggleHodSelection(h.id)} />
-                        </label>
-                      )
-                    })}
+                    {(lookupData?.hods || [])
+                      .filter((h) => {
+                        const q = hodLinkSearch.trim().toLowerCase()
+                        if (!q) return true
+                        return `${h.first_name} ${h.last_name} ${h.employee_id || ""} ${String(h.role || "").replace(/_/g, " ")} ${(h as any)?.departments?.name || ""} ${(h as any)?.geofence_locations?.name || ""}`
+                          .toLowerCase()
+                          .includes(q)
+                      })
+                      .map((h) => {
+                        const checked = selectedHodsForLink.includes(h.id)
+                        return (
+                          <label key={h.id} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm text-slate-800 shadow-sm">
+                            <span>{`${h.first_name} ${h.last_name} (${h.role})`}</span>
+                            <input type="checkbox" checked={checked} onChange={() => toggleHodSelection(h.id)} />
+                          </label>
+                        )
+                      })}
                   </div>
                 </div>
                 {!canDirectLinkageUpdate && (

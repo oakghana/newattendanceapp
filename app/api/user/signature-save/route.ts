@@ -30,7 +30,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Upload signature image to Vercel Blob if provided
+    // Upload signature image to Vercel Blob when configured. Local/self-hosted
+    // environments can safely keep the data URL in the existing profile field.
     let signatureUrl: string | null = null
     if (signature_data_url) {
       try {
@@ -48,6 +49,9 @@ export async function POST(request: NextRequest) {
 
         const binaryData = Buffer.from(base64Data, "base64")
         
+        if (!process.env.BLOB_READ_WRITE_TOKEN) {
+          signatureUrl = String(signature_data_url)
+        } else {
         // Delete old signature if exists
         const { data: existingSignature } = await admin
           .from("approval_signature_registry")
@@ -78,10 +82,11 @@ export async function POST(request: NextRequest) {
 
         signatureUrl = blob.url
         console.log("[v0] Signature uploaded to Blob successfully:", signatureUrl)
+        }
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err)
-        console.error("[v0] Error uploading signature to Blob:", errorMsg)
-        throw new Error(`Failed to upload signature: ${errorMsg}`)
+        // Blob outages must not prevent a user from saving a valid signature.
+        console.warn("[v0] Blob upload unavailable; storing signature data URL in profile", err)
+        signatureUrl = String(signature_data_url)
       }
     }
 
