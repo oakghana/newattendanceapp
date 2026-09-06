@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
-import { ArrowLeft, FileText, Pencil, Search, ShieldCheck, TriangleAlert, Upload } from "lucide-react"
+import { ArrowLeft, CalendarClock, Car, CheckCircle2, Clock, FileText, Loader2, MapPin, Pencil, Play, Route, Search, ShieldCheck, TriangleAlert, Upload, Users } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -26,6 +26,23 @@ export function DriverLicenseWorkspace({ initialDrivers, canVerify, role = "mana
   const [uploading, setUploading] = useState(false)
   const [licenseMeta, setLicenseMeta] = useState({ license_type: "", issuing_authority: "", obtained_at: "", production_year: "", expiry_year: "" })
   const fileInput = useRef<HTMLInputElement>(null)
+  const [tasks, setTasks] = useState<any[]>(assignedTasks)
+  const [tripBusy, setTripBusy] = useState<string | null>(null)
+
+  async function updateTrip(taskId: string, decision: "start_trip" | "complete_trip") {
+    setTripBusy(taskId)
+    try {
+      const res = await fetch("/api/transport/nonregional", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: taskId, decision }) })
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error ?? "Unable to update trip")
+      const now = new Date().toISOString()
+      setTasks((current) => current.map((t) => t.id === taskId ? { ...t, status: body.status ?? (decision === "start_trip" ? "in_progress" : "completed"), ...(decision === "start_trip" ? { trip_started_at: now } : { trip_completed_at: now }) } : t))
+      toast({ title: decision === "start_trip" ? "Trip started" : "Trip completed", description: decision === "start_trip" ? "Your trek has been marked as in progress." : "Great job — this trek is now complete.", className: "border-emerald-400 bg-emerald-50 text-emerald-900" })
+    } catch (error) {
+      toast({ title: "Update failed", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" })
+    } finally { setTripBusy(null) }
+  }
+
   const visible = useMemo(() => drivers.filter((driver) => `${driver.full_name} ${driver.license_number} ${driver.license_type ?? ""}`.toLowerCase().includes(search.toLowerCase())), [drivers, search])
   const pending = drivers.filter((driver) => driver.verification_status !== "verified").length
   const expiring = drivers.filter((driver) => new Date(driver.expiry_date).getTime() < Date.now() + 90 * 86400000).length
@@ -64,7 +81,45 @@ export function DriverLicenseWorkspace({ initialDrivers, canVerify, role = "mana
   if (role === "driver") return <div className="flex flex-col gap-6">
     <header className="flex flex-col gap-3 border-b pb-5"><div className="flex flex-wrap items-start justify-between gap-3"><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><ShieldCheck /></div><div><p className="text-sm font-medium text-primary">Driver workspace</p><h1 className="text-3xl font-semibold tracking-tight">Assigned transport tasks</h1><p className="text-muted-foreground leading-6">Your approved transport assignments, routes, meeting times, and departure details.</p></div></div><Button variant="outline" asChild><a href="/dashboard/transport"><ArrowLeft data-icon="inline-start" /> Back to transport</a></Button></div></header>
     <Card><CardHeader><CardTitle>My driving license</CardTitle></CardHeader><CardContent className="flex flex-wrap items-center justify-between gap-4"><div className="grid w-full gap-3 sm:grid-cols-2"><div className="grid gap-2"><Label>License type</Label><Input required value={licenseMeta.license_type} onChange={(e) => setLicenseMeta({ ...licenseMeta, license_type: e.target.value })} placeholder="e.g. Class C" /></div><div className="grid gap-2"><Label>Issuing authority</Label><Input required value={licenseMeta.issuing_authority} onChange={(e) => setLicenseMeta({ ...licenseMeta, issuing_authority: e.target.value })} placeholder="e.g. DVLA" /></div><div className="grid gap-2"><Label>Where obtained</Label><Input required value={licenseMeta.obtained_at} onChange={(e) => setLicenseMeta({ ...licenseMeta, obtained_at: e.target.value })} placeholder="Town or office" /></div><div className="grid gap-2"><Label>Year of production</Label><Input required type="number" min="1900" max={new Date().getFullYear()} value={licenseMeta.production_year} onChange={(e) => setLicenseMeta({ ...licenseMeta, production_year: e.target.value })} /></div><div className="grid gap-2"><Label>Year of expiry</Label><Input required type="number" min={new Date().getFullYear()} value={licenseMeta.expiry_year} onChange={(e) => setLicenseMeta({ ...licenseMeta, expiry_year: e.target.value })} /></div></div><div><p className="font-medium">{drivers[0]?.license_document_url ? "Document uploaded" : "No document uploaded"}</p><p className="text-sm text-muted-foreground">Complete the license details before uploading the PDF, JPG, or PNG.</p></div><input ref={fileInput} type="file" accept="application/pdf,image/jpeg,image/png" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadLicense(file); event.currentTarget.value = "" }} /><Button type="button" disabled={uploading} onClick={() => fileInput.current?.click()}><Upload className="mr-2 size-4" />{uploading ? "Uploading..." : drivers[0]?.license_document_url ? "Replace license" : "Upload license"}</Button>{drivers[0]?.license_document_url && <Button variant="outline" asChild><a href={drivers[0].license_document_url} target="_blank" rel="noreferrer"><FileText className="mr-2 size-4" />View document</a></Button>}</CardContent></Card>
-    <Card><CardHeader><CardTitle>My assignments</CardTitle></CardHeader><CardContent className="grid gap-4">{assignedTasks.map((task) => <article key={task.id} className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-4"><div><p className="text-xs text-muted-foreground">Route</p><p className="font-medium">{task.origin} to {task.destination}</p></div><div><p className="text-xs text-muted-foreground">Meet / depart</p><p className="font-medium">{task.required_at}</p></div><div><p className="text-xs text-muted-foreground">Vehicle</p><p className="font-medium">{task.assigned_vehicle || "To be confirmed"}</p></div><div><p className="text-xs text-muted-foreground">Passengers</p><p className="font-medium">{task.persons_requiring_transport}</p><p className="text-xs text-muted-foreground">{task.person_names || "Names not provided"}</p></div><div className="sm:col-span-2 lg:col-span-4"><p className="text-sm leading-6">{task.purpose}</p><Badge variant="secondary">{task.status}</Badge></div></article>)}{assignedTasks.length === 0 && <p className="p-8 text-center text-sm text-muted-foreground">No transport assignments have been assigned to you yet.</p>}</CardContent></Card>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <Card><CardContent className="flex items-center gap-3 p-4"><div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><Route className="size-5" /></div><div><p className="text-xs text-muted-foreground">Total treks</p><p className="text-2xl font-semibold">{tasks.length}</p></div></CardContent></Card>
+      <Card><CardContent className="flex items-center gap-3 p-4"><div className="flex size-10 items-center justify-center rounded-lg bg-amber-100 text-amber-700"><CalendarClock className="size-5" /></div><div><p className="text-xs text-muted-foreground">Upcoming</p><p className="text-2xl font-semibold">{tasks.filter((t) => t.status === "assigned" || t.status === "approved").length}</p></div></CardContent></Card>
+      <Card><CardContent className="flex items-center gap-3 p-4"><div className="flex size-10 items-center justify-center rounded-lg bg-blue-100 text-blue-700"><Play className="size-5" /></div><div><p className="text-xs text-muted-foreground">In progress</p><p className="text-2xl font-semibold">{tasks.filter((t) => t.status === "in_progress").length}</p></div></CardContent></Card>
+      <Card><CardContent className="flex items-center gap-3 p-4"><div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700"><CheckCircle2 className="size-5" /></div><div><p className="text-xs text-muted-foreground">Completed</p><p className="text-2xl font-semibold">{tasks.filter((t) => t.status === "completed").length}</p></div></CardContent></Card>
+    </div>
+    <Card>
+      <CardHeader><CardTitle>My assignments</CardTitle></CardHeader>
+      <CardContent className="grid gap-4">
+        {tasks.map((task) => {
+          const started = Boolean(task.trip_started_at) || task.status === "in_progress" || task.status === "completed"
+          const done = task.status === "completed"
+          const statusStyles = done ? "border-emerald-200 bg-emerald-50 text-emerald-700" : task.status === "in_progress" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-amber-200 bg-amber-50 text-amber-700"
+          return (
+            <article key={task.id} className="overflow-hidden rounded-xl border shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/40 px-4 py-3">
+                <div className="flex items-center gap-2 font-medium"><MapPin className="size-4 text-primary" />{task.origin} &rarr; {task.destination}</div>
+                <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${statusStyles}`}>{done ? <CheckCircle2 className="size-3.5" /> : task.status === "in_progress" ? <Play className="size-3.5" /> : <Clock className="size-3.5" />}{String(task.status ?? "assigned").replaceAll("_", " ")}</span>
+              </div>
+              <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="flex items-start gap-2"><CalendarClock className="mt-0.5 size-4 text-muted-foreground" /><div><p className="text-xs text-muted-foreground">Meet / depart</p><p className="font-medium">{task.required_at ? new Date(task.required_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "To be confirmed"}</p></div></div>
+                <div className="flex items-start gap-2"><Car className="mt-0.5 size-4 text-muted-foreground" /><div><p className="text-xs text-muted-foreground">Vehicle</p><p className="font-medium">{task.assigned_vehicle || "To be confirmed"}</p></div></div>
+                <div className="flex items-start gap-2"><Users className="mt-0.5 size-4 text-muted-foreground" /><div><p className="text-xs text-muted-foreground">Passengers</p><p className="font-medium">{task.persons_requiring_transport}</p><p className="text-xs text-muted-foreground">{task.person_names || "Names not provided"}</p></div></div>
+                <div className="flex items-start gap-2"><FileText className="mt-0.5 size-4 text-muted-foreground" /><div><p className="text-xs text-muted-foreground">Department</p><p className="font-medium">{task.department || "\u2014"}</p></div></div>
+                <div className="sm:col-span-2 lg:col-span-4"><p className="text-xs text-muted-foreground">Purpose</p><p className="text-sm leading-6">{task.purpose}</p></div>
+                {(task.trip_started_at || task.trip_completed_at) && <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground sm:col-span-2 lg:col-span-4">{task.trip_started_at && <span>Started {new Date(task.trip_started_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</span>}{task.trip_completed_at && <span>Completed {new Date(task.trip_completed_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</span>}</div>}
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2 border-t bg-muted/20 px-4 py-3">
+                {task.status === "approved" && <span className="text-xs text-muted-foreground">Awaiting vehicle assignment</span>}
+                {!started && task.status === "assigned" && <Button size="sm" disabled={tripBusy === task.id} onClick={() => updateTrip(task.id, "start_trip")}>{tripBusy === task.id ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Play className="mr-1 size-4" />}Start trip</Button>}
+                {started && !done && <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={tripBusy === task.id} onClick={() => updateTrip(task.id, "complete_trip")}>{tripBusy === task.id ? <Loader2 className="mr-1 size-4 animate-spin" /> : <CheckCircle2 className="mr-1 size-4" />}Confirm completion</Button>}
+                {done && <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600"><CheckCircle2 className="size-4" /> Trek completed</span>}
+              </div>
+            </article>
+          )
+        })}
+        {tasks.length === 0 && <p className="p-8 text-center text-sm text-muted-foreground">No transport assignments have been assigned to you yet.</p>}
+      </CardContent>
+    </Card>
   </div>
 
   return <div className="flex flex-col gap-6">

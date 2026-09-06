@@ -542,8 +542,8 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
   const adminStandaloneItems = adminItems.filter((item) => !groupedAdminHrefs.has(item.href))
   const settingsItems = filteredNavItems.filter((item) => item.category === "settings")
 
-  const firstInitial = profile?.first_name?.trim()?.[0] || ""
-  const lastInitial = profile?.last_name?.trim()?.[0] || ""
+  const firstInitial = String(profile?.first_name ?? "").trim()[0] || ""
+  const lastInitial = String(profile?.last_name ?? "").trim()[0] || ""
   const userInitials = (firstInitial + lastInitial).toUpperCase() || "U"
 
   return (

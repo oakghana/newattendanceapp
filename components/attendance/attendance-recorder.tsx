@@ -103,7 +103,6 @@ interface AttendanceRecorderProps {
     different_checkout_location?: boolean
   } | null
   geoSettings?: GeoSettings
-  locations?: GeofenceLocation[]
   canCheckIn?: boolean
   canCheckOut?: boolean
   previewRangeResolved?: boolean
@@ -149,7 +148,6 @@ function getOrdinalSuffix(num: number): string {
 export function AttendanceRecorder({
   todayAttendance: initialTodayAttendance,
   geoSettings,
-  locations: propLocations,
   canCheckIn: initialCanCheckIn,
   canCheckOut: initialCanCheckOut,
   previewRangeResolved = false,
@@ -1180,7 +1178,7 @@ export function AttendanceRecorder({
             description: "Use the QR code option for instant check-in/check-out or try GPS again.",
             variant: "default",
             action: (
-              <ToastAction onClick={() => setShowQRScanner(true)}>Open QR scanner</ToastAction>
+              <ToastAction altText="Open QR scanner" onClick={() => setShowQRScanner(true)}>Open QR scanner</ToastAction>
             ),
             duration: 12000,
           })
@@ -1499,6 +1497,18 @@ export function AttendanceRecorder({
   }
 
   const handleCheckInOutsidePremises = async () => {
+    // Prevent a duplicate off-premises request: if one is already pending approval
+    // (or the user is already checked in), do not re-open the reason dialog.
+    if (hasPendingOffPremisesRequest || localTodayAttendance?.check_in_time) {
+      setShowOffPremisesReasonDialog(false)
+      toast({
+        title: "Request Already Submitted",
+        description: "You already have an off-premises check-in request awaiting approval. Please wait for a decision before submitting another.",
+        variant: "default",
+      })
+      return
+    }
+
     if (isCheckingIn || isProcessing) {
       toast({
         title: "Processing",
@@ -1600,7 +1610,7 @@ export function AttendanceRecorder({
       try {
         const geoResult = await Promise.race([
           reverseGeocode(currentLocation.latitude, currentLocation.longitude),
-          new Promise<null>((_, reject) => setTimeout(() => reject(new Error("geocode timeout")), 8000)),
+          new Promise<null>((_, reject) => setTimeout(() => reject(new Error("geocode timeout")), 2500)),
         ])
         if (geoResult) {
           locationName = (geoResult as any).address || (geoResult as any).display_name || "Unknown Location"
@@ -1659,6 +1669,18 @@ export function AttendanceRecorder({
 
       console.log("[v0] API response body:", result, "raw:", rawBody)
 
+      if (response.status === 409 && result?.duplicate) {
+        setHasPendingOffPremisesRequest(true)
+        setPendingOffPremisesLocation(null)
+        setOffPremisesReason("")
+        toast({
+          title: "Request Already Pending",
+          description: result.error || "Your off-premises request is already awaiting approval.",
+          className: "border-amber-400 bg-amber-50 text-amber-900",
+        })
+        return
+      }
+
       if (!response.ok) {
         // prefer an explicit error string if available, fall back to raw text or status
         const errMsg = result?.error || result?.message || rawBody || `HTTP ${response.status}`
@@ -1675,7 +1697,7 @@ export function AttendanceRecorder({
         title: "Off-Premises Request Sent",
         description: `Your request (ID: ${result.request_id || "N/A"}) has been sent to your approvers and is awaiting approval. You will be notified when a decision is made.`,
         action: (
-          <ToastAction asChild>
+          <ToastAction altText="View notifications" asChild>
             <a href="/dashboard/notifications">View Notifications</a>
           </ToastAction>
         ),
@@ -2613,22 +2635,24 @@ export function AttendanceRecorder({
 
 
   const reasonFieldHint = "Use more than 20 alphabetic characters. Spaces, numbers, and punctuation do not count."
-  const reasonLiveStatus = (value: string) => {
-    if (hasExcessiveConsecutiveWhitespace(value)) {
+  const reasonLiveStatus = (value: string | null | undefined) => {
+    const safeValue = String(value ?? "")
+    if (hasExcessiveConsecutiveWhitespace(safeValue)) {
       return { ok: false, text: "Too many continuous spaces (max 3). Write real words." }
     }
-    if (hasRepeatedConsecutiveCharacters(value)) {
+    if (hasRepeatedConsecutiveCharacters(safeValue)) {
       return { ok: false, text: "Repeated consecutive characters are not allowed." }
     }
-    const letters = value.replace(/[^a-z]/gi, "").length
+    const letters = safeValue.replace(/[^a-z]/gi, "").length
     if (letters >= 21) return { ok: true, text: `${letters} / 21 alphabetic characters ✓` }
     return { ok: false, text: `${letters} / 21 alphabetic characters — please add more detail` }
   }
 
   const handleEarlyCheckoutConfirm = async () => {
     let normalizedEarlyReason = ""
-    if (earlyCheckoutReasonRequired || earlyCheckoutReason.trim().length > 0) {
-      const reasonValidation = validateAttendanceReason(earlyCheckoutReason, "Early checkout reason")
+    const earlyReason = String(earlyCheckoutReason || "")
+    if (earlyCheckoutReasonRequired || earlyReason.trim().length > 0) {
+      const reasonValidation = validateAttendanceReason(earlyReason, "Early checkout reason")
       if (earlyCheckoutReasonRequired && !reasonValidation.ok) {
         setFlashMessage({
           message: reasonValidation.error || "Please provide a valid reason for early checkout before proceeding.",
@@ -2636,7 +2660,7 @@ export function AttendanceRecorder({
         })
         return
       }
-      if (!earlyCheckoutReasonRequired && earlyCheckoutReason.trim().length > 0 && !reasonValidation.ok) {
+      if (!earlyCheckoutReasonRequired && earlyReason.trim().length > 0 && !reasonValidation.ok) {
         setFlashMessage({
           message: reasonValidation.error || "If you provide a reason, it must be detailed and meaningful.",
           type: "error",
@@ -2646,7 +2670,7 @@ export function AttendanceRecorder({
       if (reasonValidation.ok) normalizedEarlyReason = reasonValidation.normalized
     }
 
-    const prover = earlyCheckoutProvedBy.trim()
+    const prover = String(earlyCheckoutProvedBy || "").trim()
 
     setShowEarlyCheckoutDialog(false)
     setIsLoading(true)
@@ -2755,7 +2779,7 @@ export function AttendanceRecorder({
       try {
         const geoResult = await Promise.race([
           reverseGeocode(location.latitude, location.longitude),
-          new Promise<null>((_, reject) => setTimeout(() => reject(new Error("geocode timeout")), 8000)),
+          new Promise<null>((_, reject) => setTimeout(() => reject(new Error("geocode timeout")), 2500)),
         ])
         if (geoResult) {
           locationName = (geoResult as any).address || (geoResult as any).display_name || "Unknown Location"
@@ -2873,7 +2897,7 @@ export function AttendanceRecorder({
       return
     }
     
-    const latenessProver = latenessProvedBy.trim()
+    const latenessProver = String(latenessProvedBy || "").trim()
 
     setShowLatenessDialog(false)
     setIsCheckingIn(true)
@@ -3279,7 +3303,7 @@ export function AttendanceRecorder({
         </Card>
       )}
 
-      {showOffPremisesReasonDialog && (
+      {showOffPremisesReasonDialog && !hasPendingOffPremisesRequest && !localTodayAttendance?.check_in_time && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-md">
             <CardHeader>
@@ -3311,7 +3335,7 @@ export function AttendanceRecorder({
                   maxLength={500}
                 />
                 <p className="text-xs text-muted-foreground">
-                  {reasonLiveStatus(offPremisesReason).text} · {offPremisesReason.length}/500
+                  {reasonLiveStatus(offPremisesReason).text} · {String(offPremisesReason ?? "").length}/500
                 </p>
               </div>
 

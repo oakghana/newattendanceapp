@@ -48,23 +48,34 @@ export default function AttendancePage() {
 
         setUser(authUser)
 
-        // Fetch today's attendance
         const today = new Date().toISOString().split("T")[0]
-        const { data: attendance } = await supabase
-          .from("attendance_records")
-          .select(`
-            *,
-            geofence_locations!check_in_location_id (
-              name
-            ),
-            checkout_location:geofence_locations!check_out_location_id (
-              name
-            )
-          `)
-          .eq("user_id", authUser.id)
-          .gte("check_in_time", `${today}T00:00:00`)
-          .lt("check_in_time", `${today}T23:59:59`)
-          .maybeSingle()
+        const [{ data: attendance }, { data: profile }, { data: allLocations }] = await Promise.all([
+          supabase
+            .from("attendance_records")
+            .select(`
+              *,
+              geofence_locations!check_in_location_id (
+                name
+              ),
+              checkout_location:geofence_locations!check_out_location_id (
+                name
+              )
+            `)
+            .eq("user_id", authUser.id)
+            .gte("check_in_time", `${today}T00:00:00`)
+            .lt("check_in_time", `${today}T23:59:59`)
+            .maybeSingle(),
+          supabase
+            .from("user_profiles")
+            .select("assigned_location_id, leave_status, leave_start_date, leave_end_date, leave_reason, first_name, last_name")
+            .eq("id", authUser.id)
+            .single(),
+          supabase
+            .from("geofence_locations")
+            .select("*")
+            .eq("is_active", true)
+            .order("name"),
+        ])
 
         if (isMounted && attendance) {
           setTodayAttendance({
@@ -74,25 +85,8 @@ export default function AttendancePage() {
           })
         }
 
-        // Fetch user profile
-        const { data: profile } = await supabase
-          .from("user_profiles")
-          .select("assigned_location_id, leave_status, leave_start_date, leave_end_date, leave_reason, first_name, last_name")
-          .eq("id", authUser.id)
-          .single()
-
         if (isMounted) {
           setUserProfile(profile)
-        }
-
-        // Fetch all locations
-        const { data: allLocations } = await supabase
-          .from("geofence_locations")
-          .select("*")
-          .eq("is_active", true)
-          .order("name")
-
-        if (isMounted) {
           setLocations(allLocations || [])
         }
       } catch (error) {

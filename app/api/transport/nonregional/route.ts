@@ -462,6 +462,34 @@ export async function PATCH(request: Request) {
     update.transport_manager_signed_at = new Date().toISOString()
     update.transport_manager_signature_data_url = body.dtmSignatureDataUrl ?? null
     update.status = "assigned"
+  }
+  // Stage 4 — Assigned driver confirms the trek has started.
+  else if (role === "driver" && body.decision === "start_trip") {
+    if (String(row.recommended_driver_id ?? "") !== user.id) {
+      return NextResponse.json({ error: "Only the assigned driver can start this trip." }, { status: 403 })
+    }
+    if (row.status !== "assigned") {
+      return NextResponse.json({ error: "Only an assigned trip can be started." }, { status: 409 })
+    }
+    const now = new Date().toISOString()
+    update.status = "in_progress"
+    update.trip_started_at = now
+    update.trip_started_by = user.id
+    update.trip_start_note = String(body.note ?? "").trim() || null
+  }
+  // Stage 5 — Assigned driver confirms the trek has been completed.
+  else if (role === "driver" && body.decision === "complete_trip") {
+    if (String(row.recommended_driver_id ?? "") !== user.id) {
+      return NextResponse.json({ error: "Only the assigned driver can complete this trip." }, { status: 403 })
+    }
+    if (row.status !== "in_progress" && row.status !== "assigned") {
+      return NextResponse.json({ error: "Only an active trip can be completed." }, { status: 409 })
+    }
+    const now = new Date().toISOString()
+    update.status = "completed"
+    update.trip_completed_at = now
+    update.trip_completed_by = user.id
+    update.trip_completion_note = String(body.note ?? "").trim() || null
   } else {
     return NextResponse.json({ error: "This action is not available for your role or the current stage." }, { status: 403 })
   }
@@ -479,6 +507,12 @@ export async function PATCH(request: Request) {
       "transport_manager_signer_id",
       "transport_manager_signed_at",
       "transport_manager_signature_data_url",
+      "trip_started_at",
+      "trip_started_by",
+      "trip_start_note",
+      "trip_completed_at",
+      "trip_completed_by",
+      "trip_completion_note",
     ]) {
       delete stripped[key]
     }

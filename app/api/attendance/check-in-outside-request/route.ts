@@ -48,6 +48,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (typeof user_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(user_id)) {
+      return NextResponse.json(
+        { error: "A valid user ID is required" },
+        { status: 400 }
+      )
+    }
+
     console.log("[v0] Creating admin client...")
     const supabase = await createAdminClient()
     console.log("[v0] Admin client created")
@@ -361,18 +368,6 @@ export async function POST(request: NextRequest) {
       message: isCheckoutRequest
         ? `${userProfile.first_name} ${userProfile.last_name} is requesting to check out from outside registered QCC locations at ${current_location.display_name || current_location.name}. Reason: ${normalizedReason || 'Not provided'}. Please review this request.`
         : `${userProfile.first_name} ${userProfile.last_name} is requesting to check in from outside their assigned location: ${current_location.display_name || current_location.name}. Reason: ${normalizedReason || 'Not provided'}. Please review and approve or deny.`,
-      data: {
-        request_id: requestRecord.id,
-        staff_user_id: user_id,
-        request_type: finalRequestType,
-        staff_name: `${userProfile.first_name} ${userProfile.last_name}`,
-        location_name: current_location.name,
-        google_maps_name: current_location.display_name || current_location.name,
-        coordinates: `${current_location.latitude}, ${current_location.longitude}`,
-        reason: normalizedReason || 'Not provided',
-        off_grid_hours_before_request:
-          typeof off_grid_hours_before_request === 'number' ? off_grid_hours_before_request : null,
-      },
       is_read: false,
     }))
 

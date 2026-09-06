@@ -145,28 +145,6 @@ export default function LoginPage() {
         email = result.email
       }
 
-      // Preflight: verify network connectivity to Supabase auth endpoint
-      try {
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-        if (supabaseUrl) {
-          try {
-            const preflightController = new AbortController()
-            const preflightTimeout = setTimeout(() => preflightController.abort(), 3000)
-            await fetch(`${supabaseUrl}/auth/v1/token`, { method: 'GET', cache: 'no-store', signal: preflightController.signal })
-            clearTimeout(preflightTimeout)
-          } catch (netErr: any) {
-            if (netErr?.name !== 'AbortError') {
-              showError('Unable to reach authentication service. Check network, VPN, or browser extensions and try again.', 'Network Error')
-              setIsLoading(false)
-              return
-            }
-            // AbortError = timeout, continue anyway — Supabase may still respond
-          }
-        }
-      } catch (preflightErr) {
-        // ignore and continue — preflight is best-effort
-      }
-
       // Single authentication call with AbortError handling
       let data, error
       try {
@@ -329,7 +307,7 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      const email = otpEmail.trim().toLowerCase()
+      const email = String(otpEmail ?? "").trim().toLowerCase()
 
       if (!email) {
         showFieldError("Email", "Please enter your email address")
@@ -464,7 +442,7 @@ export default function LoginPage() {
     clearPendingDeviceSharingWarning()
 
     try {
-      if (!otp.trim()) {
+      if (!String(otp ?? "").trim()) {
         showFieldError("OTP Code", "Please enter the OTP code")
         return
       }
