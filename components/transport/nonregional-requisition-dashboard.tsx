@@ -19,6 +19,7 @@ import {
 export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
   const [requests, setRequests] = useState<any[]>([])
   const [drivers, setDrivers] = useState<any[]>([])
+  const [unavailableDriverIds, setUnavailableDriverIds] = useState<string[]>([])
   const [vehicles, setVehicles] = useState<any[]>([])
   const [vehicleLoadError, setVehicleLoadError] = useState<string | null>(null)
   const [viewerId, setViewerId] = useState<string | null>(null)
@@ -47,6 +48,7 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
       if (!response.ok) throw new Error(body?.error ?? "Unable to load non-regional transport requests.")
       setRequests(body?.requests ?? [])
       setDrivers(body?.drivers ?? [])
+      setUnavailableDriverIds(body?.unavailableDriverIds ?? [])
       const vehiclesResponse = await fetch("/api/transport/vehicles")
       const vehiclesBody = await vehiclesResponse.json().catch(() => null)
       setVehicles(vehiclesResponse.ok ? vehiclesBody?.vehicles ?? [] : [])
@@ -139,14 +141,15 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
   // other locations. The Chief Driver only sees drivers at his own location.
   const assignableDrivers = useMemo(() => {
     if (!assignTarget) return { locationDrivers: [] as any[], otherDrivers: [] as any[] }
+    const availableDrivers = drivers.filter((driver) => !unavailableDriverIds.includes(driver.id))
     if (role === "chief_driver") {
-      const own = drivers.filter((driver) => viewerLocation && driverLocationName(driver) === viewerLocation)
+      const own = availableDrivers.filter((driver) => viewerLocation && driverLocationName(driver) === viewerLocation)
       return { locationDrivers: own, otherDrivers: [] as any[] }
     }
-    const locationDrivers = drivers.filter((driver) => driverLocationName(driver) === assignTarget.location)
-    const otherDrivers = drivers.filter((driver) => driverLocationName(driver) !== assignTarget.location)
+    const locationDrivers = availableDrivers.filter((driver) => driverLocationName(driver) === assignTarget.location)
+    const otherDrivers = availableDrivers.filter((driver) => driverLocationName(driver) !== assignTarget.location)
     return { locationDrivers, otherDrivers }
-  }, [assignTarget, drivers, role, viewerLocation])
+  }, [assignTarget, drivers, role, unavailableDriverIds, viewerLocation])
 
   const assignableVehicles = useMemo(() => {
     if (!assignTarget) return [] as any[]
@@ -163,7 +166,9 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
   function openAssignment(request: any) {
     setAssignTarget(request)
     setAssignVehicleId("")
-    const locationMatch = drivers.find((driver) => driverLocationName(driver) === request.location)
+    const locationMatch = drivers.find(
+      (driver) => !unavailableDriverIds.includes(driver.id) && driverLocationName(driver) === request.location,
+    )
     setAssignDriverId(locationMatch?.id ?? "")
   }
 

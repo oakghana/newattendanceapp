@@ -126,9 +126,28 @@ export async function GET(request: Request) {
     .eq("role", "driver")
     .eq("is_active", true)
 
+  const [{ data: activeNonregionalTrips }, { data: activeRegionalTrips }] = await Promise.all([
+    supabase
+      .from("nonregional_transport_requisitions")
+      .select("recommended_driver_id")
+      .in("status", ["assigned", "in_progress"])
+      .not("recommended_driver_id", "is", null),
+    supabase
+      .from("transport_requests")
+      .select("assigned_driver_id")
+      .eq("workflow_stage", "assigned")
+      .in("status", ["assigned", "in_progress"])
+      .not("assigned_driver_id", "is", null),
+  ])
+  const unavailableDriverIds = [...new Set([
+    ...(activeNonregionalTrips ?? []).map((trip) => String(trip.recommended_driver_id)),
+    ...(activeRegionalTrips ?? []).map((trip) => String(trip.assigned_driver_id)),
+  ])]
+
   return NextResponse.json({
     requests: data ?? [],
     drivers: drivers ?? [],
+    unavailableDriverIds,
     viewerRole: role,
     viewerId: user.id,
     viewerLocation,
@@ -418,6 +437,27 @@ export async function PATCH(request: Request) {
       .single()
     if (!driver || driver.role !== "driver" || driver.is_active === false) {
       return NextResponse.json({ error: "Select an active driver from the driver list." }, { status: 400 })
+    }
+    const [{ data: activeNonregionalTrip }, { data: activeRegionalTrip }] = await Promise.all([
+      supabase
+        .from("nonregional_transport_requisitions")
+        .select("id")
+        .eq("recommended_driver_id", driverId)
+        .neq("id", id)
+        .in("status", ["assigned", "in_progress"])
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("transport_requests")
+        .select("id")
+        .eq("assigned_driver_id", driverId)
+        .in("status", ["assigned", "in_progress"])
+        .eq("workflow_stage", "assigned")
+        .limit(1)
+        .maybeSingle(),
+    ])
+    if (activeNonregionalTrip || activeRegionalTrip) {
+      return NextResponse.json({ error: "This driver is already assigned to an active trip and is unavailable." }, { status: 409 })
     }
     if (isChiefDriverRole(role)) {
       const actorLocationId = profile?.assigned_location_id ?? null

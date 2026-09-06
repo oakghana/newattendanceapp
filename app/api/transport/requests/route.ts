@@ -420,6 +420,27 @@ export async function PATCH(request: Request) {
     if (!driver || driverRole !== "driver" || driver.is_active === false) {
       return NextResponse.json({ error: "Select an active driver." }, { status: 400 })
     }
+    const [{ data: activeRegionalTrip }, { data: activeNonregionalTrip }] = await Promise.all([
+      supabase
+        .from("transport_requests")
+        .select("id")
+        .eq("assigned_driver_id", driverId)
+        .neq("id", requestId)
+        .eq("workflow_stage", "assigned")
+        .in("status", ["assigned", "in_progress"])
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("nonregional_transport_requisitions")
+        .select("id")
+        .eq("recommended_driver_id", driverId)
+        .in("status", ["assigned", "in_progress"])
+        .limit(1)
+        .maybeSingle(),
+    ])
+    if (activeRegionalTrip || activeNonregionalTrip) {
+      return NextResponse.json({ error: "This driver is already assigned to an active trip and is unavailable." }, { status: 409 })
+    }
     if (isChiefDriver && !isTransportManager && !isAdmin) {
       if (
         (locationId && driver.assigned_location_id !== locationId) ||
