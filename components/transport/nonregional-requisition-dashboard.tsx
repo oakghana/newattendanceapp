@@ -366,12 +366,10 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
                     <FileText data-icon="inline-start" /> View / save PDF
                   </Button>
                 </div>
-                {request.requester_signature_data_url && (
-                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                    <strong className="text-foreground">Requester signature:</strong>
-                    <img src={request.requester_signature_data_url} alt="Requester signature" className="h-12 max-w-40 object-contain" />
-                  </div>
-                )}
+                <div className="text-sm text-muted-foreground">
+                  <strong className="text-foreground">Requester:</strong>{" "}
+                  {[request.requester?.first_name, request.requester?.last_name].filter(Boolean).join(" ") || "Name unavailable"}
+                </div>
                 <section className="grid gap-3 rounded-lg border bg-muted/20 p-4" aria-label="Request workflow progress">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-medium">Request progress</p>
