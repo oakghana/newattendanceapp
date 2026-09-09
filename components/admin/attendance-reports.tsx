@@ -400,7 +400,7 @@ export function AttendanceReports({
     fetchDepartments()
     fetchLocations()
     fetchDistricts()
-  }, [authChecked, isAuthenticated, startDate, endDate, selectedDepartment, selectedLocation, selectedRegion, selectedDistrict, selectedStatus, page, pageSize])
+  }, [authChecked, isAuthenticated, startDate, endDate, selectedDepartment, selectedLocation, selectedRegion, selectedDistrict, selectedStatus, searchQuery, page, pageSize])
 
   useEffect(() => {
     // When the Reasons tab is opened, fetch a larger set that contains all reason entries
@@ -531,6 +531,7 @@ export function AttendanceReports({
   if (selectedRegion !== "all") params.append("region_id", selectedRegion)
   if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
       if (selectedStatus !== "all") params.append("status", selectedStatus)
+      if (searchQuery.trim()) params.append("search", searchQuery.trim())
       // Pagination params
       params.append("page", String(page))
       params.append("page_size", String(pageSize))

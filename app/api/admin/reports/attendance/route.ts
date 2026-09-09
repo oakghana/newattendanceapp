@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
   const regionId = searchParams.get("region_id")
   const districtId = searchParams.get("district_id")
     const status = searchParams.get("status")
+    const staffSearch = searchParams.get("search")?.trim() || ""
 
     console.log("[v0] Reports API - Filters:", {
       startDate,
@@ -85,6 +86,31 @@ export async function GET(request: NextRequest) {
     const safeDistrictId = districtId && districtId !== "undefined" ? districtId : null
     const safeDepartmentId = departmentId && departmentId !== "undefined" ? departmentId : null
     const safeStatus = status && status !== "undefined" && status !== "all" ? status : null
+    const adminClientForScope = await createAdminClient()
+    let matchingUserIds: string[] | null = null
+
+    if (staffSearch) {
+      const searchTerm = staffSearch.replace(/[,%]/g, " ").trim()
+      const { data: matchingProfiles, error: searchError } = await adminClientForScope
+        .from("user_profiles")
+        .select("id")
+        .or([
+          `employee_id.ilike.%${searchTerm}%`,
+          `first_name.ilike.%${searchTerm}%`,
+          `last_name.ilike.%${searchTerm}%`,
+          `email.ilike.%${searchTerm}%`,
+        ].join(","))
+
+      if (searchError) {
+        console.error("[v0] Reports API - Staff search error:", searchError)
+        return NextResponse.json({ error: "Failed to search staff records" }, { status: 500 })
+      }
+
+      matchingUserIds = (matchingProfiles || []).map((match) => match.id).filter(Boolean)
+      query = matchingUserIds.length
+        ? query.in("user_id", matchingUserIds)
+        : query.eq("user_id", "00000000-0000-0000-0000-000000000000")
+    }
 
     if (normalizedRole === "staff") {
       query = query.eq("user_id", user.id)
@@ -97,7 +123,6 @@ export async function GET(request: NextRequest) {
     // regional_manager → restricted to their own assigned_location_id
     // department_head  → restricted to their own department_id
 
-    const adminClientForScope = await createAdminClient()
     let regionalScopedLocationIds: string[] | null = null
     if ((normalizedRole === "regional_manager" || normalizedRole === "regional_hr") && profile.assigned_location_id) {
       const { data: linkedDistricts } = await adminClientForScope
@@ -407,7 +432,11 @@ export async function GET(request: NextRequest) {
         .gte("check_in_time", `${startDate}T00:00:00`)
         .lte("check_in_time", `${endDate}T23:59:59`)
 
-      if (normalizedRole === "staff") {
+      if (matchingUserIds) {
+        countQuery = matchingUserIds.length
+          ? countQuery.in("user_id", matchingUserIds)
+          : countQuery.eq("user_id", "00000000-0000-0000-0000-000000000000")
+      } else if (normalizedRole === "staff") {
         countQuery = countQuery.eq("user_id", user.id)
       } else if (userId) {
         countQuery = countQuery.eq("user_id", userId)
