@@ -338,6 +338,31 @@ export function AttendanceReports({
     return 'Unknown Staff'
   }
 
+  const getStaffSearchText = (record: AttendanceRecord) => {
+    const profile = record.user_profiles as (AttendanceRecord["user_profiles"] & {
+      email?: string
+      full_name?: string
+      name?: string
+      display_name?: string
+      position?: string
+    }) | undefined
+    const values = [
+      extractFullNameFromProfile(profile),
+      profile?.first_name,
+      profile?.last_name,
+      profile?.full_name,
+      profile?.name,
+      profile?.display_name,
+      profile?.email,
+      profile?.employee_id,
+      profile?.position,
+      record.user_id,
+      displayUserLabel(record),
+    ]
+
+    return values.filter(Boolean).map((value) => String(value).trim().toLowerCase()).join(' ')
+  }
+
 
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
@@ -907,21 +932,20 @@ export function AttendanceReports({
 
     // Search filter
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim()
-      filtered = filtered.filter((r) => {
-        const fullName = `${r.user_profiles?.first_name || ""} ${r.user_profiles?.last_name || ""}`.toLowerCase()
-        const employeeId = r.user_profiles?.employee_id?.toLowerCase() || ""
-        const department = r.user_profiles?.departments?.name?.toLowerCase() || ""
-        const assignedLocation = r.user_profiles?.assigned_location?.name?.toLowerCase() || ""
-        const district = r.user_profiles?.assigned_location?.districts?.name?.toLowerCase() || ""
+      const query = searchQuery.trim().toLowerCase()
+      filtered = filtered.filter((record) => {
+        const profile = record.user_profiles as (AttendanceRecord["user_profiles"] & {
+          departments?: { name?: string }
+          assigned_location?: { name?: string; districts?: { name?: string } }
+        }) | undefined
+        const searchableText = [
+          getStaffSearchText(record),
+          profile?.departments?.name,
+          profile?.assigned_location?.name,
+          profile?.assigned_location?.districts?.name,
+        ].filter(Boolean).join(' ').toLowerCase()
 
-        return (
-          fullName.includes(query) ||
-          employeeId.includes(query) ||
-          department.includes(query) ||
-          assignedLocation.includes(query) ||
-          district.includes(query)
-        )
+        return searchableText.includes(query)
       })
     }
 
@@ -934,11 +958,7 @@ export function AttendanceReports({
     let r = filteredRecords
     if (colFilter.employee.trim()) {
       const q = colFilter.employee.trim().toLowerCase()
-      r = r.filter((rec) => {
-        const name = displayUserLabel(rec).toLowerCase()
-        const eid = (rec.user_profiles?.employee_id || '').toLowerCase()
-        return name.includes(q) || eid.includes(q)
-      })
+      r = r.filter((rec) => getStaffSearchText(rec).includes(q))
     }
     if (colFilter.department.trim()) {
       const q = colFilter.department.trim().toLowerCase()
