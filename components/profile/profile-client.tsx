@@ -834,7 +834,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                     <img 
                       src={signatureDataUrl} 
                       alt="Your saved signature" 
-                      className="max-h-32 max-w-full object-contain"
+                      className="mx-auto max-h-32 max-w-full object-contain"
                     />
                   </div>
                   <div className="flex gap-2">
@@ -911,7 +911,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                       />
                       {signatureDataUrl && (
                         <div className="mt-3 p-3 bg-white border rounded">
-                          <img src={signatureDataUrl} alt="Uploaded signature" className="max-h-24 max-w-full" />
+                          <img src={signatureDataUrl} alt="Uploaded signature" className="mx-auto max-h-24 max-w-full object-contain" />
                         </div>
                       )}
                     </div>
@@ -932,7 +932,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                     setIsSavingSignature(true)
                     try {
                       console.log("[v0] Saving signature to /api/user/signature-save")
-                      
+
                       const response = await fetch("/api/user/signature-save", {
                         method: "POST",
                         headers: {
@@ -947,11 +947,13 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                       console.log("[v0] Signature save response:", result)
 
                       if (!response.ok) {
+                        if (response.status === 401) {
+                          throw new Error("Your session has expired. Please sign in again and try saving your signature.")
+                        }
                         throw new Error(result.error || `Failed to save signature: ${response.statusText}`)
                       }
 
                       toast.success("Signature saved successfully! You can now use it to sign documents.")
-                      // Keep the saved signature displayed and reset mode to null to show it
                       setSignatureDataUrl(result.signature?.signature_data_url || signatureDataUrl)
                       setSignatureMode(null as any)
                     } catch (err) {

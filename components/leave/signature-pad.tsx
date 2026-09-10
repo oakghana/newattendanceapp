@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { getSignatureHologramText } from "@/lib/signature-hologram"
 
 interface SignaturePadProps {
   value?: string | null
@@ -12,7 +13,7 @@ export function SignaturePad({ value, onChange }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const drawingRef = useRef(false)
   const lastPointRef = useRef<{ x: number; y: number } | null>(null)
-  const [hologram] = useState("QCC-LOANLEAVE-APP")
+  const [hologram] = useState(getSignatureHologramText())
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -145,12 +146,12 @@ export function SignaturePad({ value, onChange }: SignaturePadProps) {
 
 function drawHologramOverlay(ctx: CanvasRenderingContext2D, width: number, height: number, hologram: string) {
   ctx.save()
-  // Keep the hologram visibly embedded in every signature to deter reuse while preserving the signer’s mark.
-  ctx.globalAlpha = 0.22
-  ctx.fillStyle = "#0284c7"
-  ctx.font = "bold 15px monospace"
-  ctx.translate(width * 0.62, height * 0.72)
-  ctx.rotate((-18 * Math.PI) / 180)
+  ctx.globalAlpha = 0.45
+  ctx.fillStyle = "#0f766e"
+  ctx.font = "bold 17px monospace"
+  ctx.textAlign = "center"
+  ctx.translate(width * 0.52, height * 0.65)
+  ctx.rotate((-16 * Math.PI) / 180)
   ctx.fillText(hologram, 0, 0)
   ctx.restore()
 }

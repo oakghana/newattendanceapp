@@ -1416,9 +1416,9 @@ export function TransportRequestRegister({
                           />
                           <span
                             aria-hidden="true"
-                            className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-12 whitespace-nowrap font-mono text-[11px] font-bold tracking-[0.18em] text-sky-600/50 mix-blend-multiply"
+                            className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-12 whitespace-nowrap font-mono text-[11px] font-bold tracking-[0.2em] text-emerald-700/70 drop-shadow-[0_0_2px_rgba(255,255,255,0.9)]"
                           >
-                            QCC-LOANLEAVE-APP
+                            QCCTRANSPORT
                           </span>
                         </div>
                       ) : (

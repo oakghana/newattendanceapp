@@ -101,6 +101,7 @@ interface DefermentRecallTrackerProps {
   userRole: string
   userDepartment?: string
   userId?: string
+  onRequestSignerAssignment?: (requestId: string, type: 'deferment' | 'recall') => void
 }
 
 interface HRExecutive {
@@ -131,7 +132,7 @@ const getStatusBadge = (status: string) => {
   }
 }
 
-export function DefermentRecallTracker({ type, userRole, userDepartment, userId }: DefermentRecallTrackerProps) {
+export function DefermentRecallTracker({ type, userRole, userDepartment, userId, onRequestSignerAssignment }: DefermentRecallTrackerProps) {
   const { toast } = useToast()
   const [deferments, setDeferments] = useState<DefermentRequest[]>([])
   const [recalls, setRecalls] = useState<RecallRequest[]>([])
@@ -495,11 +496,22 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
               </div>
             </div>
             
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-wrap gap-2 pt-2">
               <Button size="sm" variant="outline" className="gap-2">
                 <Eye className="h-4 w-4" />
                 View Details
               </Button>
+              {isHrLeaveOffice && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-2 border-blue-200 text-blue-700 hover:bg-blue-50"
+                  onClick={() => onRequestSignerAssignment?.(req.id, 'deferment')}
+                >
+                  <CheckCircle className="h-4 w-4" />
+                  Assign Signer
+                </Button>
+              )}
               {req.status === 'pending' && isHrLeaveOffice && (
                 <Button 
                   size="sm" 
@@ -674,11 +686,22 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
               </div>
             </div>
             
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-wrap gap-2 pt-2">
               <Button size="sm" variant="outline" className="gap-2">
                 <Eye className="h-4 w-4" />
                 View Details
               </Button>
+              {isHrLeaveOffice && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-2 border-rose-200 text-rose-700 hover:bg-rose-50"
+                  onClick={() => onRequestSignerAssignment?.(req.id, 'recall')}
+                >
+                  <CheckCircle className="h-4 w-4" />
+                  Assign Signer
+                </Button>
+              )}
               {req.status === 'pending' && isHrLeaveOffice && (
                 <Button 
                   size="sm" 

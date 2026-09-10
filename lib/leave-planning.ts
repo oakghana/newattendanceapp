@@ -131,7 +131,7 @@ export function isHrDepartment(departmentName?: string | null, departmentCode?: 
 
 export function buildHologramCode(prefix: "USR" | "HR"): string {
   void prefix
-  return "QCC-LOANLEAVE-APP"
+  return "QCCINTRANET"
 }
 
 export function calculateRequestedDays(startDate: string, endDate: string): number {

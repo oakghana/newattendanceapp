@@ -53,6 +53,12 @@ export function canManageTransport(role?: string | null): boolean {
   return isRegionalHrRole(role) || isRegionalManagerRole(role) || isChiefDriverRole(role) || isTransportManagerRole(role) || isAdminRole(role) || ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
 }
 
+/** Driver license register edit/verify: Transport Manager (nationwide) and Chief Driver (their location/region) only.
+ *  Regional Manager / Regional HR get read-only access via canManageTransport. */
+export function canEditDriverLicenses(role?: string | null): boolean {
+  return isTransportManagerRole(role) || isChiefDriverRole(role) || isAdminRole(role)
+}
+
 /** Fleet inventory edit (status, details, register): TM nationwide; RM / Regional HR regional only */
 export function canEditFleetInventory(role?: string | null): boolean {
   const normalizedRole = normalizeAppRole(role)

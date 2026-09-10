@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 import { clearAttendanceCache } from "@/lib/utils/attendance-cache"
 import { clearGeolocationCache } from "@/lib/geolocation"
 
@@ -10,12 +9,11 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import Image from "next/image"
 import { useNotifications } from "@/components/ui/notification-system"
-import { ArrowLeft, CheckCircle2, Eye, EyeOff, KeyRound, Lock, Mail, ShieldCheck } from "lucide-react"
+import { CheckCircle2, Eye, EyeOff, Lock, Mail } from "lucide-react"
 import { getPasswordEnforcementMessage, isPasswordChangeRequired } from "@/lib/security"
 import { DEFAULT_RUNTIME_FLAGS, type RuntimeFlags } from "@/lib/runtime-flags"
 
@@ -33,10 +31,7 @@ export default function LoginPage() {
   const [identifier, setIdentifier] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
-  const [otpEmail, setOtpEmail] = useState("")
-  const [otp, setOtp] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [otpSent, setOtpSent] = useState(false)
   const router = useRouter()
 
   const { showFieldError, showSuccess, showError, showWarning } = useNotifications()
@@ -302,263 +297,6 @@ export default function LoginPage() {
     }
   }
 
-  const handleSendOtp = async (event?: React.SyntheticEvent) => {
-    event?.preventDefault()
-    setIsLoading(true)
-
-    try {
-      const email = String(otpEmail ?? "").trim().toLowerCase()
-
-      if (!email) {
-        showFieldError("Email", "Please enter your email address")
-        return
-      }
-
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        showFieldError("Email", "Please enter a valid email address")
-        return
-      }
-
-      setOtpEmail(email)
-      console.log("[v0] Attempting to validate email:", email)
-      let validationError: string | null = null
-      let emailValidated = false
-
-      try {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
-
-        const validateResponse = await fetch("/api/auth/validate-email", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({ email }),
-          signal: controller.signal,
-        })
-
-        clearTimeout(timeoutId)
-
-        if (validateResponse.ok) {
-          const validateResult = await validateResponse.json()
-
-          if (!validateResult.exists) {
-            validationError = "This email is not registered in the QCC system. Please contact your administrator."
-          } else if (!validateResult.approved) {
-            validationError = "Your account is pending admin approval. Please wait for activation."
-          } else {
-            emailValidated = true
-          }
-        } else {
-          console.log("[v0] Email validation API returned error status:", validateResponse.status)
-          // Continue anyway - let Supabase handle the validation
-        }
-      } catch (fetchError) {
-        console.log("[v0] Email validation API failed, will attempt OTP send anyway:", fetchError)
-        // Continue anyway - let Supabase handle the validation
-      }
-
-      // If validation explicitly failed (email not found or not approved), show error
-      if (validationError) {
-        showFieldError("Email", validationError)
-        return
-      }
-
-      // Proceed with OTP sending (either validation passed or we're using fallback)
-      console.log("[v0] Sending OTP to:", email)
-      const supabase = createClient()
-      let deliveryTimeoutId: number | undefined
-      const deliveryTimeout = new Promise<never>((_, reject) => {
-        deliveryTimeoutId = window.setTimeout(
-          () => reject(new Error("The OTP delivery request timed out. Check your connection and try again.")),
-          15000,
-        )
-      })
-      const otpResult = await Promise.race([
-        supabase.auth.signInWithOtp({
-          email,
-          options: {
-            emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
-            shouldCreateUser: false,
-          },
-        }),
-        deliveryTimeout,
-      ])
-      if (deliveryTimeoutId !== undefined) {
-        window.clearTimeout(deliveryTimeoutId)
-      }
-
-      console.log("[v0] Supabase OTP result:", otpResult)
-
-      if (otpResult.error) {
-        const otpErrorMessage = otpResult.error.message.toLowerCase()
-
-        if (otpErrorMessage.includes("email rate limit exceeded")) {
-          showFieldError("Email", "Too many OTP requests. Please wait 5 minutes before trying again.")
-        } else if (
-          otpErrorMessage.includes("user not found") ||
-          otpErrorMessage.includes("signups not allowed")
-        ) {
-          showFieldError(
-            "Email",
-            "This email is not registered in the system. Please use password login or contact your administrator.",
-          )
-        } else if (otpErrorMessage.includes("invalid email")) {
-          showFieldError("Email", "Invalid email format. Please check your email address.")
-        } else {
-          showFieldError("Email", `Failed to send OTP: ${otpResult.error.message}`)
-        }
-        return
-      }
-
-      console.log("[v0] OTP sent successfully")
-      setOtpSent(true)
-      showSuccess(
-        emailValidated
-          ? "OTP sent to your email. Please check your inbox and enter the code below."
-          : "OTP request sent. If your email is registered, you will receive a code shortly.",
-        "OTP Sent",
-      )
-    } catch (error: unknown) {
-      const otpErrorMessage = error instanceof Error ? error.message.toLowerCase() : ""
-      if (otpErrorMessage.includes("email rate limit exceeded")) {
-        showFieldError("Email", "Too many OTP requests. Please wait 5 minutes before trying again.")
-      } else if (error instanceof Error) {
-        console.error("[v0] OTP send error:", error)
-        showError(`Failed to send OTP: ${error.message}. Please try again or use password login.`, "OTP Error")
-      } else {
-        console.error("[v0] OTP send error:", error)
-        showError("Failed to send OTP. Please try again or use password login.", "OTP Error")
-      }
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    clearPendingDeviceSharingWarning()
-
-    try {
-      if (!String(otp ?? "").trim()) {
-        showFieldError("OTP Code", "Please enter the OTP code")
-        return
-      }
-
-      if (otp.length !== 6) {
-        showFieldError("OTP Code", "OTP code must be 6 digits")
-        return
-      }
-
-      if (!/^\d{6}$/.test(otp)) {
-        showFieldError("OTP Code", "OTP code must contain only numbers")
-        return
-      }
-
-      console.log("[v0] Verifying OTP:", otp.substring(0, 2) + "****") // Log first 2 digits only for security
-      const supabase = createClient()
-      let data: any = null
-      let error: any = null
-      
-      try {
-        const result = await supabase.auth.verifyOtp({
-          email: otpEmail,
-          token: otp,
-          type: "email",
-        })
-        data = result.data
-        error = result.error
-      } catch (authError: any) {
-        // Handle AbortError silently
-        if (authError.name === "AbortError") {
-          const { data: sessionData } = await supabase.auth.getSession().catch(() => ({ data: null }))
-          if (sessionData?.session) {
-            data = { user: sessionData.session.user, session: sessionData.session }
-            error = null
-          } else {
-            throw new Error("Verification request was cancelled. Please try again.")
-          }
-        } else {
-          throw authError
-        }
-      }
-
-      if (error) {
-        if (data?.user?.id) {
-          await logLoginActivity(data.user.id, "otp_login_failed", false, "otp")
-        }
-
-        if (error.message.includes("expired")) {
-          showFieldError("OTP Code", "OTP code has expired. Please request a new one.")
-        } else if (error.message.includes("invalid")) {
-          showFieldError("OTP Code", "Invalid OTP code. Please check and try again.")
-        } else {
-          showFieldError("OTP Code", "Invalid or expired OTP code. Please try again.")
-        }
-        return
-      }
-
-      if (data?.user?.id) {
-        const approvalCheck = await checkUserApproval(data.user.id)
-
-        if (!approvalCheck.approved) {
-          await logLoginActivity(data.user.id, "otp_login_blocked_unapproved", false, "otp")
-          await supabase.auth.signOut()
-          showWarning(approvalCheck.error || "Account not approved", "Account Approval Required")
-          if (approvalCheck.error?.includes("pending admin approval")) {
-            router.push("/auth/pending-approval")
-          }
-          return
-        }
-
-        const runtimeFlags = await getRuntimeFlags()
-
-        const mustChangePassword =
-          runtimeFlags.passwordEnforcementEnabled &&
-          (Boolean(data.user.user_metadata?.force_password_change) ||
-            isPasswordChangeRequired(approvalCheck.passwordChangedAt))
-
-        if (mustChangePassword) {
-          await logLoginActivity(data.user.id, "otp_password_change_required", true, "otp")
-          clearAttendanceCache()
-          clearGeolocationCache()
-          showWarning(getPasswordEnforcementMessage(), "Password Change Required")
-          setTimeout(() => {
-            window.location.href = "/dashboard/profile?forceChange=true&reason=monthly"
-          }, 800)
-          return
-        }
-
-        const { data: persistedSession } = await supabase.auth.getSession()
-        if (!persistedSession.session) {
-          showError("Your code was accepted, but the session could not be saved. Please try again.", "Session Error")
-          return
-        }
-
-        await logLoginActivity(data.user.id, "otp_login_success", true, "otp")
-        clearAttendanceCache()
-        clearGeolocationCache()
-
-        console.log("[v0] OTP verification successful")
-        showSuccess("OTP verified successfully! Redirecting to dashboard...", "Login Successful")
-
-        // All roles go to attendance check-in page (same as every other role)
-        const dashboardUrl = "/dashboard/attendance"
-
-        // Wait longer for Supabase to properly set and persist cookies
-        setTimeout(() => {
-          window.location.href = dashboardUrl
-        }, 800)
-      }
-    } catch (error: unknown) {
-      showFieldError("OTP Code", error instanceof Error ? error.message : "Invalid OTP code")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   return (
     <div className="relative isolate min-h-screen overflow-hidden bg-[linear-gradient(135deg,hsl(var(--background))_0%,hsl(var(--background))_45%,hsl(var(--muted))_100%)] p-4 sm:p-6">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-[radial-gradient(ellipse_at_top,hsl(var(--primary)/0.14),transparent_68%)]" />
@@ -589,28 +327,7 @@ export default function LoginPage() {
             </div>
           </CardHeader>
           <CardContent className="px-5 pb-7 pt-6 sm:px-9 sm:pb-9">
-            <Tabs defaultValue="password" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 bg-muted/40 p-1 rounded-xl h-11 sm:h-12 transition-all border border-border/20">
-                <TabsTrigger
-                  value="password"
-                  className="text-sm sm:text-base font-medium transition-all duration-200 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-primary/30"
-                >
-                  <Lock className="h-4 w-4 mr-1.5" />
-                  <span className="hidden sm:inline">Password</span>
-                  <span className="sm:hidden">Login</span>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="otp"
-                  className="text-sm sm:text-base font-medium transition-all duration-200 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-primary/30"
-                >
-                  <Mail className="h-4 w-4 mr-1.5" />
-                  <span className="hidden sm:inline">OTP</span>
-                  <span className="sm:hidden">Code</span>
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="password" className="space-y-5 mt-6 sm:space-y-6 fade-in">
-                <form onSubmit={handleLogin} className="space-y-5 sm:space-y-6 stagger-children">
+            <form onSubmit={handleLogin} className="space-y-5 sm:space-y-6 stagger-children">
                   <div className="space-y-2.5">
                     <Label htmlFor="identifier" className="text-sm font-medium text-foreground flex items-center gap-2">
                       <Mail className="h-4 w-4 text-primary/60" />
@@ -676,111 +393,7 @@ export default function LoginPage() {
                       </>
                     )}
                   </Button>
-                </form>
-              </TabsContent>
-
-              <TabsContent value="otp" className="space-y-6 mt-6 fade-in">
-                {!otpSent ? (
-                  <form onSubmit={handleSendOtp} className="space-y-6">
-                    <div className="space-y-2.5">
-                      <Label htmlFor="otpEmail" className="flex items-center gap-2 text-sm font-medium text-foreground">
-                        <Mail className="h-4 w-4 text-primary/70" />
-                        Corporate Email Address
-                      </Label>
-                      <Input
-                        id="otpEmail"
-                        type="email"
-                        placeholder="your.email@qccgh.com"
-                        value={otpEmail}
-                        onChange={(e) => setOtpEmail(e.target.value)}
-                        required
-                        className="h-12 rounded-lg border-border/50 bg-input/60 text-base focus:border-primary focus:ring-2 focus:ring-primary/20"
-                      />
-                      <p className="text-xs leading-5 text-muted-foreground">We will send a six-digit code to your registered work email.</p>
-                    </div>
-                    <Button
-                      type="submit"
-                      className="h-12 w-full gap-2 rounded-lg bg-primary font-semibold text-primary-foreground shadow-md transition-all hover:bg-primary/90 hover:shadow-lg"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? "Sending code..." : <><KeyRound className="h-4 w-4" /> Send secure code</>}
-                    </Button>
-                  </form>
-                ) : (
-                  <form onSubmit={handleVerifyOtp} className="space-y-6">
-                    <div className="space-y-4">
-                      <Label htmlFor="otp" className="flex items-center gap-2 text-sm font-medium text-foreground">
-                        <ShieldCheck className="h-4 w-4 text-primary/70" />
-                        Enter OTP Code
-                      </Label>
-                      <div className="flex justify-center">
-                        <InputOTP maxLength={6} value={otp} onChange={(value) => setOtp(value)} className="gap-2">
-                          <InputOTPGroup>
-                            <InputOTPSlot
-                              index={0}
-                              className="w-12 h-12 text-lg border-border focus:border-primary focus:ring-primary bg-input"
-                            />
-                            <InputOTPSlot
-                              index={1}
-                              className="w-12 h-12 text-lg border-border focus:border-primary focus:ring-primary bg-input"
-                            />
-                            <InputOTPSlot
-                              index={2}
-                              className="w-12 h-12 text-lg border-border focus:border-primary focus:ring-primary bg-input"
-                            />
-                            <InputOTPSlot
-                              index={3}
-                              className="w-12 h-12 text-lg border-border focus:border-primary focus:ring-primary bg-input"
-                            />
-                            <InputOTPSlot
-                              index={4}
-                              className="w-12 h-12 text-lg border-border focus:border-primary focus:ring-primary bg-input"
-                            />
-                            <InputOTPSlot
-                              index={5}
-                              className="w-12 h-12 text-lg border-border focus:border-primary focus:ring-primary bg-input"
-                            />
-                          </InputOTPGroup>
-                        </InputOTP>
-                      </div>
-                      <p className="text-center text-xs leading-5 text-muted-foreground">
-                        Enter the six-digit code sent to <span className="font-medium text-foreground">{otpEmail}</span>. Check spam if it is not in your inbox.
-                      </p>
-                    </div>
-                    <Button
-                      type="submit"
-                      className="h-12 w-full gap-2 rounded-lg bg-primary font-semibold text-primary-foreground shadow-md transition-all hover:bg-primary/90 hover:shadow-lg"
-                      disabled={isLoading || otp.length !== 6}
-                    >
-                      {isLoading ? "Verifying..." : <><ShieldCheck className="h-4 w-4" /> Verify and sign in</>}
-                    </Button>
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-12 flex-1 gap-1.5 border-border text-foreground hover:bg-muted bg-transparent"
-                        onClick={() => {
-                          setOtpSent(false)
-                          setOtp("")
-                          setSuccessMessage(null)
-                        }}
-                      >
-                        <ArrowLeft className="h-4 w-4" /> Edit email
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-12 flex-1 border-primary text-primary hover:bg-primary hover:text-primary-foreground bg-transparent"
-                        onClick={handleSendOtp}
-                        disabled={isLoading}
-                      >
-                        {isLoading ? "Sending..." : "Resend OTP"}
-                      </Button>
-                    </div>
-                  </form>
-                )}
-              </TabsContent>
-            </Tabs>
+            </form>
 
             <div className="mt-8 text-center">
               <p className="text-sm leading-6 text-muted-foreground">Need access? Contact your IT Manager or Regional IT Head.</p>

@@ -2441,6 +2441,7 @@ export function LeaveManagementClient({
                     userRole={userRole}
                     userDepartment={userDepartment ?? ""}
                     userId={userId}
+                    onRequestSignerAssignment={openSignerAssignDialog}
                   />
                 </CardContent>
               </Card>
@@ -2859,6 +2860,7 @@ export function LeaveManagementClient({
                     userRole={userRole}
                     userDepartment={userDepartment ?? ""}
                     userId={userId}
+                    onRequestSignerAssignment={openSignerAssignDialog}
                   />
                 </CardContent>
               </Card>
@@ -3308,6 +3310,106 @@ export function LeaveManagementClient({
           <DialogFooter>
             <Button variant="outline" onClick={closeEditDialog}>Cancel</Button>
             <Button onClick={handleUpdateLeaveRequest}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(signerAssignId)} onOpenChange={(open) => { if (!open) closeSignerAssignDialog() }}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Assign HR Signer</DialogTitle>
+            <DialogDescription>
+              Select the authorised HR officer to sign this {signerAssignType || "request"} memo and record the signing date.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-slate-700">HR signatory</Label>
+              <div className="space-y-2">
+                <select
+                  value={selectedSignerUser?.id ?? ""}
+                  onChange={(e) => {
+                    const selected = hrSignerCandidates.find((candidate) => candidate.id === e.target.value)
+                    if (!selected) {
+                      setSelectedSignerUser(null)
+                      setSignerName("")
+                      setSignerTitle("")
+                      return
+                    }
+                    handleSelectSigner(selected)
+                  }}
+                  className="w-full h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-emerald-500"
+                  disabled={loadingSignerCandidates}
+                >
+                  <option value="">{loadingSignerCandidates ? "Loading HR officers..." : "Choose an HR signatory"}</option>
+                  {hrSignerCandidates.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {`${candidate.first_name || ""} ${candidate.last_name || ""}`.trim() || candidate.name || candidate.email || "HR Officer"} — {candidate.position || "HR Office"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="signer_name" className="text-sm font-medium text-slate-700">Signer name</Label>
+                <Input
+                  id="signer_name"
+                  value={signerName}
+                  onChange={(e) => setSignerName(e.target.value)}
+                  placeholder="Enter signatory name"
+                  className="h-10"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="signer_title" className="text-sm font-medium text-slate-700">Title</Label>
+                <Input
+                  id="signer_title"
+                  value={signerTitle}
+                  onChange={(e) => setSignerTitle(e.target.value)}
+                  placeholder="e.g. Human Resource Manager"
+                  className="h-10"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="signer_write_date" className="text-sm font-medium text-slate-700">Signature date</Label>
+              <Input
+                id="signer_write_date"
+                type="date"
+                value={signerWriteDate}
+                onChange={(e) => setSignerWriteDate(e.target.value)}
+                className="h-10"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="signer_notes" className="text-sm font-medium text-slate-700">Notes (optional)</Label>
+              <Textarea
+                id="signer_notes"
+                value={signerNotes}
+                onChange={(e) => setSignerNotes(e.target.value)}
+                rows={3}
+                placeholder="Optional internal notes or forwarding comments"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={closeSignerAssignDialog} disabled={isSavingSigner}>Cancel</Button>
+            <Button onClick={saveSignerAssignment} disabled={isSavingSigner || !signerName.trim()} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+              {isSavingSigner ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Signer"
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return NextResponse.json({ error: "Your session has expired. Please sign in again." }, { status: 401 })
     }
 
     const body = await request.json()
@@ -93,72 +93,68 @@ export async function POST(request: NextRequest) {
     // Save signature to BOTH user_profiles AND approval_signature_registry
     // user_profiles is the primary permanent storage, approval_signature_registry is for workflow approvals
     console.log("[v0] Saving signature for user:", user.id, "Blob URL:", signatureUrl)
-    
-    try {
-      // FIRST: Update user_profiles with the signature (PRIMARY persistent storage)
-      console.log("[v0] Updating user_profiles with signature for user:", user.id)
-      const { error: profileUpdateError } = await admin
-        .from("user_profiles")
-        .update({
-          signature_data_url: signatureUrl,
-          signature_updated_at: new Date().toISOString(),
-          signature_mode: "draw",
-        })
-        .eq("id", user.id)
 
-      if (profileUpdateError) {
-        console.error("[v0] Error updating user_profiles:", profileUpdateError)
-        throw new Error(`Failed to save to profile: ${profileUpdateError.message}`)
-      }
-
-      console.log("[v0] Signature saved to user_profiles successfully")
-
-      // SECOND: Also save to approval_signature_registry for workflow approvals
-      // Delete existing signature for this user to avoid duplicates
-      const { error: deleteError } = await admin
-        .from("approval_signature_registry")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("workflow_domain", "loan")
-        .eq("approval_stage", "director_hr")
-
-      if (deleteError && deleteError.code !== "PGRST116") {
-        console.warn("[v0] Warning deleting old signature from registry:", deleteError)
-      }
-
-      // Insert new signature into approval_signature_registry
-      const { data: result, error: insertError } = await admin
-        .from("approval_signature_registry")
-        .insert({
-          user_id: user.id,
-          signature_data_url: signatureUrl,
-          is_active: true,
-          workflow_domain: "loan",
-          approval_stage: "director_hr",
-          signature_mode: "draw",
-        })
-        .select()
-        .single()
-
-      if (insertError) {
-        console.error("[v0] Database error inserting to approval_signature_registry:", {
-          code: insertError.code,
-          message: insertError.message,
-          details: insertError.details,
-        })
-        throw new Error(`Database error: ${insertError.message || insertError.code}`)
-      }
-
-      console.log("[v0] Signature saved successfully to both tables")
-
-      return NextResponse.json({
-        success: true,
-        message: "Signature saved successfully and backed up to cloud storage",
-        signature: result,
+    // FIRST: Update user_profiles with the signature (PRIMARY persistent storage)
+    console.log("[v0] Updating user_profiles with signature for user:", user.id)
+    const { error: profileUpdateError } = await admin
+      .from("user_profiles")
+      .update({
+        signature_data_url: signatureUrl,
+        signature_updated_at: new Date().toISOString(),
+        signature_mode: "draw",
       })
-    } catch (err) {
-      throw err
+      .eq("id", user.id)
+
+    if (profileUpdateError) {
+      console.error("[v0] Error updating user_profiles:", profileUpdateError)
+      throw new Error(`Failed to save to profile: ${profileUpdateError.message}`)
     }
+
+    console.log("[v0] Signature saved to user_profiles successfully")
+
+    // SECOND: Also save to approval_signature_registry for workflow approvals
+    // Delete existing signature for this user to avoid duplicates
+    const { error: deleteError } = await admin
+      .from("approval_signature_registry")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("workflow_domain", "loan")
+      .eq("approval_stage", "director_hr")
+
+    if (deleteError && deleteError.code !== "PGRST116") {
+      console.warn("[v0] Warning deleting old signature from registry:", deleteError)
+    }
+
+    // Insert new signature into approval_signature_registry
+    const { data: result, error: insertError } = await admin
+      .from("approval_signature_registry")
+      .insert({
+        user_id: user.id,
+        signature_data_url: signatureUrl,
+        is_active: true,
+        workflow_domain: "loan",
+        approval_stage: "director_hr",
+        signature_mode: "draw",
+      })
+      .select()
+      .single()
+
+    if (insertError) {
+      console.error("[v0] Database error inserting to approval_signature_registry:", {
+        code: insertError.code,
+        message: insertError.message,
+        details: insertError.details,
+      })
+      throw new Error(`Database error: ${insertError.message || insertError.code}`)
+    }
+
+    console.log("[v0] Signature saved successfully to both tables")
+
+    return NextResponse.json({
+      success: true,
+      message: "Signature saved successfully and backed up to cloud storage",
+      signature: result,
+    })
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err)
     console.error("[v0] Error saving signature:", error)

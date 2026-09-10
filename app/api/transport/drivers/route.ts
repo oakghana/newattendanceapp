@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { canManageTransport, isRegionalHrRole } from "@/lib/role-capabilities"
+import { canEditDriverLicenses, canManageTransport, isRegionalHrRole } from "@/lib/role-capabilities"
 
 async function actor() {
   const supabase = await createClient()
@@ -62,6 +62,7 @@ export async function PATCH(request: Request) {
   }
   const id = String(body.id ?? "")
   const verificationStatus = String(body.verification_status ?? "")
+  if (!canEditDriverLicenses(profile.role)) return NextResponse.json({ error: "Your role has read-only access to driver licenses." }, { status: 403 })
   if (!id || !["pending", "verified", "needs_correction"].includes(verificationStatus)) return NextResponse.json({ error: "Invalid verification request." }, { status: 400 })
   const { data: existing } = await supabase.from("transport_drivers").select("assigned_region_id").eq("id", id).single()
   if (!existing || (profile.region_id && existing.assigned_region_id !== profile.region_id)) return NextResponse.json({ error: "This driver is outside your assigned region." }, { status: 403 })
