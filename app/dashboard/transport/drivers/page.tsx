@@ -24,9 +24,9 @@ export default async function DriverLicensesPage() {
   if (isScopedToRegion && regionId) driversQuery = driversQuery.eq("assigned_region_id", regionId)
   const { data: drivers } = await driversQuery
   const canEdit = !isDriver && canEditDriverLicenses(profile.role)
-  // Only the roles that can act on the register need the "missing license" roster to prompt drivers who have not uploaded.
-  let missingDrivers: { id: string; full_name: string }[] = []
-  if (!isDriver && canEdit) {
+  // Every non-driver viewer (including read-only regional roles) should see drivers who have not submitted a license, not just those with a record.
+  let driversForDisplay = drivers ?? []
+  if (!isDriver) {
     const missingQuery = supabase
       .from("user_profiles")
       .select("id, first_name, last_name, employee_id, region_id, geofence_locations!user_profiles_assigned_location_id_fkey(districts(region_id))")
@@ -34,14 +34,23 @@ export default async function DriverLicensesPage() {
       .eq("is_active", true)
     const { data: driverProfiles } = await missingQuery
     const scopedDriverProfiles = (driverProfiles ?? []).filter((p: any) => {
-      if (!isChiefDriverRole(profile.role) || !regionId) return true
+      if (!isScopedToRegion || !regionId) return true
       const profileRegionId = p.region_id ?? (p.geofence_locations as { districts?: { region_id?: string | null } | null } | null)?.districts?.region_id ?? null
       return profileRegionId === regionId
     })
-    const uploadedIds = new Set((drivers ?? []).filter((d: any) => d.license_document_url).map((d: any) => d.profile_id))
-    missingDrivers = scopedDriverProfiles
-      .filter((p: any) => !uploadedIds.has(p.id))
-      .map((p: any) => ({ id: p.id, full_name: [p.first_name, p.last_name].filter(Boolean).join(" ") || p.employee_id || "Driver" }))
+    const registeredProfileIds = new Set((drivers ?? []).map((d: any) => d.profile_id))
+    const missingRows = scopedDriverProfiles
+      .filter((p: any) => !registeredProfileIds.has(p.id))
+      .map((p: any) => ({
+        id: `missing-${p.id}`,
+        profile_id: p.id,
+        full_name: [p.first_name, p.last_name].filter(Boolean).join(" ") || p.employee_id || "Driver",
+        license_number: "",
+        expiry_date: null,
+        verification_status: "not_submitted",
+        license_document_url: null,
+      }))
+    driversForDisplay = [...(drivers ?? []), ...missingRows]
   }
   const { data: ownDriver } = isDriver
     ? await supabase.from("transport_drivers").select("*").eq("profile_id", user.id).maybeSingle()
@@ -65,5 +74,5 @@ export default async function DriverLicensesPage() {
   const normalizedTasks = isRegionalDriver
     ? (driverTasks ?? []).map((task: any) => ({ ...task, required_at: task.event_date, persons_requiring_transport: task.passenger_count, department: task.reference_number }))
     : driverTasks ?? []
-  return <DriverLicenseWorkspace initialDrivers={isDriver ? (ownDriver ? [ownDriver] : []) : (drivers ?? [])} canEdit={canEdit} missingDrivers={missingDrivers} role={isDriver ? "driver" : normalizedRole} assignedTasks={normalizedTasks} readOnlyTasks={isRegionalDriver} />
+  return <DriverLicenseWorkspace initialDrivers={isDriver ? (ownDriver ? [ownDriver] : []) : driversForDisplay} canEdit={canEdit} role={isDriver ? "driver" : normalizedRole} assignedTasks={normalizedTasks} readOnlyTasks={isRegionalDriver} />
 }

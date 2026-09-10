@@ -458,7 +458,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
     )
   }
 
-  const userInitials = `${profile.first_name[0]}${profile.last_name[0]}`
+  const userInitials = `${profile.first_name?.[0] ?? ""}${profile.last_name?.[0] ?? ""}` || "?"
   const normalizedRole = normalizeAppRole(profile.role)
   const canEditGlobalLeaveSettings = canManageGlobalPolicies(normalizedRole) && canManageHolidays(normalizedRole)
 
