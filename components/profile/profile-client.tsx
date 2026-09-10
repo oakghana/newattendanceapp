@@ -22,7 +22,7 @@ import { processSignatureImage } from "@/lib/process-signature-image"
 import { useToast } from "@/hooks/use-toast"
 import { getPasswordEnforcementMessage, validatePassword } from "@/lib/security"
 import { displayRole } from "@/lib/role-mapping"
-import { canManageHolidays, canManageGlobalPolicies, normalizeAppRole } from "@/lib/role-capabilities"
+import { canManageHolidays, canManageGlobalPolicies, canManageOwnSignature, normalizeAppRole } from "@/lib/role-capabilities"
 import { toast } from "sonner"
 
 interface UserProfile {
@@ -111,7 +111,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
       const reason = searchParams?.get?.("reason")
       const tab = searchParams?.get?.("tab")
       
-      if (tab === "signature") {
+      if (tab === "signature" && canManageOwnSignature(initialProfile?.role)) {
         setActiveTab("signature")
       } else if (force) {
         setShowPasswordChange(true)
@@ -122,7 +122,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
     } catch (e) {
       // ignore
     }
-  }, [searchParams])
+  }, [initialProfile?.role, searchParams])
 
   // Load existing signature when Signature tab is active
   useEffect(() => {
@@ -461,6 +461,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
   const userInitials = `${profile.first_name?.[0] ?? ""}${profile.last_name?.[0] ?? ""}` || "?"
   const normalizedRole = normalizeAppRole(profile.role)
   const canEditGlobalLeaveSettings = canManageGlobalPolicies(normalizedRole) && canManageHolidays(normalizedRole)
+  const canUseSignature = canManageOwnSignature(normalizedRole)
 
   return (
     <div className="min-w-0 w-full max-w-full overflow-x-hidden space-y-6">
@@ -491,7 +492,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="flex w-full min-w-0 flex-wrap gap-1 overflow-x-auto p-1">
           <TabsTrigger value="profile">Profile Info</TabsTrigger>
-          <TabsTrigger value="signature">Signature</TabsTrigger>
+          {canUseSignature && <TabsTrigger value="signature">Signature</TabsTrigger>}
           <TabsTrigger value="security">Security & Preferences</TabsTrigger>
           <TabsTrigger value="attendance">Attendance History</TabsTrigger>
           <TabsTrigger value="summary">Quick Summary</TabsTrigger>
@@ -794,8 +795,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
           </Card>
         </TabsContent>
 
-        {/* Signature Tab - For all users who need to sign documents */}
-        <TabsContent value="signature" className="space-y-6">
+        {canUseSignature && <TabsContent value="signature" className="space-y-6">
             <Card className="border-green-200 bg-green-50">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-green-900">
@@ -973,7 +973,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
               ) : null}
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent>}
 
         <TabsContent value="security" className="space-y-6">
           {/* Password Change Section */}

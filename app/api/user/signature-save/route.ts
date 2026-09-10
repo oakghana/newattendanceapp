@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { put, del } from "@vercel/blob"
+import { canManageOwnSignature } from "@/lib/role-capabilities"
+
+async function requireSignatureRole(admin: Awaited<ReturnType<typeof createAdminClient>>, userId: string) {
+  const { data: profile } = await admin.from("user_profiles").select("role").eq("id", userId).single()
+  return canManageOwnSignature(profile?.role)
+}
 
 /**
  * POST: Save user signature to approval_signature_registry
@@ -18,6 +24,10 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: "Your session has expired. Please sign in again." }, { status: 401 })
+    }
+
+    if (!(await requireSignatureRole(admin, user.id))) {
+      return NextResponse.json({ error: "Your role is not authorized to save a signature." }, { status: 403 })
     }
 
     const body = await request.json()
@@ -173,6 +183,10 @@ export async function GET(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    if (!(await requireSignatureRole(admin, user.id))) {
+      return NextResponse.json({ error: "Your role is not authorized to access a saved signature." }, { status: 403 })
     }
 
     console.log("[v0] Fetching signature for user:", user.id)

@@ -1,5 +1,6 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { NextResponse, NextRequest } from "next/server"
+import { canManageOwnSignature } from "@/lib/role-capabilities"
 
 /**
  * Quick signature save endpoint for HR executives
@@ -32,6 +33,11 @@ export async function POST(request: NextRequest) {
 
     const admin = await createAdminClient()
     const userId = user.id
+
+    const { data: roleProfile } = await admin.from("user_profiles").select("role").eq("id", userId).single()
+    if (!canManageOwnSignature(roleProfile?.role)) {
+      return NextResponse.json({ error: "Your role is not authorized to save a signature." }, { status: 403 })
+    }
 
     console.log("[v0] Attempting to save signature for user:", userId)
 

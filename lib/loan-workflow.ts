@@ -180,7 +180,7 @@ export function canDoCommittee(role: string): boolean {
 
 export function canDoHrOffice(role: string, deptName?: string | null, deptCode?: string | null): boolean {
   const nr = normalizeRole(role)
-  return isAdminRole(nr) || nr === "hr_officer" || nr === "manager_hr" || nr === "loan_office" || nr === "hr_loan_office" || isHrDepartment(deptName, deptCode)
+  return isAdminRole(nr) || nr === "hr_officer" || nr === "manager_hr" || nr === "loan_office" || nr === "hr_loan_office" || nr === "hr_executive" || nr === "hr" || isHrDepartment(deptName, deptCode)
 }
 
 export function canDoDirectorHr(role: string, deptName?: string | null, deptCode?: string | null): boolean {

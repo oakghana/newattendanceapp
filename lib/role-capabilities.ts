@@ -108,9 +108,46 @@ export function isAdminRole(role?: string | null): boolean {
   return ADMIN_ROLES.includes(normalizeAppRole(role) as (typeof ADMIN_ROLES)[number])
 }
 
+export function canManageOwnSignature(role?: string | null): boolean {
+  const normalized = normalizeAppRole(role)
+  return (
+    isAdminRole(normalized) ||
+    [
+      "department_head",
+      "hod",
+      "regional_manager",
+      "managing_director",
+      "hr",
+      "hr_executive",
+      "hr_executive_officer",
+      "manager_hr",
+      "director_hr",
+      "hr_manager",
+      "hr_director",
+    ].includes(normalized)
+  )
+}
+
+export function isHrExecutiveRole(role?: string | null): boolean {
+  const normalized = normalizeAppRole(role)
+  const raw = String(role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
+  return [
+    "hr",
+    "hr_executive",
+    "hr_executive_officer",
+    "manager_hr",
+    "director_hr",
+    "hr_manager",
+    "hr_director",
+  ].includes(normalized) || ["hr_executive", "hr_executive_officer"].includes(raw)
+}
+
 export function canAccessMemoConsole(role?: string | null): boolean {
   const normalized = normalizeAppRole(role)
-  return ["admin", "secretary", "hr_records", "hr_records_officer", "hr_records_manager", "regional_hr", "managing_director"].includes(normalized)
+  return (
+    isHrExecutiveRole(normalized) ||
+    ["admin", "secretary", "hr_records", "hr_records_officer", "hr_records_manager", "regional_hr", "managing_director"].includes(normalized)
+  )
 }
 
 export function canEditProfile(role?: string | null): boolean {

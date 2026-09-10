@@ -19,6 +19,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { StaffLeaveHistory } from "@/components/leave/staff-leave-history"
 import { HODResumptionConfirmations } from "@/components/leave/hod-resumption-confirmations"
+import { TrackedMemoEditor } from "@/components/memo/tracked-memo-editor"
 import {
   isHrApproverRole,
   isHrLeaveOfficeRole,
@@ -1235,6 +1236,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const [hrMemoSubject, setHrMemoSubject] = useState<Record<string, string>>({})
   const [hrMemoBody, setHrMemoBody] = useState<Record<string, string>>({})
   const [hrMemoCc, setHrMemoCc] = useState<Record<string, string>>({})
+  const [hrOriginalSubject, setHrOriginalSubject] = useState<Record<string, string>>({})
+  const [hrOriginalBody, setHrOriginalBody] = useState<Record<string, string>>({})
+  const [hrOriginalCc, setHrOriginalCc] = useState<Record<string, string>>({})
   const [hrSubmitting, setHrSubmitting] = useState<string | null>(null)
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
@@ -4354,6 +4358,26 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                 </div>
                               )}
 
+                              <div className="space-y-1">
+                                <Label className="text-xs font-semibold text-slate-700">Memo subject</Label>
+                                <Input
+                                  value={officeMemoSubject[req.id] || ""}
+                                  onChange={(e) => setOfficeMemoSubject((p) => ({ ...p, [req.id]: e.target.value }))}
+                                  placeholder="Memo subject forwarded to the HR Executive"
+                                  className="h-9 bg-white"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs font-semibold text-slate-700">Memo body</Label>
+                                <Textarea
+                                  value={officeMemoBody[req.id] || ""}
+                                  onChange={(e) => setOfficeMemoBody((p) => ({ ...p, [req.id]: e.target.value }))}
+                                  placeholder="Draft the memo the HR Executive will review, edit, and sign."
+                                  rows={6}
+                                  className="resize-y text-sm bg-white leading-6"
+                                />
+                              </div>
+
                               {/* CC List */}
                               <div className="space-y-1">
                                 <Label className="text-xs font-semibold text-slate-700">CC List <span className="font-normal text-slate-400">(one per line)</span></Label>
@@ -4663,6 +4687,12 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                         if (isExpanded) { setHrExpandedId(null); return }
                                         setHrExpandedId(req.id)
                                         const tpl = buildMemoTemplate(req)
+                                        const originalSubject = req.memo_office_subject || req.memo_draft_subject || tpl.subject
+                                        const originalBody = req.memo_office_body || req.memo_draft_body || tpl.body
+                                        const originalCc = req.memo_office_cc || req.memo_draft_cc || tpl.cc
+                                        setHrOriginalSubject((p) => ({ ...p, [req.id]: p[req.id] || originalSubject }))
+                                        setHrOriginalBody((p) => ({ ...p, [req.id]: p[req.id] || originalBody }))
+                                        setHrOriginalCc((p) => ({ ...p, [req.id]: p[req.id] || originalCc }))
                                         setHrMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || tpl.subject }))
                                         setHrMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || tpl.body }))
                                         setHrMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || tpl.cc }))
@@ -4675,26 +4705,22 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                 {/* Expanded memo draft + action */}
                                 {isExpanded && (
                                   <div className="mx-5 mb-5 space-y-3 rounded-xl border border-blue-200 bg-blue-50/60 p-4">
-                                    <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Draft (Final Edit Before Issue)</p>
-                                    <div className="space-y-1">
-                                      <Label className="text-xs">Memo Subject</Label>
-                                      <Input value={hrMemoSubject[req.id] || ""}
-                                        onChange={(e) => setHrMemoSubject((p) => ({ ...p, [req.id]: e.target.value }))}
-                                        placeholder="Memo subject" className="h-9 bg-white" />
-                                    </div>
-                                    <div className="space-y-1">
-                                      <Label className="text-xs">Memo Body</Label>
-                                      <Textarea value={hrMemoBody[req.id] || ""}
-                                        onChange={(e) => setHrMemoBody((p) => ({ ...p, [req.id]: e.target.value }))}
-                                        placeholder="Finalize memo body before issuing approval."
-                                        rows={4} className="resize-none text-sm bg-white" />
-                                    </div>
-                                    <div className="space-y-1">
-                                      <Label className="text-xs">CC List (one per line)</Label>
-                                      <Textarea value={hrMemoCc[req.id] || ""}
-                                        onChange={(e) => setHrMemoCc((p) => ({ ...p, [req.id]: e.target.value }))}
-                                        placeholder="CC recipients" rows={2} className="resize-none text-sm bg-white" />
-                                    </div>
+                                    <TrackedMemoEditor
+                                      title="Final memo before issue"
+                                      originalLabel="HR Leave Office draft"
+                                      currentLabel="HR Executive"
+                                      originalSubject={hrOriginalSubject[req.id] || req.memo_office_subject || req.memo_draft_subject || ""}
+                                      originalBody={hrOriginalBody[req.id] || req.memo_office_body || req.memo_draft_body || ""}
+                                      originalCc={hrOriginalCc[req.id] || req.memo_office_cc || req.memo_draft_cc || ""}
+                                      subject={hrMemoSubject[req.id] || ""}
+                                      body={hrMemoBody[req.id] || ""}
+                                      cc={hrMemoCc[req.id] || ""}
+                                      onSubjectChange={(value) => setHrMemoSubject((p) => ({ ...p, [req.id]: value }))}
+                                      onBodyChange={(value) => setHrMemoBody((p) => ({ ...p, [req.id]: value }))}
+                                      onCcChange={(value) => setHrMemoCc((p) => ({ ...p, [req.id]: value }))}
+                                      showCc
+                                      bodyRows={7}
+                                    />
                                     <div className="space-y-1">
                                       <Label className="text-xs font-semibold">HR Note (optional)</Label>
                                       <Textarea placeholder="Any additional notes to include in the memo"

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { del } from "@vercel/blob"
+import { canManageOwnSignature } from "@/lib/role-capabilities"
 
 /**
  * DELETE: Clear user's saved signature from all storage systems
@@ -17,6 +18,11 @@ export async function DELETE(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const { data: roleProfile } = await admin.from("user_profiles").select("role").eq("id", user.id).single()
+    if (!canManageOwnSignature(roleProfile?.role)) {
+      return NextResponse.json({ error: "Your role is not authorized to clear a signature." }, { status: 403 })
     }
 
     console.log("[v0] Clearing signature for user:", user.id)

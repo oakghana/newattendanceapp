@@ -103,6 +103,7 @@ interface Props {
   approvedMemos?: ApprovedMemo[]
   regionalTransportMemos?: RegionalTransportMemo[]
   regionalScope?: boolean
+  viewerRole?: string
 }
 
 function fmtAmt(n: number | null) {
@@ -134,7 +135,9 @@ const LEAVE_STATUS_MAP: Record<string, { label: string; color: string }> = {
   hod_approved: { label: "HOD Approved", color: "bg-teal-100 text-teal-800 border-teal-200" },
 }
 
-export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedMemos = [], regionalTransportMemos = [], regionalScope = false }: Props) {
+export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedMemos = [], regionalTransportMemos = [], regionalScope = false, viewerRole }: Props) {
+  const normalizedViewerRole = String(viewerRole || profile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
+  const isHrExecutiveViewer = ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(normalizedViewerRole)
   const [tab, setTab] = useState<"loans" | "leave" | "approved" | "transport">("loans")
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -241,6 +244,35 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
     pdf.save(`regional-transport-memo-${memo.memo_reference || memo.reference_number || memo.id}.pdf`)
   }
 
+  const openLoanMemo = async (memo: LoanMemo, print = false) => {
+    setDownloadingId(memo.id)
+    try {
+      const linkRes = await fetch("/api/loan/memo-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: memo.id, disposition: print ? undefined : "attachment" }),
+      })
+      const linkData = await linkRes.json()
+      if (!linkRes.ok) throw new Error(linkData.error || "Failed to generate loan memo link")
+      if (print) {
+        const win = window.open(linkData.path, "_blank", "noopener,noreferrer")
+        if (win) win.addEventListener("load", () => win.print(), { once: true })
+        return
+      }
+      const a = document.createElement("a")
+      a.href = linkData.path
+      a.download = `loan-memo-${memo.request_number}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } catch (err) {
+      console.error("Loan memo download failed:", err)
+      window.alert(err instanceof Error ? err.message : "Unable to download the loan memo.")
+    } finally {
+      setDownloadingId(null)
+    }
+  }
+
   const openLeaveMemo = async (memo: LeaveMemo, print = false) => {
     const tokenQuery = memo.memo_token ? `?token=${encodeURIComponent(memo.memo_token)}` : ""
     try {
@@ -332,11 +364,13 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
               </div>
               <div>
                 <div className="text-xs font-semibold tracking-[0.15em] uppercase text-teal-400 mb-1">
-                  {regionalScope ? "Regional HR Leave Office" : "Secretary"}
+                  {isHrExecutiveViewer ? "HR Executive" : regionalScope ? "Regional HR Leave Office" : "Secretary"}
                 </div>
                 <h1 className="text-xl font-bold tracking-tight">{fullName}</h1>
                 <p className="text-slate-400 text-sm mt-0.5">
-                  {regionalScope ? "Linked locations and regions" : (departmentName || "QCC Head Office")} &mdash; Memo Review Console
+                  {isHrExecutiveViewer
+                    ? "Approved memos you signed — print or download anytime"
+                    : regionalScope ? "Linked locations and regions" : (departmentName || "QCC Head Office")} &mdash; Memo Review Console
                 </p>
               </div>
             </div>
@@ -410,7 +444,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                 {approvedMemos.length}
               </span>
             </button>
-            {(regionalTransportMemos.length > 0 || ["hr_records", "hr_records_officer", "hr_records_manager", "regional_hr", "regional_secretary", "regional_manager"].includes(profile.role.toLowerCase().replace(/[\s-]+/g, "_"))) && (
+            {(regionalTransportMemos.length > 0 || isHrExecutiveViewer || ["hr_records", "hr_records_officer", "hr_records_manager", "regional_hr", "regional_secretary", "regional_manager"].includes(profile.role.toLowerCase().replace(/[\s-]+/g, "_"))) && (
               <button onClick={() => { setTab("transport"); setStatusFilter("all") }} className={cn("flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all", tab === "transport" ? "bg-amber-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50")}>
                 <Bus className="h-4 w-4" /> Transport Memos <span className={cn("text-xs rounded-full px-2 py-0.5", tab === "transport" ? "bg-white/20" : "bg-amber-100 text-amber-700")}>{regionalTransportMemos.length}</span>
               </button>
@@ -530,6 +564,24 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                             MD Approved
                           </Badge>
                         )}
+                        <button
+                          onClick={() => void openLoanMemo(memo)}
+                          disabled={downloadingId === memo.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                          title="Download loan memo PDF"
+                        >
+                          {downloadingId === memo.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                          Download
+                        </button>
+                        <button
+                          onClick={() => void openLoanMemo(memo, true)}
+                          disabled={downloadingId === memo.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors disabled:opacity-50"
+                          title="Print loan memo"
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                          Print
+                        </button>
                       </div>
                     </div>
                   )

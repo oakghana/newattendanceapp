@@ -3698,7 +3698,7 @@ export function AttendanceRecorder({
                 Late Arrival Notice
               </CardTitle>
             <CardDescription>
-              You are checking in after 9:00 AM. Provide more than 20 alphabetic characters.
+              You are checking in after 9:00 AM.
             </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

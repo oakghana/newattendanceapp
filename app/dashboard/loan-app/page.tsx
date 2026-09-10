@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { SignaturePad } from "@/components/leave/signature-pad"
+import { TrackedMemoEditor } from "@/components/memo/tracked-memo-editor"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
 import { GlobalWarningsToasts } from "@/components/leave/global-warnings-toasts"
@@ -84,6 +85,7 @@ type LoanRequest = {
   disbursement_date: string | null
   recovery_months: number | null
   director_letter: string | null
+  director_letter_original?: string | null
   director_signature_text: string | null
   director_decision_at: string | null
   supporting_document_url: string | null
@@ -2785,7 +2787,7 @@ export default function LoanAppPage() {
         if (actionType === "director") {
           const entry = hrInputs[row.id]
           const draft = buildDirectorAutoMemoDraft(row, entry, data?.profile.currentHodProfile)
-          setModalMemoText(draft)
+          setModalMemoText(String(row.director_letter || "").trim() || draft)
           setModalSignatureText(signatureText)
           setModalSignatureDataUrl(signatureDataUrl)
           setModalSignatureMode(signatureMode)
@@ -6987,31 +6989,36 @@ export default function LoanAppPage() {
                 <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="Share your thoughts (what you think about this request)" rows={2} className="text-xs" />
               </>
             )}
-            {/* Loan Office */}
+            {/* Loan Office — read-only review, forwarding to Accounts only */}
             {actionModal.actionType === "loan_office" && (
               <>
+                <div className="rounded-md border bg-blue-50 p-3">
+                  <p className="text-xs text-blue-800">
+                    <strong>Note:</strong> These details were captured earlier and are shown here for review only. Click <strong>Save &amp; Forward to Accounts</strong> to send this request to the Accounts Loan Office.
+                  </p>
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Label className="text-xs">Staff Name</Label>
-                    <Input value={modalStaffFullName} onChange={(e) => setModalStaffFullName(e.target.value)} placeholder="Enter staff's full name" className="h-7 text-xs" />
+                    <Input value={modalStaffFullName} disabled placeholder="Enter staff's full name" className="h-7 text-xs" />
                   </div>
                   <div>
                     <Label className="text-xs">Staff Number</Label>
-                    <Input value={modalStaffNumber} onChange={(e) => setModalStaffNumber(e.target.value)} placeholder="e.g. QCC/HR/001" className="h-7 text-xs" />
+                    <Input value={modalStaffNumber} disabled placeholder="e.g. QCC/HR/001" className="h-7 text-xs" />
                   </div>
                   <div>
                     <Label className="text-xs">Staff Rank</Label>
-                    <Input value={modalStaffRank} onChange={(e) => setModalStaffRank(e.target.value)} placeholder="e.g. Manager or Officer" className="h-7 text-xs" />
+                    <Input value={modalStaffRank} disabled placeholder="e.g. Manager or Officer" className="h-7 text-xs" />
                   </div>
                   <div>
                     <Label className="text-xs">Corporate Email</Label>
-                    <Input value={modalCorporateEmail} onChange={(e) => setModalCorporateEmail(e.target.value)} placeholder="staff@company.com" className="h-7 text-xs" />
+                    <Input value={modalCorporateEmail} disabled placeholder="staff@company.com" className="h-7 text-xs" />
                   </div>
                 </div>
                 <Label className="text-xs">Reference Number</Label>
-                <Input value={modalReferenceNumber} onChange={(e) => setModalReferenceNumber(e.target.value)} placeholder="e.g. QCC/HR/SWL/V2/001" className="h-7 text-xs" />
+                <Input value={modalReferenceNumber} disabled placeholder="e.g. QCC/HR/SWL/V2/001" className="h-7 text-xs" />
                 <Label className="text-xs">THRO (Your Boss / Manager)</Label>
-                <Select value={modalHodReviewerId} onValueChange={setModalHodReviewerId}>
+                <Select value={modalHodReviewerId} onValueChange={setModalHodReviewerId} disabled>
                   <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Choose your boss" /></SelectTrigger>
                   <SelectContent>
                     {(lookupData?.hods || []).map((h) => (
@@ -7022,15 +7029,15 @@ export default function LoanAppPage() {
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Label className="text-xs">THRO Rank</Label>
-                    <Input value={modalHodRank} onChange={(e) => setModalHodRank(e.target.value)} placeholder="e.g. Manager or Director" className="h-7 text-xs" />
+                    <Input value={modalHodRank} disabled placeholder="e.g. Manager or Director" className="h-7 text-xs" />
                   </div>
                   <div>
                     <Label className="text-xs">THRO Location</Label>
-                    <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. Accra or Head Office" className="h-7 text-xs" />
+                    <Input value={modalHodLocation} disabled placeholder="e.g. Accra or Head Office" className="h-7 text-xs" />
                   </div>
                 </div>
                 <Label className="text-xs">Assigned Director /Manager HR Approver</Label>
-                <Select value={modalDirectorApproverId} onValueChange={setModalDirectorApproverId}>
+                <Select value={modalDirectorApproverId} onValueChange={setModalDirectorApproverId} disabled>
                   <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select assigned approver" /></SelectTrigger>
                   <SelectContent>
                     {(data?.directorApprovers || []).map((approver) => (
@@ -7198,25 +7205,6 @@ export default function LoanAppPage() {
             )}
             {actionModal.actionType === "loan_office" && actionModal.row && (
               <>
-                <Button variant="outline" onClick={() => {
-                  const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone, modalHodName, modalHodRank, modalHodLocation)
-                  runAction({
-                    action: "loan_office_update_request",
-                    id: actionModal.row!.id,
-                    note: noteForSave || null,
-                    staff_full_name: modalStaffFullName || null,
-                    staff_number: modalStaffNumber || null,
-                    staff_rank: modalStaffRank || null,
-                    corporate_email: modalCorporateEmail || null,
-                    reference_number: modalReferenceNumber || null,
-                    hod_name: modalHodName || null,
-                    hod_rank: modalHodRank || null,
-                    hod_location: modalHodLocation || null,
-                    hod_reviewer_id: modalHodReviewerId || null,
-                    director_approver_id: modalDirectorApproverId || null,
-                  })
-                  setActionModal((s) => ({ ...s, open: false }))
-                }}>Save Edits</Button>
                 <Button onClick={() => {
                   const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone, modalHodName, modalHodRank, modalHodLocation)
                   runAction({
@@ -7519,13 +7507,20 @@ export default function LoanAppPage() {
                     <div>Accra Ghana</div>
                   </div>
                 </div>
-                {/* Editable body */}
-                <Textarea
-                  value={modalMemoText}
-                  onChange={(e) => setModalMemoText(e.target.value)}
-                  className="mt-4 min-h-[560px] w-full resize-y border-0 p-0 font-serif text-[12.5px] leading-7 shadow-none focus-visible:ring-0"
-                  placeholder="Memo text will appear here..."
-                />
+                <div className="mt-4">
+                  <TrackedMemoEditor
+                    title="Loan memo"
+                    originalLabel="Forwarded loan memo"
+                    currentLabel="HR Executive"
+                    originalSubject="Loan approval memo"
+                    originalBody={memoReviewModal.row?.director_letter_original || memoReviewModal.row?.director_letter || ""}
+                    subject="Loan approval memo"
+                    body={modalMemoText}
+                    onBodyChange={setModalMemoText}
+                    bodyRows={18}
+                    bodyPlaceholder="Edit the forwarded loan memo before signing."
+                  />
+                </div>
                 {/* Signature block */}
                 {modalSignatureMode === "typed" && modalSignatureText && (
                   <div className="mt-4 font-serif">

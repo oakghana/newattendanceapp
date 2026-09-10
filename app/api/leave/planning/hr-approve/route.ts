@@ -53,9 +53,7 @@ export async function GET(request: NextRequest) {
     // This ensures the HR executive can see every request forwarded by the HR Leave Office.
     const allEligible = [...HR_APPROVE_ELIGIBLE, ...HR_APPROVED_STATUSES]
 
-    const { data: requests, error: requestError } = await admin
-      .from("leave_plan_requests")
-      .select(`
+    const leaveApproveSelect = `
         id,
         user_id,
         status,
@@ -74,6 +72,9 @@ export async function GET(request: NextRequest) {
         memo_draft_subject,
         memo_draft_body,
         memo_draft_cc,
+        memo_office_subject,
+        memo_office_body,
+        memo_office_cc,
         memo_token,
         memo_generated_at,
         hr_approver_id,
@@ -83,9 +84,22 @@ export async function GET(request: NextRequest) {
         submitted_at,
         created_at,
         updated_at
-      `)
+      `
+    let { data: requests, error: requestError } = await admin
+      .from("leave_plan_requests")
+      .select(leaveApproveSelect)
       .in("status", allEligible)
       .order("created_at", { ascending: false })
+
+    if (requestError && /memo_office_(subject|body|cc)/i.test(String(requestError.message || ""))) {
+      const fallbackSelect = leaveApproveSelect
+        .replace("memo_office_subject,\n        memo_office_body,\n        memo_office_cc,\n        ", "")
+      ;({ data: requests, error: requestError } = await admin
+        .from("leave_plan_requests")
+        .select(fallbackSelect)
+        .in("status", allEligible)
+        .order("created_at", { ascending: false }))
+    }
 
     if (requestError) {
       console.error("[v0] Error fetching requests:", requestError)

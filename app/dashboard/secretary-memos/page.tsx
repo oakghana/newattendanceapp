@@ -2,6 +2,7 @@ import { createClientAndGetUser, createAdminClient } from "@/lib/supabase/server
 import { redirect } from "next/navigation"
 import { SecretaryMemosClient } from "./secretary-memos-client"
 import { regionalSecretaryRoles, resolveMemoVisibilityScope } from "@/lib/hr-workflow"
+import { canAccessMemoConsole, isHrExecutiveRole } from "@/lib/role-capabilities"
 
 export default async function SecretaryMemosPage() {
   const { user, authError } = await createClientAndGetUser()
@@ -18,10 +19,11 @@ export default async function SecretaryMemosPage() {
   // The proxy has already validated the role. Administrators and secretaries
   // may use the memo console without being sent back to the login screen.
   const normalizedRole = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-  const canUseMemoConsole = regionalSecretaryRoles(normalizedRole) || ["hr_records", "hr_records_officer", "hr_records_manager", "regional_manager"].includes(normalizedRole)
+  const canUseMemoConsole = canAccessMemoConsole(normalizedRole) || regionalSecretaryRoles(normalizedRole) || ["hr_records", "hr_records_officer", "hr_records_manager", "regional_manager"].includes(normalizedRole)
   if (!profile || !canUseMemoConsole) {
     redirect("/dashboard/attendance")
   }
+  const isHrExecutive = isHrExecutiveRole(normalizedRole)
 
   const visibility = await resolveMemoVisibilityScope(admin, user.id, normalizedRole)
   const effectiveVisibility = normalizedRole === "regional_manager"
@@ -46,6 +48,7 @@ export default async function SecretaryMemosPage() {
       created_at,
       md_approved_at,
       md_approved_by_name,
+      director_hr_id,
       staff_full_name,
       staff_number,
       user_id,
@@ -70,19 +73,23 @@ export default async function SecretaryMemosPage() {
     .order("created_at", { ascending: false })
     .limit(300)
 
-  const visibleLoanMemos = scopedStaffIds
+  const visibleLoanMemos = isHrExecutive
+    ? (loanMemos || []).filter((memo: any) => memo.director_hr_id === user.id)
+    : scopedStaffIds
     ? (loanMemos || []).filter((memo: any) => memo.user_id && scopedStaffIds.includes(memo.user_id))
     : loanMemos || []
 
   // Fetch approved leave memos from leave_plan_requests (the correct table)
   const { data: rawLeaveMemos } = await admin
     .from("leave_plan_requests")
-    .select("id, leave_type_key, status, preferred_start_date, preferred_end_date, reason, created_at, hr_approved_at, memo_token, user_id")
+    .select("id, leave_type_key, status, preferred_start_date, preferred_end_date, reason, created_at, hr_approved_at, memo_token, user_id, hr_approver_id")
     .in("status", ["hod_approved", "hr_approved", "approved", "regional_manager_approved"])
     .order("created_at", { ascending: false })
     .limit(300)
 
-  const visibleRawLeaveMemos = scopedStaffIds
+  const visibleRawLeaveMemos = isHrExecutive
+    ? (rawLeaveMemos || []).filter((memo: any) => memo.hr_approver_id === user.id && ["hr_approved", "approved"].includes(String(memo.status || "")))
+    : scopedStaffIds
     ? (rawLeaveMemos || []).filter((memo: any) => memo.user_id && scopedStaffIds.includes(memo.user_id))
     : rawLeaveMemos || []
 
@@ -128,6 +135,7 @@ export default async function SecretaryMemosPage() {
       created_at,
       md_approved_at,
       md_approved_by_name,
+      director_hr_id,
       staff_full_name,
       staff_number,
       user_id,
@@ -150,7 +158,9 @@ export default async function SecretaryMemosPage() {
     .order("md_approved_at", { ascending: false })
     .limit(300)
 
-  const visibleApprovedLoanMemos = scopedStaffIds
+  const visibleApprovedLoanMemos = isHrExecutive
+    ? (approvedLoanMemos || []).filter((memo: any) => memo.director_hr_id === user.id)
+    : scopedStaffIds
     ? (approvedLoanMemos || []).filter((memo: any) => memo.user_id && scopedStaffIds.includes(memo.user_id))
     : approvedLoanMemos || []
 
@@ -159,7 +169,7 @@ export default async function SecretaryMemosPage() {
   // Do NOT include regular leave memos here — those belong in the Leave Memos tab only
   const { data: regionalTransportRows } = await admin
     .from("transport_requests")
-    .select("id, reference_number, purpose, origin, destination, event_date, passenger_count, workflow_stage, status, created_at, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, supporting_documents, assigned_region_id, linked_district_id, origin_location_id")
+    .select("id, reference_number, purpose, origin, destination, event_date, passenger_count, workflow_stage, status, created_at, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, supporting_documents, assigned_region_id, linked_district_id, origin_location_id, hr_executive_signer_id")
     .eq("request_type", "regional_transport")
     .order("created_at", { ascending: false })
     .limit(300)
@@ -178,6 +188,7 @@ export default async function SecretaryMemosPage() {
     const isApproved = row.status === "approved" || row.workflow_stage === "hr_records_review"
     // HR Records is the central memo office: it must see every regional
     // transport request, including pending/not-approved requests.
+    if (isHrExecutive) return row.hr_executive_signer_id === user.id
     if (isHrRecords) return true
     // RHED office secretaries see approved regional transport memos across the region.
     if (isRhedOffice) return isApproved && Boolean((row.assigned_region_id && effectiveVisibility.regionIds.includes(row.assigned_region_id)) || (row.origin_location_id && effectiveVisibility.locationIds.includes(row.origin_location_id)))
@@ -213,6 +224,7 @@ export default async function SecretaryMemosPage() {
       approvedMemos={approvedMemos}
       regionalTransportMemos={visibleRegionalTransportRows}
       regionalScope={visibility.isRegional}
+      viewerRole={normalizedRole}
     />
   )
 }

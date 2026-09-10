@@ -163,7 +163,7 @@ const navigationItems = [
     title: "Memo Console",
     href: "/dashboard/secretary-memos",
     icon: ScrollText,
-    roles: ["secretary", "hr_records", "hr_records_officer", "hr_records_manager", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "admin"],
+    roles: ["secretary", "hr_records", "hr_records_officer", "hr_records_manager", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "admin", "hr_executive", "hr", "manager_hr", "director_hr", "hr_executive_officer"],
     category: "main",
     executive: true,
   },

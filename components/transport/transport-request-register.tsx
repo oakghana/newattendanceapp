@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
+import { TrackedMemoEditor } from "@/components/memo/tracked-memo-editor";
 
 export type TransportRequestRow = {
   id: string;
@@ -170,6 +171,13 @@ export function TransportRequestRegister({
       | "approve_hr_memo";
   } | null>(null);
   const [commentText, setCommentText] = React.useState("");
+  const [hrMemoSubject, setHrMemoSubject] = React.useState("");
+  const [hrMemoBody, setHrMemoBody] = React.useState("");
+  const [hrMemoReference, setHrMemoReference] = React.useState("");
+  const [hrMemoDate, setHrMemoDate] = React.useState("");
+  const [hrMemoNote, setHrMemoNote] = React.useState("");
+  const [hrOriginalSubject, setHrOriginalSubject] = React.useState("");
+  const [hrOriginalBody, setHrOriginalBody] = React.useState("");
   const toggleSelected = (id: string) =>
     setSelectedIds((current) => {
       const next = new Set(current);
@@ -324,13 +332,38 @@ export function TransportRequestRegister({
     ]
       .filter(Boolean)
       .join("\n\n");
+    const cleanSubject = (row.memo_subject || row.purpose || "").replace(/^\s*(re:\s*)+/i, "").trim();
+    const currentSubject = `RE: ${cleanSubject}`;
+    const currentBody = String(row.memo_body || "").trim() || body;
+    let originalSubject = currentSubject;
+    let originalBody = currentBody;
+    let amendmentNote = "";
+    try {
+      const parsed = row.memo_amendments ? (JSON.parse(row.memo_amendments) as Record<string, unknown>) : null;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        originalSubject = String(parsed.original_subject || originalSubject);
+        originalBody = String(parsed.original_body || originalBody);
+        amendmentNote = typeof parsed.text === "string" ? parsed.text : "";
+      } else {
+        amendmentNote = row.memo_amendments || "";
+      }
+    } catch {
+      amendmentNote = row.memo_amendments || "";
+    }
+    setHrMemoSubject(currentSubject);
+    setHrMemoBody(currentBody);
+    setHrMemoReference(row.memo_reference || `TRANSPORT/${row.id.slice(0, 8).toUpperCase()}`);
+    setHrMemoDate(row.memo_date || new Date().toISOString().slice(0, 10));
+    setHrMemoNote(amendmentNote);
+    setHrOriginalSubject(originalSubject);
+    setHrOriginalBody(originalBody);
     setMemoPreview({
       ...row,
       hr_executive_signature_data_url: signature,
       hr_executive_signer_name: signerName,
       hr_executive_signer_position: signerPosition,
-      memo_subject: `RE: ${(row.memo_subject || row.purpose).replace(/^\s*RE:\s*/i, "")}`,
-      memo_body: body,
+      memo_subject: currentSubject,
+      memo_body: currentBody,
     });
     setPreviewedIds((current) => new Set(current).add(row.id));
   };
@@ -521,11 +554,13 @@ export function TransportRequestRegister({
       body: JSON.stringify({
         id: memoPreview.id,
         decision: "save_memo",
-        memoReference: form.get("memoReference"),
-        memoDate: form.get("memoDate"),
-        memoSubject: form.get("memoSubject"),
-        memoBody: form.get("memoBody"),
-        memoAmendments: form.get("memoAmendments"),
+        memoReference: hrMemoReference || form.get("memoReference"),
+        memoDate: hrMemoDate || form.get("memoDate"),
+        memoSubject: hrMemoSubject || form.get("memoSubject"),
+        memoBody: hrMemoBody || form.get("memoBody"),
+        memoAmendments: hrMemoNote || form.get("memoAmendments"),
+        originalSubject: hrOriginalSubject,
+        originalBody: hrOriginalBody,
       }),
     });
     const result = await response.json().catch(() => ({}));
@@ -1450,10 +1485,9 @@ export function TransportRequestRegister({
             {canHrExecutive && (
               <Card className="border-primary/30">
                 <CardHeader>
-                  <CardTitle>HR Executive rejoinder editing</CardTitle>
+                  <CardTitle>HR Executive memo console</CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Edit the memo fields below. The Regional Manager endorsement
-                    remains read-only.
+                    Edit the rejoinder, track changes against the forwarded draft, then save before signing.
                   </p>
                 </CardHeader>
                 <CardContent>
@@ -1463,10 +1497,8 @@ export function TransportRequestRegister({
                         Memo reference
                         <Input
                           name="memoReference"
-                          defaultValue={
-                            memoPreview.memo_reference ??
-                            `TRANSPORT/${memoPreview.id.slice(0, 8).toUpperCase()}`
-                          }
+                          value={hrMemoReference}
+                          onChange={(event) => setHrMemoReference(event.target.value)}
                           required
                         />
                       </label>
@@ -1475,43 +1507,33 @@ export function TransportRequestRegister({
                         <Input
                           name="memoDate"
                           type="date"
-                          defaultValue={
-                            memoPreview.memo_date ??
-                            new Date().toISOString().slice(0, 10)
-                          }
+                          value={hrMemoDate}
+                          onChange={(event) => setHrMemoDate(event.target.value)}
                           required
                         />
                       </label>
                     </div>
+                    <TrackedMemoEditor
+                      title="Transport rejoinder"
+                      originalLabel="Forwarded HR Records memo"
+                      currentLabel="HR Executive"
+                      originalSubject={hrOriginalSubject}
+                      originalBody={hrOriginalBody}
+                      subject={hrMemoSubject}
+                      body={hrMemoBody}
+                      onSubjectChange={setHrMemoSubject}
+                      onBodyChange={setHrMemoBody}
+                      bodyRows={8}
+                    />
+                    <input type="hidden" name="memoSubject" value={hrMemoSubject} />
+                    <input type="hidden" name="memoBody" value={hrMemoBody} />
                     <label className="grid gap-2 text-sm">
-                      Subject
-                      <Input
-                        name="memoSubject"
-                        defaultValue={
-                          renderedSubject ??
-                          `Request for vehicle support: ${memoPreview.purpose}`
-                        }
-                        required
-                      />
-                    </label>
-                    <label className="grid gap-2 text-sm">
-                      Memo body
-                      <textarea
-                        name="memoBody"
-                        defaultValue={
-                          memoPreview.memo_body ??
-                          `I respectfully request approval for vehicle support for ${memoPreview.purpose}, travelling from ${memoPreview.origin} to ${memoPreview.destination} on ${memoPreview.event_date ?? "the stated date"} for ${memoPreview.passenger_count} passenger(s).`
-                        }
-                        className="min-h-32 rounded-md border bg-background p-3"
-                        required
-                      />
-                    </label>
-                    <label className="grid gap-2 text-sm">
-                      Amendment note
+                      Internal note
                       <textarea
                         name="memoAmendments"
-                        defaultValue={memoPreview.memo_amendments ?? ""}
-                        placeholder="Record corrections made by HR Records"
+                        value={hrMemoNote}
+                        onChange={(event) => setHrMemoNote(event.target.value)}
+                        placeholder="Optional note for Records / Regional Manager. This is not printed on the memo."
                         className="min-h-20 rounded-md border bg-background p-3"
                       />
                     </label>

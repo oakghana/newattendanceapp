@@ -749,7 +749,7 @@ export async function POST(request: NextRequest) {
       // "hr" is the generic role used for HR Executives in the system
       const isHrExecutive = [
         "hr_executive", "hr", "hr_manager", "manager_hr", "director_hr",
-        "hr_director", "accounts", "loan_office", "hr_loan_office", "accounts_loan_office", "admin",
+        "hr_director", "admin",
       ].includes(role)
       const isDirectorHr = [
         "director_hr", "manager_hr", "hr_director", "managing_director", "admin",
@@ -858,6 +858,9 @@ export async function POST(request: NextRequest) {
       update.director_signature_data_url = savedSignature?.dataUrl || null
       const autoMemo = decision === "approve" ? buildAutoMemo(req) : null
       update.director_letter = directorLetter || autoMemo
+      if (isHrExecutiveStage && !String(req.director_letter_original || "").trim()) {
+        update.director_letter_original = String(req.director_letter || directorLetter || autoMemo || "").trim() || null
+      }
       update.director_note = note
       update.director_decision_at = new Date().toISOString()
 
@@ -980,6 +983,9 @@ export async function POST(request: NextRequest) {
 
       // Update only the memo content, don't change status
       update.director_letter = directorLetter
+      if (!String(req.director_letter_original || "").trim()) {
+        update.director_letter_original = String(req.director_letter || directorLetter).trim() || null
+      }
       update.director_note = note || "Memo saved by HR personnel for review"
     }
 
@@ -1019,7 +1025,14 @@ export async function POST(request: NextRequest) {
       updateQuery = updateQuery.eq("status", req.status)
     }
 
-    const { data: updated, error: updateError } = await updateQuery.select("*").single()
+    let { data: updated, error: updateError } = await updateQuery.select("*").single()
+
+    if (updateError && /director_letter_original/i.test(String(updateError.message || ""))) {
+      const { director_letter_original: _omit, ...fallbackUpdate } = update
+      let fallbackQuery: any = admin.from("loan_requests").update(fallbackUpdate).eq("id", id)
+      if (action !== "loan_office_update_request") fallbackQuery = fallbackQuery.eq("status", req.status)
+      ;({ data: updated, error: updateError } = await fallbackQuery.select("*").single())
+    }
 
     if (updateError) {
       const msg = String(updateError?.message || "")

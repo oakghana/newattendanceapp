@@ -188,6 +188,11 @@ export async function POST(request: NextRequest) {
         memo_draft_cc: memo_draft_cc
           ? String(memo_draft_cc).trim()
           : String((leaveRequest as any).memo_draft_cc || "").trim() || null,
+        memo_office_subject: memo_draft_subject ? String(memo_draft_subject).trim() : String((leaveRequest as any).memo_office_subject || "").trim() || null,
+        memo_office_body: memo_draft_body ? String(memo_draft_body).trim() : String((leaveRequest as any).memo_office_body || "").trim() || null,
+        memo_office_cc: memo_draft_cc
+          ? String(memo_draft_cc).trim()
+          : String((leaveRequest as any).memo_office_cc || (leaveRequest as any).memo_draft_cc || "").trim() || null,
         memo_draft_last_edited_by: user.id,
         memo_draft_last_edited_role: "hr_leave_office",
         memo_draft_last_edited_at: new Date().toISOString(),
@@ -203,10 +208,39 @@ export async function POST(request: NextRequest) {
 
     if (updateError) {
       console.error("[hr-office] update error:", updateError)
-      // Handle missing column gracefully — trigger the migration automatically
       const errMsg = String(updateError.message || "")
-      if (errMsg.includes("memo_reference") && (errMsg.includes("schema cache") || errMsg.includes("Could not find"))) {
-        // Attempt auto-migration
+      if (/memo_office_(subject|body|cc)/i.test(errMsg)) {
+        const fallbackUpdate = {
+          status: "hr_office_forwarded",
+          original_requested_days: (leaveRequest as any).requested_days,
+          adjusted_days: computedAdjustedDays,
+          outstanding_leave_days_added: requestIsAnnual ? Math.max(0, Number(outstanding_leave_days_added) || 0) : 0,
+          adjusted_start_date,
+          adjusted_end_date,
+          adjustment_reason: trimmedReason,
+          holiday_days_deducted: Number(holiday_days_deducted || 0),
+          travelling_days_added: Number(travelling_days_added || 0),
+          prior_leave_days_deducted: Number(prior_leave_days_deducted || 0),
+          hr_office_reviewer_id: user.id,
+          hr_office_reviewer_name: reviewerName,
+          hr_office_reviewed_at: new Date().toISOString(),
+          memo_draft_subject: memo_draft_subject ? String(memo_draft_subject).trim() : null,
+          memo_draft_body: memo_draft_body ? String(memo_draft_body).trim() : null,
+          memo_draft_cc: memo_draft_cc
+            ? String(memo_draft_cc).trim()
+            : String((leaveRequest as any).memo_draft_cc || "").trim() || null,
+          memo_draft_last_edited_by: user.id,
+          memo_draft_last_edited_role: "hr_leave_office",
+          memo_draft_last_edited_at: new Date().toISOString(),
+          hr_approver_id: resolvedHrApproverId,
+          preferred_start_date: adjusted_start_date,
+          preferred_end_date: adjusted_end_date,
+          requested_days: computedAdjustedDays,
+          updated_at: new Date().toISOString(),
+        }
+        const { error: fallbackError } = await admin.from("leave_plan_requests").update(fallbackUpdate).eq("id", leave_plan_request_id)
+        if (fallbackError) throw fallbackError
+      } else if (errMsg.includes("memo_reference") && (errMsg.includes("schema cache") || errMsg.includes("Could not find"))) {
         try {
           const origin = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
           await fetch(`${origin}/api/migrate/memo-reference`, { method: "POST" })
@@ -224,8 +258,9 @@ export async function POST(request: NextRequest) {
           },
           { status: 503 },
         )
+      } else {
+        throw updateError
       }
-      throw updateError
     }
 
     // Persist the outstanding days selected by HR so memo generation can add them

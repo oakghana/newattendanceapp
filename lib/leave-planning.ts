@@ -111,6 +111,8 @@ export function isHrApproverRole(role: string | null | undefined, departmentName
     normalized === "admin" ||
     normalized === "hr" ||
     normalized === "hr_officer" ||
+    normalized === "hr_executive" ||
+    normalized === "hr_executive_officer" ||
     normalized === "hr_director" ||
     normalized === "director_hr" ||
     normalized === "manager_hr" ||

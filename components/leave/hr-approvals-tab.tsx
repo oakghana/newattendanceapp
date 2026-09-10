@@ -19,10 +19,11 @@ import {
 } from '@/components/ui/dialog'
 import {
   Loader2, CheckCircle2, XCircle, ChevronDown, ChevronUp,
-  Download, Shield, Info, Eye, PenLine, Upload, AlertTriangle,
+  Download, Shield, Info, Eye, PenLine, Upload, AlertTriangle, AlertCircle,
   Building2, Calendar, Clock,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { TrackedMemoEditor } from '@/components/memo/tracked-memo-editor'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -45,8 +46,12 @@ interface LeaveRequest {
   memo_draft_subject?: string | null
   memo_draft_body?: string | null
   memo_draft_cc?: string | null
+  memo_office_subject?: string | null
+  memo_office_body?: string | null
+  memo_office_cc?: string | null
   memo_token?: string | null
   submitted_at?: string | null
+  hr_approved_at?: string | null
   created_at: string
   user?: {
     id: string
@@ -565,7 +570,7 @@ function HrApprovalCard({
   req: LeaveRequest
   expanded: boolean
   onToggle: () => void
-  onApprove: (note: string, dateOverride?: string | null) => void
+  onApprove: (note: string, dateOverride?: string | null, subject?: string, body?: string, cc?: string) => void
   onReject: (note: string) => void
   processing: boolean
   hasStoredSignature: boolean
@@ -577,6 +582,12 @@ function HrApprovalCard({
 }) {
   const [note, setNote] = useState('')
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [memoSubject, setMemoSubject] = useState(req.memo_draft_subject || '')
+  const [memoBody, setMemoBody] = useState(req.memo_draft_body || '')
+  const [memoCc, setMemoCc] = useState(req.memo_draft_cc || '')
+  const originalSubject = req.memo_office_subject || req.memo_draft_subject || ''
+  const originalBody = req.memo_office_body || req.memo_draft_body || ''
+  const originalCc = req.memo_office_cc || req.memo_draft_cc || ''
   
   // HR executive date override state
   const [overrideMode, setOverrideMode] = useState(false)
@@ -767,6 +778,23 @@ function HrApprovalCard({
               )}
             </div>
 
+            <TrackedMemoEditor
+              title="Final memo before issue"
+              originalLabel="HR Leave Office draft"
+              currentLabel="HR Executive"
+              originalSubject={originalSubject}
+              originalBody={originalBody}
+              originalCc={originalCc}
+              subject={memoSubject}
+              body={memoBody}
+              cc={memoCc}
+              onSubjectChange={setMemoSubject}
+              onBodyChange={setMemoBody}
+              onCcChange={setMemoCc}
+              showCc
+              bodyRows={7}
+            />
+
             {/* Approval note */}
             <div>
               <label className="text-xs font-semibold text-slate-600 block mb-1">
@@ -822,7 +850,7 @@ function HrApprovalCard({
                         hr_approved_days: hrDays ? Number(hrDays) : null
                       })
                     : null
-                  onApprove(note, dateOverride)
+                  onApprove(note, dateOverride, memoSubject, memoBody, memoCc)
                 }}
               >
                 {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
@@ -1019,7 +1047,7 @@ export function HrApprovalsTab() {
   }
 
   // ── Approve ───────────────────────────────────────────────────────────────
-  const handleApprove = async (reqId: string, note: string, subject: string, body: string, dateOverrideJson?: string | null) => {
+  const handleApprove = async (reqId: string, note: string, subject: string, body: string, dateOverrideJson?: string | null, cc?: string) => {
     try {
       setProcessingId(reqId)
       const requestBody: any = {
@@ -1028,6 +1056,7 @@ export function HrApprovalsTab() {
         note: note || undefined,
         memo_draft_subject: subject || undefined,
         memo_draft_body: body || undefined,
+        memo_draft_cc: cc || undefined,
         hr_signature_mode: inlineSig?.mode || undefined,
         hr_signature_text: inlineSig?.text || undefined,
         hr_signature_data_url: inlineSig?.dataUrl || undefined,
@@ -1241,7 +1270,7 @@ export function HrApprovalsTab() {
               req={req}
               expanded={expandedId === req.id}
               onToggle={() => setExpandedId(expandedId === req.id ? null : req.id)}
-                onApprove={(note, dateOverride) => handleApprove(req.id, note, '', '', dateOverride)}
+                onApprove={(note, dateOverride, subject, body, cc) => handleApprove(req.id, note, subject || '', body || '', dateOverride, cc)}
               onReject={(note) => handleReject(req.id, note)}
               processing={processingId === req.id}
               hasStoredSignature={hasStoredSignature}

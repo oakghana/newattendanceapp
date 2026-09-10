@@ -267,13 +267,14 @@ export async function PATCH(request: Request) {
       } catch {
         /* keep plain text */
       }
+      const wasEditedByHrExecutive = Boolean(priorAmendments.hr_executive_edited_by)
       const update = {
         status: "approved",
         workflow_stage: row.request_type === "regional_transport" ? "referenced" : "transport_manager_assignment",
-        memo_subject: rejoinder.memoSubject,
-        memo_body: rejoinder.memoBody,
-        memo_reference: rejoinder.memoReference,
-        memo_date: rejoinder.memoDate,
+        memo_subject: wasEditedByHrExecutive ? row.memo_subject : rejoinder.memoSubject,
+        memo_body: wasEditedByHrExecutive ? row.memo_body : rejoinder.memoBody,
+        memo_reference: wasEditedByHrExecutive ? row.memo_reference : rejoinder.memoReference,
+        memo_date: wasEditedByHrExecutive ? row.memo_date : rejoinder.memoDate,
         hr_executive_signer_id: user.id,
         hr_executive_signed_at: now,
         hr_executive_signature_data_url: resolvedSignatureDataUrl,
@@ -524,7 +525,7 @@ export async function PATCH(request: Request) {
   if (decision === "forward_to_md" && (!row.memo_body || !row.memo_reference || !row.memo_date || !row.hr_records_amended_at)) return NextResponse.json({ error: "Preview and save the amended memo before forwarding it to the Managing Director." }, { status: 409 })
   let update: Record<string, unknown>
   if (decision === "preview_memo") update = { memo_subject: String(body.memoSubject ?? row.memo_subject ?? `Request for vehicle support: ${row.purpose}`), memo_body: String(body.memoBody ?? row.memo_body ?? ""), memo_reference: String(body.memoReference ?? row.memo_reference ?? ""), memo_date: String(body.memoDate ?? row.memo_date ?? new Date().toISOString().slice(0, 10)), updated_at: new Date().toISOString() }
-  else if (decision === "save_memo") { const enteredSubject = String(body.memoSubject ?? row.memo_subject ?? row.purpose).trim().replace(/^\s*(re:\s*)+/i, ""); const memoSubject = isHrExecutive ? `RE: ${enteredSubject}` : enteredSubject; const amendmentText = String(body.memoAmendments ?? "").trim(); let mergedAmendments = amendmentText; try { const prior = row.memo_amendments ? JSON.parse(row.memo_amendments) as Record<string, unknown> : null; if (prior && typeof prior === "object" && !Array.isArray(prior)) mergedAmendments = JSON.stringify({ ...prior, text: amendmentText || (typeof prior.text === "string" ? prior.text : "") }) } catch { /* keep plain amendment text */ } update = { memo_reference: String(body.memoReference ?? "").trim(), memo_date: String(body.memoDate ?? "").trim(), memo_subject: memoSubject, memo_body: String(body.memoBody ?? "").trim(), memo_amendments: mergedAmendments, ...(isHrExecutive ? {} : { hr_records_amended_by: user.id, hr_records_amended_at: new Date().toISOString() }), updated_at: new Date().toISOString() } }
+  else if (decision === "save_memo") { const enteredSubject = String(body.memoSubject ?? row.memo_subject ?? row.purpose).trim().replace(/^\s*(re:\s*)+/i, ""); const memoSubject = isHrExecutive ? `RE: ${enteredSubject}` : enteredSubject; const amendmentText = String(body.memoAmendments ?? "").trim(); const editedAt = new Date().toISOString(); let mergedAmendments = amendmentText; try { const prior = row.memo_amendments ? JSON.parse(row.memo_amendments) as Record<string, unknown> : null; if (prior && typeof prior === "object" && !Array.isArray(prior)) mergedAmendments = JSON.stringify({ ...prior, text: amendmentText || (typeof prior.text === "string" ? prior.text : ""), original_subject: prior.original_subject || body.originalSubject || row.memo_subject || memoSubject, original_body: prior.original_body || body.originalBody || row.memo_body || "", ...(isHrExecutive ? { hr_executive_edited_by: user.id, hr_executive_edited_at: editedAt } : {}) }) } catch { mergedAmendments = JSON.stringify({ text: amendmentText, original_subject: body.originalSubject || row.memo_subject || memoSubject, original_body: body.originalBody || row.memo_body || "", ...(isHrExecutive ? { hr_executive_edited_by: user.id, hr_executive_edited_at: editedAt } : {}) }) } update = { memo_reference: String(body.memoReference ?? "").trim(), memo_date: String(body.memoDate ?? "").trim(), memo_subject: memoSubject, memo_body: String(body.memoBody ?? "").trim(), memo_amendments: mergedAmendments, ...(isHrExecutive ? {} : { hr_records_amended_by: user.id, hr_records_amended_at: editedAt }), updated_at: editedAt } }
   else if (decision === "approve_hr_memo") {
     const rejoinder = buildHrExecutiveRejoinderMemo(row)
     const [{ data: signerProfile }, { data: registrySignature }] = await Promise.all([
@@ -544,14 +545,15 @@ export async function PATCH(request: Request) {
     } catch {
       /* keep plain text */
     }
+    const wasEditedByHrExecutive = Boolean(priorAmendments.hr_executive_edited_by)
     const signedAt = new Date().toISOString()
     update = {
       status: "approved",
       workflow_stage: row.request_type === "regional_transport" ? "referenced" : "transport_manager_assignment",
-      memo_subject: rejoinder.memoSubject,
-      memo_body: rejoinder.memoBody,
-      memo_reference: rejoinder.memoReference,
-      memo_date: rejoinder.memoDate,
+      memo_subject: wasEditedByHrExecutive ? row.memo_subject : rejoinder.memoSubject,
+      memo_body: wasEditedByHrExecutive ? row.memo_body : rejoinder.memoBody,
+      memo_reference: wasEditedByHrExecutive ? row.memo_reference : rejoinder.memoReference,
+      memo_date: wasEditedByHrExecutive ? row.memo_date : rejoinder.memoDate,
       hr_executive_signer_id: user.id,
       hr_executive_signed_at: signedAt,
       hr_executive_signature_data_url: resolvedSignatureDataUrl,
