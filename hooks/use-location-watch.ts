@@ -75,7 +75,8 @@ export function useLocationWatch({
         }
       },
       (error) => {
-        console.error("[v0] Location watch error:", error)
+        // Permission denial / GPS unavailable is an expected user state, not an app error.
+        console.warn("[v0] Location watch error:", error)
         onError?.(error)
       },
       {

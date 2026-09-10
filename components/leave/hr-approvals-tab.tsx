@@ -822,7 +822,6 @@ function HrApprovalCard({
                         hr_approved_days: hrDays ? Number(hrDays) : null
                       })
                     : null
-                  // TODO: Modify onApprove signature to accept dateOverride
                   onApprove(note, dateOverride)
                 }}
               >

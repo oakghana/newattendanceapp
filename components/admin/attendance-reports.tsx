@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Download, CalendarIcon, Users, Clock, FileText, AlertTriangle, CheckCircle, FileSpreadsheet, MapPin, Loader2, Search, Eye, User, AlertCircle, BarChart3, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react"
+import { Download, CalendarIcon, Users, Clock, FileText, AlertTriangle, CheckCircle, FileSpreadsheet, MapPin, Loader2, Search, Eye, User, AlertCircle, BarChart3, ArrowUp, ArrowDown, ArrowUpDown, X } from "lucide-react"
 import {
   BarChart,
   Bar,
@@ -258,6 +258,9 @@ export function AttendanceReports({
   const [selectedRegion, setSelectedRegion] = useState("all")
   const [selectedDistrict, setSelectedDistrict] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
+  // searchInput updates instantly for a responsive box; searchQuery is debounced before it
+  // triggers a network fetch, so typing stays fast and doesn't hammer the API on every keystroke.
+  const [searchInput, setSearchInput] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [sortKey, setSortKey] = useState<string>("check_in_time")
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -330,12 +333,7 @@ export function AttendanceReports({
       }
       return localPart.charAt(0).toUpperCase() + localPart.slice(1)
     }
-    // Keep orphaned attendance rows identifiable instead of presenting them as an unnamed staff member.
-    const location = record.check_in_location?.name || record.check_in_location_name || record.geofence_locations?.name
-    if (location && record.user_id) return `Staff ${record.user_id.slice(0, 8)} at ${location}`
-    if (location) return `Staff at ${location}`
-    if (record.user_id) return `Staff (ID: ${record.user_id.slice(0, 8)})`
-    return 'Unknown Staff'
+    return 'Unnamed staff record'
   }
 
 
@@ -359,12 +357,12 @@ export function AttendanceReports({
         record.check_in_location_name ||
         record.check_in_location?.name ||
         record.geofence_locations?.name ||
-        'Missing authoritative record'
+        'Not recorded'
       )
     }
 
     return (
-      record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || record.geofence_locations?.name || 'Missing authoritative record'
+      record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || record.geofence_locations?.name || 'Not recorded'
     )
   }
 
@@ -375,7 +373,17 @@ export function AttendanceReports({
     fetchDepartments()
     fetchLocations()
     fetchDistricts()
-  }, [authChecked, isAuthenticated, startDate, endDate, selectedDepartment, selectedLocation, selectedRegion, selectedDistrict, selectedStatus, page, pageSize])
+  }, [authChecked, isAuthenticated, startDate, endDate, selectedDepartment, selectedLocation, selectedRegion, selectedDistrict, selectedStatus, searchQuery, page, pageSize])
+
+  useEffect(() => {
+    setPage(1)
+  }, [searchQuery])
+
+  // Debounce the search box so we only hit the API ~300ms after the user stops typing.
+  useEffect(() => {
+    const handle = setTimeout(() => setSearchQuery(searchInput.trim()), 300)
+    return () => clearTimeout(handle)
+  }, [searchInput])
 
   useEffect(() => {
     // When the Reasons tab is opened, fetch a larger set that contains all reason entries
@@ -506,6 +514,7 @@ export function AttendanceReports({
   if (selectedRegion !== "all") params.append("region_id", selectedRegion)
   if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
       if (selectedStatus !== "all") params.append("status", selectedStatus)
+    if (searchQuery.trim()) params.append("search", searchQuery.trim())
       // Pagination params
       params.append("page", String(page))
       params.append("page_size", String(pageSize))
@@ -615,6 +624,7 @@ export function AttendanceReports({
   if (selectedRegion !== "all") params.append("region_id", selectedRegion)
   if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
       if (selectedStatus !== "all") params.append("status", selectedStatus)
+      if (searchQuery.trim()) params.append("search", searchQuery.trim())
 
       const res = await authenticatedFetch(`/api/admin/reports/attendance?${params}`)
       const json = await res.json()
@@ -674,20 +684,20 @@ export function AttendanceReports({
           ...exportRecords.map((record) => {
               const checkInLabel = record.google_maps_name && record.is_check_in_outside_location
                 ? record.google_maps_name
-                : record.check_in_location?.name || record.check_in_location_name || "Missing authoritative record"
+                : record.check_in_location?.name || record.check_in_location_name || "Not recorded"
 
-              const checkOutLabel = record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || "Missing authoritative record"
+              const checkOutLabel = record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || "Not recorded"
 
               const row = [
                 new Date(record.check_in_time).toLocaleDateString(),
-                `"${record.user_profiles?.employee_id || "Missing authoritative record"}"`,
-                `"${(record.user_profiles?.first_name || "") + (record.user_profiles?.last_name ? ' ' + record.user_profiles.last_name : '') || 'Unknown User'}"`,
-                `"${record.user_profiles?.departments?.name || "Missing authoritative record"}"`,
-                `"${record.user_profiles?.assigned_location?.name || "Missing authoritative record"}"`,
+                `"${record.user_profiles?.employee_id || "Not recorded"}"`,
+                `"${(record.user_profiles?.first_name || "") + (record.user_profiles?.last_name ? ' ' + record.user_profiles.last_name : '') || 'Unnamed staff record'}"`,
+                `"${record.user_profiles?.departments?.name || "Not recorded"}"`,
+                `"${record.user_profiles?.assigned_location?.name || "Not recorded"}"`,
                 `"${new Date(record.check_in_time).toLocaleTimeString()}"`,
                 `"${checkInLabel}"`,
                 `"${record.is_check_in_outside_location ? "Outside Assigned Location" : "On-site"}"`,
-                `"${record.check_out_time ? new Date(record.check_out_time).toLocaleTimeString() : "Missing authoritative record"}"`,
+                `"${record.check_out_time ? new Date(record.check_out_time).toLocaleTimeString() : "Not checked out"}"`,
                 `"${checkOutLabel}"`,
                 `"${record.is_check_out_outside_location ? "Outside Assigned Location" : "On-site"}"`,
                 `"${record.early_checkout_reason || "-"}"`,
@@ -740,21 +750,21 @@ export function AttendanceReports({
           ...exportRecords.map((record) => {
             const checkInLabel = record.google_maps_name && record.is_check_in_outside_location
               ? record.google_maps_name
-              : record.check_in_location?.name || record.check_in_location_name || "Missing authoritative record"
+              : record.check_in_location?.name || record.check_in_location_name || "Not recorded"
 
             const checkOutLabel =
-              record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || "Missing authoritative record"
+              record.check_out_location?.name || record.check_out_location_name || record.check_in_location_name || "Not recorded"
 
             const firstName = record.user_profiles?.first_name || ""
             const lastName = record.user_profiles?.last_name || ""
-            const fullName = (firstName + (lastName ? " " + lastName : "")).trim() || "Unknown User"
+            const fullName = (firstName + (lastName ? " " + lastName : "")).trim() || "Unnamed staff record"
 
             return [
               new Date(record.check_in_time).toLocaleDateString(),
-              record.user_profiles?.employee_id || "Missing authoritative record",
+              record.user_profiles?.employee_id || "Not recorded",
               fullName,
-              record.user_profiles?.departments?.name || "Missing authoritative record",
-              record.user_profiles?.assigned_location?.name || "Missing authoritative record",
+              record.user_profiles?.departments?.name || "Not recorded",
+              record.user_profiles?.assigned_location?.name || "Not recorded",
               new Date(record.check_in_time).toLocaleTimeString(),
               checkInLabel,
               record.is_check_in_outside_location ? "Outside Assigned Location" : "On-site",
@@ -766,7 +776,7 @@ export function AttendanceReports({
               record.lateness_reason || "-",
               record.lateness_proved_by || "-",
               record.work_hours != null ? Number(record.work_hours.toFixed(2)) : 0,
-              record.status ? record.status.charAt(0).toUpperCase() + record.status.slice(1) : "Missing authoritative record",
+              record.status ? record.status.charAt(0).toUpperCase() + record.status.slice(1) : "Not recorded",
               record.is_check_in_outside_location || record.is_check_out_outside_location ? "Remote Work" : "On-site",
             ]
           }),
@@ -904,26 +914,6 @@ export function AttendanceReports({
     // Department, location, district, and status are applied by the report API.
     // Reapplying them here can hide valid rows when legacy profile relationships
     // are returned in a different shape than the current UI expects.
-
-    // Search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim()
-      filtered = filtered.filter((r) => {
-        const fullName = `${r.user_profiles?.first_name || ""} ${r.user_profiles?.last_name || ""}`.toLowerCase()
-        const employeeId = r.user_profiles?.employee_id?.toLowerCase() || ""
-        const department = r.user_profiles?.departments?.name?.toLowerCase() || ""
-        const assignedLocation = r.user_profiles?.assigned_location?.name?.toLowerCase() || ""
-        const district = r.user_profiles?.assigned_location?.districts?.name?.toLowerCase() || ""
-
-        return (
-          fullName.includes(query) ||
-          employeeId.includes(query) ||
-          department.includes(query) ||
-          assignedLocation.includes(query) ||
-          district.includes(query)
-        )
-      })
-    }
 
     return filtered
   }
@@ -1172,22 +1162,43 @@ export function AttendanceReports({
             </div>
           </div>
 
-          {/* Secondary Filters - simplified (search only) */}
+          {/* Staff search - instant local feedback, debounced network fetch */}
           <div className="grid gap-4 mb-4">
             <div className="space-y-3">
-              <label className="text-sm font-semibold text-gray-700 dark:text-slate-200 flex items-center gap-2">
-                <Search className="h-4 w-4 text-pink-600" />
-                Search
-              </label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-sm font-semibold text-gray-700 dark:text-slate-200 flex items-center gap-2">
+                  <Search className="h-4 w-4 text-primary" />
+                  Search staff attendance
+                </label>
+                {searchQuery && (
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {sortedRecords.length.toLocaleString()} match{sortedRecords.length === 1 ? "" : "es"}
+                  </span>
+                )}
+              </div>
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-slate-400" />
+                <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <input
                   type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by name, ID, department..."
-                  className={`w-full pl-10 pr-4 ${compactMode ? 'py-1.5 text-xs' : 'py-2 text-sm'} border border-gray-200 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-150 bg-gray-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 text-gray-900 dark:text-slate-100 placeholder:text-gray-500 dark:placeholder:text-slate-400`}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="Search by staff name, employee ID, or department..."
+                  autoComplete="off"
+                  className={`w-full rounded-xl border border-border bg-background pl-10 pr-9 ${compactMode ? 'py-1.5 text-xs' : 'py-2.5 text-sm'} shadow-sm transition-all duration-150 focus:border-primary focus:ring-2 focus:ring-primary/25 placeholder:text-muted-foreground`}
                 />
+                {searchInput && (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => { setSearchInput(""); setSearchQuery("") }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+                {searchInput.trim() !== searchQuery && searchInput.trim() !== "" && (
+                  <Loader2 className="absolute -right-6 top-1/2 hidden -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground sm:block" />
+                )}
               </div>
             </div>
           </div>
@@ -1216,6 +1227,23 @@ export function AttendanceReports({
                   {option.label}
                 </Button>
               ))}
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearchInput("")
+                  setSearchQuery("")
+                  setSelectedStatus("all")
+                  setSelectedDistrict("all")
+                  setSelectedRegion("all")
+                  if (!isDeptHead) setSelectedDepartment("all")
+                  if (!isRegionalManager && !locationIsLocked) setSelectedLocation("all")
+                }}
+                className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+              >
+                <X className="mr-1 h-3.5 w-3.5" /> Clear filters
+              </Button>
             </div>
           </div>
 
@@ -1794,11 +1822,11 @@ export function AttendanceReports({
                               </div>
                               <div>
                                 <p className="font-medium text-gray-900 dark:text-slate-100">{displayUserLabel(record)}</p>
-                                <p className="text-sm text-gray-600 dark:text-slate-300">{record.user_profiles?.employee_id || 'Missing authoritative record'}</p>
+                                <p className="text-sm text-gray-600 dark:text-slate-300">{record.user_profiles?.employee_id || 'No staff ID'}</p>
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className={compactMode ? "py-1" : "py-2"}><Badge variant="outline" className={compactMode ? "font-medium text-gray-700 dark:text-slate-200 text-xs" : "font-medium text-gray-700 dark:text-slate-200 text-sm"}>{record.user_profiles?.departments?.name || 'Missing authoritative record'}</Badge></TableCell>
+                          <TableCell className={compactMode ? "py-1" : "py-2"}><Badge variant="outline" className={compactMode ? "font-medium text-gray-700 dark:text-slate-200 text-xs" : "font-medium text-gray-700 dark:text-slate-200 text-sm"}>{record.user_profiles?.departments?.name || 'Unassigned'}</Badge></TableCell>
                           <TableCell className={compactMode ? "py-1 text-gray-800 dark:text-slate-200 text-xs" : "py-2 text-gray-800 dark:text-slate-200 text-sm"}>{new Date(record.check_in_time).toLocaleTimeString()}</TableCell>
                           <TableCell className="py-2 text-gray-800 dark:text-slate-200 text-sm"><div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-gray-500 dark:text-slate-400" /><span className="text-sm text-gray-700 dark:text-slate-300 max-w-xs truncate block" title={getLocationLabel(record, 'in')}>{getLocationLabel(record, 'in')}</span></div></TableCell>
                           <TableCell className={compactMode ? "hidden sm:table-cell py-1 text-gray-800 dark:text-slate-200 text-xs" : "hidden sm:table-cell py-2 text-gray-800 dark:text-slate-200 text-sm"}>{record.check_out_time ? new Date(record.check_out_time).toLocaleTimeString() : <span className="text-gray-400 dark:text-slate-400">-</span>}</TableCell>
@@ -1881,7 +1909,7 @@ export function AttendanceReports({
                     <div key={record.id} className="p-2 bg-white rounded-md shadow-sm border">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium">{displayUserLabel(record)} <span className="text-xs text-gray-500">({record.user_profiles?.employee_id || record.user_id?.slice(0,8) || 'Missing authoritative record'})</span></p>
+                          <p className="text-sm font-medium">{displayUserLabel(record)} <span className="text-xs text-gray-500">({record.user_profiles?.employee_id || 'No staff ID'})</span></p>
                           <p className="text-xs text-gray-500">{new Date(record.check_in_time).toLocaleDateString()} • {new Date(record.check_in_time).toLocaleTimeString()}</p>
                         </div>
                         <div className="text-right">

@@ -17,7 +17,7 @@ type Driver = {
   license_document_url?: string | null; assigned_region_id?: string | null; production_year?: number | null; issuing_authority?: string | null; obtained_at?: string | null
 }
 
-export function DriverLicenseWorkspace({ initialDrivers, canVerify, role = "manager", assignedTasks = [] }: { initialDrivers: Driver[]; canVerify: boolean; role?: string; assignedTasks?: any[] }) {
+export function DriverLicenseWorkspace({ initialDrivers, canVerify, role = "manager", assignedTasks = [], readOnlyTasks = false }: { initialDrivers: Driver[]; canVerify: boolean; role?: string; assignedTasks?: any[]; readOnlyTasks?: boolean }) {
   const canEdit = canManageTransport(role)
   const [drivers, setDrivers] = useState(initialDrivers)
   const [search, setSearch] = useState("")
@@ -109,10 +109,16 @@ export function DriverLicenseWorkspace({ initialDrivers, canVerify, role = "mana
                 {(task.trip_started_at || task.trip_completed_at) && <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground sm:col-span-2 lg:col-span-4">{task.trip_started_at && <span>Started {new Date(task.trip_started_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</span>}{task.trip_completed_at && <span>Completed {new Date(task.trip_completed_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</span>}</div>}
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2 border-t bg-muted/20 px-4 py-3">
-                {task.status === "approved" && <span className="text-xs text-muted-foreground">Awaiting vehicle assignment</span>}
-                {!started && task.status === "assigned" && <Button size="sm" disabled={tripBusy === task.id} onClick={() => updateTrip(task.id, "start_trip")}>{tripBusy === task.id ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Play className="mr-1 size-4" />}Start trip</Button>}
-                {started && !done && <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={tripBusy === task.id} onClick={() => updateTrip(task.id, "complete_trip")}>{tripBusy === task.id ? <Loader2 className="mr-1 size-4 animate-spin" /> : <CheckCircle2 className="mr-1 size-4" />}Confirm completion</Button>}
-                {done && <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600"><CheckCircle2 className="size-4" /> Trek completed</span>}
+                {readOnlyTasks ? (
+                  done ? <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600"><CheckCircle2 className="size-4" /> Trek completed</span> : <span className="text-xs text-muted-foreground">Managed by Chief Driver / Transport Manager</span>
+                ) : (
+                  <>
+                    {task.status === "approved" && <span className="text-xs text-muted-foreground">Awaiting vehicle assignment</span>}
+                    {!started && task.status === "assigned" && <Button size="sm" disabled={tripBusy === task.id} onClick={() => updateTrip(task.id, "start_trip")}>{tripBusy === task.id ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Play className="mr-1 size-4" />}Start trip</Button>}
+                    {started && !done && <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={tripBusy === task.id} onClick={() => updateTrip(task.id, "complete_trip")}>{tripBusy === task.id ? <Loader2 className="mr-1 size-4 animate-spin" /> : <CheckCircle2 className="mr-1 size-4" />}Confirm completion</Button>}
+                    {done && <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600"><CheckCircle2 className="size-4" /> Trek completed</span>}
+                  </>
+                )}
               </div>
             </article>
           )

@@ -64,7 +64,8 @@ export function LocationPreviewCard({
       setUserLocation(location)
       reverseGeocode(location.latitude, location.longitude)
     } catch (error) {
-      console.error("[v0] Failed to load location:", error)
+      // Permission denial / GPS unavailable is an expected user state, not an app error.
+      console.warn("[v0] Failed to load location:", error)
     }
   }
 

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 import { TransportWorkspace } from "@/components/transport/transport-workspace"
 import { createClient } from "@/lib/supabase/server"
-import { canCreateTransportRequest, canManageTransport, isChiefDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
+import { canCreateTransportRequest, canManageTransport, isChiefDriverRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 
 const TRANSPORT_ROLES = new Set([
   "admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "transport_manager", "regional_hr", "regional hr", "regional_hr_office", "regional hr office", "regional_hr_officer", "regional hr officer", "regional_manager", "regional manager",
@@ -37,6 +37,9 @@ export default async function TransportPage() {
   const isRegionalHr = isRegionalHrRole(profile.role)
   const isRegionalManager = isRegionalManagerRole(profile.role)
   const isRegionalScoped = isChiefDriver || isRegionalHr || isRegionalManager
+  const isDriver = normalizedRole === "driver"
+  const isRegionalDriver = isDriver && isRegionalDriverRole(profile.role)
+  const isNonRegionalDriver = isDriver && !isRegionalDriver
 
   const assignedLocation = profile.geofence_locations as { name?: string | null; district_id?: string | null; districts?: { region_id?: string | null } | null } | null
   const locationId = profile.assigned_location_id ?? null
@@ -54,7 +57,11 @@ export default async function TransportPage() {
       ? "Your non-regional trips"
       : isTransportManager
         ? "Nationwide"
-        : ""
+        : isRegionalDriver
+          ? (rawRegionalName ? `${rawRegionalName.replace(/\s+Regional\s+Office$/i, "").replace(/\s+Region$/i, "").trim()} Region` : assignedLocationName || "Assigned region")
+          : isNonRegionalDriver
+            ? "Your assigned trips"
+            : ""
 
   let pendingCount = 0
   let totalCount = 0
@@ -130,6 +137,34 @@ export default async function TransportPage() {
     } catch (error) {
       console.error("[v0] Transport landing: manager metrics unavailable", error)
     }
+  } else if (isRegionalDriver) {
+    try {
+      const { data: rows } = await supabase
+        .from("transport_requests")
+        .select("id, status, workflow_stage")
+        .eq("assigned_driver_id", user.id)
+      const rows_ = rows ?? []
+      totalCount = rows_.length
+      pendingCount = rows_.filter((row) => !["completed", "closed"].includes(String(row.status || "")) && row.workflow_stage !== "completed").length
+      approvedCount = rows_.filter((row) => ["approved", "referenced", "completed"].includes(String(row.status || ""))).length
+      assignedCount = rows_.filter((row) => row.status === "completed" || row.workflow_stage === "completed").length
+    } catch (error) {
+      console.error("[v0] Transport landing: regional driver metrics unavailable", error)
+    }
+  } else if (isNonRegionalDriver) {
+    try {
+      const { data: rows } = await supabase
+        .from("nonregional_transport_requisitions")
+        .select("id, status, recommended_driver_id")
+        .eq("recommended_driver_id", user.id)
+      const rows_ = rows ?? []
+      totalCount = rows_.length
+      pendingCount = rows_.filter((row) => ["approved", "assigned"].includes(String(row.status || ""))).length
+      approvedCount = rows_.filter((row) => row.status === "in_progress").length
+      assignedCount = rows_.filter((row) => row.status === "completed").length
+    } catch (error) {
+      console.error("[v0] Transport landing: non-regional driver metrics unavailable", error)
+    }
   } else {
     try {
       const { count: allTransportCount } = await supabase.from("transport_requests").select("id", { count: "exact", head: true })
@@ -185,6 +220,7 @@ export default async function TransportPage() {
       regionalPendingCount={regionalPendingCount}
       nonRegionalPendingCount={nonRegionalPendingCount}
       scopeLabel={scopeLabel}
+      driverKind={isRegionalDriver ? "regional" : isNonRegionalDriver ? "nonregional" : undefined}
     />
   )
 }

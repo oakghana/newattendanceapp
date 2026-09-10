@@ -33,6 +33,17 @@ export function isChiefDriverRole(role?: string | null): boolean {
   return normalizeAppRole(role) === "chief_driver"
 }
 
+/** Regional drivers are stored as a distinct raw role but normalize to "driver" for permission checks.
+ *  Use this to keep regional vs non-regional driver dashboards/data scoped separately. */
+export function isRegionalDriverRole(role?: string | null): boolean {
+  const raw = String(role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
+  return ["regional_driver", "regional_drivers"].includes(raw)
+}
+
+export function isNonRegionalDriverRole(role?: string | null): boolean {
+  return normalizeAppRole(role) === "driver" && !isRegionalDriverRole(role)
+}
+
 export function isDepartmentHeadRole(role?: string | null): boolean {
   return normalizeAppRole(role) === "department_head"
 }

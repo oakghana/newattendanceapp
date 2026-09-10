@@ -4,6 +4,43 @@ import { type NextRequest, NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
 
+// PostgREST sends `in` filters in the query string, so a single large list overflows the
+// URL limit and the whole lookup fails. Split ids into chunks and merge the results.
+const ID_CHUNK_SIZE = 150
+
+function chunkIds(ids: string[]): string[][] {
+  const chunks: string[][] = []
+  for (let index = 0; index < ids.length; index += ID_CHUNK_SIZE) {
+    chunks.push(ids.slice(index, index + ID_CHUNK_SIZE))
+  }
+  return chunks
+}
+
+async function selectByIds(
+  client: any,
+  table: string,
+  columns: string,
+  column: string,
+  ids: string[],
+): Promise<any[]> {
+  if (ids.length === 0) return []
+  const results = await Promise.all(
+    chunkIds(ids).map(async (chunk) => {
+      const { data, error } = await client.from(table).select(columns).in(column, chunk)
+      if (error) {
+        console.error(`[v0] Reports API - Chunked lookup failed for ${table}:`, {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+        })
+        return []
+      }
+      return data || []
+    }),
+  )
+  return results.flat()
+}
+
 export async function GET(request: NextRequest) {
   try {
     console.log("[v0] Reports API - Starting request")
@@ -44,6 +81,7 @@ export async function GET(request: NextRequest) {
   const regionId = searchParams.get("region_id")
   const districtId = searchParams.get("district_id")
     const status = searchParams.get("status")
+    const searchTerm = (searchParams.get("search") || "").trim().toLowerCase()
 
     console.log("[v0] Reports API - Filters:", {
       startDate,
@@ -99,6 +137,7 @@ export async function GET(request: NextRequest) {
 
     const adminClientForScope = await createAdminClient()
     let regionalScopedLocationIds: string[] | null = null
+    let scopedQueryLocationIds: string[] | null = null
     if ((normalizedRole === "regional_manager" || normalizedRole === "regional_hr") && profile.assigned_location_id) {
       const { data: linkedDistricts } = await adminClientForScope
         .from("region_location_mappings")
@@ -114,8 +153,13 @@ export async function GET(request: NextRequest) {
         ...(linkedDistricts || []).map((mapping) => mapping.district_location_id),
         ...(childLocations || []).map((location) => location.id),
       ].filter((id, index, all) => id && all.indexOf(id) === index)
-  query = query.in("check_in_location_id", regionalScopedLocationIds)
-  } else if (safeRegionId && ["admin", "department_head", "managing_director", "director_hr", "manager_hr"].includes(profile.role)) {
+      // Let regional users drill into a single office inside their own region.
+      scopedQueryLocationIds =
+        safeLocationId && regionalScopedLocationIds.includes(safeLocationId)
+          ? [safeLocationId]
+          : regionalScopedLocationIds
+      query = query.in("check_in_location_id", scopedQueryLocationIds)
+  } else if (safeRegionId && ["admin", "department_head", "managing_director", "director_hr", "manager_hr"].includes(normalizedRole)) {
   const { data: mappedDistricts } = await adminClientForScope
     .from("region_location_mappings")
     .select("district_location_id")
@@ -173,8 +217,8 @@ export async function GET(request: NextRequest) {
     const pageSize = exportMode
       ? Math.min(10000, pageSizeParam ? parseInt(pageSizeParam, 10) || 5000 : 5000)
       : Math.min(5000, pageSizeParam ? parseInt(pageSizeParam, 10) || 1000 : 1000)
-    const startIndex = (page - 1) * pageSize
-    const endIndex = startIndex + pageSize - 1
+    const startIndex = searchTerm ? 0 : (page - 1) * pageSize
+    const endIndex = searchTerm ? 9999 : startIndex + pageSize - 1
 
     const { data: attendanceRecords, error } = await query.order("check_in_time", { ascending: false }).range(startIndex, endIndex)
 
@@ -193,18 +237,13 @@ export async function GET(request: NextRequest) {
       // Use adminClient to bypass RLS — the user client can only see its own profile row,
       // so all other staff would return empty and show as "Staff at [location]".
       const adminClient = await createAdminClient()
-      const { data: profiles, error: profileError } = await adminClient
-        .from("user_profiles")
-        .select("id, first_name, last_name, email, employee_id, department_id, assigned_location_id")
-        .in("id", userIds)
-
-      if (profileError) {
-        console.error("[v0] Reports API - Error fetching scalar user profiles:", {
-          message: profileError.message,
-          code: profileError.code,
-          details: profileError.details,
-        })
-      }
+      const profiles = await selectByIds(
+        adminClient,
+        "user_profiles",
+        "id, first_name, last_name, email, employee_id, position, department_id, assigned_location_id",
+        "id",
+        userIds,
+      )
 
       userProfiles = (profiles || []).map((profile: any) => ({
         ...profile,
@@ -216,17 +255,16 @@ export async function GET(request: NextRequest) {
       const departmentIds = [...new Set(userProfiles.map((profile: any) => profile.department_id).filter(Boolean))]
       const locationIds = [...new Set(userProfiles.map((profile: any) => profile.assigned_location_id).filter(Boolean))]
 
-      const [{ data: departments, error: departmentError }, { data: locations, error: locationError }] = await Promise.all([
-        departmentIds.length
-          ? adminClient.from("departments").select("id, name, code").in("id", departmentIds)
-          : Promise.resolve({ data: [], error: null }),
-        locationIds.length
-          ? adminClient.from("geofence_locations").select("id, name, address, district_id, location_type, parent_location_id").in("id", locationIds)
-          : Promise.resolve({ data: [], error: null }),
+      const [departments, locations] = await Promise.all([
+        selectByIds(adminClient, "departments", "id, name, code", "id", departmentIds as string[]),
+        selectByIds(
+          adminClient,
+          "geofence_locations",
+          "id, name, address, district_id, location_type, parent_location_id",
+          "id",
+          locationIds as string[],
+        ),
       ])
-
-      if (departmentError) console.error("[v0] Reports API - Optional department enrichment failed:", departmentError)
-      if (locationError) console.error("[v0] Reports API - Optional location enrichment failed:", locationError)
 
       const departmentMap = new Map((departments || []).map((department: any) => [department.id, department]))
       const locationMap = new Map((locations || []).map((location: any) => [location.id, location]))
@@ -248,30 +286,28 @@ export async function GET(request: NextRequest) {
     // staff view rather than either user_profiles identity column.
     const missingProfileIds = userIds.filter((id) => !userMap.has(id))
     if (missingProfileIds.length > 0) {
-      const { data: unifiedStaff, error: unifiedStaffError } = await adminClientForScope
-        .from("unified_user_management")
-        .select("user_id, full_name, employee_id, department_name, position, assigned_location_id")
-        .in("user_id", missingProfileIds)
+      const unifiedStaff = await selectByIds(
+        adminClientForScope,
+        "unified_user_management",
+        "user_id, full_name, employee_id, department_name, position",
+        "user_id",
+        missingProfileIds as string[],
+      )
 
-      if (unifiedStaffError) {
-        console.warn("[v0] Reports API - Unified staff enrichment failed:", unifiedStaffError)
-      } else {
-        for (const staff of unifiedStaff || []) {
-          const fullName = String((staff as any).full_name || "").trim()
-          const nameParts = fullName.split(/\s+/).filter(Boolean)
-          const staffUserId = String((staff as any).user_id || "")
-          if (!staffUserId) continue
-          userMap.set(staffUserId, {
-            id: staffUserId,
-            user_id: staffUserId,
-            first_name: nameParts[0] || "",
-            last_name: nameParts.slice(1).join(" "),
-            employee_id: (staff as any).employee_id || null,
-            position: (staff as any).position || null,
-            assigned_location_id: (staff as any).assigned_location_id || null,
-            departments: (staff as any).department_name ? { name: (staff as any).department_name } : null,
-          })
-        }
+      for (const staff of unifiedStaff) {
+        const fullName = String((staff as any).full_name || "").trim()
+        const nameParts = fullName.split(/\s+/).filter(Boolean)
+        const staffUserId = String((staff as any).user_id || "")
+        if (!staffUserId) continue
+        userMap.set(staffUserId, {
+          id: staffUserId,
+          user_id: staffUserId,
+          first_name: nameParts[0] || "",
+          last_name: nameParts.slice(1).join(" "),
+          employee_id: (staff as any).employee_id || null,
+          position: (staff as any).position || null,
+          departments: (staff as any).department_name ? { name: (staff as any).department_name } : null,
+        })
       }
     }
 
@@ -298,7 +334,8 @@ export async function GET(request: NextRequest) {
     }
 
     // All department and location filtering is now done at the DB query level above.
-    // Post-fetch we only need district filtering (no DB column to filter on directly).
+    // Post-fetch we only need district filtering (no DB column to filter on directly)
+    // and global search, because search depends on enriched profile/location fallbacks.
     let filteredRecords = attendanceRecords
 
     if (safeDistrictId) {
@@ -308,6 +345,45 @@ export async function GET(request: NextRequest) {
           user?.assigned_location?.district_id === safeDistrictId ||
           record.check_in_location?.district_id === safeDistrictId
         )
+      })
+    }
+
+    if (searchTerm) {
+      filteredRecords = filteredRecords.filter((record) => {
+        const staff = userMap.get(record.user_id) || {}
+        const searchableText = [
+          record.user_id,
+          staff.first_name,
+          staff.last_name,
+          staff.full_name,
+          staff.email,
+          staff.employee_id,
+          staff.position,
+          staff.departments?.name,
+          staff.departments?.code,
+          staff.department_name,
+          staff.assigned_location?.name,
+          staff.assigned_location?.address,
+          record.check_in_location?.name,
+          record.check_in_location?.address,
+          record.check_out_location?.name,
+          record.check_out_location?.address,
+          record.check_in_location_name,
+          record.check_out_location_name,
+          record.google_maps_name,
+          record.actual_location_name,
+          record.status,
+          record.notes,
+          record.lateness_reason,
+          record.lateness_proved_by,
+          record.early_checkout_reason,
+          record.early_checkout_proved_by,
+        ]
+          .filter(Boolean)
+          .map((value) => String(value).toLowerCase())
+          .join(" ")
+
+        return searchableText.includes(searchTerm)
       })
     }
 
@@ -331,7 +407,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const enrichedRecords = filteredRecords.map((record) => {
+    const pagedRecords = searchTerm
+      ? filteredRecords.slice((page - 1) * pageSize, page * pageSize)
+      : filteredRecords
+
+    const enrichedRecords = pagedRecords.map((record) => {
       const userProfile = userMap.get(record.user_id) || null
 
       // Determine if check-in/check-out was outside assigned location
@@ -413,8 +493,8 @@ export async function GET(request: NextRequest) {
         countQuery = countQuery.eq("user_id", userId)
       }
       // Mirror location scoping
-      if (profile.role === "regional_manager" && regionalScopedLocationIds?.length) {
-        countQuery = countQuery.in("check_in_location_id", regionalScopedLocationIds)
+      if (scopedQueryLocationIds?.length) {
+        countQuery = countQuery.in("check_in_location_id", scopedQueryLocationIds)
       } else if (safeLocationId) {
         countQuery = countQuery.eq("check_in_location_id", safeLocationId)
       }
@@ -426,7 +506,7 @@ export async function GET(request: NextRequest) {
       const deptIdForCount =
         normalizedRole === "department_head" ? profile.department_id : safeDepartmentId
       if (deptIdForCount && normalizedRole !== "staff") {
-        const { data: deptUsersCount } = await supabase
+        const { data: deptUsersCount } = await adminClientForScope
           .from("user_profiles")
           .select("id")
           .eq("department_id", deptIdForCount)
@@ -438,11 +518,13 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const { count: countResult, error: countError } = await countQuery
-      if (countError) {
-        console.error("[v0] Reports API - Count query error:", countError)
-      } else {
-        totalRecords = countResult ?? filteredRecords.length
+      if (!searchTerm) {
+        const { count: countResult, error: countError } = await countQuery
+        if (countError) {
+          console.error("[v0] Reports API - Count query error:", countError)
+        } else {
+          totalRecords = countResult ?? filteredRecords.length
+        }
       }
     } catch (err) {
       console.error("[v0] Reports API - Count exception:", err)

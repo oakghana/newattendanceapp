@@ -18,14 +18,18 @@ interface ReportLocation {
 
 interface AttendanceRecord {
   id: string
+  user_id?: string
   check_in_time: string
   check_out_time?: string
   work_hours?: number
   status: string
+  check_in_location_name?: string
+  check_in_location?: { name?: string }
   user_profiles?: {
     first_name?: string
     last_name?: string
     employee_id?: string
+    position?: string
     departments?: { name?: string }
     assigned_location?: { name?: string }
   }
@@ -55,6 +59,19 @@ function statusBadge(status: string) {
   return map[status] ?? "bg-gray-100 text-gray-800 border-gray-300"
 }
 
+function recordLocationName(record: AttendanceRecord) {
+  return (
+    record.user_profiles?.assigned_location?.name ||
+    record.check_in_location?.name ||
+    record.check_in_location_name ||
+    ""
+  )
+}
+
+function recordStaffName(record: AttendanceRecord) {
+  return `${record.user_profiles?.first_name ?? ""} ${record.user_profiles?.last_name ?? ""}`.trim()
+}
+
 export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId }: SimpleHrReportsProps) {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [totalCount, setTotalCount] = useState(0)
@@ -76,7 +93,7 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
   const departments = Array.from(new Set(records.map(r => r.user_profiles?.departments?.name || "").filter(Boolean))).sort()
   const locations = scopedLocations.length > 0
     ? scopedLocations.map((location) => location.name).sort()
-    : Array.from(new Set(records.map(r => r.user_profiles?.assigned_location?.name || "").filter(Boolean))).sort()
+    : Array.from(new Set(records.map(recordLocationName).filter(Boolean))).sort()
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -88,7 +105,9 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
         page: "1",
         page_size: "5000",
       })
-      if (scopeDepartmentId) params.append("department_id", scopeDepartmentId)
+      // Only a department head is locked to a single department. Regional HR covers every
+      // department across their regional office and its linked district locations.
+      if (scopeRole === "department_head" && scopeDepartmentId) params.append("department_id", scopeDepartmentId)
       // Regional HR must receive the whole assigned region scope, not only the office row.
       if (scopeLocationId && scopeRole !== "regional_hr") params.append("location_id", scopeLocationId)
 
@@ -108,18 +127,20 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
     } finally {
       setLoading(false)
     }
-  }, [dateFrom, dateTo, scopeDepartmentId, scopeLocationId])
+  }, [dateFrom, dateTo, scopeRole, scopeDepartmentId, scopeLocationId])
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // Filtered records
+  // Filtered records — search matches name, staff ID, department, position or location
   const filtered = records.filter((r) => {
-    const name = `${r.user_profiles?.first_name ?? ""} ${r.user_profiles?.last_name ?? ""}`.toLowerCase()
+    const name = recordStaffName(r).toLowerCase()
     const id = (r.user_profiles?.employee_id ?? "").toLowerCase()
     const dept = (r.user_profiles?.departments?.name ?? "").toLowerCase()
-    const loc = (r.user_profiles?.assigned_location?.name ?? "").toLowerCase()
-    const q = search.toLowerCase()
-    const matchSearch = !q || name.includes(q) || id.includes(q) || dept.includes(q) || loc.includes(q)
+    const position = (r.user_profiles?.position ?? "").toLowerCase()
+    const loc = recordLocationName(r).toLowerCase()
+    const q = search.trim().toLowerCase()
+    const matchSearch =
+      !q || [name, id, dept, position, loc].some((field) => field.includes(q))
     const matchStatus = statusFilter === "all" || r.status === statusFilter
     const matchDept = departmentFilter === "all" || dept === departmentFilter.toLowerCase()
     const matchLoc = locationFilter === "all" || loc === locationFilter.toLowerCase()
@@ -128,6 +149,9 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
 
   // Stats — use totalCount (true DB count) for headline; compute status breakdown from fetched records
   const total = totalCount || records.length
+  const uniqueStaff = new Set(
+    records.map((r) => r.user_profiles?.employee_id || r.user_id).filter(Boolean),
+  ).size
   const present = records.filter(r => r.status === "present" || r.status === "on_time").length
   const late = records.filter(r => r.status === "late").length
   const absent = records.filter(r => r.status === "absent").length
@@ -138,10 +162,10 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
   const handleExcel = () => {
     const rows = filtered.map((r, i) => ({
       "#": i + 1,
-      "Name": `${r.user_profiles?.first_name ?? ""} ${r.user_profiles?.last_name ?? ""}`.trim(),
+      "Name": recordStaffName(r),
       "Staff ID": r.user_profiles?.employee_id ?? "",
       "Department": r.user_profiles?.departments?.name ?? "",
-      "Location": r.user_profiles?.assigned_location?.name ?? "",
+      "Location": recordLocationName(r),
       "Date": r.check_in_time ? new Date(r.check_in_time).toLocaleDateString("en-GB") : "",
       "Check In": r.check_in_time ? new Date(r.check_in_time).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "",
       "Check Out": r.check_out_time ? new Date(r.check_out_time).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—",
@@ -156,10 +180,10 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
 
   const handleCSV = () => {
     const rows = filtered.map((r) => [
-      `${r.user_profiles?.first_name ?? ""} ${r.user_profiles?.last_name ?? ""}`.trim(),
+      recordStaffName(r),
       r.user_profiles?.employee_id ?? "",
       r.user_profiles?.departments?.name ?? "",
-      r.user_profiles?.assigned_location?.name ?? "",
+      recordLocationName(r),
       r.check_in_time ? new Date(r.check_in_time).toLocaleDateString("en-GB") : "",
       r.check_in_time ? new Date(r.check_in_time).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "",
       r.check_out_time ? new Date(r.check_out_time).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "",
@@ -180,7 +204,7 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
   return (
     <div className="space-y-6">
       {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card className="border">
           <CardContent className="pt-5 pb-4 px-5">
             <div className="flex items-center gap-3">
@@ -188,6 +212,17 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
               <div>
                 <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total Records</p>
                 <p className="text-2xl font-bold text-foreground">{total}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border">
+          <CardContent className="pt-5 pb-4 px-5">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600"><Users className="h-5 w-5" /></div>
+              <div>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Staff</p>
+                <p className="text-2xl font-bold text-foreground">{uniqueStaff}</p>
               </div>
             </div>
           </CardContent>
@@ -308,7 +343,7 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name, ID or department..."
+                placeholder="Search staff, ID, department, position or district..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="pl-9 h-9"
@@ -370,7 +405,7 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
                 </thead>
                 <tbody className="divide-y divide-border">
                   {filtered.slice(0, parseInt(rowsPerPage)).map((r, i) => {
-                    const name = `${r.user_profiles?.first_name ?? ""} ${r.user_profiles?.last_name ?? ""}`.trim() || "—"
+                    const name = recordStaffName(r) || "—"
                     const checkin = r.check_in_time ? new Date(r.check_in_time) : null
                     const checkout = r.check_out_time ? new Date(r.check_out_time) : null
                     return (
@@ -379,7 +414,7 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
                         <td className="px-5 py-3 font-medium">{name}</td>
                         <td className="px-5 py-3 text-muted-foreground">{r.user_profiles?.employee_id ?? "—"}</td>
                         <td className="px-5 py-3 text-muted-foreground">{r.user_profiles?.departments?.name ?? "—"}</td>
-                        <td className="px-5 py-3 text-muted-foreground text-sm">{r.user_profiles?.assigned_location?.name ?? "—"}</td>
+                        <td className="px-5 py-3 text-muted-foreground text-sm">{recordLocationName(r) || "—"}</td>
                         <td className="px-5 py-3 text-muted-foreground">{checkin ? checkin.toLocaleDateString("en-GB") : "—"}</td>
                         <td className="px-5 py-3">{checkin ? checkin.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—"}</td>
                         <td className="px-5 py-3 text-muted-foreground">{checkout ? checkout.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—"}</td>
@@ -394,9 +429,9 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
                   })}
                 </tbody>
               </table>
-              {filtered.length > 200 && (
+              {filtered.length > parseInt(rowsPerPage) && (
                 <p className="px-5 py-3 text-xs text-muted-foreground border-t">
-                  Showing 200 of {filtered.length} records. Refine your date range or search to see more.
+                  Showing {rowsPerPage} of {filtered.length} records. Refine your date range or search to see more.
                 </p>
               )}
             </div>

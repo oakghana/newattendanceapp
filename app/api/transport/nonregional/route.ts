@@ -4,6 +4,7 @@ import {
   isAdminRole,
   isChiefDriverRole,
   isDepartmentHeadRole,
+  isRegionalDriverRole,
   isTransportManagerRole,
   normalizeAppRole,
   NON_REGIONAL_TRANSPORT_LOCATIONS,
@@ -80,6 +81,8 @@ export async function GET(request: Request) {
     .single()
   const role = normalizeAppRole(profile?.role)
   if (!profile || !VIEW_ROLES.has(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  // Regional drivers only ever handle regional trips (transport_requests); keep them out of the non-regional queue.
+  if (role === "driver" && isRegionalDriverRole(profile.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const { searchParams } = new URL(request.url)
   const requestedPage = Number(searchParams.get("page") ?? "1")
