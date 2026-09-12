@@ -85,6 +85,7 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
   })
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10))
   const [rowsPerPage, setRowsPerPage] = useState("1000")
+  const [page, setPage] = useState(1)
   const [departmentFilter, setDepartmentFilter] = useState("all")
   const [locationFilter, setLocationFilter] = useState("all")
   const [scopedLocations, setScopedLocations] = useState<ReportLocation[]>([])
@@ -131,6 +132,9 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  // Reset to first page whenever filters or page size change so stale offsets don't hide rows.
+  useEffect(() => { setPage(1) }, [search, statusFilter, departmentFilter, locationFilter, rowsPerPage, dateFrom, dateTo])
+
   // Filtered records — search matches name, staff ID, department, position or location
   const filtered = records.filter((r) => {
     const name = recordStaffName(r).toLowerCase()
@@ -146,6 +150,10 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
     const matchLoc = locationFilter === "all" || loc === locationFilter.toLowerCase()
     return matchSearch && matchStatus && matchDept && matchLoc
   })
+
+  const pageSizeNum = parseInt(rowsPerPage, 10) || 1000
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSizeNum))
+  const pagedRecords = filtered.slice((page - 1) * pageSizeNum, page * pageSizeNum)
 
   // Stats — use totalCount (true DB count) for headline; compute status breakdown from fetched records
   const total = totalCount || records.length
@@ -303,10 +311,11 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
                 <SelectValue placeholder="Rows" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="50">50 rows</SelectItem>
-                <SelectItem value="100">100 rows</SelectItem>
-                <SelectItem value="200">200 rows</SelectItem>
-                <SelectItem value="1000">1000 rows</SelectItem>
+                <SelectItem value="25">25 / page</SelectItem>
+                <SelectItem value="50">50 / page</SelectItem>
+                <SelectItem value="100">100 / page</SelectItem>
+                <SelectItem value="200">200 / page</SelectItem>
+                <SelectItem value="1000">1000 / page</SelectItem>
               </SelectContent>
             </Select>
             {/* Department filter */}
@@ -404,13 +413,13 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {filtered.slice(0, parseInt(rowsPerPage)).map((r, i) => {
+                  {pagedRecords.map((r, i) => {
                     const name = recordStaffName(r) || "—"
                     const checkin = r.check_in_time ? new Date(r.check_in_time) : null
                     const checkout = r.check_out_time ? new Date(r.check_out_time) : null
                     return (
                       <tr key={r.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-5 py-3 text-muted-foreground">{i + 1}</td>
+                        <td className="px-5 py-3 text-muted-foreground">{(page - 1) * pageSizeNum + i + 1}</td>
                         <td className="px-5 py-3 font-medium">{name}</td>
                         <td className="px-5 py-3 text-muted-foreground">{r.user_profiles?.employee_id ?? "—"}</td>
                         <td className="px-5 py-3 text-muted-foreground">{r.user_profiles?.departments?.name ?? "—"}</td>
@@ -429,11 +438,18 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
                   })}
                 </tbody>
               </table>
-              {filtered.length > parseInt(rowsPerPage) && (
-                <p className="px-5 py-3 text-xs text-muted-foreground border-t">
-                  Showing {rowsPerPage} of {filtered.length} records. Refine your date range or search to see more.
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 border-t px-5 py-3">
+                <p className="text-xs text-muted-foreground">
+                  Showing {filtered.length === 0 ? 0 : (page - 1) * pageSizeNum + 1}–{Math.min(page * pageSizeNum, filtered.length)} of {filtered.length} records
                 </p>
-              )}
+                <div className="flex items-center gap-1.5">
+                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setPage(1)} disabled={page === 1}>First</Button>
+                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>Prev</Button>
+                  <span className="px-2 text-xs text-muted-foreground">Page {page} of {totalPages}</span>
+                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Next</Button>
+                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>Last</Button>
+                </div>
+              </div>
             </div>
           )}
         </CardContent>

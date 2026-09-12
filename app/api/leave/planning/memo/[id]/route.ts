@@ -784,7 +784,10 @@ export async function GET(
     let tableEntitlement = 0
     let tableTravellingDays = 0
 
-    if (draftBody) {
+    // Annual leave ALWAYS uses the official COCOBOD table format (Entitled/Granted/From/To/Remarks).
+    // Ignore any stored plain-paragraph memo_draft_body (e.g. from the generic
+    // "Leave Period:/Approved Days:" template) so the format never regresses for annual leave.
+    if (leaveTypeKey !== "annual" && draftBody) {
       paragraphs = draftBody
         .split(/\n{2,}/)
         .map((paragraph) => paragraph.trim())

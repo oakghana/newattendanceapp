@@ -31,6 +31,7 @@ import { GOOD_FD_THRESHOLD, isPoorFdScore } from "@/lib/loan-workflow"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
 import { Activity, AlertCircle, BarChart3, Calculator, CheckCircle2, ChevronDown, Clock, Download, Edit3, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Save, Trash2, Upload, UserCog, Users, Wallet, XCircle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
 type LoanType = {
   loan_key: string
@@ -1085,6 +1086,8 @@ export default function LoanAppPage() {
   const [loanOfficeTypeTab, setLoanOfficeTypeTab] = useState("all")
   const [loanOfficeStageTab, setLoanOfficeStageTab] = useState("pending")
   const [loanOfficeViewMode, setLoanOfficeViewMode] = useState<"table" | "card">("table")
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
+  const toggleSection = (key: string) => setCollapsedSections((s) => ({ ...s, [key]: !s[key] }))
   const [isArchivingLoans, setIsArchivingLoans] = useState(false)
   const [loanOfficeLocation, setLoanOfficeLocation] = useState("all")
   const [loanOfficeDept, setLoanOfficeDept] = useState("all")
@@ -3696,10 +3699,13 @@ export default function LoanAppPage() {
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
             {/* section header */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">Processing Queue</p>
-                <p className="text-xs text-slate-500">Review HOD-approved requests, score FD, and forward for approval</p>
-              </div>
+              <button type="button" className="flex flex-1 items-center gap-2 text-left" onClick={() => toggleSection("loanOfficeQueue")}>
+                <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.loanOfficeQueue ? "-rotate-90" : ""}`} />
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Processing Queue</p>
+                  <p className="text-xs text-slate-500">Review HOD-approved requests, score FD, and forward for approval</p>
+                </div>
+              </button>
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs text-slate-600 hover:text-slate-900" onClick={() => setLoanOfficeViewMode(loanOfficeViewMode === "table" ? "card" : "table")}>
                   {loanOfficeViewMode === "table" ? <><LayoutGrid className="h-3.5 w-3.5" /> Cards</> : <><LayoutList className="h-3.5 w-3.5" /> Table</>}
@@ -3710,6 +3716,7 @@ export default function LoanAppPage() {
               </div>
             </div>
 
+            {!collapsedSections.loanOfficeQueue && (<>
             {/* stage pills */}
             <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-5 py-2.5">
               {([ 
@@ -3923,15 +3930,19 @@ export default function LoanAppPage() {
                 </div>
               </div>
             )}
+            </>)}
           </div>
 
-          {/* ── HR Terms Queue ��─ */}
+          {/* ── HR Terms Queue ── */}
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">HR Terms Queue</p>
-                <p className="text-xs text-slate-500">Set disbursement and recovery terms before forwarding to Executive HR</p>
-              </div>
+              <button type="button" className="flex flex-1 items-center gap-2 text-left" onClick={() => toggleSection("hrTermsQueue")}>
+                <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.hrTermsQueue ? "-rotate-90" : ""}`} />
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">HR Terms Queue</p>
+                  <p className="text-xs text-slate-500">Set disbursement and recovery terms before forwarding to Executive HR</p>
+                </div>
+              </button>
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs text-slate-600 hover:text-slate-900" onClick={() => setHrViewMode(hrViewMode === "table" ? "card" : "table")}>
                   {hrViewMode === "table" ? <><LayoutGrid className="h-3.5 w-3.5" /> Cards</> : <><LayoutList className="h-3.5 w-3.5" /> Table</>}
@@ -3942,6 +3953,7 @@ export default function LoanAppPage() {
               </div>
             </div>
 
+            {!collapsedSections.hrTermsQueue && (<>
             <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-2.5">
               <Input value={hrSearch} onChange={(e) => setHrSearch(e.target.value)} placeholder="Search…" className="h-8 w-48 text-xs" />
               <Select value={hrLocation} onValueChange={setHrLocation}>
@@ -4041,16 +4053,20 @@ export default function LoanAppPage() {
                 </div>
               </div>
             )}
+            </>)}
           </div>
 
-          {/* ── Payment Completion Queue ─��� */}
+          {/* ── Payment Completion Queue ── */}
           {p?.hrOffice && (
             <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-100 px-5 py-3.5">
-                <p className="text-sm font-semibold text-slate-900">Mark Payment Completed</p>
-                <p className="text-xs text-slate-500">Record staff loan repayment completion</p>
-              </div>
-              {(() => {
+              <button type="button" className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("paymentCompletion")}>
+                <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.paymentCompletion ? "-rotate-90" : ""}`} />
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Mark Payment Completed</p>
+                  <p className="text-xs text-slate-500">Record staff loan repayment completion</p>
+                </div>
+              </button>
+              {!collapsedSections.paymentCompletion && (() => {
                 const paymentReadyLoans = (data?.inbox?.hrOffice || []).filter(
                   (row) => ["awaiting_hr_terms", "awaiting_committee", "staff_receiving_funds", "partially_recovered"].includes(row.status) && row.recovery_months
                 )
@@ -4084,10 +4100,14 @@ export default function LoanAppPage() {
           {/* ── Loan type breakdown ── */}
           {loanOfficeTypeSummary.length > 0 && (
             <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-100 px-5 py-3.5">
-                <p className="text-sm font-semibold text-slate-900">Loan Type Breakdown</p>
-                <p className="text-xs text-slate-500">Stage counts per loan type across the active queue</p>
-              </div>
+              <button type="button" className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("loanTypeBreakdown")}>
+                <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.loanTypeBreakdown ? "-rotate-90" : ""}`} />
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Loan Type Breakdown</p>
+                  <p className="text-xs text-slate-500">Stage counts per loan type across the active queue</p>
+                </div>
+              </button>
+              {!collapsedSections.loanTypeBreakdown && (
               <div className="grid gap-px bg-slate-100 divide-x-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {loanOfficeTypeSummary.map((item) => (
                   <div key={`loan-summary-${item.loanKey}`} className="bg-white px-5 py-4">
@@ -4110,6 +4130,7 @@ export default function LoanAppPage() {
                   </div>
                 ))}
               </div>
+              )}
             </div>
           )}
 
@@ -8146,6 +8167,42 @@ function ReadOnlyHint({ canAct, roleLabel }: { canAct: boolean; roleLabel: strin
         View-only mode: you can monitor {roleLabel} tab details, but action buttons are restricted for your role.
       </CardContent>
     </Card>
+  )
+}
+
+function CollapsibleSection({
+  id,
+  title,
+  description,
+  collapsed,
+  onToggle,
+  headerExtra,
+  children,
+}: {
+  id: string
+  title: string
+  description?: string
+  collapsed: boolean
+  onToggle: () => void
+  headerExtra?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <Collapsible open={!collapsed} onOpenChange={onToggle} className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
+        <CollapsibleTrigger asChild>
+          <button type="button" className="flex flex-1 items-center gap-2 text-left">
+            <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsed ? "-rotate-90" : ""}`} />
+            <div>
+              <p className="text-sm font-semibold text-slate-900">{title}</p>
+              {description && <p className="text-xs text-slate-500">{description}</p>}
+            </div>
+          </button>
+        </CollapsibleTrigger>
+        {headerExtra}
+      </div>
+      <CollapsibleContent>{children}</CollapsibleContent>
+    </Collapsible>
   )
 }
 
