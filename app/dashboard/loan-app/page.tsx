@@ -1301,6 +1301,9 @@ export default function LoanAppPage() {
     const tabs: { key: string; label: string; href?: string }[] = [{ key: "staff", label: myLoansLabel }]
     // Tracking tab: hidden for pure HR Executives — they work on forwarded loans, not the full pipeline
     if (!isHrExecutiveOnly) tabs.push({ key: "tracking", label: "Tracking" })
+    if (p?.hod || p?.viewAllTabs) {
+      tabs.push({ key: "hod", label: `HOD Review (${c.hod})` })
+    }
 
     // FD Approval tab: only for Accounts executives to review FD values from Loan Office
     if (isAccountsExecutive || isAdminUser) {
@@ -1372,6 +1375,23 @@ export default function LoanAppPage() {
       return true
     })
   }, [visibleTabs])
+
+  const tabGroups = useMemo(() => {
+    const groupDefinitions = [
+      { key: "workspace", label: "My Workspace", keys: ["staff", "tracking", "my-tasks"] },
+      { key: "processing", label: "Review & Processing", keys: ["hod", "loan-office", "accounts", "committee", "director", "fd-approval", "payment-approvals"] },
+      { key: "insights", label: "Insights & Administration", keys: ["repayment-tracking", "analytics", "leave-payment", "loan-payment-advice", "overview", "archive", "fd-completed", "setup"] },
+    ]
+
+    return groupDefinitions
+      .map((group) => ({
+        ...group,
+        tabs: group.keys
+          .map((key) => uniqueVisibleTabs.find((tab) => tab.key === key))
+          .filter((tab): tab is (typeof uniqueVisibleTabs)[number] => Boolean(tab)),
+      }))
+      .filter((group) => group.tabs.length > 0)
+  }, [uniqueVisibleTabs])
 
   // HR Executives land directly on their approval queue
   const defaultTab = (!isAdmin && p?.directorHr && !p?.hod && !p?.loanOffice && !p?.accounts && !p?.committee)
@@ -3107,23 +3127,38 @@ export default function LoanAppPage() {
       </Card>
 
       <Tabs value={activeTab || defaultTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white/80 p-2 shadow-sm backdrop-blur">
-          {uniqueVisibleTabs.map((tab, index) =>
-            tab.href ? (
-              <a
-                key={`${tab.key}-${index}`}
-                href={tab.href}
-                className="rounded-xl border border-transparent px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
-              >
-                {tab.label}
-              </a>
-            ) : (
-              <TabsTrigger key={`${tab.key}-${index}`} value={tab.key} className="rounded-xl border border-transparent px-4 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-emerald-200 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
-                {tab.label}
-              </TabsTrigger>
-            )
-          )}
-        </TabsList>
+        <div className="rounded-2xl border border-slate-200 bg-white/90 p-2 shadow-sm backdrop-blur">
+          <div className="space-y-3">
+            {tabGroups.map((group) => (
+              <section key={group.key} aria-label={group.label} className="space-y-1.5">
+                <div className="px-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                  {group.label}
+                </div>
+                <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1.5 bg-transparent p-0">
+                  {group.tabs.map((tab) =>
+                    tab.href ? (
+                      <a
+                        key={tab.key}
+                        href={tab.href}
+                        className="rounded-lg border border-transparent px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:border-slate-200 hover:bg-slate-100 sm:text-sm"
+                      >
+                        {tab.label}
+                      </a>
+                    ) : (
+                      <TabsTrigger
+                        key={tab.key}
+                        value={tab.key}
+                        className="rounded-lg border border-transparent px-3 py-2 text-xs font-semibold text-slate-600 transition-all hover:border-slate-200 hover:bg-slate-100 data-[state=active]:border-emerald-200 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm sm:text-sm"
+                      >
+                        {tab.label}
+                      </TabsTrigger>
+                    ),
+                  )}
+                </TabsList>
+              </section>
+            ))}
+          </div>
+        </div>
 
         <TabsContent value="staff" className="space-y-4">
           <Card>

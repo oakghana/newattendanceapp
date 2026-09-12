@@ -57,6 +57,7 @@ type TransportWorkspaceProps = {
   requesterLocation?: string
   scopeLabel?: string
   driverKind?: "regional" | "nonregional"
+  isLinkedHod?: boolean
 }
 
 function MetricTile({
@@ -151,6 +152,7 @@ export function TransportWorkspace({
   requesterLocation = "",
   scopeLabel = "",
   driverKind,
+  isLinkedHod = false,
 }: TransportWorkspaceProps) {
   const normalizedRole = role.toLowerCase().trim().replace(/[\s-]+/g, "_")
   const isManagingDirector = ["managing_director", "director"].includes(normalizedRole)
@@ -161,10 +163,11 @@ export function TransportWorkspace({
   const isNonRegionalDriver = isDriver && driverKind !== "regional"
   const canManage = ["admin", "administrator", "it_admin", "it_admin_role"].includes(normalizedRole)
   const isDepartmentHead = normalizedRole === "department_head"
+  const isActingHod = isDepartmentHead || isLinkedHod
   const isTransportManager = normalizedRole === "transport_manager"
   const isChiefDriver = isChiefDriverRole(normalizedRole)
   const isRegionalManager = isRegionalManagerRole(normalizedRole)
-  const canCreateRequest = isChiefDriver || isRegionalHr || isDepartmentHead
+  const canCreateRequest = isChiefDriver || isRegionalHr || isActingHod
   const canViewDriverLicense = isChiefDriver || isRegionalHr || isRegionalManager || isDriver || isTransportManager || canManage
   const canManageFleet = isManagingDirector || isChiefDriver || isRegionalHr || isRegionalManager || isTransportManager || canManage
   const [requestOpen, setRequestOpen] = useState(false)
@@ -192,7 +195,7 @@ export function TransportWorkspace({
       const uploaded = await uploadResponse.json()
       documents.push({ name: file.name, url: uploaded.url, type: file.type, size: file.size })
     }
-    const isNonRegionalRequester = isDepartmentHead
+    const isNonRegionalRequester = isActingHod
     const submittedLocation = String(requesterLocation || "").trim()
     const approvedLocation = NON_REGIONAL_TRANSPORT_LOCATIONS.includes(submittedLocation as (typeof NON_REGIONAL_TRANSPORT_LOCATIONS)[number])
       ? submittedLocation
@@ -232,11 +235,11 @@ export function TransportWorkspace({
     setRequestOpen(false)
     toast({
       title: "Transport request submitted",
-      description: isDepartmentHead
+      description: isActingHod
         ? "Your non-regional requisition is awaiting Managing Director approval."
         : "Your regional request was sent to the Regional Manager for endorsement, then the Managing Director for approval.",
     })
-    router.push(isDepartmentHead ? "/dashboard/transport/nonregional" : "/dashboard/transport/requests")
+    router.push(isActingHod ? "/dashboard/transport/nonregional" : "/dashboard/transport/requests")
     router.refresh()
   }
 
@@ -503,7 +506,7 @@ export function TransportWorkspace({
           ]
 
   const modules = [
-    ...(isDepartmentHead
+    ...(isActingHod
       ? [
           {
             title: "Non-regional requisitions",
@@ -566,14 +569,14 @@ export function TransportWorkspace({
       ? []
       : [
           {
-            title: isDepartmentHead ? "New non-regional trip" : "Approval & fulfilment queues",
-            description: isDepartmentHead
+            title: isActingHod ? "New non-regional trip" : "Approval & fulfilment queues",
+            description: isActingHod
               ? "Create a digital requisition with HOD authorization for Managing Director review."
               : "Review work routed to Regional HR, Regional Managers, HR Records, MD, and Transport.",
             icon: Inbox,
-            href: isDepartmentHead ? "/dashboard/transport/nonregional/new" : "/dashboard/transport/requests",
-            cta: isDepartmentHead ? "Create requisition" : "Open queues",
-            badge: isDepartmentHead ? "Create" : undefined,
+            href: isActingHod ? "/dashboard/transport/nonregional/new" : "/dashboard/transport/requests",
+            cta: isActingHod ? "Create requisition" : "Open queues",
+            badge: isActingHod ? "Create" : undefined,
           },
         ]),
     ...(canViewDriverLicense
@@ -644,7 +647,7 @@ export function TransportWorkspace({
                 </Link>
               </Button>
             )}
-            {(isDepartmentHead || isTransportManager || canManage) && (
+            {(isActingHod || isTransportManager || canManage) && (
               <Button variant="outline" className="bg-background/80" asChild>
                 <Link href="/dashboard/transport/nonregional">
                   <Route data-icon="inline-start" /> Non-regional
@@ -653,7 +656,7 @@ export function TransportWorkspace({
             )}
             {canCreateRequest && (
               <Button onClick={() => setRequestOpen(true)}>
-                <Plus data-icon="inline-start" /> {isDepartmentHead ? "New non-regional trip" : "New regional request"}
+                <Plus data-icon="inline-start" /> {isActingHod ? "New non-regional trip" : "New regional request"}
               </Button>
             )}
           </div>

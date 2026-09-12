@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { resolveEffectiveLeaveEndDate } from '@/lib/resumption-confirmation-helpers'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   try {
-    const { leave_plan_request_id } = await req.json()
+    const { leave_plan_request_id, action = 'confirmed', notes } = await req.json()
 
-    if (!leave_plan_request_id) {
+    if (!leave_plan_request_id || !['confirmed', 'not_resumed'].includes(action)) {
       return NextResponse.json(
-        { error: 'Missing leave_plan_request_id' },
+        { error: 'Invalid request parameters' },
         { status: 400 }
       )
     }
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
     // Fetch the leave request to get user_id and end_date
     const { data: leaveRequest, error: fetchErr } = await admin
       .from('leave_plan_requests')
-      .select('id, user_id, preferred_end_date')
+      .select('id, user_id, preferred_end_date, adjusted_end_date')
       .eq('id', leave_plan_request_id)
       .single()
 
@@ -72,7 +73,10 @@ export async function POST(req: NextRequest) {
     }
 
     const staffUserId = leaveRequest.user_id
-    const leaveEndDate = leaveRequest.preferred_end_date
+    const leaveEndDate = resolveEffectiveLeaveEndDate(leaveRequest)
+    if (!leaveEndDate) {
+      return NextResponse.json({ error: 'Leave end date not found' }, { status: 400 })
+    }
 
     // Approved leave processing creates the canonical record by leave request.
     // Older records are matched by employee and leave end date as a fallback.
@@ -99,6 +103,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch resumption record' }, { status: 500 })
     }
 
+    const isConfirmed = action === 'confirmed'
     const today = new Date().toISOString().split('T')[0]
     let resumptionId = requestResumption?.id || legacyResumption?.id
 
@@ -109,12 +114,12 @@ export async function POST(req: NextRequest) {
           user_id: staffUserId,
           leave_request_id: leave_plan_request_id,
           leave_end_date: leaveEndDate,
-          status: 'resumed',
+          status: isConfirmed ? 'resumed' : 'pending',
           days_overdue: 0,
-          first_check_in_date: today,
-          first_hod_rm_check_in_date: today,
-          resumption_date: today,
-          confirmation_status: 'confirmed',
+          first_check_in_date: isConfirmed ? today : null,
+          first_hod_rm_check_in_date: isConfirmed ? today : null,
+          resumption_date: isConfirmed ? today : null,
+          confirmation_status: isConfirmed ? 'confirmed' : 'rejected',
         })
         .select('id')
         .single()
@@ -129,11 +134,11 @@ export async function POST(req: NextRequest) {
         .from('leave_resumption_notifications')
         .update({
           leave_request_id: leave_plan_request_id,
-          status: 'resumed',
-          first_check_in_date: today,
-          first_hod_rm_check_in_date: today,
-          resumption_date: today,
-          confirmation_status: 'confirmed',
+          status: isConfirmed ? 'resumed' : 'pending',
+          first_check_in_date: isConfirmed ? today : null,
+          first_hod_rm_check_in_date: isConfirmed ? today : null,
+          resumption_date: isConfirmed ? today : null,
+          confirmation_status: isConfirmed ? 'confirmed' : 'rejected',
         })
         .eq('id', resumptionId)
 
@@ -154,9 +159,10 @@ export async function POST(req: NextRequest) {
 
     const confirmationUpdate = {
       hod_rm_user_id: user.id,
-      hod_rm_confirmation_status: 'confirmed',
+      hod_rm_confirmation_status: isConfirmed ? 'confirmed' : 'rejected',
       hod_rm_confirmed_at: new Date().toISOString(),
-      final_status: 'confirmed',
+      hod_rm_notes: notes || null,
+      final_status: isConfirmed ? 'confirmed' : 'rejected',
     }
     const { error: confirmationError } = existingConfirmation
       ? await admin.from('leave_resumption_confirmations').update(confirmationUpdate).eq('id', existingConfirmation.id)
@@ -172,7 +178,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Staff resumption confirmed successfully',
+      message: isConfirmed ? 'Staff resumption confirmed successfully' : 'Staff marked as not resumed',
       resumption_id: resumptionId,
     })
   } catch (err) {

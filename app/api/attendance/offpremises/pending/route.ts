@@ -1,5 +1,8 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
+import { isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
+import { isNonRegionalLocation } from "@/lib/location-mappings"
+import { isRegionalManagerLocationMatch, loadLocationHierarchyMap } from "@/lib/regional-manager-scope"
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,7 +42,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    if (!["department_head", "regional_manager", "admin"].includes(managerProfile.role)) {
+    const managerRole = normalizeAppRole(managerProfile.role)
+    if (!["department_head", "regional_manager", "regional_hr", "admin"].includes(managerRole)) {
       // Staff members can only see their own pending requests
       let query = adminClient
         .from("pending_offpremises_checkins")
@@ -129,7 +133,7 @@ export async function GET(request: NextRequest) {
 
     // if non-admin manager, restrict to own department or assigned location
     // Note: Filter based on nested user_profiles data client-side since PostgREST doesn't support OR on nested filters well
-    if (managerProfile.role !== 'admin') {
+    if (managerRole !== "admin") {
       // Fetch all records first, then filter client-side
       const allRes = await queryWithReason
       if (allRes.error) {
@@ -140,15 +144,22 @@ export async function GET(request: NextRequest) {
       const deptId = managerProfile.department_id
       const locId = managerProfile.assigned_location_id
       
-      // Filter records based on department_id or assigned_location_id
+      const staffLocationIds = (allRes.data || []).map((req: any) => req.user_profiles?.assigned_location_id)
+      const locationMap = await loadLocationHierarchyMap(adminClient, [locId, ...staffLocationIds])
+
       let filteredRequests = allRes.data || []
-      if (deptId || locId) {
-        filteredRequests = filteredRequests.filter((req: any) => {
-          const userDept = req.user_profiles?.department_id
-          const userLoc = req.user_profiles?.assigned_location_id
-          return (deptId && userDept === deptId) || (locId && userLoc === locId)
-        })
-      }
+      filteredRequests = filteredRequests.filter((req: any) => {
+        const userDept = req.user_profiles?.department_id
+        const userLoc = req.user_profiles?.assigned_location_id
+        const location = locationMap.get(String(userLoc || ""))
+        if (managerRole === "department_head") {
+          return userDept === deptId && isNonRegionalLocation(location?.name)
+        }
+        if (isRegionalManagerRole(managerRole) || isRegionalHrRole(managerRole)) {
+          return Boolean(userLoc) && !isNonRegionalLocation(location?.name) && isRegionalManagerLocationMatch(userLoc, location, locId, locationMap)
+        }
+        return true
+      })
 
       // Apply status filter if needed
       if (statusFilter !== 'all') {

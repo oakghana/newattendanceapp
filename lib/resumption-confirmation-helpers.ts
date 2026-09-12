@@ -1,3 +1,7 @@
+export function resolveEffectiveLeaveEndDate(leaveRequest: { adjusted_end_date?: string | null; preferred_end_date?: string | null }): string {
+  return String(leaveRequest.adjusted_end_date || leaveRequest.preferred_end_date || '').slice(0, 10)
+}
+
 /**
  * Calculate how many days have passed since the leave end date.
  * Returns 0 if leave has not ended yet.

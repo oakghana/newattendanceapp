@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url"
 
 /** @type {import('next').NextConfig} */
 const projectRoot = path.dirname(fileURLToPath(import.meta.url))
+const isDevelopment = process.env.NODE_ENV !== "production"
 
 const nextConfig = {
   typescript: {
@@ -54,7 +55,7 @@ const nextConfig = {
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=3600, stale-while-revalidate=86400'
+            value: isDevelopment ? 'no-store, max-age=0' : 'public, max-age=3600, stale-while-revalidate=86400'
           },
           {
             key: 'X-Content-Type-Options',
@@ -71,7 +72,7 @@ const nextConfig = {
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable'
+            value: isDevelopment ? 'no-store, max-age=0' : 'public, max-age=31536000, immutable'
           }
         ],
       },

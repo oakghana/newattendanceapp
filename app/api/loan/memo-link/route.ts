@@ -40,6 +40,13 @@ export async function POST(request: NextRequest) {
     const role = normalizeRole((profile as any).role)
     const deptName = (profile as any)?.departments?.name || null
     const deptCode = (profile as any)?.departments?.code || null
+    const { data: memoHodLink } = await admin
+      .from("loan_hod_linkages")
+      .select("id")
+      .eq("hod_user_id", user.id)
+      .eq("staff_user_id", loan.user_id)
+      .maybeSingle()
+    const isLinkedHodForLoan = Boolean(memoHodLink)
 
     const isRegionalManagerForLoan =
       role === "regional_manager" &&
@@ -55,7 +62,7 @@ export async function POST(request: NextRequest) {
       ["hr_records", "hr_records_officer", "hr_records_manager"].includes(role) ||
       ["regional_hr_leave_office", "regional_hr", "regional_leave_office"].includes(role) ||
       role === "it-admin" ||
-      canDoHodReview(role) ||
+      canDoHodReview(role, isLinkedHodForLoan) ||
       canDoCommittee(role) ||
       canDoLoanOffice(role, deptName, deptCode) ||
       canDoHrOffice(role, deptName, deptCode) ||

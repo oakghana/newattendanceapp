@@ -52,6 +52,10 @@ type TrackedMemoEditorProps = {
   currentLabel?: string
   subjectPlaceholder?: string
   bodyPlaceholder?: string
+  bodyLabel?: string
+  ccLabel?: string
+  ccPlaceholder?: string
+  fixedCcRecipients?: string[]
   bodyRows?: number
 }
 
@@ -72,21 +76,28 @@ export function TrackedMemoEditor({
   currentLabel = "HR Executive edits",
   subjectPlaceholder = "Memo subject",
   bodyPlaceholder = "Edit the memo body before signing.",
+  bodyLabel = "Memo body",
+  ccLabel = "CC list",
+  ccPlaceholder = "Add any other people to copy",
+  fixedCcRecipients = [],
   bodyRows = 8,
 }: TrackedMemoEditorProps) {
   const [mode, setMode] = useState<"edit" | "changes">("edit")
+  const fixedCcText = fixedCcRecipients.map((recipient) => recipient.trim()).filter(Boolean).join("\n")
+  const originalCcForDiff = [fixedCcText, originalCc].filter(Boolean).join("\n")
+  const currentCcForDiff = [fixedCcText, cc].filter(Boolean).join("\n")
   const fields = useMemo(
     () =>
       buildMemoFieldChanges({
         originalSubject,
         originalBody,
-        originalCc,
+        originalCc: originalCcForDiff,
         subject,
         body,
-        cc,
+        cc: currentCcForDiff,
         includeCc: showCc,
       }),
-    [originalSubject, originalBody, originalCc, subject, body, cc, showCc],
+    [originalSubject, originalBody, originalCcForDiff, subject, body, currentCcForDiff, showCc],
   )
   const changedCount = fields.filter((field) => field.changed).length
   const editCounts = fields.reduce(
@@ -157,7 +168,7 @@ export function TrackedMemoEditor({
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">{readOnly ? "Body" : "Memo body"}</Label>
+            <Label className="text-xs">{readOnly ? bodyLabel : bodyLabel}</Label>
             <Textarea
               value={body}
               onChange={(event) => onBodyChange?.(event.target.value)}
@@ -168,12 +179,20 @@ export function TrackedMemoEditor({
             />
           </div>
           {showCc && (
-            <div className="space-y-1">
-              <Label className="text-xs">CC list (one per line)</Label>
+            <div className="space-y-2">
+              {fixedCcText && (
+                <>
+                  <Label className="text-xs">Permanent CC list</Label>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 whitespace-pre-line">
+                    {fixedCcText}
+                  </div>
+                </>
+              )}
+              <Label className="text-xs">{ccLabel} <span className="font-normal text-slate-400">(optional, one per line)</span></Label>
               <Textarea
                 value={cc}
                 onChange={(event) => onCcChange?.(event.target.value)}
-                placeholder={"Managing Director\nDeputy Managing Director\nFile"}
+                placeholder={ccPlaceholder}
                 rows={3}
                 readOnly={readOnly}
                 className="resize-none text-sm bg-white"

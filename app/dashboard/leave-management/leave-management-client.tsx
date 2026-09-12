@@ -91,6 +91,7 @@ interface LeaveManagementClientProps {
   userFirstName: string | null
   userLastName: string | null
   hasHodLinkage: boolean
+  isAssignedHod?: boolean
   inactivityDays: number
   initialStaffRequests: LeaveRequest[]
   initialManagerNotifications: LeaveNotification[]
@@ -119,11 +120,12 @@ export function LeaveManagementClient({
   userFirstName,
   userLastName,
   hasHodLinkage,
+  isAssignedHod = false,
   inactivityDays,
   initialStaffRequests,
   initialManagerNotifications,
   initialApprovedStaffRequests = [],
-  initialSelectedTab = "my-requests",
+  initialSelectedTab = "approved",
 }: LeaveManagementClientProps) {
     const formatDateSafe = (value?: string | null) => {
       if (!value) return "-"
@@ -684,7 +686,7 @@ export function LeaveManagementClient({
 
   const handleApprove = async (notificationId: string) => {
     const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalized)
+    const canManageLeave = isAssignedHod || ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
       return
@@ -729,7 +731,7 @@ export function LeaveManagementClient({
 
   const handleDismiss = async (notificationId: string, reason: string) => {
     const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalized)
+    const canManageLeave = isAssignedHod || ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
       return
@@ -820,7 +822,7 @@ export function LeaveManagementClient({
   // All authenticated users can access their leave request hub. This does not
   // grant reviewer or administrative permissions.
   const canUseStaffLeaveHub = true
-  const isManagerView = ["admin", "regional_manager", "regional_manager_officer", "department_head", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office", "hr", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
+  const isManagerView = isAssignedHod || ["admin", "regional_manager", "regional_manager_officer", "department_head", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office", "hr", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isRegionalManager = normalizedRole === "regional_manager" || normalizedRole === "regional_manager_officer"
   const isAdminView = isAdmin
   const canViewHrTemplates = isAdmin || ["hr_director", "hr_leave_office"].includes(normalizedRole)
@@ -1804,18 +1806,6 @@ export function LeaveManagementClient({
           </CardHeader>
           <CardContent>
             <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
-              <Button
-                onClick={() => setSelectedTab("my-requests")}
-                className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
-                  selectedTab === "my-requests"
-                    ? "bg-blue-600 text-white shadow-md hover:bg-blue-700"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
-                }`}
-                variant={selectedTab === "my-requests" ? "default" : "outline"}
-              >
-                <Calendar className="h-4 w-4" />
-                My Requests ({staffRequests.length + myDefermentRequests.length + myRecallRequests.length})
-              </Button>
               <Button
                 asChild
                 className="gap-2 rounded-xl px-6 py-2 font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-md hover:shadow-lg hover:from-emerald-600 hover:to-emerald-700 transition-all"

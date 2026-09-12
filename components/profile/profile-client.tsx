@@ -76,6 +76,42 @@ interface ProfileClientProps {
   initialProfile: UserProfile | null
 }
 
+async function hydrateProfileReferences(supabase: ReturnType<typeof createClient>, profile: any) {
+  if (!profile) return profile
+
+  const hydratedProfile = { ...profile }
+  if (profile.department_id) {
+    const { data: department } = await supabase
+      .from("departments")
+      .select("id, name, code")
+      .eq("id", profile.department_id)
+      .maybeSingle()
+    if (department) hydratedProfile.departments = department
+  }
+
+  if (profile.assigned_location_id) {
+    const { data: assignedLocation } = await supabase
+      .from("geofence_locations")
+      .select("id, name, address, district_id")
+      .eq("id", profile.assigned_location_id)
+      .maybeSingle()
+
+    if (assignedLocation) {
+      hydratedProfile.assigned_location = assignedLocation
+      if (assignedLocation.district_id) {
+        const { data: district } = await supabase
+          .from("districts")
+          .select("id, name")
+          .eq("id", assignedLocation.district_id)
+          .maybeSingle()
+        if (district) hydratedProfile.assigned_location.districts = district
+      }
+    }
+  }
+
+  return hydratedProfile
+}
+
 export function ProfileClient({ initialUser, initialProfile }: ProfileClientProps) {
   const { toast: appToast } = useToast()
   const [profile, setProfile] = useState<UserProfile | null>(initialProfile)
@@ -192,24 +228,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
 
       const { data: profileData, error } = await supabase
         .from("user_profiles")
-        .select(`
-          *,
-          departments (
-            id,
-            name,
-            code
-          ),
-          assigned_location:assigned_location_id (
-            id,
-            name,
-            address,
-            district_id,
-            districts (
-              id,
-              name
-            )
-          )
-        `)
+        .select("*")
         .eq("id", user.id)
         .maybeSingle()
 
@@ -231,24 +250,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
             role: "staff", // Default role for new users
             is_active: true,
           })
-          .select(`
-            *,
-            departments (
-              id,
-              name,
-              code
-            ),
-            assigned_location:assigned_location_id (
-              id,
-              name,
-              address,
-              district_id,
-              districts (
-                id,
-                name
-              )
-            )
-          `)
+          .select("*")
           .single()
 
         if (createError) {
@@ -256,16 +258,18 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
           throw new Error(`Failed to create profile: ${createError.message}`)
         }
 
-        setProfile(newProfile)
+        const hydratedProfile = await hydrateProfileReferences(supabase, newProfile)
+        setProfile(hydratedProfile)
         setEditForm({
-          first_name: newProfile.first_name || "",
-          last_name: newProfile.last_name || "",
+          first_name: hydratedProfile.first_name || "",
+          last_name: hydratedProfile.last_name || "",
         })
       } else {
-        setProfile(profileData)
+        const hydratedProfile = await hydrateProfileReferences(supabase, profileData)
+        setProfile(hydratedProfile)
         setEditForm({
-          first_name: profileData.first_name || "",
-          last_name: profileData.last_name || "",
+          first_name: hydratedProfile.first_name || "",
+          last_name: hydratedProfile.last_name || "",
         })
       }
     } catch (error: any) {

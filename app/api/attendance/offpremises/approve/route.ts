@@ -1,5 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
+import { isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
+import { isNonRegionalLocation } from "@/lib/location-mappings"
+import { isRegionalManagerLocationMatch, loadLocationHierarchyMap } from "@/lib/regional-manager-scope"
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,7 +30,7 @@ export async function POST(request: NextRequest) {
     // Verify the approver is a department head, regional manager, or admin
     const { data: approverProfile, error: approverError } = await supabase
       .from("user_profiles")
-      .select("role, department_id")
+      .select("role, department_id, assigned_location_id")
       .eq("id", user_id)
       .single()
 
@@ -39,7 +42,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!["department_head", "regional_manager", "admin"].includes(approverProfile.role)) {
+    const approverRole = normalizeAppRole(approverProfile.role)
+    if (!["department_head", "regional_manager", "regional_hr", "admin"].includes(approverRole)) {
       console.error("[v0] User not authorized to approve:", approverProfile.role)
       return NextResponse.json(
         { error: "Only managers can approve off-premises check-ins" },
@@ -81,21 +85,33 @@ export async function POST(request: NextRequest) {
     }
 
     // Permission validation based on role
-    if (approverProfile.role === "admin") {
+    const staffLocationId = pendingRequest.user_profiles?.assigned_location_id || null
+    const locationMap = await loadLocationHierarchyMap(supabase, [approverProfile.assigned_location_id, staffLocationId])
+    const staffLocation = locationMap.get(String(staffLocationId || ""))
+
+    if (approverRole === "admin") {
       // Admins can approve all requests
       console.log("[v0] Admin approving request")
-    } else if (
-      approverProfile.role === "department_head" &&
-      pendingRequest.user_profiles?.department_id !== approverProfile.department_id
-    ) {
-      // Department heads can only approve requests from staff in their department
+    } else if (approverRole === "department_head" && (
+      pendingRequest.user_profiles?.department_id !== approverProfile.department_id ||
+      !isNonRegionalLocation(staffLocation?.name)
+    )) {
+      // Nonregional department heads can approve only their department's nonregional staff requests.
       console.error("[v0] Department head trying to approve outside their department")
       return NextResponse.json(
-        { error: "You can only approve requests from staff in your department" },
+        { error: "You can only approve nonregional requests from staff in your department" },
+        { status: 403 }
+      )
+    } else if ((isRegionalManagerRole(approverRole) || isRegionalHrRole(approverRole)) && (
+      !staffLocationId ||
+      isNonRegionalLocation(staffLocation?.name) ||
+      !isRegionalManagerLocationMatch(staffLocationId, staffLocation, approverProfile.assigned_location_id, locationMap)
+    )) {
+      return NextResponse.json(
+        { error: "You can only approve regional or district office requests within your assigned regional office" },
         { status: 403 }
       )
     }
-    // Regional managers can approve all in current setup since we don't have location filtering
 
     if (approved) {
       console.log("[v0] Approving request (type=%s)", pendingRequest.request_type || 'checkin')

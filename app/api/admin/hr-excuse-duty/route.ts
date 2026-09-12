@@ -1,5 +1,6 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
+import { notifyExcuseDutyHrDecision } from "@/lib/excuse-duty-notifications"
 
 export async function GET(request: NextRequest) {
   try {
@@ -288,6 +289,18 @@ This is for your records.`,
         status: "pending",
       })
     }
+
+    const notificationAdmin = await createAdminClient()
+    await notifyExcuseDutyHrDecision(notificationAdmin, {
+      staffId: excuseDoc.user_id,
+      staffName: `${docUserProfile.first_name} ${docUserProfile.last_name}`.trim(),
+      reviewerId: user.id,
+      reviewerName: `${profile.first_name} ${profile.last_name}`.trim(),
+      decision: hrStatus,
+      excuseDate: excuseDoc.excuse_date,
+      hodReviewerId: excuseDoc.hod_reviewed_by || null,
+      notes: hrNotes || null,
+    })
 
     await supabase.from("audit_logs").insert({
       user_id: user.id,

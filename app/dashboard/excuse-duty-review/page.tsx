@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { ExcuseDutyReviewClient } from "@/components/admin/excuse-duty-review-client"
+import { isAdminRole, isDepartmentHeadRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 
 export default async function ExcuseDutyReviewPage() {
   const supabase = await createClient()
@@ -26,8 +27,14 @@ export default async function ExcuseDutyReviewPage() {
     redirect("/dashboard")
   }
 
-  // Check if user has admin, regional_manager, or department_head role
-  if (!["admin", "regional_manager", "department_head"].includes(profile.role)) {
+  const normalizedRole = normalizeAppRole(profile.role)
+  const isAdmin = isAdminRole(normalizedRole)
+  const isRegionalManager = isRegionalManagerRole(normalizedRole)
+  const isRegionalHr = isRegionalHrRole(normalizedRole)
+  const isDeptHead = isDepartmentHeadRole(normalizedRole)
+
+  // Check if user has admin, regional_manager, regional_hr, or department_head role
+  if (!isAdmin && !isRegionalManager && !isRegionalHr && !isDeptHead) {
     redirect("/dashboard")
   }
 
@@ -36,9 +43,11 @@ export default async function ExcuseDutyReviewPage() {
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Excuse Duty Review</h1>
           <p className="text-muted-foreground">
-            {profile.role === "admin"
+            {isAdmin
               ? "Review and approve excuse duty submissions from all departments"
-              : "Review and approve excuse duty submissions from your department"}
+              : isRegionalManager || isRegionalHr
+                ? "Review and approve excuse duty submissions from staff in your regional office and its district offices"
+                : "Review and approve excuse duty submissions from your department"}
           </p>
         </div>
 

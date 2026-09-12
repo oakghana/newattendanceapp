@@ -270,6 +270,13 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   const role = normalizeRole((profile as any).role)
     const deptName = (profile as any)?.departments?.name || null
     const deptCode = (profile as any)?.departments?.code || null
+    const { data: memoHodLink } = await admin
+      .from("loan_hod_linkages")
+      .select("id")
+      .eq("hod_user_id", userId)
+      .eq("staff_user_id", loan.user_id)
+      .maybeSingle()
+    const isLinkedHodForLoan = Boolean(memoHodLink)
 
     const canAccess =
       loan.user_id === userId ||
@@ -277,7 +284,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       role === "managing_director" ||
       role === "secretary" ||
       role === "it-admin" ||
-      canDoHodReview(role) ||
+      canDoHodReview(role, isLinkedHodForLoan) ||
       canDoCommittee(role) ||
       canDoLoanOffice(role, deptName, deptCode) ||
       canDoHrOffice(role, deptName, deptCode) ||
@@ -291,6 +298,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const memoEligibleStatuses = [
       "approved_director", "md_approved", "director_rejected", "rejected_fd",
       "awaiting_director_hr", "pending_hr_executive_review", "awaiting_hr_executives",
+      "pending_hr_records_reference", "referenced",
       "staff_receiving_funds", "partially_recovered", "fully_recovered",
     ]
     if (!memoEligibleStatuses.includes(String(loan.status || ""))) {
@@ -687,7 +695,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     // ─── MD Approval Stamp — Professional Square Stamp with MD Signature ─
     // Only show if MD has ACTUALLY approved (md_approved_at is populated)
     // Don't show at awaiting_director_hr stage — that means HR signed but MD hasn't approved yet
-    const isMdApproved = Boolean(loan.md_approved_at) && ["approved_director", "staff_receiving_funds", "partially_recovered", "fully_recovered"].includes(String(loan.status || ""))
+    const isMdApproved = Boolean(loan.md_approved_at) && ["approved_director", "md_approved", "pending_hr_records_reference", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"].includes(String(loan.status || ""))
     if (isMdApproved) {
       // ── QCC physical rubber-stamp replica ──────────────────────────────────
       // Rounded rectangle, all QCC blue ink, "QUALITY CONTROL CO. LTD. (COCOBOD)"
@@ -788,7 +796,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     applySignatureSideWatermark(doc, sigImgY, marginLeft)
 
-    const pdfBytes = Buffer.from(doc.output("arraybuffer"))
+    const pdfBytes = doc.output("arraybuffer")
 
     // "disposition=attachment" is used by the Download button so Chrome saves the file
     // to disk instead of trying to open it inline in the same navigation it was

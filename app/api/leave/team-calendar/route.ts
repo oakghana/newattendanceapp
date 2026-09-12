@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { isAdminRole, isDepartmentHeadRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
+import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
+import { isNonRegionalLocation } from "@/lib/location-mappings"
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,18 +14,23 @@ export async function GET(request: NextRequest) {
 
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    // Get user's role and department
+    // Get user's role, department, and assigned location
     const { data: userProfile } = await supabase
       .from("user_profiles")
-      .select("role, department_id")
+      .select("role, department_id, assigned_location_id")
       .eq("id", user.id)
       .single()
 
-    const userRole = String(userProfile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
+    const normalizedRole = normalizeAppRole(userProfile?.role)
     const userDepartment = userProfile?.department_id
+    const userLocationId = userProfile?.assigned_location_id
 
-    // HR-level roles that can see all departments
-    const HR_GLOBAL_ROLES = ["hr_leave_office", "hr_office", "admin", "regional_manager", "director_hr", "manager_hr", "hr_executive", "hr"]
+    // HR-level roles that can see all departments. Regional Manager / Regional HR
+    // Office are scoped to their own regional office below, not treated as global.
+    const HR_GLOBAL_ROLES = ["hr_leave_office", "hr_office", "director_hr", "manager_hr", "hr_executive", "hr"]
+    const isGlobalRole = isAdminRole(normalizedRole) || HR_GLOBAL_ROLES.includes(normalizedRole)
+    const isRegionalScoped = isRegionalManagerRole(normalizedRole) || isRegionalHrRole(normalizedRole)
+    const isDeptHead = isDepartmentHeadRole(normalizedRole)
 
     // Optional: filter by month query param  ?month=2026-04
     const url = new URL(request.url)
@@ -53,19 +61,55 @@ export async function GET(request: NextRequest) {
       .eq("is_archived", false)
       .order("preferred_start_date", { ascending: true })
 
-    // For non-HR roles: scope to their own department only
-    const isGlobalRole = HR_GLOBAL_ROLES.includes(userRole)
-    if (!isGlobalRole && userDepartment) {
-      const { data: deptStaff } = await admin
-        .from("user_profiles")
-        .select("id")
-        .eq("department_id", userDepartment)
-
-      const staffIds = (deptStaff || []).map((s: any) => s.id)
+    // For non-HR roles: scope to staff they are actually linked to, either by
+    // regional office location (Regional Manager / Regional HR Office) or by
+    // department (Department Head at a non-regional / head-office location).
+    // Every other role only ever sees its own department's peers.
+    let scopeLabel = "All departments"
+    let totalStaffInScope = 0
+    if (!isGlobalRole && isRegionalScoped) {
+      const ownedLocationIds = await resolveOwnedLocationIdsForRegionalOffice(admin, userLocationId)
+      const staffIds = ownedLocationIds.length
+        ? ((await admin.from("user_profiles").select("id").in("assigned_location_id", ownedLocationIds)).data || []).map((s: any) => s.id)
+        : []
       if (staffIds.length === 0) {
-        return NextResponse.json({ entries: [], rangeStart, rangeEnd, userDepartment, isGlobalRole })
+        return NextResponse.json({ entries: [], rangeStart, rangeEnd, isGlobalRole: false, scopeLabel: "Your regional office", totalStaffInScope: 0 })
       }
       requestsQuery = requestsQuery.in("user_id", staffIds)
+      scopeLabel = "Your regional office & district staff"
+      totalStaffInScope = staffIds.length
+    } else if (!isGlobalRole && isDeptHead) {
+      // Only a department head at a non-regional (e.g. head-office) location gets
+      // department-wide visibility. Regional/district staff are scoped via location above.
+      let isNonRegionalDeptHead = true
+      if (userLocationId) {
+        const { data: location } = await admin.from("geofence_locations").select("name").eq("id", userLocationId).maybeSingle()
+        isNonRegionalDeptHead = isNonRegionalLocation(location?.name)
+      }
+      const staffIds = isNonRegionalDeptHead && userDepartment
+        ? ((await admin.from("user_profiles").select("id").eq("department_id", userDepartment)).data || []).map((s: any) => s.id)
+        : []
+      if (staffIds.length === 0) {
+        return NextResponse.json({ entries: [], rangeStart, rangeEnd, isGlobalRole: false, scopeLabel: "Your department", totalStaffInScope: 0 })
+      }
+      requestsQuery = requestsQuery.in("user_id", staffIds)
+      scopeLabel = "Your department"
+      totalStaffInScope = staffIds.length
+    } else if (!isGlobalRole) {
+      const staffIds = userDepartment
+        ? ((await admin.from("user_profiles").select("id").eq("department_id", userDepartment)).data || []).map((s: any) => s.id)
+        : []
+      if (staffIds.length === 0) {
+        return NextResponse.json({ entries: [], rangeStart, rangeEnd, isGlobalRole: false, scopeLabel: "Your department", totalStaffInScope: 0 })
+      }
+      requestsQuery = requestsQuery.in("user_id", staffIds)
+      scopeLabel = "Your department"
+      totalStaffInScope = staffIds.length
+    }
+
+    if (isGlobalRole) {
+      const { count } = await admin.from("user_profiles").select("id", { count: "exact", head: true }).eq("is_active", true)
+      totalStaffInScope = count ?? 0
     }
 
     const { data: requests, error } = await requestsQuery
@@ -136,7 +180,7 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ entries, rangeStart, rangeEnd, isGlobalRole })
+    return NextResponse.json({ entries, rangeStart, rangeEnd, isGlobalRole, scopeLabel, totalStaffInScope })
   } catch (err) {
     console.error("[leave/team-calendar]", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

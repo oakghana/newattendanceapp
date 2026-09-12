@@ -53,7 +53,7 @@ export const MobileBottomNav = memo(function MobileBottomNav({ profile }: Mobile
       return adminNavItems
     }
 
-    if (["department_head", "head_of_department", "regional_manager"].includes(role)) {
+    if (["department_head", "head_of_department", "regional_manager", "regional_hr"].includes(role)) {
       return approvalsNavItems
     }
 
@@ -72,7 +72,7 @@ export const MobileBottomNav = memo(function MobileBottomNav({ profile }: Mobile
             <Link
               key={item.href}
               href={item.href}
-              prefetch={true}
+              prefetch={false}
               className={cn(
                 "relative flex h-full min-w-0 flex-col items-center justify-center rounded-2xl px-2 py-2 transition-all duration-200 touch-manipulation active:scale-[0.98]",
                 isActive

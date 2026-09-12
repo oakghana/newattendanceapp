@@ -68,6 +68,7 @@ interface SidebarProps {
       code: string
     }
   } | null
+  isAssignedHod?: boolean
   isCollapsed: boolean
   setIsCollapsed: (value: boolean) => void
 }
@@ -107,7 +108,7 @@ const navigationItems = [
     title: "Off-Premises Approvals",
     href: "/offpremises-approvals",
     icon: MapPin,
-    roles: ["admin", "regional_manager", "department_head"],
+    roles: ["admin", "regional_manager", "regional_hr", "department_head"],
     category: "main",
   },
 
@@ -129,7 +130,7 @@ const navigationItems = [
     title: "Excuse Duty Review",
     href: "/dashboard/excuse-duty-review",
     icon: FileText,
-    roles: ["admin", "it-admin", "regional_manager", "department_head", "director_hr", "manager_hr"],
+    roles: ["admin", "it-admin", "regional_manager", "regional_hr", "department_head", "director_hr", "manager_hr"],
     category: "admin",
   },
 
@@ -310,7 +311,7 @@ const navigationItems = [
   },
 ]
 
-export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarProps) {
+export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsCollapsed }: SidebarProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isClearingCache, setIsClearingCache] = useState(false)
   const [openAdminGroups, setOpenAdminGroups] = useState<string[]>([])
@@ -326,7 +327,6 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
         timeZone: "Africa/Accra",
         hour: "2-digit",
         minute: "2-digit",
-        second: "2-digit",
         hour12: true,
       })
     }
@@ -354,7 +354,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
     }
 
     void syncServerTime()
-    const tickId = setInterval(tick, 1000)
+    const tickId = setInterval(tick, 60_000)
     const syncId = setInterval(() => {
       void syncServerTime()
     }, 60_000)
@@ -469,6 +469,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
 
   const filteredNavItems = allNavigationItems.filter((item) => {
     if (isAttendanceOnly) return item.href === "/dashboard/attendance"
+    if (isAssignedHod && item.roles.some((role) => normalizeAppRole(role) === "department_head")) return true
     // Disbursement confirmation belongs only to Accounts/Loan Office workflows.
     // Explicitly deny it for HR Records and HR Leave Office even if a legacy
     // "main" navigation fallback would otherwise make it visible.

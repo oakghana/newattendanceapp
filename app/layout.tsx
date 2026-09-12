@@ -11,8 +11,11 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className="antialiased">
+    <html lang="en" className="antialiased" data-scroll-behavior="smooth">
       <head>
+        <meta name="format-detection" content="telephone=no,date=no,email=no,address=no" />
+        <link rel="preconnect" href="https://vgtajtqxgczhjboatvol.supabase.co" />
+        <link rel="dns-prefetch" href="https://vgtajtqxgczhjboatvol.supabase.co" />
         <link rel="stylesheet" href="/print-styles.css" media="print" />
       </head>
       <body className="font-sans">

@@ -1,6 +1,7 @@
 import { createClientAndGetUser, createAdminClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { DisbursementConfirmationClient } from "@/components/disbursement-confirmation-client"
+import { canAccessDisbursementConfirmation } from "@/lib/role-capabilities"
 
 interface DisbursedLoan {
   id: string
@@ -30,24 +31,15 @@ export default async function DisbursementConfirmationPage() {
     .eq("id", user.id)
     .maybeSingle()
 
-  const userRole = (profile as any)?.role || ""
-  const isAuthorized = 
-    userRole === "hr_executive" ||
-    userRole === "accounts_executive" ||
-    userRole === "loan_office" ||
-    userRole === "hr_loan_office" ||
-    userRole === "accounts_loan_office"
-
-  if (!profile || !isAuthorized) {
-    redirect("/auth/login")
+  if (!profile || !canAccessDisbursementConfirmation(profile.role)) {
+    redirect("/dashboard/attendance")
   }
 
-  // Fetch loans that have been approved by MD or Director HR (ready for disbursement confirmation)
-  // Include both md_approved and awaiting_director_hr statuses as these are the ones ready to disburse
   const { data: loans, error: loansError } = await admin
     .from("loan_requests")
     .select("*")
-    .in("status", ["md_approved", "awaiting_director_hr"])
+    .in("status", ["md_approved", "approved_director", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
+    .or("status.eq.md_approved,md_approved_at.not.is.null")
     .order("md_approved_at", { ascending: false })
     .limit(500)
 

@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/server"
+import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
 /**
@@ -8,16 +8,12 @@ import { NextResponse } from "next/server"
  */
 export async function GET() {
   try {
-    const supabase = await createAdminClient()
-    
-    // Get current user
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    
+    const { user } = await createClientAndGetUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    const supabase = await createAdminClient()
 
     // Fetch approved recall memos for this staff member
     const { data: recallMemos, error: recallErr } = await supabase

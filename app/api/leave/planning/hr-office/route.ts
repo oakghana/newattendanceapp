@@ -9,6 +9,31 @@ import {
   buildAnnualLeaveEntitlementSummary,
 } from "@/lib/annual-leave-entitlement"
 
+const MANDATORY_LEAVE_MEMO_CC = [
+  "Managing Director",
+  "Deputy Director-HR",
+  "Deputy Director - Finance",
+  "Audit Manager",
+]
+
+function normalizeCcRecipient(value: string) {
+  return String(value || "").toLowerCase().replace(/\s+/g, " ").trim()
+}
+
+function buildLeaveMemoCc(value?: string | null) {
+  const seen = new Set<string>()
+  return [...MANDATORY_LEAVE_MEMO_CC, ...String(value || "").split(/[\r\n,]+/)]
+    .map((line) => line.trim())
+    .filter((line) => {
+      if (!line) return false
+      const key = normalizeCcRecipient(line)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .join("\n")
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -90,7 +115,7 @@ export async function POST(request: NextRequest) {
     // Verify the request exists and is in a state the HR office can process
     const { data: leaveRequest, error: fetchError } = await admin
       .from("leave_plan_requests")
-      .select("id, user_id, status, requested_days, preferred_start_date, preferred_end_date, leave_type_key, entitlement_days, memo_reference, memo_reference_locked, workflow_route")
+      .select("id, user_id, status, requested_days, preferred_start_date, preferred_end_date, leave_type_key, entitlement_days, memo_reference, memo_reference_locked, workflow_route, memo_draft_cc")
       .eq("id", leave_plan_request_id)
       .single()
 
@@ -163,6 +188,7 @@ export async function POST(request: NextRequest) {
       .filter(Boolean)
       .join(" ")
       .trim() || "HR Leave Office"
+    const resolvedMemoCc = buildLeaveMemoCc(memo_draft_cc || (leaveRequest as any).memo_draft_cc || "")
 
     const { error: updateError } = await admin
       .from("leave_plan_requests")
@@ -185,14 +211,10 @@ export async function POST(request: NextRequest) {
         memo_draft_subject: memo_draft_subject ? String(memo_draft_subject).trim() : null,
         memo_draft_body: memo_draft_body ? String(memo_draft_body).trim() : null,
         // Do not erase CC recipients when HR Office leaves the field unchanged.
-        memo_draft_cc: memo_draft_cc
-          ? String(memo_draft_cc).trim()
-          : String((leaveRequest as any).memo_draft_cc || "").trim() || null,
+        memo_draft_cc: resolvedMemoCc,
         memo_office_subject: memo_draft_subject ? String(memo_draft_subject).trim() : String((leaveRequest as any).memo_office_subject || "").trim() || null,
         memo_office_body: memo_draft_body ? String(memo_draft_body).trim() : String((leaveRequest as any).memo_office_body || "").trim() || null,
-        memo_office_cc: memo_draft_cc
-          ? String(memo_draft_cc).trim()
-          : String((leaveRequest as any).memo_office_cc || (leaveRequest as any).memo_draft_cc || "").trim() || null,
+        memo_office_cc: resolvedMemoCc,
         memo_draft_last_edited_by: user.id,
         memo_draft_last_edited_role: "hr_leave_office",
         memo_draft_last_edited_at: new Date().toISOString(),
@@ -226,9 +248,7 @@ export async function POST(request: NextRequest) {
           hr_office_reviewed_at: new Date().toISOString(),
           memo_draft_subject: memo_draft_subject ? String(memo_draft_subject).trim() : null,
           memo_draft_body: memo_draft_body ? String(memo_draft_body).trim() : null,
-          memo_draft_cc: memo_draft_cc
-            ? String(memo_draft_cc).trim()
-            : String((leaveRequest as any).memo_draft_cc || "").trim() || null,
+          memo_draft_cc: resolvedMemoCc,
           memo_draft_last_edited_by: user.id,
           memo_draft_last_edited_role: "hr_leave_office",
           memo_draft_last_edited_at: new Date().toISOString(),

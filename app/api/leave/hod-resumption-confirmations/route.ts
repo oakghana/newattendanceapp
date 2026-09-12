@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { resolveEffectiveLeaveEndDate } from '@/lib/resumption-confirmation-helpers'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -34,7 +35,7 @@ export async function GET() {
     const isDepartmentHead = ['department_head', 'hod'].includes(normalizedRole)
 
     if (!isRegionalManager && !isDepartmentHead) {
-      return NextResponse.json({ error: 'Only HODs and Regional Managers can review resumptions' }, { status: 403 })
+      return NextResponse.json({ success: true, requests: [], authorized: false })
     }
 
     if (isRegionalManager && !userProfile.assigned_location_id) {
@@ -73,12 +74,11 @@ export async function GET() {
       profileMap[u.id] = { first_name: u.first_name || '', last_name: u.last_name || '', employee_id: u.employee_id || '' }
     }
 
-    // Step 2: Fetch HR-approved leaves past end date for dept users only
+    // Step 2: Fetch HR-approved leaves past their effective end date for scoped staff only
     const { data: requests, error: fetchErr } = await admin
       .from('leave_plan_requests')
-      .select('id, user_id, leave_type_key, preferred_start_date, preferred_end_date, status')
+      .select('id, user_id, leave_type_key, preferred_start_date, preferred_end_date, adjusted_end_date, status')
       .eq('status', 'hr_approved')
-      .lte('preferred_end_date', todayStr)
       .in('user_id', deptUserIds)
       .order('preferred_end_date', { ascending: false })
 
@@ -111,10 +111,13 @@ export async function GET() {
     const formattedRequests = (requests || [])
       .map((req: any) => {
         const profile = profileMap[req.user_id] || { first_name: '', last_name: '', employee_id: '' }
-        const key = `${req.user_id}::${req.preferred_end_date}`
+        const effectiveEndDate = resolveEffectiveLeaveEndDate(req)
+        const key = `${req.user_id}::${effectiveEndDate}`
         const confirmation = hodConfirmationMap[key] || { confirmed: false, confirmedAt: null }
 
-        const [y, m, d] = (req.preferred_end_date || '').split('-').map(Number)
+        if (!effectiveEndDate || effectiveEndDate > todayStr) return null
+
+        const [y, m, d] = effectiveEndDate.split('-').map(Number)
         const endDate = new Date(y, m - 1, d, 0, 0, 0, 0)
         const daysOverdue = Math.max(0, Math.floor((today.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24)))
 
@@ -128,14 +131,14 @@ export async function GET() {
           },
           leave_type_key: req.leave_type_key,
           preferred_start_date: req.preferred_start_date,
-          preferred_end_date: req.preferred_end_date,
+          preferred_end_date: effectiveEndDate,
           status: req.status,
           hod_confirmed: confirmation.confirmed,
           hod_confirmed_at: confirmation.confirmedAt,
           daysOverdue,
         }
       })
-      .filter((req: any) => !req.hod_confirmed)
+      .filter((req: any) => req && !req.hod_confirmed)
 
     return NextResponse.json({
       success: true,

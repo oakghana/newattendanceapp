@@ -17,6 +17,7 @@ interface LoanOfficeLeaveModuleProps {
   userDepartmentCode: string | null
   userLocationName: string | null
   hasHodLinkage: boolean
+  isAssignedHod?: boolean
   initialStaffRequests: any[]
   initialManagerNotifications: any[]
   initialApprovedStaffRequests?: any[]
@@ -33,6 +34,7 @@ export function LoanOfficeLeaveModule({
   userDepartmentCode,
   userLocationName,
   hasHodLinkage,
+  isAssignedHod = false,
   initialStaffRequests,
   initialManagerNotifications,
   initialApprovedStaffRequests = [],
@@ -75,6 +77,7 @@ export function LoanOfficeLeaveModule({
             userFirstName={userFirstName}
             userLastName={userLastName}
             hasHodLinkage={hasHodLinkage}
+            isAssignedHod={isAssignedHod}
             inactivityDays={inactivityDays}
             initialStaffRequests={initialStaffRequests}
             initialManagerNotifications={initialManagerNotifications}

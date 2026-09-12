@@ -28,7 +28,7 @@ export function isRegionalManagerRole(role: string | null | undefined) {
 }
 
 export function isDepartmentHeadRole(role: string | null | undefined) {
-  return ["department_head", "hod"].includes(normalizeWorkflowRole(role))
+  return ["department_head", "hod", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(normalizeWorkflowRole(role))
 }
 
 export function isSelfLeaveRole(role: string | null | undefined, locationName?: string | null) {

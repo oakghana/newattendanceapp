@@ -137,9 +137,55 @@ interface LeavePlanningClientProps {
     lastName?: string
     departmentName: string | null
     departmentCode: string | null
+    isAssignedHod?: boolean
   }
   initialHolidays?: Array<{ holiday_date: string; holiday_name: string }>
   initialActiveTab?: string
+}
+
+const MANDATORY_LEAVE_MEMO_CC = [
+  "Managing Director",
+  "Deputy Director-HR",
+  "Deputy Director - Finance",
+  "Audit Manager",
+]
+
+const MANDATORY_LEAVE_MEMO_CC_TEXT = MANDATORY_LEAVE_MEMO_CC.join("\n")
+
+function normalizeCcRecipient(value: string) {
+  return String(value || "").toLowerCase().replace(/\s+/g, " ").trim()
+}
+
+function getAdditionalLeaveMemoCc(value?: string | null) {
+  const mandatory = new Set(MANDATORY_LEAVE_MEMO_CC.map(normalizeCcRecipient))
+  return String(value || "")
+    .split(/[\r\n,]+/)
+    .map((line) => line.trim())
+    .filter((line) => line && !mandatory.has(normalizeCcRecipient(line)))
+    .join("\n")
+}
+
+function buildLeaveMemoCc(value?: string | null) {
+  const seen = new Set<string>()
+  return [...MANDATORY_LEAVE_MEMO_CC, ...String(value || "").split(/[\r\n,]+/)]
+    .map((line) => line.trim())
+    .filter((line) => {
+      if (!line) return false
+      const key = normalizeCcRecipient(line)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .join("\n")
+}
+
+function isInterimWorkflowMemo(subject?: string | null, body?: string | null) {
+  return /leave request received|workflow review|current stage\s*:/i.test(`${subject || ""}\n${body || ""}`)
+}
+
+function pickFinalMemoField(savedValue: string | null | undefined, fallbackValue: string, subject?: string | null, body?: string | null) {
+  const value = String(savedValue || "").trim()
+  return value && !isInterimWorkflowMemo(subject, body) ? value : fallbackValue
 }
 
 async function readAsDataUrl(file: File): Promise<string> {
@@ -357,7 +403,7 @@ function buildMemoTemplateData(req: any): Record<string, string> {
 }
 
 function getBuiltinHrTemplateOptions(): HrTemplateOption[] {
-  const commonCc = "Managing Director\nDeputy Managing Director\nHR Leave Office\nFile"
+  const commonCc = MANDATORY_LEAVE_MEMO_CC_TEXT
   return [
     {
       id: "builtin-annual-leave-approval",
@@ -1082,7 +1128,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
 
   const isStaff = isStaffRole(normalizedRole)
-  const isHod = isHodRole(normalizedRole) && !isHrLeaveOfficeRole(normalizedRole)
+  const isHod = (isHodRole(normalizedRole) || profile.isAssignedHod === true) && !isHrLeaveOfficeRole(normalizedRole)
   const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole) || (normalizedRole.includes("regional") && normalizedRole.includes("hr"))
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole) || isRegionalHr
   const isHrApprover = isHrApproverRole(normalizedRole, profile.departmentName, profile.departmentCode) && !isHrOffice
@@ -1091,6 +1137,8 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin
   const canManageLeaveTypePolicy = isHrOffice || isAdmin
   const isLoanOffice = normalizedRole === "loan_office" || normalizedRole === "hr_loan_office" || normalizedRole === "accounts_loan_office"
+  const todayIsoDate = useMemo(() => toIsoDate(new Date()), [])
+  const canBackdateLeaveApplication = isHrOffice || ["regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   // Every authenticated role may submit a leave request. Role and location
   // continue to control the downstream review route and reviewer permissions.
   const canSelfApply = true // Regional HR Office users retain the Apply for Leave action
@@ -2259,6 +2307,10 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       toast({ title: "Missing date", description: "Please select a start date.", variant: "destructive" })
       return
     }
+    if (!canBackdateLeaveApplication && startDate < todayIsoDate) {
+      toast({ title: "Backdating restricted", description: "Staff cannot select past leave dates. Contact the HR Leave Office for backdated leave entry.", variant: "destructive" })
+      return
+    }
     if ((leaveType === "maternity" || leaveType === "paternity") && !maternityDeliveryDate) {
       toast({ title: "Missing delivery date", description: "Please provide the child delivery date.", variant: "destructive" })
       return
@@ -2560,7 +2612,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
           memo_reference: refNum,
           memo_draft_subject: officeMemoSubject[requestId] || null,
           memo_draft_body: officeMemoBody[requestId] || null,
-          memo_draft_cc: officeMemoCc[requestId] || null,
+          memo_draft_cc: buildLeaveMemoCc(officeMemoCc[requestId]),
           forwarded_to_hr_approver_id: forwardToHrExecutiveId || null,
         }),
       })
@@ -2599,7 +2651,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
           note: hrNote[requestId] || null,
           memo_draft_subject: hrMemoSubject[requestId] || null,
           memo_draft_body: hrMemoBody[requestId] || null,
-          memo_draft_cc: hrMemoCc[requestId] || null,
+          memo_draft_cc: buildLeaveMemoCc(hrMemoCc[requestId]),
           hr_signature_mode: hrSigMode,
           hr_signature_text: hrSigMode === "typed" ? hrSigTyped : null,
           hr_signature_data_url: hrSigMode !== "typed" ? hrSigDataUrl : null,
@@ -2933,7 +2985,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
 
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date (Date of Delivery)</Label>
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" readOnly={leaveType === "maternity" || leaveType === "paternity"} disabled={leaveType === "maternity" || leaveType === "paternity"} />
+                  <Input type="date" value={startDate} min={canBackdateLeaveApplication ? undefined : todayIsoDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" readOnly={leaveType === "maternity" || leaveType === "paternity"} disabled={leaveType === "maternity" || leaveType === "paternity"} />
                   {calculatingEndDate && (
                     <p className="text-xs text-blue-600">Calculating leave duration...</p>
                   )}
@@ -3219,21 +3271,22 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
               </div>
             )}
 
-            {/* ── Staff Resumption Confirmations ── always visible ── */}
-            <Card className="border border-orange-200 bg-orange-50/30 mt-4">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-orange-900 flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-orange-500 inline-block" />
-                  Staff Resumption Confirmations
-                </CardTitle>
-                <p className="text-xs text-orange-700 mt-1">
-                  Confirm that staff have resumed work after their approved leave. Search by name or employee ID.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <HODResumptionConfirmations />
-              </CardContent>
-            </Card>
+            {isHod && (
+              <Card className="border border-orange-200 bg-orange-50/30 mt-4">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-orange-900 flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-orange-500 inline-block" />
+                    Staff Resumption Confirmations
+                  </CardTitle>
+                  <p className="text-xs text-orange-700 mt-1">
+                    Confirm that staff have resumed work after their approved leave. Search by name or employee ID.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <HODResumptionConfirmations viewerRole={normalizedRole} />
+                </CardContent>
+              </Card>
+            )}
 
           </div>}
 
@@ -4094,9 +4147,11 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                               setOfficeTemplateKey((p) => ({ ...p, [req.id]: matchingTemplate?.template_key || getDefaultMemoTemplateKey(String(req.leave_type_key || "annual")) }))
                               const memoTpl = buildMemoTemplate(req)
                               const renderedTemplate = matchingTemplate ? renderTemplateForRequest(matchingTemplate, req) : memoTpl
-                              setOfficeMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || renderedTemplate.subject || memoTpl.subject }))
-                              setOfficeMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || renderedTemplate.body || memoTpl.body }))
-                              setOfficeMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc ?? "" }))
+                              const fallbackSubject = renderedTemplate.subject || memoTpl.subject
+                              const fallbackBody = renderedTemplate.body || memoTpl.body
+                              setOfficeMemoSubject((p) => ({ ...p, [req.id]: pickFinalMemoField(req.memo_draft_subject, fallbackSubject, req.memo_draft_subject, req.memo_draft_body) }))
+                              setOfficeMemoBody((p) => ({ ...p, [req.id]: pickFinalMemoField(req.memo_draft_body, fallbackBody, req.memo_draft_subject, req.memo_draft_body) }))
+                              setOfficeMemoCc((p) => ({ ...p, [req.id]: getAdditionalLeaveMemoCc(req.memo_draft_cc || renderedTemplate.cc || memoTpl.cc) }))
                               
                               // Auto-populate travel days and fetch outstanding leave for annual leave
                               if (String(req.leave_type_key || "").toLowerCase() === "annual") {
@@ -4368,23 +4423,27 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                 />
                               </div>
                               <div className="space-y-1">
-                                <Label className="text-xs font-semibold text-slate-700">Memo body</Label>
+                                <Label className="text-xs font-semibold text-slate-700">Leave information</Label>
                                 <Textarea
                                   value={officeMemoBody[req.id] || ""}
                                   onChange={(e) => setOfficeMemoBody((p) => ({ ...p, [req.id]: e.target.value }))}
-                                  placeholder="Draft the memo the HR Executive will review, edit, and sign."
+                                  placeholder="Draft the leave information the HR Executive will review, edit, and sign."
                                   rows={6}
                                   className="resize-y text-sm bg-white leading-6"
                                 />
                               </div>
 
                               {/* CC List */}
-                              <div className="space-y-1">
-                                <Label className="text-xs font-semibold text-slate-700">CC List <span className="font-normal text-slate-400">(one per line)</span></Label>
+                              <div className="space-y-2">
+                                <Label className="text-xs font-semibold text-slate-700">Permanent CC List</Label>
+                                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 whitespace-pre-line">
+                                  {MANDATORY_LEAVE_MEMO_CC_TEXT}
+                                </div>
+                                <Label className="text-xs font-semibold text-slate-700">Additional CC <span className="font-normal text-slate-400">(optional, one per line)</span></Label>
                                 <Textarea
                                   value={officeMemoCc[req.id] || ""}
                                   onChange={(e) => setOfficeMemoCc((p) => ({ ...p, [req.id]: e.target.value }))}
-                                  placeholder={"Managing Director\nDeputy Managing Director\nHR Leave Office\nFile"}
+                                  placeholder="Add any other people to copy"
                                   rows={4}
                                   className="resize-none text-sm bg-white"
                                 />
@@ -4687,15 +4746,15 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                         if (isExpanded) { setHrExpandedId(null); return }
                                         setHrExpandedId(req.id)
                                         const tpl = buildMemoTemplate(req)
-                                        const originalSubject = req.memo_office_subject || req.memo_draft_subject || tpl.subject
-                                        const originalBody = req.memo_office_body || req.memo_draft_body || tpl.body
+                                        const originalSubject = pickFinalMemoField(req.memo_office_subject || req.memo_draft_subject, tpl.subject, req.memo_office_subject || req.memo_draft_subject, req.memo_office_body || req.memo_draft_body)
+                                        const originalBody = pickFinalMemoField(req.memo_office_body || req.memo_draft_body, tpl.body, req.memo_office_subject || req.memo_draft_subject, req.memo_office_body || req.memo_draft_body)
                                         const originalCc = req.memo_office_cc || req.memo_draft_cc || tpl.cc
                                         setHrOriginalSubject((p) => ({ ...p, [req.id]: p[req.id] || originalSubject }))
                                         setHrOriginalBody((p) => ({ ...p, [req.id]: p[req.id] || originalBody }))
-                                        setHrOriginalCc((p) => ({ ...p, [req.id]: p[req.id] || originalCc }))
-                                        setHrMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || tpl.subject }))
-                                        setHrMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || tpl.body }))
-                                        setHrMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || tpl.cc }))
+                                        setHrOriginalCc((p) => ({ ...p, [req.id]: p[req.id] || getAdditionalLeaveMemoCc(originalCc) }))
+                                        setHrMemoSubject((p) => ({ ...p, [req.id]: pickFinalMemoField(req.memo_draft_subject, originalSubject, req.memo_draft_subject, req.memo_draft_body) }))
+                                        setHrMemoBody((p) => ({ ...p, [req.id]: pickFinalMemoField(req.memo_draft_body, originalBody, req.memo_draft_subject, req.memo_draft_body) }))
+                                        setHrMemoCc((p) => ({ ...p, [req.id]: getAdditionalLeaveMemoCc(req.memo_draft_cc || tpl.cc) }))
                                       }}
                                       className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors">
                                       {isExpanded ? "▲ Collapse" : "▼ Review & Decide"}
@@ -4711,7 +4770,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                       currentLabel="HR Executive"
                                       originalSubject={hrOriginalSubject[req.id] || req.memo_office_subject || req.memo_draft_subject || ""}
                                       originalBody={hrOriginalBody[req.id] || req.memo_office_body || req.memo_draft_body || ""}
-                                      originalCc={hrOriginalCc[req.id] || req.memo_office_cc || req.memo_draft_cc || ""}
+                                      originalCc={hrOriginalCc[req.id] || getAdditionalLeaveMemoCc(req.memo_office_cc || req.memo_draft_cc || "")}
                                       subject={hrMemoSubject[req.id] || ""}
                                       body={hrMemoBody[req.id] || ""}
                                       cc={hrMemoCc[req.id] || ""}
@@ -4719,6 +4778,11 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                       onBodyChange={(value) => setHrMemoBody((p) => ({ ...p, [req.id]: value }))}
                                       onCcChange={(value) => setHrMemoCc((p) => ({ ...p, [req.id]: value }))}
                                       showCc
+                                      fixedCcRecipients={MANDATORY_LEAVE_MEMO_CC}
+                                      bodyLabel="Leave information"
+                                      bodyPlaceholder="Edit the leave information before signing."
+                                      ccLabel="Additional CC"
+                                      ccPlaceholder="Add any other people to copy"
                                       bodyRows={7}
                                     />
                                     <div className="space-y-1">

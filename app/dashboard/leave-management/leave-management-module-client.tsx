@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { BarChart3, CalendarRange, TrendingUp, Gift, Info, FileText, CheckCircle, CalendarDays } from "lucide-react"
+import { BarChart3, CalendarRange, TrendingUp, Gift, Info, FileText, CheckCircle } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { LeaveManagementClient } from "./leave-management-client"
 import { LeavePlanningClient } from "../leave-planning/leave-planning-client"
@@ -16,7 +16,6 @@ import { isHrLeaveOfficeRole, isRegionalHrOfficerRole } from "@/lib/leave-planni
 import { HrExecutiveLeaveModule } from "./hr-executive-leave-module"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 import { LoanOfficeLeaveModule } from "./loan-office-leave-module"
-import { ShiftSchedulingPanel } from "@/components/leave/shift-scheduling-panel"
 
 const HR_ANALYTICS_ROLES = ["hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr", "department_head", "regional_manager"]
 
@@ -41,6 +40,7 @@ interface LeaveManagementModuleClientProps {
   userDepartmentCode: string | null
   userLocationName: string | null
   hasHodLinkage: boolean
+  isAssignedHod: boolean
   initialStaffRequests: any[]
   initialManagerNotifications: any[]
   initialApprovedStaffRequests?: any[]
@@ -58,6 +58,7 @@ export function LeaveManagementModuleClient({
   userDepartmentCode,
   userLocationName,
   hasHodLinkage,
+  isAssignedHod,
   initialStaffRequests,
   initialManagerNotifications,
   initialApprovedStaffRequests = [],
@@ -93,6 +94,7 @@ export function LeaveManagementModuleClient({
         userDepartmentCode={userDepartmentCode}
         userLocationName={userLocationName}
         hasHodLinkage={hasHodLinkage}
+        isAssignedHod={isAssignedHod}
         initialStaffRequests={initialStaffRequests}
         initialManagerNotifications={initialManagerNotifications}
         initialApprovedStaffRequests={initialApprovedStaffRequests}
@@ -114,6 +116,7 @@ export function LeaveManagementModuleClient({
         userDepartmentCode={userDepartmentCode}
         userLocationName={userLocationName}
         hasHodLinkage={hasHodLinkage}
+        isAssignedHod={isAssignedHod}
         initialStaffRequests={initialStaffRequests}
         initialManagerNotifications={initialManagerNotifications}
         initialApprovedStaffRequests={initialApprovedStaffRequests}
@@ -140,11 +143,6 @@ export function LeaveManagementModuleClient({
               <span className="sm:hidden">Planning</span>
               <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-0 h-1 bg-blue-500 rounded-full transition-all duration-300 group-data-[state=active]:w-3/4" />
             </TabsTrigger>
-
-          <TabsTrigger value="shift-scheduling" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-teal-300 transition-all duration-300 ease-out data-[state=active]:border-teal-600 data-[state=active]:bg-teal-600 data-[state=active]:text-white min-w-fit">
-            <CalendarDays className="h-3 w-3 sm:h-4 sm:w-4" />
-            <span>Shifts</span>
-          </TabsTrigger>
 
           {isHrLeaveOfficeRole(userRole) && !isRegionalHR && (
             <TabsTrigger value="outstanding-leave" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-green-300 transition-all duration-300 ease-out data-[state=active]:border-green-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-green-500 data-[state=active]:to-green-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(34,197,94,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
@@ -206,6 +204,7 @@ export function LeaveManagementModuleClient({
               userFirstName={userFirstName}
               userLastName={userLastName}
               hasHodLinkage={hasHodLinkage}
+              isAssignedHod={isAssignedHod}
               inactivityDays={inactivityDays}
               initialStaffRequests={initialStaffRequests}
               initialManagerNotifications={initialManagerNotifications}
@@ -222,6 +221,7 @@ export function LeaveManagementModuleClient({
                 role: userRole || "regional_hr_leave_office",
                 departmentName: userDepartmentName,
                 departmentCode: userDepartmentCode,
+                isAssignedHod,
               }}
               initialActiveTab={shouldOpenApplyForm ? "apply" : "hr-office"}
             />
@@ -234,15 +234,12 @@ export function LeaveManagementModuleClient({
                 role: userRole ?? "staff",
                 departmentName: userDepartmentName,
                 departmentCode: userDepartmentCode,
+                isAssignedHod,
               }}
               initialActiveTab={shouldOpenApplyForm ? "apply" : undefined}
             />
           </TabsContent>
         )}
-
-        <TabsContent value="shift-scheduling" className="space-y-4 sm:space-y-6 w-full">
-          <ShiftSchedulingPanel userId={userId} />
-        </TabsContent>
 
         {/* Outstanding Leave Tab */}
         {isHrLeaveOfficeRole(userRole) && !isRegionalHR && (

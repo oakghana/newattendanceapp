@@ -11,6 +11,7 @@ import { HODResumptionConfirmations } from './hod-resumption-confirmations'
 
 interface HODReviewSectionProps {
   userDepartmentId: string
+  viewerRole?: string | null
 }
 
 interface LeaveRequest {
@@ -34,7 +35,7 @@ interface LeaveRequest {
   hod_linkages?: Array<{ id: string; name?: string; employee_id?: string; position?: string; role?: string; email?: string }>
 }
 
-export function HODReviewSection({ userDepartmentId }: HODReviewSectionProps) {
+export function HODReviewSection({ userDepartmentId, viewerRole }: HODReviewSectionProps) {
   const [requests, setRequests] = useState<LeaveRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -256,7 +257,7 @@ export function HODReviewSection({ userDepartmentId }: HODReviewSectionProps) {
       <div>
         <h3 className="text-sm font-semibold mb-3 text-slate-700">Staff Resumption Confirmations</h3>
         <p className="text-xs text-slate-500 mb-3">Confirm that staff members have resumed work after their approved leave</p>
-        <HODResumptionConfirmations />
+        <HODResumptionConfirmations viewerRole={viewerRole || 'department_head'} />
       </div>
     </div>
   )

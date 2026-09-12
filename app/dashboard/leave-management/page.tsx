@@ -37,6 +37,7 @@ export default async function LeaveManagementPage() {
   let staffRequests: any[] = []
   let managerNotifications: any[] = []
   let hasHodLinkage = false
+  let isAssignedHod = false
   let userLocationName: string | null = null
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
   const isItAdmin = normalizedRole === "it_admin"
@@ -47,15 +48,11 @@ export default async function LeaveManagementPage() {
     // Build parallel queries — include location lookup when user has an assigned location
     const locationId = (profile as any)?.assigned_location_id
     const queries: any[] = [
-      // Staff submissions are written to leave_requests by /api/leave/request-leave.
-      // Reading leave_plan_requests here made the staff Request tab appear empty
-      // even though the submitted request existed in the database.
+      // Staff submissions in the current workflow are written to leave_plan_requests.
+      // Preloading the same source keeps the Request tab aligned with the Apply flow.
       admin
-        .from("leave_requests")
-        // Keep this select limited to columns that exist on leave_requests. Workflow-specific
-        // fields live on leave_plan_requests; requesting them here makes Supabase return
-        // an error and the page silently fall back to an empty Request tab.
-        .select("id, user_id, start_date, end_date, reason, status, created_at, approved_at, reference_number")
+        .from("leave_plan_requests")
+        .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, workflow_route, workflow_stage, created_at, adjusted_start_date, adjusted_end_date, hod_decision, memo_token, memo_reference, reference_number, user_profiles:user_id(first_name, last_name, position)")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(50),
@@ -63,6 +60,12 @@ export default async function LeaveManagementPage() {
         .from("loan_hod_linkages")
         .select("id")
         .eq("staff_user_id", user.id)
+        .limit(1)
+        .maybeSingle(),
+      admin
+        .from("loan_hod_linkages")
+        .select("id")
+        .eq("hod_user_id", user.id)
         .limit(1)
         .maybeSingle(),
     ]
@@ -78,7 +81,10 @@ export default async function LeaveManagementPage() {
     }
 
     const results = await Promise.all(queries)
-    const [requestsRes, linkageRes, locationRes] = results
+    const [requestsRes, linkageRes, assignedHodRes, locationRes] = locationId
+      ? results
+      : [results[0], results[1], results[2], undefined]
+    isAssignedHod = Boolean((assignedHodRes?.data as any)?.id)
     userLocationName = (locationRes?.data as any)?.name || null
     const selfLeaveResolution = resolveSelfLeaveRoute({ role: profile.role, locationName: userLocationName })
 
@@ -230,10 +236,10 @@ export default async function LeaveManagementPage() {
     staffRequests = (requestsRes.data || []).map((request: any) => ({
       id: String(request.id),
       user_id: String(request.user_id),
-      start_date: request.start_date,
-      end_date: request.end_date,
+      start_date: request.preferred_start_date,
+      end_date: request.preferred_end_date,
       reason: request.reason || "",
-      leave_type: request.leave_type || "annual",
+      leave_type: request.leave_type_key || "annual",
       status: request.status,
       workflow_route: request.workflow_route,
       workflow_stage: request.workflow_stage,
@@ -249,9 +255,11 @@ export default async function LeaveManagementPage() {
     }))
 
     hasHodLinkage = Boolean((linkageRes?.data as any)?.id)
+    isAssignedHod = isAssignedHod || managerNotifications.length > 0
   } catch (err) {
     console.error("[v0] Error fetching essential data:", err)
     hasHodLinkage = false
+    isAssignedHod = false
   }
 
   // Heavy reviewer queries are lazy-loaded client-side to keep page fast
@@ -278,6 +286,7 @@ export default async function LeaveManagementPage() {
             userDepartmentCode={(profile as any)?.departments?.code || null}
             userLocationName={userLocationName}
             hasHodLinkage={hasHodLinkage}
+            isAssignedHod={isAssignedHod}
             initialStaffRequests={staffRequests}
             initialManagerNotifications={managerNotifications}
             initialApprovedStaffRequests={approvedStaffRequests}

@@ -98,6 +98,7 @@ async function locationsMapForProfiles(admin: any, profiles: any[]): Promise<Map
 
 async function fetchAllRows(queryFactory: (from: number, to: number) => any, chunkSize = 500) {
   const rows: any[] = []
+  const seenIds = new Set<string>()
   let from = 0
 
   while (true) {
@@ -106,7 +107,11 @@ async function fetchAllRows(queryFactory: (from: number, to: number) => any, chu
     if (error) throw error
 
     const batch = data || []
-    rows.push(...batch)
+    for (const row of batch) {
+      if (seenIds.has(row.id)) continue
+      seenIds.add(row.id)
+      rows.push(row)
+    }
 
     if (batch.length < chunkSize) break
     from += chunkSize
@@ -171,6 +176,7 @@ export async function GET(request: NextRequest) {
             .in("role", ["staff", "nsp", "intern", "contract", "it-admin", "it_admin", "department_head", "regional_manager", "loan_officer", "loan_office", "hr_loan_office", "accounts_loan_office", "hr_officer", "hr_office", "accounts", "director_hr", "manager_hr", "audit_staff", "loan_committee", "committee"])
             .eq("is_active", true)
             .order("first_name", { ascending: true })
+            .order("id", { ascending: true })
             .range(from, to),
       ),
       fetchAllRows(
@@ -181,6 +187,7 @@ export async function GET(request: NextRequest) {
             .in("role", ["department_head", "regional_manager"])
             .eq("is_active", true)
             .order("first_name", { ascending: true })
+            .order("id", { ascending: true })
             .range(from, to),
       ),
       fetchAllRows(
@@ -189,6 +196,7 @@ export async function GET(request: NextRequest) {
             .from("loan_hod_linkages")
             .select("id, staff_user_id, hod_user_id, location_id, district_name, location_address, staff_rank, hod_rank, updated_at")
             .order("updated_at", { ascending: false })
+            .order("id", { ascending: true })
             .range(from, to),
       ),
     ])
@@ -270,6 +278,7 @@ export async function GET(request: NextRequest) {
               .select("id, recipient_id, title, message, type, data, is_read, read_at, created_at")
               .eq("type", "hod_linkage_request")
               .order("created_at", { ascending: false })
+              .order("id", { ascending: true })
               .range(from, to),
           250,
         )
@@ -410,7 +419,7 @@ export async function POST(request: NextRequest) {
     const action = String(body?.action || "")
 
     if (action === "auto_link_unassigned_staff_to_hr_executive") {
-      if (!isAdministrator && role !== "it_admin") {
+      if (role !== "admin" && role !== "it_admin") {
         return NextResponse.json({ error: "Only administrators can run the staff linkage backfill." }, { status: 403 })
       }
 

@@ -23,6 +23,12 @@ export default async function TransportPage() {
     )
     .eq("id", user.id)
     .maybeSingle()
+  const { data: assignedHodLink } = await supabase
+    .from("loan_hod_linkages")
+    .select("id")
+    .eq("hod_user_id", user.id)
+    .limit(1)
+    .maybeSingle()
   const normalizedRole = normalizeAppRole(profile?.role)
   const departmentName = (profile as { departments?: { name?: string | null } | null } | null)?.departments?.name ?? ""
   const locationName = (profile as { geofence_locations?: { name?: string | null } | null } | null)?.geofence_locations?.name ?? ""
@@ -33,6 +39,7 @@ export default async function TransportPage() {
   const isHrExecutive = ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
   const isDepartmentHead = normalizedRole === "department_head"
   const isTransportManager = normalizedRole === "transport_manager"
+  const isAssignedHod = Boolean(assignedHodLink)
   const isChiefDriver = isChiefDriverRole(profile.role)
   const isRegionalHr = isRegionalHrRole(profile.role)
   const isRegionalManager = isRegionalManagerRole(profile.role)
@@ -221,6 +228,7 @@ export default async function TransportPage() {
       nonRegionalPendingCount={nonRegionalPendingCount}
       scopeLabel={scopeLabel}
       driverKind={isRegionalDriver ? "regional" : isNonRegionalDriver ? "nonregional" : undefined}
+      isLinkedHod={isAssignedHod}
     />
   )
 }

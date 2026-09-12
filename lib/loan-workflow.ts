@@ -127,8 +127,9 @@ export function isLoanOfficeDepartment(name?: string | null, code?: string | nul
   return n.includes("loan") || c.includes("loan") || n.includes("welfare")
 }
 
-export function canDoHodReview(role: string): boolean {
-  return isAdminRole(role) || ["regional_manager", "department_head"].includes(role)
+export function canDoHodReview(role: string, isLinkedHod = false): boolean {
+  const normalized = normalizeRole(role)
+  return isAdminRole(normalized) || ["regional_manager", "department_head", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(normalized) || Boolean(isLinkedHod)
 }
 
 export function canDoLoanOffice(role: string, deptName?: string | null, deptCode?: string | null): boolean {

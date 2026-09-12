@@ -11,6 +11,31 @@ import crypto from "crypto"
 const HR_APPROVE_ELIGIBLE = ["hr_office_forwarded", "manager_confirmed", "hod_approved"] as const
 const HR_APPROVED_STATUSES = ["hr_approved", "hr_rejected"] as const
 
+const MANDATORY_LEAVE_MEMO_CC = [
+  "Managing Director",
+  "Deputy Director-HR",
+  "Deputy Director - Finance",
+  "Audit Manager",
+]
+
+function normalizeCcRecipient(value: string) {
+  return String(value || "").toLowerCase().replace(/\s+/g, " ").trim()
+}
+
+function buildLeaveMemoCc(value?: string | null) {
+  const seen = new Set<string>()
+  return [...MANDATORY_LEAVE_MEMO_CC, ...String(value || "").split(/[\r\n,]+/)]
+    .map((line) => line.trim())
+    .filter((line) => {
+      if (!line) return false
+      const key = normalizeCcRecipient(line)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .join("\n")
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -490,18 +515,18 @@ export async function POST(request: NextRequest) {
     const providedCc = memo_draft_cc ? String(memo_draft_cc).trim() : ""
 
     const rawResolvedSubject = providedSubject
-      || fallbackApprovalSubject
       || String((leaveRequest as any).memo_draft_subject || "").trim()
+      || fallbackApprovalSubject
     const leaveTypeKey = String((leaveRequest as any).leave_type_key || "annual").toLowerCase()
     const resolvedSubject = leaveTypeKey === "annual"
       ? rawResolvedSubject
       : `RE: ${leaveTypeLabel(leaveTypeKey).toUpperCase()} LEAVE`
 
     const resolvedBody = providedBody
-      || fallbackApprovalBody
       || String((leaveRequest as any).memo_draft_body || "").trim()
+      || fallbackApprovalBody
 
-    const resolvedCc = providedCc || String((leaveRequest as any).memo_draft_cc || "").trim()
+    const resolvedCc = buildLeaveMemoCc(providedCc || String((leaveRequest as any).memo_draft_cc || "").trim())
 
     const rawResolvedRejectSubject = memo_draft_subject
       ? String(memo_draft_subject).trim()
@@ -514,9 +539,11 @@ export async function POST(request: NextRequest) {
       ? String(memo_draft_body).trim()
       : String((leaveRequest as any).memo_draft_body || "").trim() || fallbackRejectionBody
 
-    const resolvedRejectCc = memo_draft_cc !== undefined && memo_draft_cc !== null
-      ? String(memo_draft_cc).trim()
-      : String((leaveRequest as any).memo_draft_cc || "").trim()
+    const resolvedRejectCc = buildLeaveMemoCc(
+      memo_draft_cc !== undefined && memo_draft_cc !== null
+        ? String(memo_draft_cc).trim()
+        : String((leaveRequest as any).memo_draft_cc || "").trim(),
+    )
 
     if (action === "reject") {
       await admin

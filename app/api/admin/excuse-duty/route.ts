@@ -1,5 +1,8 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
+import { isAdminRole, isDepartmentHeadRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
+import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
+import { notifyExcuseDutyHodDecision } from "@/lib/excuse-duty-notifications"
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,7 +23,7 @@ export async function GET(request: NextRequest) {
     // Get user profile to check role and department
     const { data: profile, error: profileError } = await supabase
       .from("user_profiles")
-      .select("role, department_id, first_name, last_name")
+      .select("role, department_id, assigned_location_id, first_name, last_name")
       .eq("id", user.id)
       .single()
 
@@ -29,19 +32,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    // Check if user has admin, regional_manager, or department_head role
-    if (!["admin", "regional_manager", "department_head"].includes(profile.role)) {
+    const normalizedRole = normalizeAppRole(profile.role)
+    const isAdmin = isAdminRole(normalizedRole)
+    const isRegionalManager = isRegionalManagerRole(normalizedRole)
+    const isRegionalHr = isRegionalHrRole(normalizedRole)
+    const isDeptHead = isDepartmentHeadRole(normalizedRole)
+
+    // Check if user has admin, regional_manager, regional_hr, or department_head role
+    if (!isAdmin && !isRegionalManager && !isRegionalHr && !isDeptHead) {
       console.log("[v0] HOD Excuse duty API - Insufficient permissions")
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
 
     console.log("[v0] HOD Excuse duty API - User authorized:", profile.role)
 
+    if (isDeptHead && !profile.department_id) {
+      return NextResponse.json({ excuseDocuments: [], userRole: profile.role, userDepartment: null })
+    }
+
+    const admin = await createAdminClient()
+
     // Build base query for excuse documents (select only needed columns)
-    let query = supabase
+    let query = admin
       .from("excuse_documents")
       .select(
-        "id,document_name,document_type,file_url,excuse_reason,excuse_date,status,user_id,reviewed_by,reviewed_at,review_notes,created_at,attendance_record_id"
+        "id,document_name,document_type,excuse_date,status,user_id,reviewed_by,reviewed_at,created_at"
       )
 
     // Get URL parameters for filtering and pagination
@@ -51,8 +66,10 @@ export async function GET(request: NextRequest) {
     const docType = url.searchParams.get("document_type")
     const dateFrom = url.searchParams.get("date_from")
     const dateTo = url.searchParams.get("date_to")
+    const detailId = url.searchParams.get("id")
     const pageParam = parseInt(url.searchParams.get("page") || "1", 10)
-    const perPage = Math.min(parseInt(url.searchParams.get("per_page") || "50", 10), 200)
+    const perPageParam = parseInt(url.searchParams.get("per_page") || "50", 10)
+    const perPage = Number.isFinite(perPageParam) ? Math.min(Math.max(perPageParam, 1), 200) : 50
 
     if (status && status !== "all") {
       query = query.eq("status", status)
@@ -60,6 +77,47 @@ export async function GET(request: NextRequest) {
 
     if (docType && docType !== "all") {
       query = query.eq("document_type", docType)
+    }
+
+    if (detailId) {
+      const { data: detailDoc, error: detailError } = await admin
+        .from("excuse_documents")
+        .select("id,document_name,document_type,file_url,excuse_reason,excuse_date,status,user_id,reviewed_by,reviewed_at,review_notes,created_at,attendance_record_id")
+        .eq("id", detailId)
+        .maybeSingle()
+
+      if (detailError) throw detailError
+      if (!detailDoc) return NextResponse.json({ error: "Document not found" }, { status: 404 })
+
+      const { data: detailProfile } = await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, employee_id, department_id, assigned_location_id")
+        .eq("id", (detailDoc as any).user_id)
+        .maybeSingle()
+
+      if (isDeptHead && profile.department_id !== (detailProfile as any)?.department_id) {
+        return NextResponse.json({ error: "Cannot review documents from other departments" }, { status: 403 })
+      }
+
+      if (isRegionalManager || isRegionalHr) {
+        const ownedLocationIds = await resolveOwnedLocationIdsForRegionalOffice(admin, profile.assigned_location_id)
+        if (!(detailProfile as any)?.assigned_location_id || !ownedLocationIds.includes(String((detailProfile as any).assigned_location_id))) {
+          return NextResponse.json({ error: "Cannot review documents outside your regional scope" }, { status: 403 })
+        }
+      }
+
+      let department = null
+      if ((detailProfile as any)?.department_id) {
+        const { data: dept } = await admin.from("departments").select("id, name, code").eq("id", (detailProfile as any).department_id).maybeSingle()
+        department = dept
+      }
+
+      return NextResponse.json({
+        excuseDocument: {
+          ...detailDoc,
+          user_profiles: detailProfile ? { ...(detailProfile as any), departments: department } : null,
+        },
+      })
     }
 
     if (dateFrom) {
@@ -70,12 +128,13 @@ export async function GET(request: NextRequest) {
     }
 
     // If the requester is a department head, restrict the query to user_ids in their department
-    if (profile.role === "department_head" && profile.department_id) {
-      const { data: deptUsers } = await supabase
+    if (isDeptHead && profile.department_id) {
+      const { data: deptUsers, error: scopeError } = await admin
         .from("user_profiles")
         .select("id")
         .eq("department_id", profile.department_id)
 
+      if (scopeError) throw scopeError
       const userIds = (deptUsers || []).map((u: any) => u.id)
       if (userIds.length === 0) {
         // No users in department -> return empty
@@ -84,13 +143,34 @@ export async function GET(request: NextRequest) {
       query = query.in("user_id", userIds)
     }
 
+    // Regional Manager / Regional HR Office: restrict to staff assigned to their own
+    // regional office location or one of its linked district offices.
+    if (isRegionalManager || isRegionalHr) {
+      const ownedLocationIds = await resolveOwnedLocationIdsForRegionalOffice(admin, profile.assigned_location_id)
+      if (ownedLocationIds.length === 0) {
+        return NextResponse.json({ excuseDocuments: [], userRole: profile.role, userDepartment: profile.department_id })
+      }
+      const { data: regionalUsers, error: scopeError } = await admin
+        .from("user_profiles")
+        .select("id")
+        .in("assigned_location_id", ownedLocationIds)
+
+      if (scopeError) throw scopeError
+      const userIds = (regionalUsers || []).map((u: any) => u.id)
+      if (userIds.length === 0) {
+        return NextResponse.json({ excuseDocuments: [], userRole: profile.role, userDepartment: profile.department_id })
+      }
+      query = query.in("user_id", userIds)
+    }
+
     // If admin supplied a department filter, restrict to users in that department
-    if (departmentFilter && profile.role === "admin") {
-      const { data: deptUsers } = await supabase
+    if (departmentFilter && departmentFilter !== "all" && isAdmin) {
+      const { data: deptUsers, error: scopeError } = await admin
         .from("user_profiles")
         .select("id")
         .eq("department_id", departmentFilter)
 
+      if (scopeError) throw scopeError
       const userIds = (deptUsers || []).map((u: any) => u.id)
       if (userIds.length === 0) {
         return NextResponse.json({ excuseDocuments: [], userRole: profile.role, userDepartment: profile.department_id })
@@ -102,7 +182,7 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, isNaN(pageParam) ? 1 : pageParam)
     const start = (page - 1) * perPage
     const end = start + perPage // request perPage+1 rows
-    const { data: excuseDocsRaw, error } = await query.order("created_at", { ascending: false }).range(start, end)
+    const { data: excuseDocsRaw, error } = await query.order("created_at", { ascending: false }).order("id", { ascending: false }).range(start, end)
     const excuseDocs = excuseDocsRaw || []
 
     if (error) {
@@ -118,7 +198,7 @@ export async function GET(request: NextRequest) {
 
     const profilesMap: Record<string, any> = {}
     if (allProfileIds.length > 0) {
-      const { data: profiles } = await supabase
+      const { data: profiles } = await admin
         .from("user_profiles")
         .select("id, first_name, last_name, employee_id, department_id")
         .in("id", allProfileIds)
@@ -132,7 +212,7 @@ export async function GET(request: NextRequest) {
     const deptIds = Array.from(new Set(Object.values(profilesMap).map((p: any) => p.department_id).filter(Boolean)))
     const deptMap: Record<string, any> = {}
     if (deptIds.length > 0) {
-      const { data: depts } = await supabase.from("departments").select("id, name, code").in("id", deptIds)
+      const { data: depts } = await admin.from("departments").select("id, name, code").in("id", deptIds)
       for (const d of depts || []) deptMap[d.id] = d
     }
 
@@ -193,7 +273,7 @@ export async function PUT(request: NextRequest) {
 
     const { data: profile, error: profileError } = await supabase
       .from("user_profiles")
-      .select("role, department_id, first_name, last_name")
+      .select("role, department_id, assigned_location_id, first_name, last_name")
       .eq("id", user.id)
       .single()
 
@@ -202,7 +282,13 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    if (!["admin", "regional_manager", "department_head"].includes(profile.role)) {
+    const normalizedRole = normalizeAppRole(profile.role)
+    const isAdmin = isAdminRole(normalizedRole)
+    const isRegionalManager = isRegionalManagerRole(normalizedRole)
+    const isRegionalHr = isRegionalHrRole(normalizedRole)
+    const isDeptHead = isDepartmentHeadRole(normalizedRole)
+
+    if (!isAdmin && !isRegionalManager && !isRegionalHr && !isDeptHead) {
       console.log("[v0] HOD Excuse duty API - Insufficient permissions")
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
@@ -227,7 +313,7 @@ export async function PUT(request: NextRequest) {
 
     const { data: docUserProfile } = await supabase
       .from("user_profiles")
-      .select("department_id, first_name, last_name, employee_id, email")
+      .select("department_id, assigned_location_id, first_name, last_name, employee_id, email")
       .eq("id", excuseDoc.user_id)
       .single()
 
@@ -236,10 +322,16 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "User profile not found" }, { status: 404 })
     }
 
-    if (profile.role === "department_head") {
-      if (profile.department_id !== docUserProfile.department_id) {
-        console.log("[v0] HOD Excuse duty API - Department mismatch")
-        return NextResponse.json({ error: "Cannot review documents from other departments" }, { status: 403 })
+    if (isDeptHead && profile.department_id !== docUserProfile.department_id) {
+      console.log("[v0] HOD Excuse duty API - Department mismatch")
+      return NextResponse.json({ error: "Cannot review documents from other departments" }, { status: 403 })
+    }
+
+    if (isRegionalManager || isRegionalHr) {
+      const ownedLocationIds = await resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id)
+      if (!docUserProfile.assigned_location_id || !ownedLocationIds.includes(String(docUserProfile.assigned_location_id))) {
+        console.log("[v0] HOD Excuse duty API - Location mismatch")
+        return NextResponse.json({ error: "You can only review requests from staff in your regional office or its district offices" }, { status: 403 })
       }
     }
 
@@ -297,32 +389,16 @@ ${
       status: "pending",
     })
 
-    if (status === "approved") {
-      const { data: adminUsers } = await supabase
-        .from("user_profiles")
-        .select("id, first_name, last_name, email")
-        .eq("role", "admin")
-
-      if (adminUsers && adminUsers.length > 0) {
-        const notifications = adminUsers.map((admin) => ({
-          user_id: admin.id,
-          email_type: "excuse_duty_hr_review",
-          subject: "Excuse Duty Approved - HR Processing Required",
-          body: `An excuse duty submission has been approved by the Head of Department and requires HR processing:
-
-Staff Member: ${docUserProfile.first_name} ${docUserProfile.last_name} (${docUserProfile.employee_id})
-Date of Absence: ${new Date(excuseDoc.excuse_date).toLocaleDateString()}
-Document Type: ${excuseDoc.document_type}
-Approved By: ${profile.first_name} ${profile.last_name}
-
-Please log in to the HR Excuse Duty Portal to complete the final processing.`,
-          status: "pending",
-        }))
-
-        await supabase.from("email_notifications").insert(notifications)
-        console.log("[v0] HOD Excuse duty API - HR notifications sent")
-      }
-    }
+    const notificationAdmin = await createAdminClient()
+    await notifyExcuseDutyHodDecision(notificationAdmin, {
+      staffId: excuseDoc.user_id,
+      staffName: `${docUserProfile.first_name} ${docUserProfile.last_name}`.trim(),
+      reviewerId: user.id,
+      reviewerName: `${profile.first_name} ${profile.last_name}`.trim(),
+      decision: status,
+      excuseDate: excuseDoc.excuse_date,
+      notes: reviewNotes || null,
+    })
 
     await supabase.from("audit_logs").insert({
       user_id: user.id,

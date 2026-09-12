@@ -13,6 +13,23 @@ export default function RootLayoutClient({
   children: React.ReactNode
 }) {
   useEffect(() => {
+    if (window.location.hostname === "localhost") {
+      void (async () => {
+        try {
+          if ("serviceWorker" in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations()
+            await Promise.all(registrations.map((registration) => registration.unregister()))
+          }
+          if ("caches" in window) {
+            const cacheKeys = await caches.keys()
+            await Promise.all(cacheKeys.map((key) => caches.delete(key)))
+          }
+        } catch {
+          // Local development must remain usable when browser storage is unavailable.
+        }
+      })()
+    }
+
     const reloadStateKey = "qcc:chunk-reload-state-v2"
     const maxRecoveryAttempts = 3
     const recoveryWindowMs = 5 * 60 * 1000

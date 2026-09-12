@@ -248,6 +248,7 @@ export async function POST(request: NextRequest) {
     const role = normalizeRole((profile as any).role)
     const deptName = (profile as any)?.departments?.name || null
     const deptCode = (profile as any)?.departments?.code || null
+    const isDepartmentHead = ["department_head", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(role)
 
     const update: any = { updated_at: new Date().toISOString() }
     let toStatus = req.status
@@ -256,7 +257,14 @@ export async function POST(request: NextRequest) {
 
     if (action === "hod_decision") {
       actionHandled = true
-      if (!canDoHodReview(role)) return NextResponse.json({ error: "Only HOD/manager/admin can review" }, { status: 403 })
+      const { data: hodDecisionLinkage } = await admin
+        .from("loan_hod_linkages")
+        .select("id")
+        .eq("hod_user_id", user.id)
+        .eq("staff_user_id", req.user_id)
+        .maybeSingle()
+      const isLinkedHodForRequest = Boolean(hodDecisionLinkage)
+      if (!canDoHodReview(role, isLinkedHodForRequest)) return NextResponse.json({ error: "Only HOD/manager/admin can review" }, { status: 403 })
       if (req.status !== "pending_hod") return NextResponse.json({ error: "Request is not pending HOD review" }, { status: 400 })
 
       if (role !== "admin") {
@@ -271,21 +279,16 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        if (role === "department_head") {
+        if (isDepartmentHead) {
           const sameDept = reviewerDept && requesterDept && reviewerDept === requesterDept
           const sameLocation = !reviewerLocation || (requesterLocation && reviewerLocation === requesterLocation)
           if (!sameDept || !sameLocation) {
-            // Fall back to checking explicit HOD linkage table before blocking
-            const { data: linkage } = await admin
-              .from("loan_hod_linkages")
-              .select("id")
-              .eq("hod_user_id", user.id)
-              .eq("staff_user_id", req.user_id)
-              .maybeSingle()
-            if (!linkage) {
+            if (!isLinkedHodForRequest) {
               return NextResponse.json({ error: "Department heads can review only requests within their department and assigned location." }, { status: 403 })
             }
           }
+        } else if (!["regional_manager"].includes(role) && !isLinkedHodForRequest) {
+          return NextResponse.json({ error: "Only the assigned HOD can review this request." }, { status: 403 })
         }
       }
 

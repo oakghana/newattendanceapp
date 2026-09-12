@@ -1553,7 +1553,7 @@ export function AttendanceRecorder({
     if (!isExemptFromAttendanceReasons(userProfile?.role) && !reasonValidation.ok) {
       toast({
         title: "Reason Required",
-        description: reasonValidation.error,
+        description: "Please add a clear reason for your off-premises duty.",
         variant: "destructive",
       })
       return
@@ -2634,18 +2634,18 @@ export function AttendanceRecorder({
   }
 
 
-  const reasonFieldHint = "Use more than 20 alphabetic characters. Spaces, numbers, and punctuation do not count."
+  const reasonFieldHint = "Please briefly explain your reason."
   const reasonLiveStatus = (value: string | null | undefined) => {
     const safeValue = String(value ?? "")
     if (hasExcessiveConsecutiveWhitespace(safeValue)) {
-      return { ok: false, text: "Too many continuous spaces (max 3). Write real words." }
+      return { ok: false, text: "Please write a clear reason." }
     }
     if (hasRepeatedConsecutiveCharacters(safeValue)) {
-      return { ok: false, text: "Repeated consecutive characters are not allowed." }
+      return { ok: false, text: "Please write a clear reason." }
     }
     const letters = safeValue.replace(/[^a-z]/gi, "").length
-    if (letters >= 21) return { ok: true, text: `${letters} / 21 alphabetic characters ✓` }
-    return { ok: false, text: `${letters} / 21 alphabetic characters — please add more detail` }
+    if (letters >= 21) return { ok: true, text: "Ready to submit." }
+    return { ok: false, text: safeValue.trim() ? "Please add a little more detail." : "Please enter a reason." }
   }
 
   const handleEarlyCheckoutConfirm = async () => {
@@ -2705,7 +2705,7 @@ export function AttendanceRecorder({
       ? { ok: true, normalized: "", error: null }
       : validateAttendanceReason(offPremisesCheckoutReason, "Off-premises checkout reason")
     if (!reasonValidation.ok) {
-      toast({ title: "Reason required", description: reasonValidation.error || "Please provide a detailed reason with more than 20 alphabetic characters.", variant: "destructive" })
+      toast({ title: "Reason required", description: "Please add a clear reason for checking out off-premises.", variant: "destructive" })
       return
     }
     const { location, nearestLocation: nearestLocFromDialog } = pendingOffPremisesCheckoutData
@@ -3312,30 +3312,22 @@ export function AttendanceRecorder({
                 Off-Premises Request
               </CardTitle>
               <CardDescription>
-                Provide more than 20 alphabetic characters. Spaces, numbers, and punctuation do not count. Continuous spaces (more than 3) are not accepted.
+                Please tell us why you are working off-premises.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Alert className="border-blue-200 bg-blue-50">
-                <Info className="h-4 w-4 text-blue-600" />
-                <AlertTitle className="text-blue-800">Required Information</AlertTitle>
-                <AlertDescription className="text-blue-700">
-                  Your reason will be reviewed by your department head, regional manager, and admin staff for approval.
-                </AlertDescription>
-              </Alert>
-
               <div className="space-y-2">
-                <Label htmlFor="offpremises-reason">Reason for Off-Premises Request *</Label>
+                <Label htmlFor="offpremises-reason">Reason *</Label>
                 <textarea
                   id="offpremises-reason"
                   value={offPremisesReason}
                   onChange={(e) => setOffPremisesReason(e.target.value)}
-                  placeholder="e.g., Client meeting, field assignment, official business, training session..."
+                  placeholder="Describe your off-premises duty."
                   className="w-full min-h-[100px] p-3 border rounded-md resize-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   maxLength={500}
                 />
-                <p className="text-xs text-muted-foreground">
-                  {reasonLiveStatus(offPremisesReason).text} · {String(offPremisesReason ?? "").length}/500
+                <p className="text-xs text-muted-foreground" aria-live="polite">
+                  {reasonLiveStatus(offPremisesReason).text}
                 </p>
               </div>
 
@@ -3386,16 +3378,16 @@ export function AttendanceRecorder({
                   </h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {pendingOffPremisesIsDirectCheckout
-                      ? "You started the day on approved off-premises duty and have worked 7+ hours. You can check out immediately."
-                      : "You are currently outside your registered QCC location. You must explain why you are not within range before your check-out can be processed. Your explanation will be reviewed by your supervisor."}
+                      ? "Confirm that you have finished your off-premises duty."
+                      : "Please tell us why you are checking out off-premises."}
                   </p>
                 </div>
               </div>
               <div className={cn("rounded-lg px-3 py-2 text-xs font-medium flex items-center gap-2", pendingOffPremisesIsDirectCheckout ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800" : "bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800")}>
                 {pendingOffPremisesIsDirectCheckout ? (
-                  <><CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> Direct checkout unlocked after approved off-premises start plus 7 hours worked. No extra reason or approval is required.</>
+                  <><CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> Ready to check out.</>
                 ) : (
-                  <><Info className="h-3.5 w-3.5 shrink-0" /> Your request will be reviewed. You will be notified when approved.</>
+                  <><Info className="h-3.5 w-3.5 shrink-0" /> We will notify you when approved.</>
                 )}
               </div>
               {!pendingOffPremisesIsDirectCheckout && (
@@ -3407,7 +3399,7 @@ export function AttendanceRecorder({
                     id="offpremises-checkout-reason"
                     value={offPremisesCheckoutReason}
                     onChange={(e) => setOffPremisesCheckoutReason(e.target.value)}
-                    placeholder="Provide a full and concrete explanation. For example: I was assigned by my supervisor to conduct a field inspection at the Kumasi branch office and could not return to the main premises before close of work."
+                    placeholder="Describe your off-premises duty."
                     className="w-full min-h-[110px] p-3 text-sm border rounded-xl resize-none bg-muted/40 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition"
                     maxLength={600}
                     autoFocus
@@ -3614,7 +3606,7 @@ export function AttendanceRecorder({
                   </h3>
                   <p className="text-sm text-muted-foreground mt-0.5">
                     {checkoutReasonContext === "out_of_location"
-                      ? "You appear to be outside a registered QCC location. Provide more than 20 alphabetic characters (no space-padding)."
+                      ? "Please tell us why you are checking out off-premises."
                       : getFormattedCheckoutTime()}
                   </p>
                 </div>
@@ -3640,7 +3632,7 @@ export function AttendanceRecorder({
                 />
                 {earlyCheckoutReasonRequired && (
                   <p className="text-xs text-muted-foreground">
-                    More than 20 alphabetic characters required. No more than 3 continuous spaces. Shared with your supervisor and HR.
+                    {reasonLiveStatus(earlyCheckoutReason).text}
                   </p>
                 )}
               </div>

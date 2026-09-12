@@ -33,6 +33,12 @@ export function useRealTimeLocations() {
     const MAX_RETRIES = 2
     let attempt = 0
 
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setError("Offline")
+      setLoading(false)
+      return
+    }
+
     while (attempt <= MAX_RETRIES) {
       try {
         console.log("[v0] Real-time locations - Fetching locations (attempt)", attempt + 1)
@@ -79,12 +85,22 @@ export function useRealTimeLocations() {
 
         // Other non-OK responses — surface server message if present
         const errMsg = result?.error || result?.message || `HTTP ${response.status}`
-        console.error("[v0] Real-time locations - Fetch error:", errMsg)
+        if (String(errMsg).toLowerCase() === "offline") {
+          console.warn("[v0] Real-time locations - Offline")
+        } else {
+          console.error("[v0] Real-time locations - Fetch error:", errMsg)
+        }
         setError(errMsg)
         setLocations([])
         return
       } catch (err: any) {
-        console.error("[v0] Real-time locations - Exception while fetching locations:", err?.message || err)
+        const message = err?.message || err
+        if (String(message).toLowerCase() === "offline") {
+          setError("Offline")
+          setLocations([])
+          break
+        }
+        console.error("[v0] Real-time locations - Exception while fetching locations:", message)
         attempt += 1
         if (attempt > MAX_RETRIES) {
           setError("Failed to fetch locations — network or server error")

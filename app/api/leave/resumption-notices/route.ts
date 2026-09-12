@@ -33,6 +33,17 @@ function dayDiff(from: string, to: string) {
   return Math.round((end - start) / 86400000)
 }
 
+async function fetchByUserChunks(ids: string[], runQuery: (chunk: string[]) => Promise<{ data: any[] | null; error: any }>) {
+  const rows: any[] = []
+  for (let index = 0; index < ids.length; index += 100) {
+    const chunk = ids.slice(index, index + 100)
+    const { data, error } = await runQuery(chunk)
+    if (error) throw error
+    rows.push(...(data || []))
+  }
+  return rows
+}
+
 export async function GET() {
   try {
     const supabase = await createClient()
@@ -61,19 +72,21 @@ export async function GET() {
     const staffIds = (staff || []).map((item) => item.id)
     if (!staffIds.length) return NextResponse.json({ notices: [], role, authorized: true })
 
-    const { data: leaves, error: leavesError } = await admin
-      .from('leave_plan_requests')
-      .select('id, user_id, leave_type_key, preferred_end_date, adjusted_end_date, status')
-      .in('status', ['hr_approved', 'approved', 'completed', 'hod_approved', 'pending_hr_records_reference', 'pending_hr_leave_processing', 'hr_office_forwarded'])
-      .or('is_archived.is.null,is_archived.eq.false')
-      .in('user_id', staffIds)
-    if (leavesError) throw leavesError
+    const leaves = await fetchByUserChunks(staffIds, (chunk) =>
+      admin
+        .from('leave_plan_requests')
+        .select('id, user_id, leave_type_key, preferred_end_date, adjusted_end_date, status')
+        .in('status', ['hr_approved', 'approved', 'completed', 'hod_approved', 'pending_hr_records_reference', 'pending_hr_leave_processing', 'hr_office_forwarded'])
+        .or('is_archived.is.null,is_archived.eq.false')
+        .in('user_id', chunk),
+    )
 
-    const { data: confirmations, error: confirmationsError } = await admin
-      .from('leave_resumption_notifications')
-      .select('id, leave_request_id, user_id, leave_end_date, first_check_in_date, first_hod_rm_check_in_date, confirmation_status, status')
-      .in('user_id', staffIds)
-    if (confirmationsError) throw confirmationsError
+    const confirmations = await fetchByUserChunks(staffIds, (chunk) =>
+      admin
+        .from('leave_resumption_notifications')
+        .select('id, leave_request_id, user_id, leave_end_date, first_check_in_date, first_hod_rm_check_in_date, confirmation_status, status')
+        .in('user_id', chunk),
+    )
 
     const byRequest = new Map((confirmations || []).filter((item) => item.leave_request_id).map((item) => [item.leave_request_id, item]))
     const byDate = new Map((confirmations || []).map((item) => [`${item.user_id}::${dateOnly(item.leave_end_date)}`, item]))

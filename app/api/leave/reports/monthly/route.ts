@@ -78,6 +78,25 @@ function formatLeaveType(key: string): string {
   return types[key] || key
 }
 
+// Resolves a staff member's Cocoa region/location, falling back through the
+// assigned-location hierarchy when region_id isn't set directly on the profile.
+function resolveStaffRegionName(user: any): string {
+  const directRegion = user?.regions?.name
+  if (directRegion) return directRegion
+
+  const location = user?.geofence_locations
+  const districtRegion = location?.districts?.regions?.name
+  if (districtRegion) return districtRegion
+
+  const districtName = location?.districts?.name
+  if (districtName) return districtName
+
+  const locationName = location?.name
+  if (locationName) return locationName
+
+  return "Unassigned"
+}
+
 function formatStatus(status: string): string {
   const statuses: Record<string, string> = {
     pending_hod_review: "Pending HOD Review",
@@ -127,8 +146,13 @@ export async function GET(request: NextRequest) {
           first_name,
           last_name,
           region_id,
+          assigned_location_id,
           departments (name),
-          regions (name)
+          regions (name),
+          geofence_locations!user_profiles_assigned_location_id_fkey (
+            name,
+            districts (name, regions (name))
+          )
         )
       `)
       .eq("leave_year_period", yearPeriod)
@@ -143,7 +167,7 @@ export async function GET(request: NextRequest) {
     let filteredRequests = requests || []
     if (regionKey !== "all") {
       filteredRequests = filteredRequests.filter((r: any) => {
-        const regionDbName = (r.user?.regions?.name || "").toLowerCase().replace(/\s+/g, "_")
+        const regionDbName = resolveStaffRegionName(r.user).toLowerCase().replace(/\s+/g, "_")
         const regionDbId   = (r.user?.region_id || "")
         return (
           regionDbName.includes(regionKey.replace(/_port$/, "").replace(/_/g, " ")) ||
@@ -172,7 +196,7 @@ export async function GET(request: NextRequest) {
       r.user?.employee_id || "N/A",
       `${r.user?.first_name || ""} ${r.user?.last_name || ""}`.trim() || "Unknown",
       r.user?.departments?.name || "Unassigned",
-      regionKey !== "all" ? regionName : (r.user?.regions?.name || "Unassigned"),
+      regionKey !== "all" ? regionName : resolveStaffRegionName(r.user),
       formatLeaveType(r.leave_type_key),
       r.preferred_start_date || "",
       r.preferred_end_date || "",

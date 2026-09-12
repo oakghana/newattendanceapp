@@ -192,7 +192,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Only administrators can assign the Regional HR Leave Office role" }, { status: 403 })
     }
 
-    const allowedRolesForItAdmin = ["staff", "nsp", "contract", "department_head", "it-admin", "intern"]
+    const allowedRolesForItAdmin = ["staff", "nsp", "contract", "department_head", "driver", "chief_driver", "it-admin", "intern"]
     if (isItAdmin && role && !allowedRolesForItAdmin.includes(role)) {
       console.error("[v0] Staff API PUT - IT-Admin tried to assign restricted role:", role)
       return NextResponse.json(

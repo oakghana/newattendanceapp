@@ -1,5 +1,6 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
+import { notifyExcuseDutySubmitted } from "@/lib/excuse-duty-notifications"
 
 export async function POST(request: NextRequest) {
   try {
@@ -116,68 +117,22 @@ export async function POST(request: NextRequest) {
     // Get user profile to find approvers
     const { data: userProfile } = await supabase
       .from("user_profiles")
-      .select("department_id, first_name, last_name, employee_id")
+      .select("department_id, assigned_location_id, first_name, last_name, employee_id")
       .eq("id", user.id)
       .single()
 
     if (userProfile) {
-      // Collect all approvers: admins + department heads for this dept + all regional managers
-      const approversMap: Record<string, any> = {}
-      const addUnique = (arr: any[] | null) => {
-        (arr || []).forEach((a) => { if (a?.id) approversMap[a.id] = a })
-      }
-
-      const [adminsResult, deptHeadsResult, regionalResult] = await Promise.all([
-        supabase.from("user_profiles").select("id, first_name, last_name").eq("role", "admin").eq("is_active", true),
-        userProfile.department_id
-          ? supabase.from("user_profiles").select("id, first_name, last_name, email").eq("role", "department_head").eq("department_id", userProfile.department_id).eq("is_active", true)
-          : Promise.resolve({ data: [] }),
-        supabase.from("user_profiles").select("id, first_name, last_name").eq("role", "regional_manager").eq("is_active", true),
-      ])
-
-      addUnique(adminsResult.data)
-      addUnique(deptHeadsResult.data as any[])
-      addUnique(regionalResult.data)
-
-      const approvers = Object.values(approversMap)
-
-      if (approvers.length > 0) {
-        const notifications = approvers.map((approver: any) => ({
-          recipient_id: approver.id,
-          type: "excuse_duty_request",
-          title: "Excuse Duty Submission",
-          message: `${userProfile.first_name} ${userProfile.last_name} (${userProfile.employee_id || 'N/A'}) submitted an excuse duty note for ${new Date(excuseDate).toLocaleDateString()}. Type: ${documentType}. Reason: ${excuseReason}`,
-          data: {
-            excuse_doc_id: excuseDoc.id,
-            staff_user_id: user.id,
-            staff_name: `${userProfile.first_name} ${userProfile.last_name}`,
-            excuse_date: excuseDate,
-            document_type: documentType,
-            reason: excuseReason,
-          },
-          is_read: false,
-        }))
-
-        const { error: notifError } = await supabase.from("staff_notifications").insert(notifications)
-        if (notifError) {
-          console.warn("[v0] Excuse duty API - Failed to insert staff_notifications:", notifError)
-        } else {
-          console.log("[v0] Excuse duty API - Notifications sent to", approvers.length, "approvers")
-        }
-      }
-
-      // Also send email to department head (legacy)
-      if (deptHeadsResult.data && (deptHeadsResult.data as any[]).length > 0) {
-        const departmentHead = (deptHeadsResult.data as any[])[0]
-        await supabase.from("email_notifications").insert({
-          user_id: departmentHead.id,
-          email_type: "excuse_duty_review",
-          subject: "New Excuse Duty Submission for Review",
-          body: `A new excuse duty submission requires your review:\n\nStaff Member: ${userProfile.first_name} ${userProfile.last_name} (${userProfile.employee_id})\nDate of Absence: ${new Date(excuseDate).toLocaleDateString()}\nDocument Type: ${documentType}\nReason: ${excuseReason}\n\nPlease log in to the system to review and approve this submission.`,
-          status: "pending",
-        })
-        console.log("[v0] Excuse duty API - Email notification sent to department head")
-      }
+      const admin = await createAdminClient()
+      await notifyExcuseDutySubmitted(admin, {
+        staffId: user.id,
+        staffName: `${userProfile.first_name} ${userProfile.last_name}`.trim(),
+        departmentId: userProfile.department_id || null,
+        assignedLocationId: userProfile.assigned_location_id || null,
+        excuseDate,
+        documentType,
+        reason: excuseReason,
+      })
+      console.log("[v0] Excuse duty API - Notifications dispatched to HOD/RM/HR Executive")
     }
 
     // Log the action

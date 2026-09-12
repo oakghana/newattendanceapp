@@ -123,6 +123,22 @@ function normalizeRoleValue(role: string | null | undefined) {
     .trim()
     .replace(/[-\s]+/g, "_")
 }
+function getTodayIsoDate() {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, "0")
+  const day = String(today.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function isPastIsoDate(value: string | null | undefined) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) && String(value) < getTodayIsoDate()
+}
+
+function canBackdateLeaveApplication(role: string | null | undefined) {
+  const normalized = normalizeRoleValue(role)
+  return isHrLeaveOfficeRole(normalized) || ["regional_hr_leave_office", "regional_leave_office"].includes(normalized)
+}
 
 function isSchemaIssue(error: any) {
   const code = error?.code || ""
@@ -1274,7 +1290,38 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    return NextResponse.json({ mode: "restricted", requests: [] })
+    const { data: myRequests, error: myRequestsError } = await admin
+      .from("leave_plan_requests")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+
+    if (myRequestsError) {
+      if (isSchemaIssue(myRequestsError)) {
+        return buildDegradedModeResponse("staff", getSchemaIssueMessage(myRequestsError))
+      }
+      throw myRequestsError
+    }
+
+    const { data: myStaggerRequests, error: myStaggerRequestsError } = await admin
+      .from("leave_plan_stagger_requests")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+
+    if (myStaggerRequestsError) {
+      if (isSchemaIssue(myStaggerRequestsError)) {
+        return buildDegradedModeResponse("staff", getSchemaIssueMessage(myStaggerRequestsError))
+      }
+      throw myStaggerRequestsError
+    }
+
+    return NextResponse.json({
+      mode: "staff",
+      requests: myRequests || [],
+      myRequests: myRequests || [],
+      myStaggerRequests: myStaggerRequests || [],
+    })
   } catch (error) {
     const errMsg =
       error instanceof Error
@@ -1328,6 +1375,9 @@ export async function POST(request: NextRequest) {
 
     if (!preferred_start_date || !preferred_end_date) {
       return NextResponse.json({ error: "Start and end dates are required." }, { status: 400 })
+    }
+    if (!canBackdateLeaveApplication((profile as any)?.role) && isPastIsoDate(preferred_start_date)) {
+      return NextResponse.json({ error: "Staff cannot submit leave for past dates. Contact the HR Leave Office for backdated leave entry." }, { status: 400 })
     }
 
     const selectedLeaveYearPeriod = normalizeLeaveYearPeriod(leave_year_period)
@@ -1680,6 +1730,9 @@ export async function PUT(request: NextRequest) {
 
     if (!id || !preferred_start_date || !preferred_end_date) {
       return NextResponse.json({ error: "id, start date, and end date are required." }, { status: 400 })
+    }
+    if (!canBackdateLeaveApplication((profile as any)?.role) && isPastIsoDate(preferred_start_date)) {
+      return NextResponse.json({ error: "Staff cannot submit leave for past dates. Contact the HR Leave Office for backdated leave entry." }, { status: 400 })
     }
 
     const selectedLeaveYearPeriod = normalizeLeaveYearPeriod(leave_year_period)

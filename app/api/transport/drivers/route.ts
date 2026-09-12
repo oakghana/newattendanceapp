@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { canEditDriverLicenses, canManageTransport, isRegionalHrRole } from "@/lib/role-capabilities"
+import { canEditDriverLicenses, canManageTransport, hasNationwideFleetScope, isChiefDriverRole, isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
+import { isNonRegionalLocation } from "@/lib/location-mappings"
+import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
 async function actor() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { supabase, user: null, profile: null }
-  const { data: profile } = await supabase.from("user_profiles").select("role, is_active, region_id").eq("id", user.id).single()
+  const { data: profile } = await supabase.from("user_profiles").select("role, is_active, region_id, assigned_location_id").eq("id", user.id).single()
   return { supabase, user, profile }
 }
 
@@ -14,8 +16,25 @@ export async function GET() {
   const { supabase, user, profile } = await actor()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   if (!profile?.is_active || !canManageTransport(profile.role)) return NextResponse.json({ error: "Transport access denied." }, { status: 403 })
+  const hasNationwideScope = hasNationwideFleetScope(profile.role)
+  const isRegionalScope = isChiefDriverRole(profile.role) || isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role)
+  const ownedLocationIds = isRegionalScope
+    ? await resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id)
+    : []
+  const { data: driverProfiles, error: profileError } = await supabase
+    .from("user_profiles")
+    .select("id, region_id, assigned_location_id, geofence_locations!user_profiles_assigned_location_id_fkey(name, districts(region_id))")
+    .in("role", ["driver", "regional_driver", "regional_drivers"])
+    .eq("is_active", true)
+  if (profileError) return NextResponse.json({ error: "Unable to resolve driver locations." }, { status: 500 })
+  const scopedProfileIds = (driverProfiles ?? []).filter((driver: any) => {
+    if (hasNationwideScope) return true
+    if (isRegionalScope) return ownedLocationIds.includes(driver.assigned_location_id)
+    return Boolean(profile.assigned_location_id) && driver.assigned_location_id === profile.assigned_location_id && isNonRegionalLocation(driver.geofence_locations?.name)
+  }).map((driver: any) => driver.id)
+  if (!hasNationwideScope && !scopedProfileIds.length) return NextResponse.json({ drivers: [], canVerify: false })
   let query = supabase.from("transport_drivers").select("*").order("expiry_date")
-  if (profile.region_id && !["admin", "administrator", "it-admin", "it_admin"].includes(String(profile.role).toLowerCase())) query = query.eq("assigned_region_id", profile.region_id)
+  if (!hasNationwideScope) query = query.in("profile_id", scopedProfileIds)
   const { data, error } = await query
   if (error) return NextResponse.json({ error: "Unable to load driver licenses." }, { status: 500 })
   return NextResponse.json({ drivers: data ?? [], canVerify: isRegionalHrRole(profile.role) })

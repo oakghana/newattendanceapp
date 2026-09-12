@@ -1008,7 +1008,7 @@ export function StaffManagement() {
                               <Input value={roleSearch} onChange={(event) => setRoleSearch(event.target.value)} placeholder="Search roles..." className="h-8" />
                             </div>
                             {ROLE_OPTIONS.filter(([value, label]) => {
-                              const allowedForItAdmin = ["staff", "nsp", "contract", "department_head", "regional_manager"].includes(value)
+                              const allowedForItAdmin = ["staff", "nsp", "contract", "department_head", "regional_manager", "driver", "chief_driver"].includes(value)
                               const allowed = isItAdmin ? allowedForItAdmin : isAdministrator || !["accounts", "accounts_executive", "admin", "director_hr", "driver", "chief_driver", "hr_executive", "hr_leave_office", "hr_loan_office", "hr_records", "loan_office", "manager_hr", "managing_director", "regional_hr", "regional_manager", "secretary", "transport_manager"].includes(value) || (value === "it-admin" && canManageStaffLinks)
                               return allowed && `${label} ${value}`.toLowerCase().includes(roleSearch.toLowerCase())
                             }).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
@@ -1254,6 +1254,8 @@ export function StaffManagement() {
                             <SelectItem value="contract">Contract</SelectItem>
                                 <SelectItem value="department_head">Department Head</SelectItem>
                                 <SelectItem value="regional_manager">Regional Manager</SelectItem>
+                            <SelectItem value="driver">Driver</SelectItem>
+                            <SelectItem value="chief_driver">Chief Driver</SelectItem>
                               </>
                         ) : (
                           <>

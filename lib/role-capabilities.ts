@@ -12,6 +12,7 @@ export function normalizeAppRole(role?: string | null): string {
 
 export const REGIONAL_HR_ROLES = ["regional_hr"] as const
 export const HR_LEAVE_OFFICE_ROLES = ["hr_leave_office", "hr_office", "director_hr", "manager_hr"] as const
+export const HR_EXECUTIVE_ROLES = ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"] as const
 export const ADMIN_ROLES = ["admin", "super_admin", "god"] as const
 export const ATTENDANCE_ONLY_ROLES = ["intern", "nsp"] as const
 
@@ -45,18 +46,60 @@ export function isNonRegionalDriverRole(role?: string | null): boolean {
 }
 
 export function isDepartmentHeadRole(role?: string | null): boolean {
-  return normalizeAppRole(role) === "department_head"
+  const normalizedRole = normalizeAppRole(role)
+  return normalizedRole === "department_head" || HR_EXECUTIVE_ROLES.includes(normalizedRole as (typeof HR_EXECUTIVE_ROLES)[number])
+}
+
+/** True when loan_hod_linkages lists this user as hod_user_id, regardless of role. */
+export function isAssignedHod(isLinkedHod?: boolean | null): boolean {
+  return Boolean(isLinkedHod)
+}
+
+/** Role HOD/RM or an explicit HOD linkage assignment. */
+export function isActingHod(role?: string | null, isLinkedHod?: boolean | null): boolean {
+  return isDepartmentHeadRole(role) || isRegionalManagerRole(role) || isAssignedHod(isLinkedHod)
+}
+
+export type TransportDeptInfo = { code?: string | null; name?: string | null } | null | undefined
+
+export function isTransportDepartment(dept?: TransportDeptInfo): boolean {
+  if (!dept) return false
+  const code = String(dept.code || "").toLowerCase()
+  const name = String(dept.name || "").toLowerCase()
+  return code === "transport" || name.includes("transport")
+}
+
+/**
+ * Transport department staff who are also HOD (role or linkage) keep TM dashboard
+ * features and gain HOD loan/leave/transport capabilities.
+ */
+export function isTransportDepartmentHod(
+  role?: string | null,
+  dept?: TransportDeptInfo,
+  isLinkedHod?: boolean | null,
+): boolean {
+  return isTransportDepartment(dept) && (isDepartmentHeadRole(role) || isAssignedHod(isLinkedHod))
+}
+
+export function isDualTransportHod(
+  role?: string | null,
+  dept?: TransportDeptInfo,
+  isLinkedHod?: boolean | null,
+): boolean {
+  const actingHod = isActingHod(role, isLinkedHod)
+  if (!actingHod) return false
+  return isTransportManagerRole(role) || isTransportDepartmentHod(role, dept, isLinkedHod)
 }
 
 export function canManageTransport(role?: string | null): boolean {
   const normalizedRole = normalizeAppRole(role)
-  return isRegionalHrRole(role) || isRegionalManagerRole(role) || isChiefDriverRole(role) || isTransportManagerRole(role) || isAdminRole(role) || ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
+  return isRegionalHrRole(role) || isRegionalManagerRole(role) || isChiefDriverRole(role) || isTransportManagerRole(role) || isAdminRole(role) || ["it-admin", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
 }
 
 /** Driver license register edit/verify: Transport Manager (nationwide) and Chief Driver (their location/region) only.
  *  Regional Manager / Regional HR get read-only access via canManageTransport. */
 export function canEditDriverLicenses(role?: string | null): boolean {
-  return isTransportManagerRole(role) || isChiefDriverRole(role) || isAdminRole(role)
+  return isTransportManagerRole(role) || isChiefDriverRole(role) || isAdminRole(role) || normalizeAppRole(role) === "it-admin"
 }
 
 /** Fleet inventory edit (status, details, register): TM nationwide; RM / Regional HR regional only */
@@ -83,21 +126,20 @@ export function canViewFleetInventory(role?: string | null): boolean {
   )
 }
 
-/** Nationwide fleet (no region filter): Transport Manager, MD, admin */
+/** Nationwide fleet (no location filter): Transport Manager and administrators only. */
 export function hasNationwideFleetScope(role?: string | null): boolean {
   const normalizedRole = normalizeAppRole(role)
   return (
     isTransportManagerRole(role) ||
     isAdminRole(role) ||
-    normalizedRole === "managing_director" ||
-    ["it_admin", "it-admin"].includes(normalizedRole)
+    normalizedRole === "it-admin"
   )
 }
 
-export function canCreateTransportRequest(role?: string | null): boolean {
+export function canCreateTransportRequest(role?: string | null, isLinkedHod?: boolean | null): boolean {
   // Regional HR / Chief Driver create regional requests for RM → MD.
-  // Department Heads create non-regional requisitions (separate API).
-  return isRegionalHrRole(role) || isChiefDriverRole(role) || isDepartmentHeadRole(role)
+  // Department Heads and assigned HODs create non-regional requisitions (separate API).
+  return isRegionalHrRole(role) || isChiefDriverRole(role) || isDepartmentHeadRole(role) || isAssignedHod(isLinkedHod)
 }
 
 export function isRegionalHrRole(role?: string | null): boolean {
@@ -106,6 +148,13 @@ export function isRegionalHrRole(role?: string | null): boolean {
 
 export function isAdminRole(role?: string | null): boolean {
   return ADMIN_ROLES.includes(normalizeAppRole(role) as (typeof ADMIN_ROLES)[number])
+}
+
+export function canAccessDisbursementConfirmation(role?: string | null): boolean {
+  return isAdminRole(role) || [
+    "accounts", "accounts_executive", "hr_executive",
+    "loan_office", "hr_loan_office", "accounts_loan_office",
+  ].includes(normalizeAppRole(role))
 }
 
 export function canManageOwnSignature(role?: string | null): boolean {
@@ -131,15 +180,7 @@ export function canManageOwnSignature(role?: string | null): boolean {
 export function isHrExecutiveRole(role?: string | null): boolean {
   const normalized = normalizeAppRole(role)
   const raw = String(role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
-  return [
-    "hr",
-    "hr_executive",
-    "hr_executive_officer",
-    "manager_hr",
-    "director_hr",
-    "hr_manager",
-    "hr_director",
-  ].includes(normalized) || ["hr_executive", "hr_executive_officer"].includes(raw)
+  return HR_EXECUTIVE_ROLES.includes(normalized as (typeof HR_EXECUTIVE_ROLES)[number]) || ["hr_executive", "hr_executive_officer"].includes(raw)
 }
 
 export function canAccessMemoConsole(role?: string | null): boolean {

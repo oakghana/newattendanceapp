@@ -12,7 +12,7 @@ import { MobileBottomNav } from "./mobile-bottom-nav"
 import { toast } from "@/hooks/use-toast"
 import { ToastAction } from "@/components/ui/toast"
 
-const POLL_INTERVAL_MS = 30_000 // 30 seconds
+const POLL_INTERVAL_MS = 120_000
 const IDLE_TIMEOUT_MS = 2 * 60 * 1000
 const IDLE_EVENTS: Array<keyof WindowEventMap> = [
   "mousemove",
@@ -35,6 +35,7 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
+  const [isAssignedHod, setIsAssignedHod] = useState(false)
   const [loading, setLoading] = useState(true)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const router = useRouter()
@@ -135,6 +136,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           setProfile(profileData)
         }
 
+        const { data: hodLink } = await supabase
+          .from("loan_hod_linkages")
+          .select("id")
+          .eq("hod_user_id", data.user.id)
+          .limit(1)
+          .maybeSingle()
+        setIsAssignedHod(Boolean(hodLink))
+
         setLoading(false)
       } catch (err) {
         console.error("[v0] Auth check error:", err)
@@ -166,8 +175,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     if (!profile) return
 
     const checkNewNotifications = async () => {
+      if (document.hidden || !navigator.onLine) return
       try {
-        const res = await fetch("/api/staff/notifications")
+        const res = await fetch("/api/staff/notifications", { cache: "no-store" })
         const json = await res.json()
         if (!json.success || !Array.isArray(json.data)) return
 
@@ -239,7 +249,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background/98 to-muted/10">
-      <Sidebar user={user} profile={profile} isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
+      <Sidebar user={user} profile={profile} isAssignedHod={isAssignedHod} isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
       <div className={`min-w-0 w-full overflow-x-hidden transition-all duration-300 ease-in-out ${isCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
         <main className="mx-auto min-w-0 w-full max-w-[min(100%-1rem,96rem)] overflow-x-hidden px-4 pb-28 pt-4 sm:px-5 sm:pb-32 sm:pt-5 lg:px-8 lg:pb-12 lg:pt-8 xl:px-10">
           <div className="relative">

@@ -4,6 +4,7 @@ import {
   canDoAccounts,
   canDoCommittee,
   canDoDirectorHr,
+  canDoHodReview,
   canDoHrOffice,
   canDoLoanOffice,
   isAdminRole,
@@ -305,17 +306,16 @@ export async function GET() {
     const managerDepartmentId = String((profile as any)?.department_id || "")
     const managerLocationId = String((profile as any)?.assigned_location_id || "")
     const isRegionalManager = role === "regional_manager"
-    const isDepartmentHead = role === "department_head"
+    const isDepartmentHead = ["department_head", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(role)
 
     let linkedStaffIds: string[] = []
-    if (isRegionalManager || isDepartmentHead) {
-      const { data: linkageRows } = await admin
-        .from("loan_hod_linkages")
-        .select("staff_user_id")
-        .eq("hod_user_id", user.id)
-        .limit(5000)
-      linkedStaffIds = (linkageRows || []).map((row: any) => row.staff_user_id).filter(Boolean)
-    }
+    const { data: linkageRows } = await admin
+      .from("loan_hod_linkages")
+      .select("staff_user_id")
+      .eq("hod_user_id", user.id)
+      .limit(5000)
+    linkedStaffIds = (linkageRows || []).map((row: any) => row.staff_user_id).filter(Boolean)
+    const isLinkedHod = linkedStaffIds.length > 0
     const reviewerScopedStaffIds = Array.from(new Set(linkedStaffIds))
 
     const loanTypesWithTermsQuery = () =>
@@ -413,7 +413,7 @@ export async function GET() {
             allLoans: [],
           },
           permissions: {
-            hod: isAdminRole(role) || ["department_head", "regional_manager"].includes(role),
+            hod: canDoHodReview(role, isLinkedHod),
             loanOffice: canDoLoanOffice(role, deptName, deptCode),
             accounts: canDoAccounts(role, deptName, deptCode),
             committee: canDoCommittee(role),
@@ -436,7 +436,7 @@ export async function GET() {
     const viewAllTabs = isAdminRole(role)
 
     const permissions = {
-      hod: isAdminRole(role) || ["department_head", "regional_manager"].includes(role),
+      hod: canDoHodReview(role, isLinkedHod),
       loanOffice: canDoLoanOffice(role, deptName, deptCode),
       accounts: canDoAccounts(role, deptName, deptCode),
       committee: canDoCommittee(role),
@@ -449,7 +449,7 @@ export async function GET() {
     // HOD query: include requests explicitly assigned to this HOD, plus linked-staff fallback for legacy data.
     const hodPromise: Promise<any> = (async () => {
       if (!(permissions.hod || viewAllTabs)) return { data: [], error: null }
-      if (viewAllTabs || !["department_head", "regional_manager"].includes(role)) {
+      if (viewAllTabs || (!isDepartmentHead && !isRegionalManager && !isLinkedHod)) {
         return admin
           .from("loan_requests")
           .select("*")
@@ -516,7 +516,7 @@ export async function GET() {
         : Promise.resolve({ data: [], error: null } as any),
       (viewAllTabs || permissions.allLoans)
         ? admin.from("loan_requests").select("*").order("created_at", { ascending: false })
-        : (isRegionalManager || isDepartmentHead)
+        : (isRegionalManager || isDepartmentHead || isLinkedHod)
           ? admin
               .from("loan_requests")
               .select("*")

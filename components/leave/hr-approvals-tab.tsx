@@ -16,6 +16,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from '@/components/ui/dialog'
 import {
   Loader2, CheckCircle2, XCircle, ChevronDown, ChevronUp,
@@ -141,6 +142,46 @@ const leaveYear = (period?: string | null) => {
   if (!period) return String(new Date().getFullYear() - 1)
   return period.split('/')[0] || period
 }
+
+const MANDATORY_LEAVE_MEMO_CC = [
+  'Managing Director',
+  'Deputy Director-HR',
+  'Deputy Director - Finance',
+  'Audit Manager',
+]
+
+const MANDATORY_LEAVE_MEMO_CC_TEXT = MANDATORY_LEAVE_MEMO_CC.join('\n')
+
+const normalizeCcRecipient = (value: string) => String(value || '').toLowerCase().replace(/\s+/g, ' ').trim()
+
+const getAdditionalLeaveMemoCc = (value?: string | null) => {
+  const mandatory = new Set(MANDATORY_LEAVE_MEMO_CC.map(normalizeCcRecipient))
+  return String(value || '')
+    .split(/[\r\n,]+/)
+    .map((line) => line.trim())
+    .filter((line) => line && !mandatory.has(normalizeCcRecipient(line)))
+    .join('\n')
+}
+
+const buildLeaveMemoCc = (value?: string | null) => {
+  const seen = new Set<string>()
+  return [...MANDATORY_LEAVE_MEMO_CC, ...String(value || '').split(/[\r\n,]+/)]
+    .map((line) => line.trim())
+    .filter((line) => {
+      if (!line) return false
+      const key = normalizeCcRecipient(line)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .join('\n')
+}
+
+const splitMemoParagraphs = (value?: string | null) =>
+  String(value || '')
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
 
 // ── Inline Signature Panel ────────────────────────────────────────────────────
 
@@ -321,6 +362,9 @@ function QccMemoPreviewModal({
   signatureDataUrl,
   signatureText,
   storedSignatureDataUrl,
+  memoSubject,
+  memoBody,
+  memoCc,
 }: {
   open: boolean
   onClose: () => void
@@ -330,6 +374,9 @@ function QccMemoPreviewModal({
   signatureDataUrl?: string | null
   signatureText?: string | null
   storedSignatureDataUrl?: string | null
+  memoSubject?: string | null
+  memoBody?: string | null
+  memoCc?: string | null
 }) {
   // Resolve the best available signature: inline drawn > stored profile
   const resolvedSigDataUrl = signatureDataUrl || storedSignatureDataUrl || null
@@ -368,6 +415,12 @@ function QccMemoPreviewModal({
   const refNo = buildRefNo(req)
   const today = fmtDateOrdinal(new Date().toISOString())
   const serial = `${staffSerial.replace(/\s/g, '')}`.toUpperCase() || 'S/N'
+  const previewSubject = String(memoSubject || req.memo_draft_subject || '').trim() || `${leaveType} LEAVE ADVICE FOR ${yearLabel}`
+  const previewParagraphs = splitMemoParagraphs(memoBody || req.memo_draft_body)
+  const hasEditedBody = previewParagraphs.length > 0
+  const previewCc = buildLeaveMemoCc(memoCc || req.memo_draft_cc)
+    .split('\n')
+    .filter(Boolean)
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
@@ -375,7 +428,7 @@ function QccMemoPreviewModal({
         {/* Chrome top bar */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50 sticky top-0 z-10">
           <div>
-            <p className="text-sm font-semibold text-slate-800">Memo Preview</p>
+            <DialogTitle className="text-sm font-semibold text-slate-800">Memo Preview</DialogTitle>
             <p className="text-xs text-slate-500">Official QCC/COCOBOD leave advice — review before approving</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl leading-none font-light">&times;</button>
@@ -441,22 +494,28 @@ function QccMemoPreviewModal({
           {/* Subject — bold + underline, green */}
           <div className="mt-5">
             <p className="font-bold underline text-[13px] uppercase text-[#2d7a2d]">
-              {leaveType} LEAVE ADVICE FOR {yearLabel}
+              {previewSubject}
             </p>
           </div>
 
           {/* Body */}
           <div className="mt-4 space-y-3 text-[12.5px]">
-            <p>
-              In accordance with COCOBOD&apos;s vacation leave policy, we wish to inform you that approval has been
-              granted for you to proceed on your {leaveTypeLabel(req.leave_type_key).toLowerCase()} leave in respect
-              of the year January to December {yearLabel}.
-            </p>
-            <p>Your leave details are shown below.</p>
+            {hasEditedBody ? previewParagraphs.map((paragraph, index) => (
+              <p key={`memo-paragraph-${index}`} className="whitespace-pre-wrap">{paragraph}</p>
+            )) : (
+              <>
+                <p>
+                  In accordance with COCOBOD&apos;s vacation leave policy, we wish to inform you that approval has been
+                  granted for you to proceed on your {leaveTypeLabel(req.leave_type_key).toLowerCase()} leave in respect
+                  of the year January to December {yearLabel}.
+                </p>
+                <p>Your leave details are shown below.</p>
+              </>
+            )}
           </div>
 
           {/* Leave details table */}
-          <div className="mt-4 border border-slate-300 rounded overflow-hidden text-[12px]">
+          {!hasEditedBody && <div className="mt-4 border border-slate-300 rounded overflow-hidden text-[12px]">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b border-slate-300 bg-slate-50">
@@ -486,16 +545,16 @@ function QccMemoPreviewModal({
                 </tr>
               </tbody>
             </table>
-          </div>
+          </div>}
 
           {/* Resume duty */}
-          <div className="mt-4 text-[12.5px]">
+          {!hasEditedBody && <div className="mt-4 text-[12.5px]">
             <p>You are to resume duty on <span className="font-semibold">{resumeDate}</span>.</p>
             <p className="mt-2">We wish you a pleasant and relaxing vacation.</p>
-          </div>
+          </div>}
 
           {/* Adjustment line if applicable */}
-          {wasAdjusted && (
+          {!hasEditedBody && wasAdjusted && (
             <div className="mt-1 text-[12px] text-slate-600">
               <p>Adjustment Details: {grantedDays} working days approved</p>
             </div>
@@ -529,10 +588,10 @@ function QccMemoPreviewModal({
 
           {/* CC */}
           <div className="mt-8 border-t border-slate-200 pt-3 text-[11.5px]">
-            <p>
-              <span className="font-bold">cc:</span>
-              <span className="ml-2 text-slate-700">Managing Director, Deputy Managing Director, HR Head, Accounts Manager</span>
-            </p>
+            <p className="font-bold">cc:</p>
+            <div className="ml-4 mt-1 text-slate-700 space-y-0.5">
+              {previewCc.map((recipient) => <p key={recipient}>{recipient}</p>)}
+            </div>
           </div>
 
           {/* Footer bar */}
@@ -584,10 +643,10 @@ function HrApprovalCard({
   const [previewOpen, setPreviewOpen] = useState(false)
   const [memoSubject, setMemoSubject] = useState(req.memo_draft_subject || '')
   const [memoBody, setMemoBody] = useState(req.memo_draft_body || '')
-  const [memoCc, setMemoCc] = useState(req.memo_draft_cc || '')
+  const [memoCc, setMemoCc] = useState(getAdditionalLeaveMemoCc(req.memo_draft_cc || ''))
   const originalSubject = req.memo_office_subject || req.memo_draft_subject || ''
   const originalBody = req.memo_office_body || req.memo_draft_body || ''
-  const originalCc = req.memo_office_cc || req.memo_draft_cc || ''
+  const originalCc = getAdditionalLeaveMemoCc(req.memo_office_cc || req.memo_draft_cc || '')
   
   // HR executive date override state
   const [overrideMode, setOverrideMode] = useState(false)
@@ -792,6 +851,11 @@ function HrApprovalCard({
               onBodyChange={setMemoBody}
               onCcChange={setMemoCc}
               showCc
+              fixedCcRecipients={MANDATORY_LEAVE_MEMO_CC}
+              bodyLabel="Leave information"
+              bodyPlaceholder="Edit the leave information before signing."
+              ccLabel="Additional CC"
+              ccPlaceholder="Add any other people to copy"
               bodyRows={7}
             />
 
@@ -850,7 +914,7 @@ function HrApprovalCard({
                         hr_approved_days: hrDays ? Number(hrDays) : null
                       })
                     : null
-                  onApprove(note, dateOverride, memoSubject, memoBody, memoCc)
+                  onApprove(note, dateOverride, memoSubject, memoBody, buildLeaveMemoCc(memoCc))
                 }}
               >
                 {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
@@ -871,6 +935,9 @@ function HrApprovalCard({
         signatureDataUrl={previewSigDataUrl}
         signatureText={previewSigText}
         storedSignatureDataUrl={storedSignatureDataUrl}
+        memoSubject={memoSubject}
+        memoBody={memoBody}
+        memoCc={memoCc}
       />
     </>
   )

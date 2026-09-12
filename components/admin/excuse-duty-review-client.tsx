@@ -28,6 +28,7 @@ import {
   Filter,
   Building2,
 } from "lucide-react"
+import { isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 
 interface Department {
   id: string
@@ -39,8 +40,8 @@ interface ExcuseDocument {
   id: string
   document_name: string
   document_type: string
-  file_url: string
-  excuse_reason: string
+  file_url?: string
+  excuse_reason?: string
   excuse_date: string
   status: "pending" | "approved" | "rejected"
   reviewer?: {
@@ -68,6 +69,8 @@ interface ExcuseDutyReviewClientProps {
 }
 
 export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyReviewClientProps) {
+  const normalizedRole = normalizeAppRole(userRole)
+  const isRegionalScoped = isRegionalManagerRole(normalizedRole) || isRegionalHrRole(normalizedRole)
   const [excuseDocuments, setExcuseDocuments] = useState<ExcuseDocument[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [loading, setLoading] = useState(true)
@@ -87,7 +90,7 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
   const [dateFrom, setDateFrom] = useState<string | null>(null)
   const [dateTo, setDateTo] = useState<string | null>(null)
   const [page, setPage] = useState<number>(1)
-  const [perPage, setPerPage] = useState<number>(50)
+  const [perPage, setPerPage] = useState<number>(20)
   const [hasMore, setHasMore] = useState<boolean>(false)
 
   useEffect(() => {
@@ -117,6 +120,7 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
   const fetchExcuseDocuments = async () => {
     try {
       setLoading(true)
+      setError("")
       const params = new URLSearchParams()
       if (statusFilter !== "all") {
         params.append("status", statusFilter)
@@ -135,9 +139,7 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
       const response = await fetch(`/api/admin/excuse-duty?${params.toString()}`)
 
       if (!response.ok) {
-        const text = await response.text().catch(() => "")
-        console.error("Excuse documents fetch failed:", response.status, text)
-        throw new Error(`Failed to fetch excuse documents: ${response.status} ${text}`)
+        throw new Error("Unable to load excuse documents. Please try again.")
       }
 
       const data = await response.json()
@@ -149,6 +151,14 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
     } finally {
       setLoading(false)
     }
+  }
+
+  const fetchExcuseDocumentDetail = async (doc: ExcuseDocument) => {
+    if (doc.file_url && doc.excuse_reason) return doc
+    const response = await fetch(`/api/admin/excuse-duty?id=${encodeURIComponent(doc.id)}`, { cache: "no-store" })
+    if (!response.ok) throw new Error("Unable to load document details.")
+    const data = await response.json()
+    return (data.excuseDocument || doc) as ExcuseDocument
   }
 
   const handleReview = async () => {
@@ -187,11 +197,15 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
     }
   }
 
-  const openReviewDialog = (doc: ExcuseDocument) => {
-    setSelectedDoc(doc)
-    setReviewStatus("approved")
-    setReviewNotes("")
-    setReviewDialogOpen(true)
+  const openReviewDialog = async (doc: ExcuseDocument) => {
+    try {
+      setSelectedDoc(await fetchExcuseDocumentDetail(doc))
+      setReviewStatus("approved")
+      setReviewNotes("")
+      setReviewDialogOpen(true)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to load document details.")
+    }
   }
 
   const getStatusBadge = (status: string) => {
@@ -236,7 +250,13 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
     )
   }
 
-  const viewDocument = (fileUrl: string, fileName: string) => {
+  const viewDocument = async (doc: ExcuseDocument) => {
+    const detailedDoc = await fetchExcuseDocumentDetail(doc)
+    const fileUrl = detailedDoc.file_url || ""
+    if (!fileUrl) {
+      setError("Document file is not available.")
+      return
+    }
     if (fileUrl.startsWith("data:")) {
       // For data URLs, open directly
       window.open(fileUrl, "_blank", "width=800,height=600,scrollbars=yes,resizable=yes")
@@ -309,7 +329,9 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
               <CardDescription>
                 {userRole === "admin"
                   ? "Review excuse duty submissions from all departments"
-                  : "Review excuse duty submissions from your department"}
+                  : isRegionalScoped
+                    ? "Review excuse duty submissions from your regional office and its district offices"
+                    : "Review excuse duty submissions from your department"}
               </CardDescription>
             </div>
 
@@ -443,8 +465,8 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="max-w-[200px] truncate" title={doc.excuse_reason}>
-                          {doc.excuse_reason}
+                        <div className="max-w-[200px] truncate" title={doc.excuse_reason || "Open review to view reason"}>
+                          {doc.excuse_reason || "Open review to view reason"}
                         </div>
                       </TableCell>
                       <TableCell>{getStatusBadge(doc.status)}</TableCell>
@@ -453,7 +475,7 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => viewDocument(doc.file_url, doc.document_name)}
+                            onClick={() => viewDocument(doc)}
                             className="flex items-center gap-1"
                           >
                             <Eye className="h-3 w-3" />
@@ -537,7 +559,7 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
               <div>
                 <label className="text-sm font-medium">Reason for Absence</label>
                 <p className="text-sm text-muted-foreground mt-1 p-3 bg-muted rounded-lg">
-                  {selectedDoc.excuse_reason}
+                  {selectedDoc.excuse_reason || "No reason provided."}
                 </p>
               </div>
 

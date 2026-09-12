@@ -80,7 +80,14 @@ export async function GET(request: Request) {
     .eq("id", user.id)
     .single()
   const role = normalizeAppRole(profile?.role)
-  if (!profile || !VIEW_ROLES.has(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const { data: assignedHodLink } = await supabase
+    .from("loan_hod_linkages")
+    .select("id")
+    .eq("hod_user_id", user.id)
+    .limit(1)
+    .maybeSingle()
+  const isLinkedHod = Boolean(assignedHodLink)
+  if (!profile || (!VIEW_ROLES.has(role) && !isLinkedHod)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   // Regional drivers only ever handle regional trips (transport_requests); keep them out of the non-regional queue.
   if (role === "driver" && isRegionalDriverRole(profile.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
@@ -112,7 +119,7 @@ export async function GET(request: Request) {
     else query = query.eq("location", "__no_assigned_location__")
   } else if (isAdminRole(role) || role === "managing_director" || isTransportManagerRole(role) || role === "it-admin") {
     // full queue
-  } else if (isDepartmentHeadRole(role)) {
+  } else if (isDepartmentHeadRole(role) || isLinkedHod) {
     query = query.or(`requester_id.eq.${user.id},hod_id.eq.${user.id}`)
   } else {
     query = query.eq("requester_id", user.id)
@@ -190,7 +197,14 @@ export async function POST(request: Request) {
   }
 
   const submitterRole = normalizeAppRole(profile?.role)
-  if (!SUBMIT_ROLES.has(submitterRole) && !isAdminRole(profile.role)) {
+  const { data: assignedHodLink } = await supabase
+    .from("loan_hod_linkages")
+    .select("id")
+    .eq("hod_user_id", user.id)
+    .limit(1)
+    .maybeSingle()
+  const isLinkedHod = Boolean(assignedHodLink)
+  if (!SUBMIT_ROLES.has(submitterRole) && !isAdminRole(profile.role) && !isLinkedHod) {
     return NextResponse.json({ error: "You are not allowed to submit non-regional transport requisitions." }, { status: 403 })
   }
 
@@ -215,7 +229,7 @@ export async function POST(request: Request) {
 
   // A linked HOD must approve first. Department Heads and HR Executives submit
   // their own departmental requisitions directly to the Managing Director.
-  const selfAuth = canSelfAuthorize(submitterRole) && !isAdminRole(submitterRole)
+  const selfAuth = (canSelfAuthorize(submitterRole) || isLinkedHod) && !isAdminRole(submitterRole)
   const signedAt = new Date().toISOString()
   const hodId = profile.hod_id ? String(profile.hod_id) : null
 

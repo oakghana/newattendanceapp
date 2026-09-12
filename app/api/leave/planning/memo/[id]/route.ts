@@ -57,6 +57,30 @@ function normalizeRole(r: string | null | undefined): string {
     .replace(/[-\s]+/g, "_")
 }
 
+const MANDATORY_LEAVE_MEMO_CC = [
+  "Managing Director",
+  "Deputy Director-HR",
+  "Deputy Director - Finance",
+  "Audit Manager",
+]
+
+function normalizeCcRecipient(value: string) {
+  return String(value || "").toLowerCase().replace(/\s+/g, " ").trim()
+}
+
+function buildLeaveMemoCcList(value?: string | null) {
+  const seen = new Set<string>()
+  return [...MANDATORY_LEAVE_MEMO_CC, ...String(value || "").split(/[\r\n,]+/)]
+    .map((line) => line.trim())
+    .filter((line) => {
+      if (!line) return false
+      const key = normalizeCcRecipient(line)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+}
+
 function leaveTypeLabel(key: string): string {
   const map: Record<string, string> = {
     annual: "Annual Leave",
@@ -760,10 +784,14 @@ export async function GET(
     let tableEntitlement = 0
     let tableTravellingDays = 0
 
-    // Always use the authoritative builtin body for every leave type.
-    // Stored draftBody values are stale and may contain wrong leave-type content
-    // (e.g. a casual leave record with annual leave body text from old data entry).
-    {
+    if (draftBody) {
+      paragraphs = draftBody
+        .split(/\n{2,}/)
+        .map((paragraph) => paragraph.trim())
+        .filter(Boolean)
+      closingLine = ""
+      useTable = false
+    } else {
       const built = buildBuiltinBody(lr, effectiveStart, adjustedEffectiveEnd, isCalendarLeave ? calendarEffectiveDays : effectiveDays, returnDateIso, holidayDatesForMemo)
       paragraphs          = built.paragraphs
       closingLine         = built.closing
@@ -996,11 +1024,15 @@ export async function GET(
     }
 
     // ── Closing line ─────────────────────────────────────────────────
-    doc.setFont("times", "normal")
-    doc.setFontSize(9.5)
-    const closingLines = doc.splitTextToSize(closingLine, contentWidth)
-    doc.text(closingLines, marginLeft, y)
-    y += closingLines.length * 5.5 + 12
+    if (closingLine) {
+      doc.setFont("times", "normal")
+      doc.setFontSize(9.5)
+      const closingLines = doc.splitTextToSize(closingLine, contentWidth)
+      doc.text(closingLines, marginLeft, y)
+      y += closingLines.length * 5.5 + 12
+    } else {
+      y += 7
+    }
 
     // ── Signature block ───────────────────────────────────────────────
     // CRITICAL: Use selectedSigner from memo_body ONLY, never fall back to stale leave_plan_requests data
@@ -1115,11 +1147,8 @@ export async function GET(
     doc.setFont("times", "normal")
   const ccSource = lr.memo_draft_cc ?? lr.cc_recipients ?? lr.cc_list ?? ""
   const ccList: string[] = Array.isArray(ccSource)
-    ? ccSource.map((value: unknown) => String(value).trim()).filter(Boolean)
-    : String(ccSource)
-      .split(/[\r\n,]+/)
-      .map((line) => line.trim())
-      .filter(Boolean)
+    ? buildLeaveMemoCcList(ccSource.join("\n"))
+    : buildLeaveMemoCcList(ccSource)
     const ccIndent = marginLeft + 10
     for (const cc of ccList) {
       doc.text(cc, ccIndent, y)

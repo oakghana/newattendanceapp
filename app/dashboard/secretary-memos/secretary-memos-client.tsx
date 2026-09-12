@@ -149,68 +149,14 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
   const departmentName = Array.isArray(profile.departments) ? profile.departments[0]?.name : profile.departments?.name
   const initials = [profile.first_name[0], profile.last_name[0]].join("").toUpperCase()
 
-  const downloadMemo = async (memo: ApprovedMemo) => {
-    setDownloadingId(memo.id)
-    try {
-      const linkRes = await fetch("/api/loan/memo-link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: memo.id, disposition: "attachment" }),
-      })
-      const linkData = await linkRes.json()
-      if (!linkRes.ok) throw new Error(linkData.error || "Failed to generate memo link")
-      // Do NOT set target="_blank" here: pairing a forced `download` attribute with a
-      // new-tab navigation is what makes Chrome report "Couldn't download - No
-      // permissions". The server now sends Content-Disposition: attachment for this
-      // link (disposition: "attachment" above), so a same-tab anchor click downloads
-      // the file cleanly without navigating away.
-      const a = document.createElement("a")
-      a.href = linkData.path
-      a.download = `${memo.type}-memo-${memo.request_number}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-    } catch (err) {
-      console.error("Download failed:", err)
-    } finally {
-      setDownloadingId(null)
-    }
-  }
+  const downloadMemo = (memo: ApprovedMemo) => openLoanMemo(memo)
 
-  // Prints the actual memo PDF (opened inline in a new tab), instead of the previous
-  // behaviour which downloaded a file to disk and then called window.print() on the
-  // memo console page itself.
-  const printMemo = async (memo: ApprovedMemo) => {
-    setDownloadingId(memo.id)
-    try {
-      const linkRes = await fetch("/api/loan/memo-link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: memo.id }),
-      })
-      const linkData = await linkRes.json()
-      if (!linkRes.ok) throw new Error(linkData.error || "Failed to generate memo link")
-      const win = window.open(linkData.path, "_blank", "noopener,noreferrer")
-      if (win) win.addEventListener("load", () => win.print(), { once: true })
-    } catch (err) {
-      console.error("Print failed:", err)
-    } finally {
-      setDownloadingId(null)
-    }
-  }
+  const printMemo = (memo: ApprovedMemo) => openLoanMemo(memo, true)
 
   const exportRegionalTransportMemo = async (memo: RegionalTransportMemo, print = false) => {
     const reference = memo.memo_reference || memo.reference_number
     if (!reference) return
-    let signedUrl = memo.signed_memo_url || null
-    try {
-      const amendments = memo.memo_amendments ? JSON.parse(memo.memo_amendments) as Record<string, unknown> : {}
-      signedUrl = signedUrl || (typeof amendments.signed_memo_url === "string" ? amendments.signed_memo_url : null) || (typeof amendments.memo_pdf_url === "string" ? amendments.memo_pdf_url : null) || (typeof amendments.document_url === "string" ? amendments.document_url : null)
-    } catch { /* malformed optional metadata must not break the console */ }
-    if (!signedUrl) {
-      await legacyExportRegionalTransportMemo(memo, print)
-      return
-    }
+    const signedUrl = `/api/transport/memo/${memo.id}`
     if (print) {
       const win = window.open(signedUrl, "_blank", "noopener,noreferrer")
       if (win) win.addEventListener("load", () => win.print(), { once: true })
@@ -224,27 +170,13 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
     link.remove()
   }
 
-  const legacyExportRegionalTransportMemo = async (memo: RegionalTransportMemo, print = false) => {
-    const subject = memo.memo_subject || `Regional Transport Request: ${memo.purpose}`
-    const body = memo.memo_body || `Approval is granted for transportation support for ${memo.passenger_count} passenger(s) from ${memo.origin} to ${memo.destination} on ${fmtDate(memo.event_date)}.`
-    if (print) {
-      const win = window.open("", "_blank", "noopener,noreferrer")
-      if (!win) { window.alert("Allow pop-ups to print the memo."); return }
-      win.document.write(`<html><head><title>${subject}</title><style>body{font-family:Arial,sans-serif;max-width:760px;margin:48px auto;line-height:1.6;color:#172033}h1{font-size:20px;text-align:center}p{white-space:pre-wrap}.meta{border-bottom:1px solid #ccd3df;padding-bottom:16px;margin-bottom:24px}</style></head><body><h1>${subject}</h1><div class="meta">Reference: ${memo.memo_reference || memo.reference_number || "—"}<br>Date: ${fmtDate(memo.memo_date || memo.event_date)}</div><p>${body}</p></body></html>`)
-      win.document.close(); win.focus(); win.print()
+  const openLoanMemo = async (memo: Pick<LoanMemo, "id" | "request_number">, print = false) => {
+    const printWindow = print ? window.open("", "_blank") : null
+    if (print && !printWindow) {
+      window.alert("Allow pop-ups to print the memo.")
       return
     }
-    const { jsPDF } = await import("jspdf")
-    const pdf = new jsPDF()
-    pdf.setFontSize(16); pdf.text(subject, 20, 25)
-    pdf.setFontSize(10); pdf.text(`Reference: ${memo.memo_reference || memo.reference_number || "—"}`, 20, 36)
-    pdf.text(`Date: ${fmtDate(memo.memo_date || memo.event_date)}`, 20, 43)
-    pdf.setFontSize(12)
-    pdf.splitTextToSize(body, 170).forEach((line: string, index: number) => pdf.text(line, 20, 60 + index * 7))
-    pdf.save(`regional-transport-memo-${memo.memo_reference || memo.reference_number || memo.id}.pdf`)
-  }
-
-  const openLoanMemo = async (memo: LoanMemo, print = false) => {
+    if (printWindow) printWindow.opener = null
     setDownloadingId(memo.id)
     try {
       const linkRes = await fetch("/api/loan/memo-link", {
@@ -254,18 +186,29 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
       })
       const linkData = await linkRes.json()
       if (!linkRes.ok) throw new Error(linkData.error || "Failed to generate loan memo link")
-      if (print) {
-        const win = window.open(linkData.path, "_blank", "noopener,noreferrer")
-        if (win) win.addEventListener("load", () => win.print(), { once: true })
-        return
+      const response = await fetch(linkData.path)
+      if (!response.ok || !response.headers.get("content-type")?.includes("application/pdf")) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || "Unable to load the loan memo. Please try again.")
       }
-      const a = document.createElement("a")
-      a.href = linkData.path
-      a.download = `loan-memo-${memo.request_number}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
+      const pdfUrl = URL.createObjectURL(await response.blob())
+      if (printWindow) {
+        printWindow.addEventListener("load", () => {
+          printWindow.focus()
+          printWindow.print()
+        }, { once: true })
+        printWindow.location.href = pdfUrl
+      } else {
+        const link = document.createElement("a")
+        link.href = pdfUrl
+        link.download = `loan-memo-${memo.request_number}.pdf`
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+      }
+      window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000)
     } catch (err) {
+      printWindow?.close()
       console.error("Loan memo download failed:", err)
       window.alert(err instanceof Error ? err.message : "Unable to download the loan memo.")
     } finally {
@@ -774,10 +717,6 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                   <div className="h-10 w-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0"><Bus className="h-5 w-5" /></div>
                   <div className="flex-1 min-w-0"><div className="font-semibold text-sm text-slate-900 truncate">{memo.memo_subject || memo.purpose}</div><div className="text-xs text-slate-500 mt-1">{memo.memo_reference || memo.reference_number || "No reference"} · {memo.origin} → {memo.destination} · {fmtDate(memo.event_date)}</div></div>
                   <Badge className={cn("text-xs border", memo.status === "approved" || memo.workflow_stage === "hr_records_review" ? "bg-emerald-100 text-emerald-800 border-emerald-200" : "bg-amber-100 text-amber-800 border-amber-200")}>{memo.status === "approved" || memo.workflow_stage === "hr_records_review" ? "Approved" : "Pending"}</Badge>
-                  {((memo.memo_reference || memo.reference_number || "").trim().length > 0) && <>
-                    <button onClick={() => void exportRegionalTransportMemo(memo)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"><Download className="h-3.5 w-3.5" /> Download signed memo</button>
-                    <button onClick={() => void exportRegionalTransportMemo(memo, true)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold"><Printer className="h-3.5 w-3.5" /> Print signed memo</button>
-                  </>}
                 </div>
               ))}
             </div>

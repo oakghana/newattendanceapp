@@ -48,6 +48,7 @@ interface TeamCalendarData {
   rangeStart: string
   rangeEnd: string
   isGlobalRole?: boolean
+  scopeLabel?: string
 }
 
 // ─── Leave type metadata ───────────────────────────────────────────────────────
@@ -267,7 +268,7 @@ export function TeamCalendarView({
     return []
   }, [activePanel, onLeaveTodayList, onLeaveThisMonth, upcomingList])
 
-  const scopeLabel = isHrOffice ? "All departments" : userDepartmentName ? `${userDepartmentName} department` : "Your department"
+  const scopeLabel = data?.scopeLabel || (isHrOffice ? "All departments" : userDepartmentName ? `${userDepartmentName} department` : "Your department")
 
   return (
     <div className="space-y-5">
@@ -276,9 +277,11 @@ export function TeamCalendarView({
         <div>
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <CalendarDays className="h-5 w-5 text-amber-500" />
-            Department Leave Calendar
+            Team Leave Calendar
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">{scopeLabel} — who is on leave and when</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            See who is on leave, when they return, and today's coverage — scoped to <span className="font-medium text-slate-600">{scopeLabel}</span>.
+          </p>
         </div>
         <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-1 py-1 shadow-sm">
           <Button size="icon" variant="ghost" className="h-7 w-7 rounded-lg" onClick={prevMonth}>

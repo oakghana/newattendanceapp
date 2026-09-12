@@ -34,6 +34,7 @@ interface HrExecutiveLeaveModuleProps {
   userDepartmentCode: string | null
   userLocationName: string | null
   hasHodLinkage: boolean
+  isAssignedHod?: boolean
   initialStaffRequests: any[]
   initialManagerNotifications: any[]
   initialApprovedStaffRequests: any[]
@@ -52,6 +53,7 @@ export function HrExecutiveLeaveModule({
   userId, userRole, userDepartment, userFirstName, userLastName,
   inactivityDays, userDepartmentName, userDepartmentCode, userLocationName,
   hasHodLinkage, initialStaffRequests, initialManagerNotifications, initialApprovedStaffRequests,
+  isAssignedHod = false,
 }: HrExecutiveLeaveModuleProps) {
   const [activeTab, setActiveTab] = useState<Tab>("overview")
   const [balanceView, setBalanceView] = useState<"balances" | "calendar">("balances")
@@ -142,6 +144,7 @@ export function HrExecutiveLeaveModule({
             userFirstName={userFirstName || ""}
             userLastName={userLastName || ""}
             hasHodLinkage={hasHodLinkage}
+            isAssignedHod={isAssignedHod}
             inactivityDays={inactivityDays}
             initialStaffRequests={initialStaffRequests}
             initialManagerNotifications={initialManagerNotifications}

@@ -142,3 +142,23 @@ export async function findRegionalManagersForLocation(
   if (error) throw error
   return data || []
 }
+
+/**
+ * Locations "owned" by a Regional Manager/Regional HR Office's own regional office:
+ * the regional office itself plus every district office linked to it via parent_location_id.
+ * Used to scope regional/district staff records to their reviewing regional office.
+ */
+export async function resolveOwnedLocationIdsForRegionalOffice(
+  admin: SupabaseClient,
+  regionalOfficeLocationId: string | null | undefined,
+): Promise<string[]> {
+  if (!regionalOfficeLocationId) return []
+  const ids = new Set<string>([String(regionalOfficeLocationId)])
+  const { data, error } = await admin
+    .from("geofence_locations")
+    .select("id")
+    .eq("parent_location_id", regionalOfficeLocationId)
+  if (error) throw error
+  for (const row of data || []) ids.add(String((row as any).id))
+  return Array.from(ids)
+}

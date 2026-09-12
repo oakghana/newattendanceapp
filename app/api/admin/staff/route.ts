@@ -402,7 +402,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (isItAdmin) {
-      const allowedForItAdmin = ["staff", "nsp", "contract", "department_head", "regional_manager"]
+      const allowedForItAdmin = ["staff", "nsp", "contract", "department_head", "regional_manager", "driver", "chief_driver"]
       if (!allowedForItAdmin.includes(role)) {
         console.error("[v0] Staff API - IT-Admin attempted to create disallowed role:", role)
         return createJsonResponse(

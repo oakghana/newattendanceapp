@@ -16,6 +16,9 @@ interface ExcuseDocument {
   excuse_reason: string
   excuse_date: string
   status: "pending" | "approved" | "rejected"
+  hod_status?: string | null
+  hr_status?: string | null
+  final_status?: string | null
   reviewed_by_profile?: {
     first_name: string
     last_name: string
@@ -52,15 +55,19 @@ export function ExcuseDutyHistory() {
     }
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
+  const getStatusBadge = (doc: ExcuseDocument) => {
+    const stage = doc.final_status || doc.status
+    switch (stage) {
       case "approved":
         return <Badge className="bg-green-100 text-green-800 border-green-200">Approved</Badge>
       case "rejected":
         return <Badge variant="destructive">Rejected</Badge>
+      case "hr_review":
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Awaiting HR</Badge>
+      case "hod_review":
       case "pending":
       default:
-        return <Badge variant="secondary">Pending Review</Badge>
+        return <Badge variant="secondary">Awaiting HOD</Badge>
     }
   }
 
@@ -117,17 +124,8 @@ export function ExcuseDutyHistory() {
           </Alert>
         )}
 
-        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex items-start gap-2">
-            <FileText className="h-4 w-4 text-blue-600 mt-0.5" />
-            <div className="text-sm text-blue-800">
-              <p className="font-medium">Approval Workflow:</p>
-              <p className="mt-1">
-                Your excuse duty submissions are first reviewed by your Head of Department, then processed by HR for
-                final approval.
-              </p>
-            </div>
-          </div>
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-800">
+          Reviewed by your Head of Department first, then finalized by HR.
         </div>
 
         {excuseDocuments.length === 0 ? (
@@ -172,7 +170,7 @@ export function ExcuseDutyHistory() {
                         {doc.excuse_reason}
                       </div>
                     </TableCell>
-                    <TableCell>{getStatusBadge(doc.status)}</TableCell>
+                    <TableCell>{getStatusBadge(doc)}</TableCell>
                     <TableCell>
                       {doc.reviewed_by_profile ? (
                         <div className="text-sm">
