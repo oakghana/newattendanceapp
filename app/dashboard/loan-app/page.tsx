@@ -29,7 +29,49 @@ import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { GOOD_FD_THRESHOLD, canEnterFdScore as canEnterFdScoreForRole, isPoorFdScore } from "@/lib/loan-workflow"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
-import { Activity, AlertCircle, BarChart3, Calculator, CheckCircle2, ChevronDown, Clock, Download, Edit3, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Save, Trash2, Upload, UserCog, Users, Wallet, XCircle } from "lucide-react"
+import {
+  Activity,
+  AlertCircle,
+  AlertTriangle,
+  ArrowRight,
+  Award,
+  BadgeCheck,
+  BarChart3,
+  Building,
+  Building2,
+  Calculator,
+  Calendar,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  Clock,
+  Download,
+  Edit3,
+  FileCheck,
+  FileSpreadsheet,
+  FileText,
+  Filter,
+  Forward,
+  Hourglass,
+  LayoutGrid,
+  LayoutList,
+  Loader2,
+  MapPin,
+  PenTool,
+  Radio,
+  Receipt,
+  Save,
+  Send,
+  Sparkles,
+  Trash2,
+  Upload,
+  UserCheck,
+  UserCog,
+  Users,
+  Wallet,
+  XCircle,
+  Zap
+} from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
@@ -286,12 +328,15 @@ const ACTION_LABELS: Record<string, string> = {
   staff_submit: "Staff Submitted",
   staff_edit: "Staff Edited",
   hod_decision: "HOD Decision",
+  hod_auto_approved: "HOD Auto-Forwarded",
   loan_office_update_request: "Loan Office Updated Request",
   loan_office_forward: "Loan Office Forward",
   accounts_fd_update: "Accounts FD Update",
   committee_decision: "Committee Decision",
   hr_set_terms: "HR Terms Set",
   director_finalize: "Director HR Final Decision",
+  process_delay_broadcast: "Process Delay Broadcast",
+  confirm_disbursement: "Disbursement Confirmed",
 }
 
 const LOAN_SUBMISSION_LOCKED = false
@@ -3402,14 +3447,14 @@ export default function LoanAppPage() {
               const isDenied = ["hod_rejected","rejected_fd","committee_rejected","director_rejected"].includes(req.status)
               const isApproved = req.status === "approved_director"
 
-              const STEP_META: Record<string, { icon: string; label: string; owner: string; desc: string }> = {
-                pending_hod:         { icon: "🏢", label: "HOD Review",       owner: "Department Head",    desc: "Awaiting your HOD to review and forward" },
-                hod_approved:        { icon: "✅", label: "Loan Office",      owner: "Loan Officer",       desc: "Loan Office is processing your request" },
-                sent_to_accounts:    { icon: "🔢", label: "Accounts / FD",    owner: "Accounts Team",      desc: "FD check & financial review in progress" },
-                awaiting_committee:  { icon: "👥", label: "Committee",        owner: "Welfare Committee",  desc: "Under committee deliberation" },
-                awaiting_hr_terms:   { icon: "📝", label: "HR Terms",         owner: "HR Office",          desc: "HR is setting loan repayment terms" },
-                awaiting_director_hr:{ icon: "🎖️", label: "Executive HR",     owner: "Director / Executive","desc": "Final executive approval pending" },
-                approved_director:   { icon: "🎉", label: "Approved!",        owner: "Complete",           desc: "Your loan has been fully approved" },
+              const STEP_META: Record<string, { icon: React.ReactNode; label: string; owner: string; desc: string }> = {
+                pending_hod:         { icon: <Building2 className="h-4 w-4" />, label: "HOD Review",       owner: "Department Head",    desc: "Awaiting your HOD to review and forward" },
+                hod_approved:        { icon: <FileCheck className="h-4 w-4" />, label: "Loan Office",      owner: "Loan Officer",       desc: "Loan Office is processing your request" },
+                sent_to_accounts:    { icon: <Calculator className="h-4 w-4" />, label: "Accounts / FD",    owner: "Accounts Team",      desc: "FD check & financial review in progress" },
+                awaiting_committee:  { icon: <Users className="h-4 w-4" />, label: "Committee",        owner: "Welfare Committee",  desc: "Under committee deliberation" },
+                awaiting_hr_terms:   { icon: <FileSpreadsheet className="h-4 w-4" />, label: "HR Terms",         owner: "HR Office",          desc: "HR is setting loan repayment terms" },
+                awaiting_director_hr:{ icon: <Award className="h-4 w-4" />, label: "Executive HR",     owner: "Director / Executive","desc": "Final executive approval pending" },
+                approved_director:   { icon: <BadgeCheck className="h-4 w-4" />, label: "Approved!",        owner: "Complete",           desc: "Your loan has been fully approved" },
               }
 
               return (
@@ -3422,8 +3467,8 @@ export default function LoanAppPage() {
                       <p className="text-sm opacity-90 mt-0.5">GHc {fmtAmount(req.fixed_amount || req.requested_amount)}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
-                      <Badge className={`${isApproved ? "bg-white text-emerald-700" : isDenied ? "bg-white text-red-700" : "bg-white/20 text-white border border-white/40"} font-semibold text-xs px-3 py-1`}>
-                        {isApproved ? "🎉 Approved" : isDenied ? "����� " + statusText(req.status) : "⏳ " + statusText(req.status)}
+                      <Badge className={`${isApproved ? "bg-white text-emerald-700" : isDenied ? "bg-white text-red-700" : "bg-white/20 text-white border border-white/40"} font-semibold text-xs px-3 py-1 flex items-center gap-1.5`}>
+                        {isApproved ? (<><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Approved</>) : isDenied ? (<><XCircle className="h-3.5 w-3.5 text-red-600" /> {statusText(req.status)}</>) : (<><Hourglass className="h-3.5 w-3.5 animate-pulse" /> {statusText(req.status)}</>)}
                       </Badge>
                       <p className="text-xs opacity-70">Submitted {fmtDate(req.submitted_at || req.created_at)}</p>
                     </div>
@@ -3462,11 +3507,13 @@ export default function LoanAppPage() {
                           })}
                         </div>
                         {STEP_META[req.status] && (
-                          <div className="mt-3 rounded-xl bg-violet-50 border border-violet-100 px-4 py-3 flex items-center gap-3">
-                            <span className="text-2xl">{STEP_META[req.status]?.icon}</span>
+                          <div className="mt-3 rounded-xl bg-violet-50 border border-violet-200/80 px-4 py-3 flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-600 text-white shadow-sm shrink-0">
+                              {STEP_META[req.status]?.icon}
+                            </div>
                             <div>
                               <p className="text-sm font-semibold text-violet-900">Currently with: {STEP_META[req.status]?.owner}</p>
-                              <p className="text-xs text-violet-700">{STEP_META[req.status]?.desc}</p>
+                              <p className="text-xs text-violet-700 mt-0.5">{STEP_META[req.status]?.desc}</p>
                             </div>
                           </div>
                         )}
@@ -3561,36 +3608,75 @@ export default function LoanAppPage() {
 
                     {/* Timeline Events */}
                     {timeline.length > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">Activity Log</p>
-                        <div className="relative space-y-0 before:absolute before:left-4 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                            <Activity className="h-4 w-4 text-violet-600" />
+                            Activity Log &amp; Audit Trail
+                          </p>
+                          <span className="text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                            {timeline.length} event{timeline.length !== 1 ? "s" : ""}
+                          </span>
+                        </div>
+
+                        <div className="relative space-y-3 pl-2 before:absolute before:left-[19px] before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
                           {timeline.map((entry, i) => {
-                            const isLatest = i === timeline.length - 1
-                            const actionIcon: Record<string, string> = {
-                              staff_submit: "📤", staff_edit: "✏️", hod_decision: "🏢",
-                              hod_auto_approved: "⚡", loan_office_update_request: "📋",
-                              loan_office_forward: "➡️", accounts_fd_update: "🔢",
-                              committee_decision: "👥", hr_set_terms: "📝",
-                              director_finalize: "🎖️",
+                            const isLatest = i === 0 || i === timeline.length - 1
+                            const actionConfig: Record<string, { icon: React.ReactNode; bg: string; text: string }> = {
+                              staff_submit: { icon: <Send className="h-3.5 w-3.5" />, bg: "bg-blue-50 text-blue-700 border-blue-200", text: "text-blue-900" },
+                              staff_edit: { icon: <Edit3 className="h-3.5 w-3.5" />, bg: "bg-amber-50 text-amber-700 border-amber-200", text: "text-amber-900" },
+                              hod_decision: { icon: <Building2 className="h-3.5 w-3.5" />, bg: "bg-purple-50 text-purple-700 border-purple-200", text: "text-purple-900" },
+                              hod_auto_approved: { icon: <Zap className="h-3.5 w-3.5" />, bg: "bg-amber-50 text-amber-700 border-amber-200", text: "text-amber-900" },
+                              loan_office_update_request: { icon: <FileCheck className="h-3.5 w-3.5" />, bg: "bg-cyan-50 text-cyan-700 border-cyan-200", text: "text-cyan-900" },
+                              loan_office_forward: { icon: <Forward className="h-3.5 w-3.5" />, bg: "bg-indigo-50 text-indigo-700 border-indigo-200", text: "text-indigo-900" },
+                              accounts_fd_update: { icon: <Calculator className="h-3.5 w-3.5" />, bg: "bg-emerald-50 text-emerald-700 border-emerald-200", text: "text-emerald-900" },
+                              committee_decision: { icon: <Users className="h-3.5 w-3.5" />, bg: "bg-violet-50 text-violet-700 border-violet-200", text: "text-violet-900" },
+                              hr_set_terms: { icon: <FileSpreadsheet className="h-3.5 w-3.5" />, bg: "bg-teal-50 text-teal-700 border-teal-200", text: "text-teal-900" },
+                              director_finalize: { icon: <Award className="h-3.5 w-3.5" />, bg: "bg-emerald-50 text-emerald-700 border-emerald-200", text: "text-emerald-900" },
+                              process_delay_broadcast: { icon: <Radio className="h-3.5 w-3.5" />, bg: "bg-rose-50 text-rose-700 border-rose-200", text: "text-rose-900" },
+                              confirm_disbursement: { icon: <BadgeCheck className="h-3.5 w-3.5" />, bg: "bg-emerald-50 text-emerald-700 border-emerald-200", text: "text-emerald-900" },
                             }
+
+                            const conf = actionConfig[entry.action_key] || {
+                              icon: <CheckCircle2 className="h-3.5 w-3.5" />,
+                              bg: "bg-slate-50 text-slate-700 border-slate-200",
+                              text: "text-slate-900",
+                            }
+
                             return (
-                              <div key={entry.id} className="relative flex gap-4 pl-10 pb-4">
-                                <div className={`absolute left-2 top-1 flex h-5 w-5 items-center justify-center rounded-full text-xs ring-2 ring-white ${isLatest ? "bg-violet-600 text-white" : "bg-slate-300 text-slate-600"}`}>
-                                  {isLatest ? "●" : "���"}
+                              <div key={entry.id} className="relative flex items-start gap-3 pl-8">
+                                <div className={`absolute left-1.5 top-2 flex h-6 w-6 items-center justify-center rounded-full border shadow-sm ${conf.bg}`}>
+                                  {conf.icon}
                                 </div>
-                                <div className={`flex-1 rounded-xl border px-4 py-3 ${isLatest ? "border-violet-200 bg-violet-50/50" : "border-slate-100 bg-white"}`}>
-                                  <div className="flex flex-wrap items-center justify-between gap-1">
-                                    <span className="font-semibold text-sm text-slate-800">
-                                      {actionIcon[entry.action_key] || "📌"} {ACTION_LABELS[entry.action_key] || entry.action_key.replace(/_/g," ")}
-                                    </span>
-                                    <span className="text-[11px] text-slate-400">{fmtDate(entry.created_at)}</span>
+                                <div className={`flex-1 rounded-xl border p-3.5 transition-all ${isLatest ? "border-violet-300 bg-violet-50/40 shadow-sm" : "border-slate-200 bg-white"}`}>
+                                  <div className="flex flex-wrap items-center justify-between gap-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`font-semibold text-xs sm:text-sm ${conf.text}`}>
+                                        {ACTION_LABELS[entry.action_key] || entry.action_key.replace(/_/g, " ")}
+                                      </span>
+                                      {entry.actor_role && (
+                                        <span className="text-[10px] font-medium uppercase tracking-wider text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                          {entry.actor_role.replace(/_/g, " ")}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-[11px] text-slate-400 tabular-nums">{fmtDate(entry.created_at)}</span>
                                   </div>
+
                                   {entry.to_status && (
-                                    <p className="mt-1 text-xs text-slate-500">
-                                      Status moved to: <span className="font-semibold text-slate-700">{statusText(entry.to_status)}</span>
+                                    <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
+                                      <span>Status moved to:</span>
+                                      <Badge className={statusBadgeClass(entry.to_status, "soft")}>
+                                        {statusText(entry.to_status)}
+                                      </Badge>
+                                    </div>
+                                  )}
+
+                                  {entry.note && (
+                                    <p className="mt-2 text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded-lg p-2 leading-relaxed italic">
+                                      "{entry.note}"
                                     </p>
                                   )}
-                                  {entry.note && <p className="mt-1 text-xs italic text-slate-600">"{entry.note}"</p>}
                                 </div>
                               </div>
                             )
