@@ -13,6 +13,8 @@ interface DisbursedLoan {
   request_number: string
   staff_full_name: string
   staff_number: string
+  staff_rank?: string
+  corporate_email?: string
   loan_type_label: string
   fixed_amount: number
   status: string
@@ -166,12 +168,18 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
                   <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div className="flex-1 min-w-[250px]">
                       <div className="flex items-center gap-3 mb-2">
-                        <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 font-bold text-sm flex-shrink-0">
-                          {String(loan.staff_full_name || "?").split(" ").map((p) => p[0]).join("").toUpperCase().slice(0, 2)}
+                        <div className="h-10 w-10 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-800 font-bold text-sm flex-shrink-0 shadow-sm">
+                          {loan.staff_full_name
+                            ? loan.staff_full_name.split(" ").filter(Boolean).map((p) => p[0]).join("").toUpperCase().slice(0, 2)
+                            : (loan.staff_number ? String(loan.staff_number).slice(0, 2) : "ST")}
                         </div>
                         <div>
-                          <h3 className="font-bold text-slate-900">{loan.staff_full_name || "Unknown"}</h3>
-                          <p className="text-xs text-slate-500">{loan.staff_number} • {loan.department_name || "N/A"}</p>
+                          <h3 className="font-bold text-slate-900 text-base">{loan.staff_full_name || (loan.staff_number ? `Staff #${loan.staff_number}` : "Staff Member")}</h3>
+                          <p className="text-xs text-slate-500 font-medium">
+                            {loan.staff_number && <span>#{loan.staff_number}</span>}
+                            {loan.staff_rank && <span> • {loan.staff_rank}</span>}
+                            {loan.department_name && <span> • {loan.department_name}</span>}
+                          </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-slate-600 flex-wrap">
