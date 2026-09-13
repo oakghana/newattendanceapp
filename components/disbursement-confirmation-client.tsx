@@ -33,7 +33,6 @@ interface DisbursementConfirmationClientProps {
 export function DisbursementConfirmationClient({ loans: initialLoans, userProfile }: DisbursementConfirmationClientProps) {
   const [loans, setLoans] = useState(initialLoans)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
-  const supabase = createClient()
   const { toast } = useToast()
 
   const canConfirm = canConfirmDisbursement(userProfile?.role)
@@ -42,7 +41,7 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
     if (!canConfirm) {
       toast({
         title: "Permission Denied",
-        description: "Only Accounts Executive / Accounts Officers are authorized to confirm loan disbursements.",
+        description: "Only Accounts Executive and Accounts Officers are authorized to confirm loan disbursements.",
         variant: "destructive",
       })
       return
@@ -50,54 +49,45 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
 
     setConfirmingId(loanId)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error("Not authenticated")
+      const res = await fetch("/api/loan/disbursement-confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ loan_id: loanId }),
+      })
 
-      // Get current user's name for confirmation tracking
-      const { data: profile } = await supabase
-        .from("user_profiles")
-        .select("first_name, last_name")
-        .eq("id", user.id)
-        .maybeSingle()
+      const data = await res.json()
 
-      const confirmedByName = profile 
-        ? `${profile.first_name} ${profile.last_name}`
-        : "Unknown User"
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || data.message || "Failed to confirm disbursement")
+      }
 
-      // Update loan status to mark funds as received
-      const { error: updateError } = await supabase
-        .from("loan_requests")
-        .update({
-          status: "partially_recovered",
-          staff_receiving_funds_confirmed_at: new Date().toISOString(),
-          staff_receiving_funds_confirmed_by: confirmedByName,
-        })
-        .eq("id", loanId)
+      const confirmedByName = data.confirmedByName || "Accounts Officer"
+      const confirmedAt = data.confirmedAt || new Date().toISOString()
 
-      if (updateError) throw updateError
-
-      // Update local state
+      // Update local state smoothly
       setLoans((prev) =>
         prev.map((loan) =>
           loan.id === loanId
             ? {
                 ...loan,
                 status: "partially_recovered",
-                staff_receiving_funds_confirmed_at: new Date().toISOString(),
+                staff_receiving_funds_confirmed_at: confirmedAt,
                 staff_receiving_funds_confirmed_by: confirmedByName,
               }
             : loan
         )
       )
 
+      const targetLoan = loans.find((l) => l.id === loanId)
       toast({
         title: "Disbursement Confirmed",
-        description: `Loan ${loans.find((l) => l.id === loanId)?.request_number} marked as received.`,
+        description: `Loan ${targetLoan?.request_number || loanId} for ${targetLoan?.staff_full_name || "Staff"} marked as received.`,
       })
-    } catch (error) {
+    } catch (error: any) {
+      console.error("[v0] Error confirming disbursement:", error)
       toast({
         title: "Error confirming disbursement",
-        description: error instanceof Error ? error.message : "Unknown error",
+        description: error?.message || "An unexpected error occurred while confirming disbursement.",
         variant: "destructive",
       })
     } finally {

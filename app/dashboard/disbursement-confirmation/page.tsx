@@ -20,6 +20,81 @@ interface DisbursedLoan {
   department_name?: string
 }
 
+function formatProperCase(str: string): string {
+  if (!str) return ""
+  return str
+    .split(/(\s+|-)/)
+    .map((part) => {
+      if (!part.trim() || part === "-") return part
+      const upper = part.toUpperCase()
+      if (["MR", "MRS", "MS", "DR", "PROF", "ING", "REV"].includes(upper)) {
+        return upper === "DR" ? "Dr." : upper === "MR" ? "Mr." : upper === "MRS" ? "Mrs." : upper === "MS" ? "Ms." : part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+      }
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+    })
+    .join("")
+}
+
+function extractNameFromLetter(letter?: string | null): string | null {
+  if (!letter) return null
+  const match = letter.match(/(?:Your Ref No:[^\n]*\n+)?([A-Za-z\s.'-]+)\s*\(S\/No\.:/i)
+  if (match && match[1]) {
+    const raw = match[1].replace(/Your Ref No:[\s_]*/i, "").trim()
+    if (raw.length > 2 && !/QUALITY CONTROL|HUMAN RESOURCES|MANAGING DIRECTOR/i.test(raw)) {
+      return formatProperCase(raw)
+    }
+  }
+  return null
+}
+
+function parseNameFromEmail(email?: string | null): string | null {
+  if (!email || !email.includes("@")) return null
+  const local = email.split("@")[0]
+  if (/^(sectest|test|admin|user|leavestaff|driver)\d*$/i.test(local)) return null
+  const parts = local.split(/[._-]/).filter(Boolean)
+  if (parts.length >= 2) {
+    return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(" ")
+  }
+  return null
+}
+
+function resolveStaffFullName(loan: any, prof?: any): string {
+  // 1. If loan already has a valid human full name
+  const rawLoanName = String(loan?.staff_full_name || "").trim()
+  if (rawLoanName && !/unknown|staff member|undefined|null/i.test(rawLoanName)) {
+    return formatProperCase(rawLoanName)
+  }
+
+  // 2. Extract official recipient name from approved director memo letter
+  const letterName = extractNameFromLetter(loan?.director_letter)
+  if (letterName) return letterName
+
+  // 3. From user profile
+  if (prof) {
+    const rawFull = String(prof.full_name || "").trim()
+    if (rawFull && !/unknown|staff member|undefined|null/i.test(rawFull)) {
+      return formatProperCase(rawFull)
+    }
+
+    const first = String(prof.first_name || "").trim()
+    const last = String(prof.last_name || "").trim()
+    if (first || last) {
+      const combined = `${first} ${last}`.trim()
+      if (!/^(leavestaff|test|user|staff)\s*(staff|user|member)?$/i.test(combined)) {
+        return formatProperCase(combined)
+      }
+    }
+  }
+
+  // 4. From corporate or profile email
+  const emailName = parseNameFromEmail(prof?.email || loan?.corporate_email)
+  if (emailName) return emailName
+
+  // 5. Fallback
+  const staffNum = prof?.employee_id || loan?.staff_number
+  return staffNum ? `Staff (${staffNum})` : "Staff Member"
+}
+
 export default async function DisbursementConfirmationPage() {
   const { user, authError } = await createClientAndGetUser()
   if (authError || !user) redirect("/auth/login")
@@ -40,7 +115,7 @@ export default async function DisbursementConfirmationPage() {
   const { data: loans, error: loansError } = await admin
     .from("loan_requests")
     .select("*")
-    .in("status", ["md_approved", "approved_director", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
+    .in("status", ["md_approved", "approved_director", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered", "payment_completed"])
     .or("status.eq.md_approved,md_approved_at.not.is.null")
     .order("md_approved_at", { ascending: false })
     .limit(500)
@@ -53,50 +128,73 @@ export default async function DisbursementConfirmationPage() {
   const rawLoans = loans || []
   const userIds = Array.from(new Set(rawLoans.map((l: any) => l.user_id).filter(Boolean))) as string[]
   const staffNumbers = Array.from(new Set(rawLoans.map((l: any) => l.staff_number).filter(Boolean))) as string[]
+  const loanIds = rawLoans.map((l: any) => l.id)
 
   const profileMapById = new Map<string, any>()
   const profileMapByEmpId = new Map<string, any>()
+  const timelineMap = new Map<string, any>()
 
-  if (userIds.length > 0) {
-    const { data: profilesById } = await admin
-      .from("user_profiles")
-      .select("id, first_name, last_name, full_name, employee_id, position, email, departments(name, code)")
-      .in("id", userIds)
+  const [profilesByIdRes, profilesByEmpRes, timelineRes] = await Promise.all([
+    userIds.length > 0
+      ? admin
+          .from("user_profiles")
+          .select("id, first_name, last_name, full_name, employee_id, position, email, departments(name, code)")
+          .in("id", userIds)
+      : Promise.resolve({ data: [] }),
+    staffNumbers.length > 0
+      ? admin
+          .from("user_profiles")
+          .select("id, first_name, last_name, full_name, employee_id, position, email, departments(name, code)")
+          .in("employee_id", staffNumbers)
+      : Promise.resolve({ data: [] }),
+    loanIds.length > 0
+      ? admin
+          .from("loan_request_timeline")
+          .select("loan_request_id, actor_id, actor_role, note, metadata, created_at")
+          .in("loan_request_id", loanIds)
+          .eq("action_key", "confirm_disbursement")
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+  ])
 
-    for (const p of profilesById || []) {
-      profileMapById.set(p.id, p)
-      if (p.employee_id) profileMapByEmpId.set(String(p.employee_id).trim(), p)
-    }
+  for (const p of (profilesByIdRes.data as any[]) || []) {
+    profileMapById.set(p.id, p)
+    if (p.employee_id) profileMapByEmpId.set(String(p.employee_id).trim(), p)
   }
 
-  if (staffNumbers.length > 0) {
-    const missingEmpIds = staffNumbers.filter((num) => !profileMapByEmpId.has(String(num).trim()))
-    if (missingEmpIds.length > 0) {
-      const { data: profilesByEmp } = await admin
-        .from("user_profiles")
-        .select("id, first_name, last_name, full_name, employee_id, position, email, departments(name, code)")
-        .in("employee_id", missingEmpIds)
+  for (const p of (profilesByEmpRes.data as any[]) || []) {
+    if (p.id) profileMapById.set(p.id, p)
+    if (p.employee_id) profileMapByEmpId.set(String(p.employee_id).trim(), p)
+  }
 
-      for (const p of profilesByEmp || []) {
-        if (p.id) profileMapById.set(p.id, p)
-        if (p.employee_id) profileMapByEmpId.set(String(p.employee_id).trim(), p)
-      }
+  for (const te of (timelineRes.data as any[]) || []) {
+    if (!timelineMap.has(te.loan_request_id)) {
+      timelineMap.set(te.loan_request_id, te)
     }
   }
 
   const enrichedLoans: DisbursedLoan[] = rawLoans.map((loan: any) => {
     const prof = profileMapById.get(loan.user_id) || profileMapByEmpId.get(String(loan.staff_number || "").trim())
     
-    // Resolve complete full name
-    const profFullName = prof?.full_name?.trim() || `${prof?.first_name || ""} ${prof?.last_name || ""}`.trim()
-    const rawLoanName = String(loan.staff_full_name || "").trim()
-    const isValidLoanName = rawLoanName && !rawLoanName.toLowerCase().includes("unknown")
-    const resolvedName = profFullName || (isValidLoanName ? rawLoanName : "") || (loan.staff_number ? `Staff #${loan.staff_number}` : "Staff Member")
-
+    // Resolve complete human full name
+    const resolvedName = resolveStaffFullName(loan, prof)
     const resolvedEmpId = prof?.employee_id || loan.staff_number || ""
     const resolvedDept = (prof as any)?.departments?.name || (prof as any)?.department_name || loan.department_name || "General"
     const resolvedRank = prof?.position || loan.staff_rank || ""
     const resolvedEmail = prof?.email || loan.corporate_email || ""
+
+    const timelineEntry = timelineMap.get(loan.id)
+    const isConfirmed =
+      loan.status === "partially_recovered" ||
+      loan.status === "fully_recovered" ||
+      loan.status === "payment_completed" ||
+      Boolean(timelineEntry)
+
+    const confirmedAt = timelineEntry?.created_at || (isConfirmed ? loan.updated_at : null)
+    const confirmedBy =
+      timelineEntry?.metadata?.confirmed_by_name ||
+      timelineEntry?.note?.replace(/Disbursement confirmed received by staff\. Action taken by /i, "")?.replace(/\.$/, "") ||
+      (isConfirmed ? "Accounts Department" : null)
 
     return {
       id: loan.id,
@@ -109,8 +207,8 @@ export default async function DisbursementConfirmationPage() {
       fixed_amount: Number(loan.fixed_amount || loan.requested_amount || 0),
       status: loan.status || "",
       md_approved_at: loan.md_approved_at,
-      staff_receiving_funds_confirmed_at: loan.staff_receiving_funds_confirmed_at,
-      staff_receiving_funds_confirmed_by: loan.staff_receiving_funds_confirmed_by,
+      staff_receiving_funds_confirmed_at: confirmedAt,
+      staff_receiving_funds_confirmed_by: confirmedBy,
       created_at: loan.created_at,
       department_name: resolvedDept,
     }
