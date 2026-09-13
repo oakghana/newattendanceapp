@@ -64,7 +64,6 @@ export function FDCalculationSubmission({
   const [fdTab, setFdTab] = useState('salary')
   const [calculating, setCalculating] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [sending, setSending] = useState(false)
   const [result, setResult] = useState<FDCalculationResult | null>(null)
   const [errors, setErrors] = useState<string[]>([])
   const [outstandingOpen, setOutstandingOpen] = useState(false)
@@ -236,6 +235,7 @@ export function FDCalculationSubmission({
             gross_salary_monthly: result.gross_salary_per_month,
             gross_deductions_monthly: result.gross_deduction_monthly,
             loan_installment_monthly: result.loan_installment_monthly,
+            outstanding_installment_monthly: result.outstanding_installment_monthly,
             total_deductions_monthly: result.total_deduction_monthly,
             net_salary_monthly: result.net_salary_monthly,
             half_gross_monthly: result.half_gross_salary_per_month,
@@ -252,8 +252,8 @@ export function FDCalculationSubmission({
       const data = await res.json()
       if (data.success) {
         toast({
-          title: isEditMode ? 'FD Correction Saved' : 'FD Submitted',
-          description: `Score ${finalScore}% ${isEditMode ? 'updated for' : 'forwarded to'} Accounts Executive review. You cannot approve.`,
+          title: isEditMode ? 'FD Correction Forwarded' : 'FD Forwarded',
+          description: `Score ${finalScore}% sent to Accounts Executive for review.`,
         })
         setIsSentForApproval(true)
         setCorrectionReason('')
@@ -266,50 +266,6 @@ export function FDCalculationSubmission({
       toast({ title: 'Network Error', description: 'Could not reach server', variant: 'destructive' })
     } finally {
       setSubmitting(false)
-    }
-  }
-
-  const handleSendForApproval = async () => {
-    if (!result) return
-    setSending(true)
-    try {
-      const res = await fetch('/api/loan/fd-send-approval', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          loan_request_id: loanRequest.id,
-          fd_score: result.fd_score,
-          fd_good: result.fd_good,
-          fd_calculation_data: {
-            salary_per_annum: result.salary_per_annum,
-            consolidated_salary_per_month: result.consolidated_salary_per_month,
-            recovery_period_months: result.recovery_period_months,
-            other_allowances: result.other_allowances_per_month,
-            gross_salary_monthly: result.gross_salary_per_month,
-            gross_deductions_monthly: result.gross_deduction_monthly,
-            loan_installment_monthly: result.loan_installment_monthly,
-            total_deductions_monthly: result.total_deduction_monthly,
-            net_salary_monthly: result.net_salary_monthly,
-            half_gross_monthly: result.half_gross_salary_per_month,
-            net_to_gross_ratio: result.net_to_gross_ratio,
-            net_to_gross_fraction: result.net_to_gross_fraction,
-            total_outstanding_loans: result.total_outstanding,
-            total_loan_exposure: result.total_loan_exposure,
-            outstanding_loans: parsedOutstanding,
-          },
-        }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        toast({ title: 'Sent for Approval', description: `FD Score ${result.fd_score}/100 sent to Accounts Executive` })
-        setIsSentForApproval(true)
-      } else {
-        toast({ title: 'Send Failed', description: data.error || 'Unknown error', variant: 'destructive' })
-      }
-    } catch {
-      toast({ title: 'Network Error', description: 'Could not reach server', variant: 'destructive' })
-    } finally {
-      setSending(false)
     }
   }
 
@@ -479,7 +435,9 @@ export function FDCalculationSubmission({
 
             {/* Tab 2: Outstanding Loans */}
             <TabsContent value="outstanding" className="space-y-3 p-4">
-              <p className="text-xs text-muted-foreground mb-3">Enter any outstanding loan balances that apply to this staff member. Leave blank if none apply.</p>
+              <p className="text-xs text-muted-foreground mb-3">
+                Enter outstanding loan balances. They are converted to a monthly burden (total balances ÷ recovery months) and reduce the FD score together with the new loan installment.
+              </p>
               
               <div className="border rounded-md overflow-hidden">
                 <button
@@ -560,6 +518,9 @@ export function FDCalculationSubmission({
                   {([
                     ['Existing Gross Deductions', GHC(result.gross_deduction_monthly), false],
                     ['Approx. Loan Installment (Loan ÷ Recovery)', GHC(result.loan_installment_monthly), false],
+                    ...(result.outstanding_installment_monthly > 0
+                      ? [['Outstanding monthly burden (Balances ÷ Recovery)', GHC(result.outstanding_installment_monthly), false] as [string, string, boolean]]
+                      : []),
                     ['Total Deduction', GHC(result.total_deduction_monthly), true],
                   ] as [string, string, boolean][]).map(([label, value, bold]) => (
                     <div key={label} className="flex justify-between items-center px-3 py-2 border-b last:border-0">
@@ -666,30 +627,17 @@ export function FDCalculationSubmission({
                 <div className="space-y-2">
                   <Button onClick={handleSubmit} disabled={submitting || isLockedAfterAe} size="lg" className="w-full">
                     {submitting
-                      ? (isEditMode ? 'Saving correction...' : 'Submitting...')
-                      : (isEditMode ? 'Save FD Correction (no approve)' : 'Submit FD to Accounts Review')}
+                      ? (isEditMode ? 'Forwarding correction...' : 'Forwarding...')
+                      : (isEditMode ? 'Forward corrected FD to Accounts Executive' : 'Submit FD to Accounts Executive')}
                   </Button>
-                  
-                  {!isEditMode && !isSentForApproval && (
-                    <Button 
-                      onClick={handleSendForApproval} 
-                      disabled={sending || isSentForApproval} 
-                      size="lg" 
-                      variant="outline"
-                      className="w-full border-green-300 text-green-700 hover:bg-green-50"
-                    >
-                      {sending ? 'Sending...' : '✓ Send for Approval'}
-                    </Button>
-                  )}
-                  
-                  {(isSentForApproval || isEditMode) && (
+                  {isSentForApproval && (
                     <div className="w-full px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-center text-amber-800 font-medium">
-                      Awaiting Accounts Executive decision — Loan Office cannot approve
+                      Forwarded — awaiting Accounts Executive review
                     </div>
                   )}
                 </div>
                 <p className="text-xs text-center text-muted-foreground">
-                  No attachment required — calculation is automatically captured and recorded
+                  One submit forwards the calculated FD to Accounts Executive. No attachment required.
                 </p>
               </TabsContent>
             )}

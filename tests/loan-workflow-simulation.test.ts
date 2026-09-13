@@ -13,6 +13,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import {
+  canApproveFdScore,
+  canEnterFdScore,
+  canSendFdForAccountsExecutiveReview,
+  formatFdScoreAdjustmentMemo,
+  parseFdScoreAdjustment,
+} from '../lib/loan-workflow'
 
 interface LoanRequest {
   id: string
@@ -78,6 +85,25 @@ describe('Loan Workflow - FD Review and Payment Flow', () => {
     }
   })
 
+  describe('Accounts Executive FD value override', () => {
+    it('preserves the original score and requires a visible reason', () => {
+      const memo = formatFdScoreAdjustmentMemo(32, 45, 'Verified against the latest payroll statement')
+      expect(parseFdScoreAdjustment(memo)).toEqual({
+        originalScore: 32,
+        verifiedScore: 45,
+        reason: 'Verified against the latest payroll statement',
+      })
+    })
+
+    it('reads the legacy adjustment memo format', () => {
+      expect(parseFdScoreAdjustment('FD SCORE ADJUSTMENT: 32% -> 45%. Reason: Payroll evidence corrected the calculation')).toEqual({
+        originalScore: 32,
+        verifiedScore: 45,
+        reason: 'Payroll evidence corrected the calculation',
+      })
+    })
+  })
+
   describe('STAGE 1: HOD Review', () => {
     it('should allow HOD to approve loan request', () => {
       // Simulate HOD approval
@@ -109,6 +135,28 @@ describe('Loan Workflow - FD Review and Payment Flow', () => {
       expect(fdReview.review_status).toBe('pending_review')
       expect(fdReview.loan_request_id).toBe(loanRequest.id)
       console.log('✓ FD review record created')
+    })
+
+    it('should allow Accounts staff to enter FD scores', () => {
+      expect(canEnterFdScore('accounts')).toBe(true)
+      expect(canEnterFdScore('staff', 'Accounts Department')).toBe(true)
+      expect(canEnterFdScore('staff', 'Human Resources')).toBe(false)
+    })
+
+    it('should allow all Accounts roles to send FD for Accounts Executive review', () => {
+      expect(canSendFdForAccountsExecutiveReview('accounts')).toBe(true)
+      expect(canSendFdForAccountsExecutiveReview('accounts_loan_office')).toBe(true)
+      expect(canSendFdForAccountsExecutiveReview('accounts_officer')).toBe(true)
+      expect(canSendFdForAccountsExecutiveReview('accounts_executive')).toBe(true)
+      expect(canSendFdForAccountsExecutiveReview('staff', 'Accounts')).toBe(true)
+      expect(canSendFdForAccountsExecutiveReview('hr_loan_office')).toBe(false)
+    })
+
+    it('should allow only Accounts Executive to approve FD, not Accounts Office', () => {
+      expect(canApproveFdScore('accounts_executive')).toBe(true)
+      expect(canApproveFdScore('accounts')).toBe(false)
+      expect(canApproveFdScore('accounts_loan_office')).toBe(false)
+      expect(canApproveFdScore('staff', 'Accounts Department')).toBe(false)
     })
 
     it('should allow Accounts Executive to review FD', () => {

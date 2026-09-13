@@ -55,6 +55,8 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    const today = new Date().toISOString().split('T')[0]
+
     // Update confirmation based on type
     if (confirmation_type === 'pending_hod_rm') {
       // HOD/RM is confirming
@@ -81,6 +83,8 @@ export async function POST(req: NextRequest) {
         .from('leave_resumption_notifications')
         .update({
           confirmation_status: action === 'confirmed' ? 'confirmed' : 'rejected',
+          first_hod_rm_check_in_date: action === 'confirmed' ? today : null,
+          status: action === 'confirmed' ? 'resumed' : 'pending',
         })
         .eq('id', leave_resumption_id)
 
@@ -100,7 +104,15 @@ export async function POST(req: NextRequest) {
           decision_maker_role: 'hod_or_rm',
           notes,
         })
-      } catch {}  
+      } catch {}
+
+      const { data: staffProfile } = await admin
+        .from('user_profiles')
+        .select('first_name, last_name, full_name')
+        .eq('id', resumption.user_id)
+        .single()
+
+      const staffName = staffProfile?.full_name || `${staffProfile?.first_name || ''} ${staffProfile?.last_name || ''}`.trim() || 'Staff member'
 
       // Notify HR Leave Office and HR Executive if confirmed
       if (action === 'confirmed') {
@@ -110,12 +122,6 @@ export async function POST(req: NextRequest) {
           .in('role', ['hr_leave_office', 'hr_executive', 'director_hr'])
           .eq('is_active', true)
 
-        const staffProfile = await admin
-          .from('user_profiles')
-          .select('first_name, last_name')
-          .eq('id', resumption.user_id)
-          .single()
-
         const notifRows = (hrUsers || [])
           .filter((u: any) => u.id !== user.id)
           .map((u: any) => ({
@@ -123,7 +129,7 @@ export async function POST(req: NextRequest) {
             sender_id: user.id,
             sender_role: 'hod_or_rm',
             sender_label: 'HOD/RM Confirmation',
-            message: `${staffProfile.data?.first_name} ${staffProfile.data?.last_name} has been verified as resumed by their HOD/RM. Status is now confirmed.`,
+            message: `${staffName} has been verified as resumed by their HOD/RM. Status is now confirmed.`,
             notification_type: 'leave_resumption_confirmed',
             is_read: false,
           }))
@@ -133,6 +139,32 @@ export async function POST(req: NextRequest) {
             await admin.from('staff_notifications').insert(notifRows)
           } catch {}
         }
+
+        // Also notify the staff member
+        try {
+          await admin.from('staff_notifications').insert({
+            recipient_id: resumption.user_id,
+            sender_id: user.id,
+            sender_role: 'system',
+            sender_label: 'Leave Resumption Confirmed',
+            message: `Your resumption from leave has been officially verified and confirmed by your HOD/Regional Manager.`,
+            notification_type: 'leave_resumption_confirmed_staff',
+            is_read: false,
+          })
+        } catch {}
+      } else {
+        // Notify staff if marked as not resumed
+        try {
+          await admin.from('staff_notifications').insert({
+            recipient_id: resumption.user_id,
+            sender_id: user.id,
+            sender_role: 'system',
+            sender_label: 'Leave Resumption Notice',
+            message: `Your supervisor indicated that you have not resumed duty. Please contact your department head or HR immediately.${notes ? ` Note: ${notes}` : ''}`,
+            notification_type: 'leave_resumption_rejected',
+            is_read: false,
+          })
+        } catch {}
       }
     } else if (confirmation_type === 'pending_hr_manual') {
       // HR Leave Office is manually confirming
@@ -158,6 +190,8 @@ export async function POST(req: NextRequest) {
         .from('leave_resumption_notifications')
         .update({
           confirmation_status: action === 'confirmed' ? 'confirmed' : 'rejected',
+          first_hod_rm_check_in_date: action === 'confirmed' ? today : null,
+          status: action === 'confirmed' ? 'resumed' : 'pending',
         })
         .eq('id', leave_resumption_id)
 
@@ -176,6 +210,21 @@ export async function POST(req: NextRequest) {
           decision_maker_id: user.id,
           decision_maker_role: 'hr_leave_office',
           notes,
+        })
+      } catch {}
+
+      // Notify staff member of HR verification
+      try {
+        await admin.from('staff_notifications').insert({
+          recipient_id: resumption.user_id,
+          sender_id: user.id,
+          sender_role: 'system',
+          sender_label: 'HR Leave Resumption Notice',
+          message: action === 'confirmed'
+            ? `HR Leave Office has manually verified and confirmed your return to work.`
+            : `HR Leave Office marked your leave resumption as unverified.${notes ? ` Note: ${notes}` : ''}`,
+          notification_type: action === 'confirmed' ? 'leave_resumption_confirmed_staff' : 'leave_resumption_rejected',
+          is_read: false,
         })
       } catch {}
     }

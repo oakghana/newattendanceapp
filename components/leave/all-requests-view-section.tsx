@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
-import { AlertCircle, CheckCircle2, Loader2, Search, XCircle, AlertTriangle } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Loader2, Search, XCircle, AlertTriangle, Clock, User, Calendar, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -255,120 +255,256 @@ export function AllRequestsViewSection() {
           </CardContent>
         </Card>
       ) : (
-        <div className="border rounded-lg overflow-hidden">
-          <Table>
-            <TableHeader className="bg-muted/50">
-              <TableRow>
-                <TableHead>Staff Name</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Leave Type</TableHead>
-                <TableHead>Start Date</TableHead>
-                <TableHead>End Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>HOD Review</TableHead>
-                <TableHead className="text-center">Staff Confirmed</TableHead>
-                <TableHead className="text-center">HOD Confirmed</TableHead>
-                <TableHead className="text-right">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredRequests.map((req) => {
-                const staffName =
-                  req.user_profiles?.full_name ||
-                  `${req.user_profiles?.first_name || ''} ${req.user_profiles?.last_name || ''}`.trim() ||
-                  req.staff_name ||
-                  'Unknown'
-                const deptName =
-                  req.user_profiles?.department_name ||
-                  req.user_profiles?.departments?.name ||
-                  'N/A'
-                const startDate = formatLeaveDate(req.start_date || req.preferred_start_date)
-                const endDate = formatLeaveDate(req.end_date || req.preferred_end_date)
-                const hodStatus = req.hod_review_status || req.hod_decision || 'pending'
+        <>
+          {/* Mobile Card View (visible on screens < 768px) */}
+          <div className="grid grid-cols-1 gap-3 md:hidden">
+            {filteredRequests.map((req) => {
+              const staffName =
+                req.user_profiles?.full_name ||
+                `${req.user_profiles?.first_name || ''} ${req.user_profiles?.last_name || ''}`.trim() ||
+                req.staff_name ||
+                'Unknown'
+              const deptName =
+                req.user_profiles?.department_name ||
+                req.user_profiles?.departments?.name ||
+                'N/A'
+              const startDate = formatLeaveDate(req.start_date || req.preferred_start_date)
+              const endDate = formatLeaveDate(req.end_date || req.preferred_end_date)
+              const hodStatus = req.hod_review_status || req.hod_decision || 'pending'
+              const isHrApproved = req.status?.toLowerCase() === 'hr_approved'
+              const daysOver = getDaysOverdue(req.end_date || req.preferred_end_date || '')
+              const isStaffCheckedIn = Boolean(req.staff_confirmed || req.staff_confirmed_at)
+              const isHodConfirmed = Boolean(req.hod_confirmed || req.hod_confirmed_at || req.confirmation_status === 'confirmed')
+              const isRejected = req.confirmation_status === 'rejected'
 
-                const isHrApproved = req.status?.toLowerCase() === 'hr_approved'
-                // Only colour rows that are HR-approved and whose leave has ended
-                const daysOver = getDaysOverdue(req.end_date || req.preferred_end_date || '')
-                
-                // Use inline styles for row coloring to ensure colors are applied
-                let rowStyle: React.CSSProperties = {}
-                if (isHrApproved && daysOver > 0) {
-                  if (daysOver >= 5) {
-                    rowStyle = { backgroundColor: '#fee2e2' } // red-100
-                  } else {
-                    rowStyle = { backgroundColor: '#fffbeb' } // amber-50
-                  }
+              let cardBg = 'bg-white'
+              let borderClass = 'border-slate-200'
+              if (isHrApproved && daysOver > 0 && !isHodConfirmed) {
+                if (daysOver >= 5) {
+                  cardBg = 'bg-red-50/80'
+                  borderClass = 'border-red-300'
+                } else {
+                  cardBg = 'bg-amber-50/80'
+                  borderClass = 'border-amber-300'
                 }
+              }
 
-                return (
-                  <TableRow key={req.id} style={rowStyle}>
-                    <TableCell className="font-medium">{staffName}</TableCell>
-                    <TableCell>{deptName}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{req.leave_type || req.leave_type_key || 'Annual'}</Badge>
-                    </TableCell>
-                    <TableCell>{startDate}</TableCell>
-                    <TableCell>{endDate}</TableCell>
-                    <TableCell>{getStatusBadge(req.status)}</TableCell>
-                    <TableCell>{getHodStatusBadge(hodStatus)}</TableCell>
-                    <TableCell className="text-center">
-                      {isHrApproved ? (
-                        daysOver > 0 ? (
+              return (
+                <Card key={`mobile-${req.id}`} className={`${cardBg} ${borderClass} shadow-sm transition-all`}>
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm text-slate-900 truncate">{staffName}</p>
+                        <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                          <Building2 className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{deptName}</span>
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-xs shrink-0">
+                        {req.leave_type || req.leave_type_key || 'Annual'}
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs bg-slate-100/60 dark:bg-slate-800/40 p-2.5 rounded-md">
+                      <div>
+                        <span className="text-slate-500 block">Period:</span>
+                        <span className="font-medium">{startDate} → {endDate}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">Status:</span>
+                        <div className="mt-0.5">{getStatusBadge(req.status)}</div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-500 text-[11px]">Staff check-in:</span>
+                        {isStaffCheckedIn ? (
+                          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px] px-1.5 py-0.5">
+                            <CheckCircle2 className="h-2.5 w-2.5 mr-0.5" /> Checked In
+                          </Badge>
+                        ) : daysOver > 0 ? (
+                          <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px] px-1.5 py-0.5">
+                            <Clock className="h-2.5 w-2.5 mr-0.5" /> Awaiting
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">—</Badge>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-500 text-[11px]">HOD confirmation:</span>
+                        {isHodConfirmed ? (
+                          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px] px-1.5 py-0.5">
+                            <CheckCircle2 className="h-2.5 w-2.5 mr-0.5" /> Verified
+                          </Badge>
+                        ) : isRejected ? (
+                          <Badge className="bg-red-100 text-red-800 border-red-300 text-[10px] px-1.5 py-0.5">
+                            <XCircle className="h-2.5 w-2.5 mr-0.5" /> Not Resumed
+                          </Badge>
+                        ) : daysOver > 0 ? (
+                          <Badge className={`border text-[10px] px-1.5 py-0.5 ${daysOver >= 5 ? 'bg-red-100 text-red-800 border-red-300' : 'bg-amber-100 text-amber-800 border-amber-300'}`}>
+                            <AlertCircle className="h-2.5 w-2.5 mr-0.5" /> Pending
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">—</Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    {isHrApproved && (req.confirmation_status === 'pending_hod_rm' || (daysOver > 0 && !isHodConfirmed)) && (
+                      <div className="pt-2 border-t border-slate-200/60 flex gap-2">
+                        <Button
+                          size="sm"
+                          className="w-full gap-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs h-8"
+                          onClick={() => openConfirmationModal(req, 'pending_hod_rm')}
+                        >
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          Verify Resumption
+                        </Button>
+                        {daysOver >= 5 && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="w-full gap-1.5 text-xs h-8"
+                            onClick={() => openConfirmationModal(req, 'pending_hr_manual')}
+                          >
+                            <AlertCircle className="h-3.5 w-3.5" />
+                            HR Verify
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+
+          {/* Desktop Table View (hidden on screens < 768px) */}
+          <div className="hidden md:block border rounded-lg overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead className="whitespace-nowrap">Staff Name</TableHead>
+                  <TableHead className="whitespace-nowrap">Department</TableHead>
+                  <TableHead className="whitespace-nowrap">Leave Type</TableHead>
+                  <TableHead className="whitespace-nowrap">Start Date</TableHead>
+                  <TableHead className="whitespace-nowrap">End Date</TableHead>
+                  <TableHead className="whitespace-nowrap">Status</TableHead>
+                  <TableHead className="whitespace-nowrap">HOD Review</TableHead>
+                  <TableHead className="text-center whitespace-nowrap">Staff Confirmed</TableHead>
+                  <TableHead className="text-center whitespace-nowrap">HOD Confirmed</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredRequests.map((req) => {
+                  const staffName =
+                    req.user_profiles?.full_name ||
+                    `${req.user_profiles?.first_name || ''} ${req.user_profiles?.last_name || ''}`.trim() ||
+                    req.staff_name ||
+                    'Unknown'
+                  const deptName =
+                    req.user_profiles?.department_name ||
+                    req.user_profiles?.departments?.name ||
+                    'N/A'
+                  const startDate = formatLeaveDate(req.start_date || req.preferred_start_date)
+                  const endDate = formatLeaveDate(req.end_date || req.preferred_end_date)
+                  const hodStatus = req.hod_review_status || req.hod_decision || 'pending'
+
+                  const isHrApproved = req.status?.toLowerCase() === 'hr_approved'
+                  const daysOver = getDaysOverdue(req.end_date || req.preferred_end_date || '')
+                  const isStaffCheckedIn = Boolean(req.staff_confirmed || req.staff_confirmed_at)
+                  const isHodConfirmed = Boolean(req.hod_confirmed || req.hod_confirmed_at || req.confirmation_status === 'confirmed')
+                  const isRejected = req.confirmation_status === 'rejected'
+                  
+                  let rowStyle: React.CSSProperties = {}
+                  if (isHrApproved && daysOver > 0 && !isHodConfirmed) {
+                    if (daysOver >= 5) {
+                      rowStyle = { backgroundColor: '#fee2e2' } // red-100
+                    } else {
+                      rowStyle = { backgroundColor: '#fffbeb' } // amber-50
+                    }
+                  }
+
+                  return (
+                    <TableRow key={req.id} style={rowStyle}>
+                      <TableCell className="font-medium whitespace-nowrap">{staffName}</TableCell>
+                      <TableCell className="whitespace-nowrap">{deptName}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <Badge variant="outline">{req.leave_type || req.leave_type_key || 'Annual'}</Badge>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{startDate}</TableCell>
+                      <TableCell className="whitespace-nowrap">{endDate}</TableCell>
+                      <TableCell className="whitespace-nowrap">{getStatusBadge(req.status)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{getHodStatusBadge(hodStatus)}</TableCell>
+                      <TableCell className="text-center whitespace-nowrap">
+                        {isStaffCheckedIn ? (
+                          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-xs">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Checked In
+                          </Badge>
+                        ) : isHrApproved && daysOver > 0 ? (
                           <Badge className={`border text-xs ${daysOver >= 5 ? 'bg-red-100 text-red-800 border-red-300' : 'bg-amber-100 text-amber-800 border-amber-300'}`}>
-                            <XCircle className="h-3 w-3 mr-1" />
+                            <Clock className="h-3 w-3 mr-1" />
                             Awaiting
                           </Badge>
                         ) : (
                           <Badge className="bg-gray-100 text-gray-600 border border-gray-200 text-xs">—</Badge>
-                        )
-                      ) : (
-                        <Badge className="bg-gray-100 text-gray-600 border border-gray-200 text-xs">—</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {isHrApproved ? (
-                        daysOver > 0 ? (
-                          <Badge className={`border text-xs ${daysOver >= 5 ? 'bg-red-100 text-red-800 border-red-300' : 'bg-amber-100 text-amber-800 border-amber-300'}`}>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center whitespace-nowrap">
+                        {isHodConfirmed ? (
+                          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-xs">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Verified
+                          </Badge>
+                        ) : isRejected ? (
+                          <Badge className="bg-red-100 text-red-800 border-red-300 text-xs">
                             <XCircle className="h-3 w-3 mr-1" />
+                            Not Resumed
+                          </Badge>
+                        ) : isHrApproved && daysOver > 0 ? (
+                          <Badge className={`border text-xs ${daysOver >= 5 ? 'bg-red-100 text-red-800 border-red-300' : 'bg-amber-100 text-amber-800 border-amber-300'}`}>
+                            <AlertCircle className="h-3 w-3 mr-1" />
                             Pending
                           </Badge>
                         ) : (
                           <Badge className="bg-gray-100 text-gray-600 border border-gray-200 text-xs">—</Badge>
-                        )
-                      ) : (
-                        <Badge className="bg-gray-100 text-gray-600 border border-gray-200 text-xs">—</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right space-x-2">
-                      {isHrApproved && req.confirmation_status === 'pending_hod_rm' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1 text-orange-600 border-orange-200 hover:bg-orange-50"
-                          onClick={() => openConfirmationModal(req, 'pending_hod_rm')}
-                        >
-                          <AlertTriangle className="h-4 w-4" />
-                          Verify Resumption
-                        </Button>
-                      )}
-                      {isHrApproved && req.confirmation_status === 'pending_hr_manual' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1 text-red-600 border-red-200 hover:bg-red-50"
-                          onClick={() => openConfirmationModal(req, 'pending_hr_manual')}
-                        >
-                          <AlertCircle className="h-4 w-4" />
-                          HR Verify
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right space-x-2 whitespace-nowrap">
+                        {isHrApproved && (req.confirmation_status === 'pending_hod_rm' || (daysOver > 0 && !isHodConfirmed)) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1 text-orange-600 border-orange-200 hover:bg-orange-50 text-xs"
+                            onClick={() => openConfirmationModal(req, 'pending_hod_rm')}
+                          >
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            Verify Resumption
+                          </Button>
+                        )}
+                        {isHrApproved && (req.confirmation_status === 'pending_hr_manual' || daysOver >= 5) && !isHodConfirmed && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1 text-red-600 border-red-200 hover:bg-red-50 text-xs"
+                            onClick={() => openConfirmationModal(req, 'pending_hr_manual')}
+                          >
+                            <AlertCircle className="h-3.5 w-3.5" />
+                            HR Verify
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
 
       {filteredRequests.length > 0 && (

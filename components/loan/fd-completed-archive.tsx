@@ -28,6 +28,8 @@ type CompletedFdReview = {
   status?: string
   review_status?: string
   user_role?: string
+  calculated_by_name?: string | null
+  calculated_by_role?: string | null
 }
 
 export function FdCompletedArchive({ userRole }: { userRole?: string }) {
@@ -41,7 +43,13 @@ export function FdCompletedArchive({ userRole }: { userRole?: string }) {
   const [editingReason, setEditingReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const { toast } = useToast()
-  const isLoanOffice = userRole === 'loan_office'
+  const normalizedRole = String(userRole || '').toLowerCase().replace(/[\s-]+/g, '_')
+  const isLoanOffice = normalizedRole === 'loan_office' || normalizedRole === 'hr_loan_office'
+  const isAccountsOffice =
+    normalizedRole === 'accounts' ||
+    normalizedRole === 'accounts_loan_office' ||
+    normalizedRole === 'accounts_officer'
+  const canEditCompleted = isLoanOffice && !isAccountsOffice
 
   const load = async () => {
     setLoading(true)
@@ -70,6 +78,8 @@ export function FdCompletedArchive({ userRole }: { userRole?: string }) {
         submission_date: r.submission_date,
         status: r.status,
         review_status: r.review_status || fallback,
+        calculated_by_name: r.calculated_by_name,
+        calculated_by_role: r.calculated_by_role,
       })
 
       const merged = [
@@ -163,7 +173,9 @@ export function FdCompletedArchive({ userRole }: { userRole?: string }) {
           <div>
             <h2 className="text-2xl font-bold text-slate-900">FD Completed &amp; Archived Records</h2>
             <p className="text-sm text-slate-600">
-              {isLoanOffice
+              {isAccountsOffice
+                ? 'View-only list of FD entries already decided by Accounts Executive. You cannot approve or change these records.'
+                : isLoanOffice
                 ? 'Edit FD values before accounts executive approval'
                 : 'All FD decisions from Accounts Executive — with full calculation details'}
             </p>
@@ -226,7 +238,7 @@ export function FdCompletedArchive({ userRole }: { userRole?: string }) {
           const poor = isPoorFdScore(row.fd_score, row.fd_good)
           const isRejected = ['fd_rejected', 'rejected_fd'].includes(String(row.status || '')) || row.review_status === 'rejected'
           const isEditing = editingId === row.id
-          const canEdit = isLoanOffice && !isRejected && row.review_status === 'approved'
+          const canEdit = canEditCompleted && !isRejected && row.review_status === 'approved'
 
           return (
             <div
@@ -245,6 +257,9 @@ export function FdCompletedArchive({ userRole }: { userRole?: string }) {
                     </h3>
                     <p className="text-sm text-slate-600 mt-1">
                       <span className="font-medium">{row.loan_type || 'Loan'}</span> • Ref: <span className="font-mono text-xs">{row.request_number || row.id.slice(0, 8)}</span>
+                    </p>
+                    <p className="text-xs font-medium text-violet-800 mt-1">
+                      Calculated by: {row.calculated_by_name || 'Unknown Accounts officer'}
                     </p>
                   </div>
                   <div className="flex flex-col gap-2 items-end">

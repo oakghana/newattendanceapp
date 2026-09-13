@@ -27,7 +27,7 @@ import { HRLoanOfficeFDApproved } from "@/components/loan/hr-loan-office-fd-appr
 import { RepaymentTrackingPanel } from "@/components/loan/repayment-tracking-panel"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
-import { GOOD_FD_THRESHOLD, isPoorFdScore } from "@/lib/loan-workflow"
+import { GOOD_FD_THRESHOLD, canEnterFdScore as canEnterFdScoreForRole, isPoorFdScore } from "@/lib/loan-workflow"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
 import { Activity, AlertCircle, BarChart3, Calculator, CheckCircle2, ChevronDown, Clock, Download, Edit3, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Save, Trash2, Upload, UserCog, Users, Wallet, XCircle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -295,6 +295,15 @@ const ACTION_LABELS: Record<string, string> = {
 }
 
 const LOAN_SUBMISSION_LOCKED = false
+
+const LOAN_OFFICE_SECTIONS = [
+  { key: "loanOfficeQueue", label: "Processing Queue" },
+  { key: "hrTermsQueue", label: "HR Terms" },
+  { key: "paymentCompletion", label: "Payment Completion" },
+  { key: "loanTypeBreakdown", label: "Loan Types" },
+  { key: "loanOfficeAnalytics", label: "Analytics" },
+  { key: "loanOfficeFdApproved", label: "FD Approved" },
+] as const
 
 const WORKFLOW_ORDER = [
   "pending_hod",
@@ -673,9 +682,29 @@ function deriveMemoRef(requestNumber: string | null | undefined): string {
 
 function formatReferenceNumber(referenceNumber?: string | null, requestNumber?: string | null) {
   const candidate = String(referenceNumber || "").trim()
-  const match = candidate.match(/^QCC\/HRD\/SWL\/V\.2\/(\d+)$/i)
+  const match = candidate.match(/^QCC\/HRD\/SWL\/V\.2\/([a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*)$/i)
   if (match) return `QCC/HRD/SWL/V.2/${match[1]}`
   return deriveMemoRef(requestNumber)
+}
+
+type MemoSigner = { name?: string | null; position?: string | null }
+
+function normalizeMemoSigner(memoText: string, signer?: MemoSigner): string {
+  const signerName = String(signer?.name || "").trim().toUpperCase()
+  if (!memoText.trim() || !signerName) return memoText
+
+  const signerTitle = String(signer?.position || "HR EXECUTIVE").trim().toUpperCase()
+  const lines = memoText.split("\n")
+  const forManagingDirectorIndex = lines.findIndex((line) => line.trim().toUpperCase() === "FOR: MANAGING DIRECTOR")
+  if (forManagingDirectorIndex >= 2) {
+    lines[forManagingDirectorIndex - 2] = signerName
+    lines[forManagingDirectorIndex - 1] = signerTitle
+    return lines.join("\n")
+  }
+
+  return memoText
+    .replace(/OHENEBA BOAMAH/gi, signerName)
+    .replace(/DEPUTY DIRECTOR HUMAN RESOURCE/gi, signerTitle)
 }
 
 function splitHrNoteAndThroTelephone(note?: string | null): { cleanedNote: string; throTelephone: string; throName: string; throRank: string; throLocation: string; memoRecipient: string } {
@@ -715,6 +744,7 @@ function buildDirectorAutoMemoDraft(
   row: LoanRequest,
   entry?: { hodName?: string; hodRank?: string; hodLocation?: string; hodTelephone?: string; memoRef?: string; memoRecipient?: string },
   currentHodProfile?: any,
+  signer?: MemoSigner,
 ) {
   const amount = row.fixed_amount || row.requested_amount || 0
   const amtNum = Number(amount)
@@ -732,8 +762,10 @@ function buildDirectorAutoMemoDraft(
   const today = new Date().toISOString().slice(0, 10)
   const recoveryMonth = fmtMemoMonth(row.recovery_start_date)
   const disbursementMonth = fmtMemoMonth(row.disbursement_date)
-  const submittedDate = row.submitted_at ? row.submitted_at.slice(0, 10) : row.created_at.slice(0, 10)
+  const submittedDate = (row.submitted_at || row.created_at || today).toString().slice(0, 10)
   const months = row.recovery_months || "—"
+  const signerName = String(signer?.name || "HR EXECUTIVE").trim().toUpperCase()
+  const signerPosition = String(signer?.position || "HR EXECUTIVE").trim().toUpperCase()
 
   return [
     "QUALITY CONTROL COMPANY LTD. (COCOBOD)",
@@ -762,8 +794,8 @@ function buildDirectorAutoMemoDraft(
     "You can count on our co-operation.",
     "",
     "",
-    "OHENEBA BOAMAH",
-    "DEPUTY DIRECTOR HUMAN RESOURCE",
+    signerName,
+    signerPosition,
     "FOR: MANAGING DIRECTOR",
     "",
     "cc:  Managing Director",
@@ -1086,8 +1118,15 @@ export default function LoanAppPage() {
   const [loanOfficeTypeTab, setLoanOfficeTypeTab] = useState("all")
   const [loanOfficeStageTab, setLoanOfficeStageTab] = useState("pending")
   const [loanOfficeViewMode, setLoanOfficeViewMode] = useState<"table" | "card">("table")
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    paymentCompletion: true,
+    loanTypeBreakdown: true,
+    loanOfficeAnalytics: true,
+    loanOfficeFdApproved: true,
+  })
   const toggleSection = (key: string) => setCollapsedSections((s) => ({ ...s, [key]: !s[key] }))
+  const setSectionsCollapsed = (keys: string[], collapsed: boolean) =>
+    setCollapsedSections((s) => ({ ...s, ...Object.fromEntries(keys.map((k) => [k, collapsed])) }))
   const [isArchivingLoans, setIsArchivingLoans] = useState(false)
   const [loanOfficeLocation, setLoanOfficeLocation] = useState("all")
   const [loanOfficeDept, setLoanOfficeDept] = useState("all")
@@ -1245,7 +1284,7 @@ export default function LoanAppPage() {
     // Loan Office workspace: loan_office/manager_hr ONLY if in HR dept (not Accounts dept)
   // Accounts-dept loan_office users get Accounts tab, not Loan Office tab
   const userDeptName = data?.profile?.departmentName || ""
-  const canEnterFdScore = isAdmin || normalizedRole === "accounts_loan_office" || normalizedRole === "accounts_loan_officer" || /loan/i.test(userDeptName)
+  const canEnterFdScore = canEnterFdScoreForRole(normalizedRole, userDeptName)
   const userDeptIsAccounts = /account|finance/i.test(userDeptName)
   const canAccessLoanOfficeWorkspace =
     isAdmin ||
@@ -1289,7 +1328,7 @@ export default function LoanAppPage() {
     }
     // Determine if this user is ONLY an HR Executive (director_hr) with no other elevated roles
     const isHrExecutive = !isAdminUser && !!p?.directorHr
-    const isAccountsExecutive = !isAdminUser && !!p?.accounts
+    const isAccountsExecutive = !isAdminUser && (normalizedRole === "accounts_executive" || normalizedRole === "account_executive" || normalizedRole === "accounts_exec")
     const isHrExecutiveOnly = !isAdminUser && p?.directorHr && !p?.hod && !p?.loanOffice && !p?.accounts && !p?.hrOffice && !p?.viewAllTabs
 
     // Get loan type name for "My Loans" tab if a loan is selected
@@ -1308,7 +1347,7 @@ export default function LoanAppPage() {
       tabs.push({ key: "hod", label: `HOD Review (${c.hod})` })
     }
 
-    // FD Approval tab: only for Accounts executives to review FD values from Loan Office
+    // FD Approval is Accounts Executive only — Accounts Office calculates but cannot approve their own work
     if (isAccountsExecutive || isAdminUser) {
       tabs.push({
         key: "fd-approval",
@@ -1329,13 +1368,21 @@ export default function LoanAppPage() {
 
     // Accounts tab: ONLY for Accounts department loan office staff OR users with direct accounts permission
     // Supports both new (accounts_loan_office) and legacy (loan_office in Accounts dept) role names
-    const isAccountsOffice = (normalizedRole === "accounts_loan_office") || (normalizedRole === "loan_office" && userDeptIsAccounts) || p?.accounts
+    const isAccountsOffice =
+      normalizedRole === "accounts_loan_office" ||
+      normalizedRole === "accounts" ||
+      (normalizedRole === "loan_office" && userDeptIsAccounts) ||
+      (Boolean(p?.accounts) && !isAccountsExecutive)
     if (isAccountsOffice) {
       tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
+      tabs.push({
+        key: "fd-completed",
+        label: "Approved FD (view only)",
+      })
     }
 
-    // Repayment Tracking tab: for Loan Office, Accounts executives, and HR Loan Office
-    if (canAccessLoanOfficeWorkspace || isAccountsExecutive || isHRLoanOffice || isAdminUser) {
+    // Repayment Tracking tab: for Loan Office, Accounts Office, executives, and HR Loan Office
+    if (canAccessLoanOfficeWorkspace || isAccountsOffice || isAccountsExecutive || isHRLoanOffice || isAdminUser) {
       tabs.push({ key: "repayment-tracking", label: "Repayment Tracking" })
     }
 
@@ -1347,7 +1394,7 @@ export default function LoanAppPage() {
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
     // Payment Approvals: single tab only (HR/Accounts executives). Avoid second push for HR Loan Office alone.
-    if (isHrExecutive || isAccountsExecutive || isAdminUser) {
+    if (isHrExecutive || isAccountsExecutive || isAccountsOffice || isAdminUser) {
       tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
     }
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
@@ -2809,9 +2856,14 @@ export default function LoanAppPage() {
         }
         if (actionType === "director") {
           const entry = hrInputs[row.id]
-          const draft = buildDirectorAutoMemoDraft(row, entry, data?.profile.currentHodProfile)
-          setModalMemoText(String(row.director_letter || "").trim() || draft)
-          setModalSignatureText(signatureText)
+          const currentExecutive = {
+            name: `${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim(),
+            position: data?.profile.position || "HR Executive",
+          }
+          const draft = buildDirectorAutoMemoDraft(row, entry, data?.profile.currentHodProfile, currentExecutive)
+          const savedMemo = String(row.director_letter || "").trim()
+          setModalMemoText(normalizeMemoSigner(savedMemo || draft, currentExecutive))
+          setModalSignatureText(signatureText || currentExecutive.name)
           setModalSignatureDataUrl(signatureDataUrl)
           setModalSignatureMode(signatureMode)
           setModalDecision(directorDecision)
@@ -2910,8 +2962,8 @@ export default function LoanAppPage() {
             trimmed.startsWith("THRO'") ||
             trimmed.startsWith("Our Ref No:") ||
             trimmed.startsWith("Your Ref No:") ||
-            trimmed === "OHENEBA BOAMAH" ||
-            trimmed === "DEPUTY DIRECTOR HUMAN RESOURCE" ||
+            trimmed === `${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim().toUpperCase() ||
+            trimmed === String(data?.profile.position || "HR Executive").trim().toUpperCase() ||
             trimmed === "FOR: MANAGING DIRECTOR"
           ) {
             fontStyle = "bold"
@@ -3680,6 +3732,47 @@ export default function LoanAppPage() {
         <TabsContent value="loan-office" className="space-y-5">
           <ReadOnlyHint canAct={Boolean(p?.loanOffice || p?.hrOffice)} roleLabel="Loan Office / HR Office" />
 
+          {/* ── Section navigator ── */}
+          <div className="sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 shadow-sm backdrop-blur">
+            {LOAN_OFFICE_SECTIONS.filter((section) => section.key !== "paymentCompletion" || p?.hrOffice).map((section) => (
+              <button
+                key={section.key}
+                type="button"
+                onClick={() => {
+                  setCollapsedSections((s) => ({ ...s, [section.key]: false }))
+                  requestAnimationFrame(() => {
+                    document.getElementById(`loan-office-${section.key}`)?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  })
+                }}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                  collapsedSections[section.key]
+                    ? "border-slate-200 bg-white text-slate-500 hover:border-violet-300 hover:text-violet-700"
+                    : "border-violet-200 bg-violet-50 text-violet-700"
+                }`}
+              >
+                {section.label}
+              </button>
+            ))}
+            <div className="ml-auto flex items-center gap-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 text-xs text-slate-600 hover:text-slate-900"
+                onClick={() => setSectionsCollapsed(LOAN_OFFICE_SECTIONS.map((s) => s.key), false)}
+              >
+                Expand all
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 text-xs text-slate-600 hover:text-slate-900"
+                onClick={() => setSectionsCollapsed(LOAN_OFFICE_SECTIONS.map((s) => s.key), true)}
+              >
+                Collapse all
+              </Button>
+            </div>
+          </div>
+
           {/* ── Compact metric strip ── */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[
@@ -3696,13 +3789,16 @@ export default function LoanAppPage() {
           </div>
 
           {/* ── Processing Queue ── */}
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div id="loan-office-loanOfficeQueue" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
             {/* section header */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
-              <button type="button" className="flex flex-1 items-center gap-2 text-left" onClick={() => toggleSection("loanOfficeQueue")}>
+              <button type="button" data-loan-section-toggle className="flex flex-1 items-center gap-2 text-left" onClick={() => toggleSection("loanOfficeQueue")}>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.loanOfficeQueue ? "-rotate-90" : ""}`} />
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">Processing Queue</p>
+                  <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    Processing Queue
+                    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">{filteredLoanOfficeStageRows.length}</span>
+                  </p>
                   <p className="text-xs text-slate-500">Review HOD-approved requests, score FD, and forward for approval</p>
                 </div>
               </button>
@@ -3934,12 +4030,15 @@ export default function LoanAppPage() {
           </div>
 
           {/* ── HR Terms Queue ── */}
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div id="loan-office-hrTermsQueue" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
-              <button type="button" className="flex flex-1 items-center gap-2 text-left" onClick={() => toggleSection("hrTermsQueue")}>
+              <button type="button" data-loan-section-toggle className="flex flex-1 items-center gap-2 text-left" onClick={() => toggleSection("hrTermsQueue")}>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.hrTermsQueue ? "-rotate-90" : ""}`} />
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">HR Terms Queue</p>
+                  <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    HR Terms Queue
+                    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">{filteredHr.length}</span>
+                  </p>
                   <p className="text-xs text-slate-500">Set disbursement and recovery terms before forwarding to Executive HR</p>
                 </div>
               </button>
@@ -3988,6 +4087,7 @@ export default function LoanAppPage() {
                       <th className="px-4 py-2.5 whitespace-nowrap">FD Reviewer</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Status</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Attachment</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">Date</th>
                       {p?.hrOffice && <th className="px-4 py-2.5 whitespace-nowrap">Action</th>}
                     </tr>
                   </thead>
@@ -4058,8 +4158,8 @@ export default function LoanAppPage() {
 
           {/* ── Payment Completion Queue ── */}
           {p?.hrOffice && (
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-              <button type="button" className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("paymentCompletion")}>
+            <div id="loan-office-paymentCompletion" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+              <button type="button" data-loan-section-toggle className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("paymentCompletion")}>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.paymentCompletion ? "-rotate-90" : ""}`} />
                 <div>
                   <p className="text-sm font-semibold text-slate-900">Mark Payment Completed</p>
@@ -4099,8 +4199,8 @@ export default function LoanAppPage() {
 
           {/* ── Loan type breakdown ── */}
           {loanOfficeTypeSummary.length > 0 && (
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-              <button type="button" className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("loanTypeBreakdown")}>
+            <div id="loan-office-loanTypeBreakdown" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+              <button type="button" data-loan-section-toggle className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("loanTypeBreakdown")}>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.loanTypeBreakdown ? "-rotate-90" : ""}`} />
                 <div>
                   <p className="text-sm font-semibold text-slate-900">Loan Type Breakdown</p>
@@ -4135,72 +4235,90 @@ export default function LoanAppPage() {
           )}
 
           {/* ── Analytics strip ── */}
-          <div className="grid gap-4 xl:grid-cols-2">
-            <LoanAnalyticsBarChart
-              title="Stage Distribution"
-              rows={loanOfficeAnalytics.stageBreakdown}
-              valueKey="total"
-              colorClass="bg-violet-600"
-              emptyMessage="No stage data available."
-              formatter={(row) => statusText(String(row?.status || "unknown"))}
-            />
-            <LoanAnalyticsBarChart
-              title="Loan Intake Trend"
-              rows={loanOfficeAnalytics.monthlyIntake}
-              valueKey="total"
-              colorClass="bg-emerald-600"
-              emptyMessage="No monthly intake data."
-              formatter={(row) => monthLabel(String(row?.month || currentMonthValue()))}
-            />
-          </div>
-          <div className="grid gap-4 xl:grid-cols-2">
-            <LoanAnalyticsBarChart
-              title="Location Exposure"
-              rows={loanOfficeAnalytics.locationRanking}
-              valueKey="total"
-              colorClass="bg-slate-700"
-              emptyMessage="No location data available."
-              formatter={(row) => String(row?.name || "Unassigned")}
-            />
-            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-sm font-semibold text-slate-900">Pipeline Summary</p>
-              <div className="space-y-2">
-                {[
-                  { label: "Worked on", value: loanOfficeAnalytics.totals.worked_on, pct: loanOfficeAnalytics.totals.total_requests ? Math.round((loanOfficeAnalytics.totals.worked_on / loanOfficeAnalytics.totals.total_requests) * 100) : 0, color: "bg-violet-600" },
-                  { label: "Yet to work on", value: loanOfficeAnalytics.totals.yet_to_be_worked, pct: loanOfficeAnalytics.totals.total_requests ? Math.round((loanOfficeAnalytics.totals.yet_to_be_worked / loanOfficeAnalytics.totals.total_requests) * 100) : 0, color: "bg-amber-500" },
-                  { label: "Finalized", value: loanOfficeAnalytics.totals.finalized, pct: loanOfficeAnalytics.totals.total_requests ? Math.round((loanOfficeAnalytics.totals.finalized / loanOfficeAnalytics.totals.total_requests) * 100) : 0, color: "bg-emerald-600" },
-                ].map(({ label, value, pct, color }) => (
-                  <div key={label}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-slate-600">{label}</span>
-                      <span className="text-xs font-semibold tabular-nums text-slate-800">{value} <span className="text-slate-400 font-normal">({pct}%)</span></span>
-                    </div>
-                    <div className="h-1.5 w-full rounded-full bg-slate-100">
-                      <div className={`h-1.5 rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+          <div id="loan-office-loanOfficeAnalytics" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+            <button type="button" data-loan-section-toggle className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("loanOfficeAnalytics")}>
+              <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.loanOfficeAnalytics ? "-rotate-90" : ""}`} />
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Analytics</p>
+                <p className="text-xs text-slate-500">Stage mix, intake trend, location exposure, and pipeline summary</p>
+              </div>
+            </button>
+            {!collapsedSections.loanOfficeAnalytics && (
+              <div className="space-y-4 p-5">
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <LoanAnalyticsBarChart
+                    title="Stage Distribution"
+                    rows={loanOfficeAnalytics.stageBreakdown}
+                    valueKey="total"
+                    colorClass="bg-violet-600"
+                    emptyMessage="No stage data available."
+                    formatter={(row) => statusText(String(row?.status || "unknown"))}
+                  />
+                  <LoanAnalyticsBarChart
+                    title="Loan Intake Trend"
+                    rows={loanOfficeAnalytics.monthlyIntake}
+                    valueKey="total"
+                    colorClass="bg-emerald-600"
+                    emptyMessage="No monthly intake data."
+                    formatter={(row) => monthLabel(String(row?.month || currentMonthValue()))}
+                  />
+                </div>
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <LoanAnalyticsBarChart
+                    title="Location Exposure"
+                    rows={loanOfficeAnalytics.locationRanking}
+                    valueKey="total"
+                    colorClass="bg-slate-700"
+                    emptyMessage="No location data available."
+                    formatter={(row) => String(row?.name || "Unassigned")}
+                  />
+                  <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <p className="text-sm font-semibold text-slate-900">Pipeline Summary</p>
+                    <div className="space-y-2">
+                      {[
+                        { label: "Worked on", value: loanOfficeAnalytics.totals.worked_on, pct: loanOfficeAnalytics.totals.total_requests ? Math.round((loanOfficeAnalytics.totals.worked_on / loanOfficeAnalytics.totals.total_requests) * 100) : 0, color: "bg-violet-600" },
+                        { label: "Yet to work on", value: loanOfficeAnalytics.totals.yet_to_be_worked, pct: loanOfficeAnalytics.totals.total_requests ? Math.round((loanOfficeAnalytics.totals.yet_to_be_worked / loanOfficeAnalytics.totals.total_requests) * 100) : 0, color: "bg-amber-500" },
+                        { label: "Finalized", value: loanOfficeAnalytics.totals.finalized, pct: loanOfficeAnalytics.totals.total_requests ? Math.round((loanOfficeAnalytics.totals.finalized / loanOfficeAnalytics.totals.total_requests) * 100) : 0, color: "bg-emerald-600" },
+                      ].map(({ label, value, pct, color }) => (
+                        <div key={label}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs text-slate-600">{label}</span>
+                            <span className="text-xs font-semibold tabular-nums text-slate-800">{value} <span className="text-slate-400 font-normal">({pct}%)</span></span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-slate-100">
+                            <div className={`h-1.5 rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* ── FD-Approved from Accounts Executive ── */}
-          {loanOfficeStageTab === "fd-approved-accounts-exec" && (
-            <div className="mt-6 pt-6 border-t">
-              <div className="mb-4">
-                <h3 className="text-lg font-semibold text-slate-900">FD-Approved Loans from Accounts Executive</h3>
-                <p className="text-sm text-slate-500">Loans with approved FD scores ready for HR Loan Office processing and disbursement</p>
+          <div id="loan-office-loanOfficeFdApproved" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+            <button type="button" data-loan-section-toggle className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("loanOfficeFdApproved")}>
+              <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.loanOfficeFdApproved ? "-rotate-90" : ""}`} />
+              <div>
+                <p className="text-sm font-semibold text-slate-900">FD Approved by Accounts</p>
+                <p className="text-xs text-slate-500">Approved FD scores ready for HR Loan Office processing</p>
               </div>
-              <HRLoanOfficeFDApproved />
-            </div>
-          )}
+            </button>
+            {!collapsedSections.loanOfficeFdApproved && (
+              <div className="p-5">
+                <HRLoanOfficeFDApproved />
+              </div>
+            )}
+          </div>
         </TabsContent>
 
         <TabsContent value="accounts" className="space-y-3">
           <ReadOnlyHint canAct={Boolean(p?.accounts)} roleLabel="Accounts" />
           
-          {/* FD Calculation Submission for Accounts Loan Office Staff */}
-          {normalizedRole === "accounts_loan_office" && (
+          {/* FD calculator — salary/deduction fields determine the score */}
+          {canEnterFdScore && (
             <>
               {/* New FD Calculations (Pending) */}
               <Card className="border-blue-200 bg-blue-50">
@@ -4297,7 +4415,9 @@ export default function LoanAppPage() {
           <Card>
             <CardHeader>
               <CardTitle>Accounts FD Queue</CardTitle>
-              <CardDescription>All requests pushed from Loan Office for FD scoring are listed here.</CardDescription>
+              <CardDescription>
+                All requests pushed from Loan Office for FD scoring are listed here. Use <strong>Calculate FD</strong> to enter salary, allowances, deductions and outstanding loans — the score is computed from those fields, not typed by hand.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between gap-2">
@@ -4388,11 +4508,14 @@ export default function LoanAppPage() {
                             )}
                           </TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
-{canEnterFdScore && (
-  <TableCell>
-  <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>
-  </TableCell>
-  )}
+                          {canEnterFdScore && (
+                            <TableCell>
+                              <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "accounts")}>
+                                <Calculator className="h-3.5 w-3.5 mr-1" />
+                                {row.fd_score != null ? "Recalculate FD" : "Calculate FD"}
+                              </Button>
+                            </TableCell>
+                          )}
                         </TableRow>
                       )
                     })}
@@ -4404,7 +4527,12 @@ export default function LoanAppPage() {
 
           {accountsViewMode === "card" && pagedAccounts.map((row) => (
             <StageCard key={row.id} row={row}>
-              {canEnterFdScore && <Button size="sm" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>}
+              {canEnterFdScore && (
+                <Button size="sm" onClick={() => openActionModal(row, "accounts")}>
+                  <Calculator className="h-3.5 w-3.5 mr-1" />
+                  {row.fd_score != null ? "Recalculate FD" : "Calculate FD"}
+                </Button>
+              )}
             </StageCard>
           ))}
 
@@ -5546,13 +5674,18 @@ export default function LoanAppPage() {
         {/* ── Repayment Tracking ── */}
         <TabsContent value="repayment-tracking" className="space-y-4">
           <RepaymentTrackingPanel
-            loans={[
-              ...(data?.inbox?.allLoans || []),
-              ...(data?.inbox?.accountsSigned || []),
-              ...(data?.inbox?.loanOffice || []),
-              ...(data?.inbox?.hrOffice || []),
-              ...(data?.inbox?.directorHr || []),
-            ]}
+            loans={Array.from(
+              new Map(
+                [
+                  ...(data?.inbox?.allLoans || []),
+                  ...(data?.inbox?.accountsSigned || []),
+                  ...(data?.inbox?.loanOffice || []),
+                  ...(data?.inbox?.hrOffice || []),
+                  ...(data?.inbox?.directorHr || []),
+                  ...(data?.inbox?.accounts || []),
+                ].map((loan) => [loan.id, loan]),
+              ).values(),
+            )}
           />
         </TabsContent>
 
@@ -7009,12 +7142,12 @@ export default function LoanAppPage() {
 
       {/* ── Action Modal ──────────────────────��─────────────────────── */}
       <Dialog open={actionModal.open} onOpenChange={(o) => setActionModal((s) => ({ ...s, open: o }))}>
-        <DialogContent className={actionModal.actionType === "accounts" ? "max-w-2xl" : "max-w-lg"}>
+        <DialogContent className={actionModal.actionType === "accounts" ? "max-w-[96vw] w-[96vw] sm:max-w-[96vw] max-h-[92vh] overflow-y-auto" : "max-w-lg"}>
           <DialogHeader>
             <DialogTitle>
               {actionModal.actionType === "hod" && "HOD Review & Decision"}
               {actionModal.actionType === "loan_office" && "Loan Office Review & Forward"}
-              {actionModal.actionType === "accounts" && "Set FD Score"}
+              {actionModal.actionType === "accounts" && "Calculate FD Score"}
               {actionModal.actionType === "committee" && "Employee Further Information"}
               {actionModal.actionType === "hr_terms" && "Set HR Terms & Forward to Executive HR"}
               {actionModal.actionType === "payment_completed" && "Mark Loan Payment Completed"}
@@ -7107,22 +7240,30 @@ export default function LoanAppPage() {
                 <Textarea value={modalMemoCC} onChange={(e) => setModalMemoCC(e.target.value)} placeholder="Managing Director&#10;Deputy Director Finance" rows={2} className="text-xs" />
               </>
             )}
-            {/* Accounts FD — simple form, full calculation done in Accounts Loan Office */}
+            {/* Accounts FD — salary/deduction fields populate the score */}
             {actionModal.actionType === "accounts" && actionModal.row && (
-              <>
-                <div className="rounded-md border bg-blue-50 p-3">
-                  <p className="text-xs text-blue-800">
-                    <strong>Note:</strong> FD calculations with outstanding loans are handled by the Accounts Loan Office. 
-                    This form is for reference only if already calculated.
-                  </p>
-                </div>
-
-                <Label className="text-xs">FD Score (Mark out of 100)</Label>
-                <Input type="number" min={0} max={100} value={modalFdScore} onChange={(e) => setModalFdScore(e.target.value)} placeholder="e.g. 75" className="h-7 text-xs" />
-
-                <Label className="text-xs">HR Loan Office Remarks (optional)</Label>
-                <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Any observations or remarks..." rows={2} className="text-xs" />
-              </>
+              <FDCalculationSubmission
+                allowPendingCorrection={actionModal.row.fd_score != null || actionModal.row.fd_score === 0}
+                loanRequest={{
+                  id: actionModal.row.id,
+                  request_number: actionModal.row.request_number || "",
+                  staff_number: actionModal.row.staff_number || "",
+                  staff_full_name: actionModal.row.staff_full_name || "",
+                  requested_amount: actionModal.row.requested_amount || actionModal.row.fixed_amount || 0,
+                  repayment_duration_months: actionModal.row.repayment_duration_months || actionModal.row.recovery_months || 12,
+                  loan_type_label: actionModal.row.loan_type_label,
+                  monthly_deduction: actionModal.row.monthly_deduction ?? undefined,
+                  status: actionModal.row.status,
+                  fd_calculated: actionModal.row.fd_score != null,
+                  fd_score: actionModal.row.fd_score ?? undefined,
+                  fd_note: actionModal.row.fd_note || undefined,
+                  fd_good: actionModal.row.fd_good,
+                }}
+                onSubmitComplete={() => {
+                  void loadData()
+                  setActionModal((s) => ({ ...s, open: false }))
+                }}
+              />
             )}
             {/* Committee - Further Information */}
             {actionModal.actionType === "committee" && (
@@ -7215,7 +7356,7 @@ export default function LoanAppPage() {
                   </div>
                   <div>
                     <Label className="text-xs">Memo Reference</Label>
-                    <Input value={modalMemoRef} onChange={(e) => setModalMemoRef(e.target.value)} placeholder="e.g. QCC/HR/001/2024" className="h-7 text-xs" />
+                    <Input value={modalMemoRef} onChange={(e) => setModalMemoRef(e.target.value)} placeholder="e.g. QCC/HRD/SWL/V.2/81/oak" className="h-7 text-xs" />
                   </div>
                 </div>
                 <Label className="text-xs">Memo CC Recipients (one per line)</Label>
@@ -7284,24 +7425,9 @@ export default function LoanAppPage() {
               </>
             )}
             {actionModal.actionType === "accounts" && actionModal.row && (
-              <Button
-                disabled={!modalFdScore}
-                onClick={async () => {
-                  if (!modalFdScore) {
-                    toast({ title: "Enter FD Score", description: "Please enter an FD score before saving.", variant: "destructive" })
-                    return
-                  }
-                  await runAction({
-                    action: "accounts_fd_update",
-                    id: actionModal.row!.id,
-                    fd_score: Number(modalFdScore),
-                    note: modalFdNote || null,
-                    fd_document_url: null,
-                  })
-                  setActionModal((s) => ({ ...s, open: false }))
-                }}>
-                Save FD Score
-              </Button>
+              <p className="w-full text-xs text-muted-foreground">
+                Fill salary, allowances, deductions and outstanding loans in the calculator. The FD score is computed from those fields — use the calculator Submit button, not a typed mark.
+              </p>
             )}
             {actionModal.actionType === "committee" && actionModal.row && (
               <Button variant="outline" onClick={() => setActionModal((s) => ({ ...s, open: false }))}>Close</Button>
@@ -7309,13 +7435,27 @@ export default function LoanAppPage() {
             {actionModal.actionType === "hr_terms" && actionModal.row && (
               <>
                 <Button variant="outline" onClick={() => {
-                  setMemoReviewModal({ open: true, row: { ...actionModal.row!, recovery_start_date: modalRecovery, disbursement_date: modalDisbursement, recovery_months: Number(modalMonths) || null, hod_name: modalHodName, hod_rank: modalHodRank, hod_location: modalHodLocation } })
+                  const previewRow = {
+                    ...actionModal.row!,
+                    recovery_start_date: modalRecovery || actionModal.row!.recovery_start_date,
+                    disbursement_date: modalDisbursement || actionModal.row!.disbursement_date,
+                    recovery_months: Number(modalMonths) || actionModal.row!.recovery_months || null,
+                    hod_name: modalHodName,
+                    hod_rank: modalHodRank,
+                    hod_location: modalHodLocation,
+                  }
+                  const selectedExecutive = data?.directorApprovers?.find((approver) => approver.id === modalDirectorApproverId)
                   const draft = buildDirectorAutoMemoDraft(
-                    { ...actionModal.row!, recovery_start_date: modalRecovery, disbursement_date: modalDisbursement, recovery_months: Number(modalMonths) || null },
+                    previewRow,
                     { hodName: modalHodName, hodRank: modalHodRank, hodLocation: modalHodLocation, hodTelephone: modalHodTelephone, memoRef: modalMemoRef, memoRecipient: modalMemoRecipient },
                     data?.profile.currentHodProfile,
+                    selectedExecutive ? { name: selectedExecutive.full_name, position: selectedExecutive.position } : undefined,
                   )
                   setModalMemoText(draft)
+                  setActionModal((s) => ({ ...s, open: false }))
+                  window.setTimeout(() => {
+                    setMemoReviewModal({ open: true, row: previewRow })
+                  }, 80)
                 }}>Preview Memo</Button>
                 <Button onClick={() => {
                   const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone, modalHodName, modalHodRank, modalHodLocation, modalMemoRecipient)
@@ -7347,6 +7487,7 @@ export default function LoanAppPage() {
                     director_approver_id: modalDirectorApproverId || null,
                     note: noteForSave || null,
                     memo_cc: modalMemoCC || null,
+                    director_letter: modalMemoText || null,
                   })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>Set Terms &amp; Forward to Executive HR</Button>
@@ -7470,7 +7611,7 @@ export default function LoanAppPage() {
                 <Input 
                   value={modalMemoRef} 
                   onChange={(e) => setModalMemoRef(e.target.value)} 
-                  placeholder="e.g. QCC/HR/LOAN/2024/001" 
+                  placeholder="e.g. QCC/HRD/SWL/V.2/81/oak" 
                   className="h-8 text-xs"
                 />
 
@@ -7521,20 +7662,27 @@ export default function LoanAppPage() {
       </Dialog>
 
       {/* ── Memo Review Modal (Executive HR / Director HR) ──────────── */}
-      <Dialog open={memoReviewModal.open} onOpenChange={(o) => setMemoReviewModal((s) => ({ ...s, open: o }))}>
-        <DialogContent className="max-w-5xl w-full p-0 gap-0 overflow-hidden" style={{ height: "90vh", maxHeight: "90vh" }}>
+      <Dialog open={memoReviewModal.open} onOpenChange={(o) => {
+        setMemoReviewModal((s) => ({ ...s, open: o }))
+        if (!o && actionModal.actionType === "hr_terms" && actionModal.row) {
+          setActionModal((s) => ({ ...s, open: true }))
+        }
+      }}>
+        <DialogContent className="flex !w-[96vw] !max-w-[96vw] sm:!max-w-[96vw] h-[92vh] max-h-[92vh] flex-col p-0 gap-0 overflow-hidden" showCloseButton={false}>
 
           {/* ── Header bar ─────────────────────────────────────────────── */}
           <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-3 shrink-0">
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-indigo-600" />
               <div>
-                <h2 className="text-sm font-semibold text-slate-900 leading-tight">Executive HR — Review &amp; Sign Memo</h2>
-                {memoReviewModal.row && (
-                  <p className="text-xs text-slate-500">
-                    {memoReviewModal.row.request_number} &nbsp;·&nbsp; {memoReviewModal.row.staff_full_name} &nbsp;·&nbsp; GHc {fmtAmount(memoReviewModal.row.fixed_amount || memoReviewModal.row.requested_amount)}
-                  </p>
-                )}
+                <DialogTitle className="text-sm font-semibold text-slate-900 leading-tight">
+                  {actionModal.actionType === "hr_terms" ? "Preview Loan Memo" : "Executive HR — Review & Sign Memo"}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-500">
+                  {memoReviewModal.row
+                    ? `${memoReviewModal.row.request_number || ""} · ${memoReviewModal.row.staff_full_name || ""} · GHc ${fmtAmount(memoReviewModal.row.fixed_amount || memoReviewModal.row.requested_amount)}`
+                    : "Review the generated loan memo before forwarding."}
+                </DialogDescription>
               </div>
             </div>
             <button
@@ -7546,11 +7694,11 @@ export default function LoanAppPage() {
           </div>
 
           {/* ── Two-panel body ──────────────────────────────────────────── */}
-          <div className="flex flex-1 overflow-hidden" style={{ height: "calc(90vh - 57px - 57px)" }}>
+          <div className={`flex min-h-0 flex-1 overflow-hidden ${actionModal.actionType === "hr_terms" ? "" : ""}`}>
 
             {/* LEFT — scrollable memo preview */}
-            <div className="flex-1 overflow-y-auto bg-slate-50 p-4 border-r border-slate-200">
-              <div className="mx-auto max-w-[680px] border border-slate-200 bg-white px-8 py-6 shadow-sm" id="memo-preview-content">
+            <div className={`flex-1 overflow-y-auto bg-slate-50 p-4 ${actionModal.actionType === "hr_terms" ? "" : "border-r border-slate-200"}`}>
+              <div className={`mx-auto border border-slate-200 bg-white px-8 py-6 shadow-sm ${actionModal.actionType === "hr_terms" ? "max-w-4xl" : "max-w-[680px]"}`} id="memo-preview-content">
                 {/* Letterhead */}
                 <div className="relative min-h-[72px] border-b border-slate-300 pb-3">
                   <img src="/images/qcc-logo.png" alt="QCC logo" className="absolute left-0 top-2 h-12 w-12 object-contain" draggable={false} />
@@ -7566,29 +7714,30 @@ export default function LoanAppPage() {
                 <div className="mt-4">
                   <TrackedMemoEditor
                     title="Loan memo"
-                    originalLabel="Forwarded loan memo"
-                    currentLabel="HR Executive"
+                    originalLabel={actionModal.actionType === "hr_terms" ? "Generated draft" : "Forwarded loan memo"}
+                    currentLabel={actionModal.actionType === "hr_terms" ? "HR Loan Office" : "HR Executive"}
                     originalSubject="Loan approval memo"
-                    originalBody={memoReviewModal.row?.director_letter_original || memoReviewModal.row?.director_letter || ""}
+                    originalBody={memoReviewModal.row?.director_letter_original || memoReviewModal.row?.director_letter || modalMemoText}
                     subject="Loan approval memo"
                     body={modalMemoText}
                     onBodyChange={setModalMemoText}
-                    bodyRows={18}
-                    bodyPlaceholder="Edit the forwarded loan memo before signing."
+                    bodyRows={actionModal.actionType === "hr_terms" ? 28 : 18}
+                    bodyPlaceholder={actionModal.actionType === "hr_terms" ? "Review and correct the memo before forwarding to HR Executive for signing." : "Edit the forwarded loan memo before signing."}
                   />
                 </div>
                 {/* Signature block */}
-                {modalSignatureMode === "typed" && modalSignatureText && (
+                {actionModal.actionType !== "hr_terms" && modalSignatureMode === "typed" && modalSignatureText && (
                   <div className="mt-4 font-serif">
                     <div className="w-48 border-b border-slate-400 pb-1 text-base font-bold italic">{modalSignatureText}</div>
-                    <div className="mt-1 text-[12px] font-semibold">DEPUTY DIRECTOR HUMAN RESOURCE</div>
+                    <div className="mt-1 text-[12px] font-semibold">{String(data?.profile.position || "HR Executive").toUpperCase()}</div>
                     <div className="text-[12px] font-semibold">FOR: MANAGING DIRECTOR</div>
                   </div>
                 )}
-                {modalSignatureMode !== "typed" && modalSignatureDataUrl && (
+                {actionModal.actionType !== "hr_terms" && modalSignatureMode !== "typed" && modalSignatureDataUrl && (
                   <div className="mt-4 font-serif">
                     <img src={modalSignatureDataUrl} alt="Signature" className="max-h-16 border-b border-slate-400 pb-1" draggable={false} />
-                    <div className="mt-1 text-[12px] font-semibold">DEPUTY DIRECTOR HUMAN RESOURCE</div>
+                    <div className="mt-1 text-[12px] font-semibold">{`${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim().toUpperCase()}</div>
+                    <div className="text-[12px] font-semibold">{String(data?.profile.position || "HR Executive").toUpperCase()}</div>
                     <div className="text-[12px] font-semibold">FOR: MANAGING DIRECTOR</div>
                   </div>
                 )}
@@ -7596,6 +7745,7 @@ export default function LoanAppPage() {
             </div>
 
             {/* RIGHT — compact controls panel */}
+            {actionModal.actionType !== "hr_terms" && (
             <div className="w-72 shrink-0 flex flex-col overflow-y-auto bg-white">
               <div className="flex-1 p-4 space-y-4">
 
@@ -7703,6 +7853,7 @@ export default function LoanAppPage() {
                 )}
               </div>
             </div>
+            )}
           </div>
 
           {/* ── Footer action bar ───────────────────────────────────────── */}
@@ -7714,7 +7865,7 @@ export default function LoanAppPage() {
                 onClick={() => setMemoReviewModal((s) => ({ ...s, open: false }))}
                 className="h-8 text-xs"
               >
-                Cancel
+                {actionModal.actionType === "hr_terms" ? "Back to Set Terms" : "Cancel"}
               </Button>
               {memoReviewModal.row && (
                 <Button
@@ -7739,6 +7890,15 @@ export default function LoanAppPage() {
                 </Button>
               )}
             </div>
+            {actionModal.actionType === "hr_terms" && (
+              <Button
+                size="sm"
+                className="h-8 bg-violet-700 text-xs font-semibold text-white hover:bg-violet-800"
+                onClick={() => setMemoReviewModal((s) => ({ ...s, open: false }))}
+              >
+                Keep edits &amp; return
+              </Button>
+            )}
 
             {/* Primary approve / reject CTA */}
             {memoReviewModal.row && (memoReviewModal.row.status === "awaiting_hr_executives" || memoReviewModal.row.status === "awaiting_director_hr" || memoReviewModal.row.status === "pending_hr_executive_review") && (

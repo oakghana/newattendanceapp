@@ -9,7 +9,6 @@ import {
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import {
   GOOD_FD_THRESHOLD,
-  isFdExemptLoanType,
   canDoAccounts,
   canEnterFdScore,
   canDoCommittee,
@@ -36,7 +35,8 @@ type ActionKey =
 function normalizeReferenceNumber(value: string | null | undefined): string | null {
   const raw = String(value || "").trim()
   if (!raw) return null
-  const match = raw.match(/^QCC\/HRD\/SWL\/V\.2\/(\d+)$/i)
+  if (raw.length > 120) return null
+  const match = raw.match(/^QCC\/HRD\/SWL\/V\.2\/([a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*)$/i)
   if (!match) return null
   return `QCC/HRD/SWL/V.2/${match[1]}`
 }
@@ -142,32 +142,6 @@ function buildAutoMemo(req: any) {
     `Recovery Months: ${req.recovery_months || "TBD"}`,
     "",
     "Please contact HR/Accounts for processing and disbursement instructions.",
-  ].join("\n")
-}
-
-function buildCarLoanHoldNotice(req: any) {
-  return [
-    `Reference: ${memoReference(req)}`,
-    "Car Loan Committee Scheduling Notice",
-    "",
-    "Your request has passed FD verification and remains active.",
-    "The Car Loan Committee meets periodically (typically once per year).",
-    "You will be notified immediately once your request is scheduled for final committee sitting.",
-    "",
-    "Please hold on for the committee schedule update.",
-  ].join("\n")
-}
-
-function buildFdRejectionMemo(req: any, fdScore: number, note?: string | null) {
-  return [
-    `Reference: ${memoReference(req)}`,
-    "Loan Request Feedback: FD Threshold Not Met",
-    "",
-    `FD Score: ${fdScore}`,
-    `Minimum Required FD Score: ${GOOD_FD_THRESHOLD}`,
-    `Reason from Accounts: ${note || "FD value below required threshold."}`,
-    "",
-    "You may improve your FD position and submit a new request in a future cycle.",
   ].join("\n")
 }
 
@@ -366,7 +340,7 @@ export async function POST(request: NextRequest) {
       if (refInput) {
         const normalizedReference = normalizeReferenceNumber(refInput)
         if (!normalizedReference) {
-          return NextResponse.json({ error: "Reference number format must be QCC/HRD/SWL/V.2/<sequence>" }, { status: 400 })
+          return NextResponse.json({ error: "Reference number must start with QCC/HRD/SWL/V.2/ and contain only letters, numbers, /, ., _ or -" }, { status: 400 })
         }
         update.reference_number = normalizedReference
       }
@@ -428,7 +402,7 @@ export async function POST(request: NextRequest) {
           const { data: hrUsers } = await admin
             .from("user_profiles")
             .select("id")
-            .in("role", ["hr_officer", "director_hr", "manager_hr", "hr_director", "admin", "department_head"])
+            .in("role", ["hr_officer", "hr_loan_office", "loan_office", "director_hr", "manager_hr", "hr_director", "admin", "department_head"])
             .eq("is_active", true)
           await notifyUsers(
             admin,
@@ -439,7 +413,7 @@ export async function POST(request: NextRequest) {
             { request_id: req.id },
           )
           notifyLoanStageAdvanced(admin, {
-            toRoles: ["hr_officer", "director_hr", "manager_hr", "hr_director", "admin"],
+            toRoles: ["hr_officer", "hr_loan_office", "loan_office", "director_hr", "manager_hr", "hr_director", "admin"],
             staffName: loanStaffName,
             loanType: String(req.loan_type_label || req.loan_type_key || ""),
             requestNumber: String(req.request_number || req.id),
@@ -453,9 +427,9 @@ export async function POST(request: NextRequest) {
 
     if (action === "accounts_fd_update") {
       actionHandled = true
-  if (!canEnterFdScore(role, deptName, deptCode)) {
-  return NextResponse.json({ error: "Only the Accounts Loan Office can enter FD scores" }, { status: 403 })
-  }
+      if (!canEnterFdScore(role, deptName, deptCode)) {
+        return NextResponse.json({ error: "Only the Accounts Loan Office can enter FD scores" }, { status: 403 })
+      }
       if (req.status !== "sent_to_accounts") return NextResponse.json({ error: "Request is not at Accounts stage" }, { status: 400 })
 
       const fdScore = Number(body.fd_score)
@@ -463,144 +437,50 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "fd_score is required" }, { status: 400 })
       }
 
-      const fdGood = fdScore >= GOOD_FD_THRESHOLD
-      const isCarLoan = Boolean(req.committee_required)
-
-      // Funeral, Repair, and Issuance loans bypass FD rejection when score >= 0
-      const isExemptLoanType = isFdExemptLoanType(req.loan_type_key, req.loan_type_label)
-      const isFdNonNegative = fdScore >= 0
-      const shouldForwardToHrOffice = isExemptLoanType && !fdGood && isFdNonNegative
-
-      if (!fdGood && !shouldForwardToHrOffice && !note) {
-        return NextResponse.json({ error: `Provide Accounts response note for FD below ${GOOD_FD_THRESHOLD}.` }, { status: 400 })
-      }
-
+      // Accounts Office only submits the calculated FD here. The final approve/reject
+      // decision — and any rejection letter — is issued by Accounts Executive via
+      // PATCH /api/loan/fd-review, never by this route.
       update.accounts_reviewer_id = user.id
       update.fd_score = fdScore
       update.fd_note = note
       update.fd_checked_at = new Date().toISOString()
-      update.fd_good = fdGood
+      update.fd_good = fdScore >= GOOD_FD_THRESHOLD
       // Save the FD proof document URL if provided so staff/HR can view it
       const fdDocumentUrl = String(body.fd_document_url || "").trim() || null
       if (fdDocumentUrl) update.fd_document_url = fdDocumentUrl
 
-      if (!fdGood) {
-        if (shouldForwardToHrOffice) {
-          // Forward to HR Loan Office for processing instead of automatic rejection
-          toStatus = "sent_to_hr_office"
-        } else {
-          toStatus = "rejected_fd"
-        }
-      } else if (isCarLoan) {
-        toStatus = "awaiting_committee"
-      } else {
-        toStatus = "awaiting_hr_terms"
-      }
-
+      toStatus = "pending_accounts_fd_review"
       update.status = toStatus
 
-      if (fdGood) {
-        const staffMemo = isCarLoan
-          ? buildCarLoanHoldNotice(req)
-          : `Your request ${req.request_number} has FD ${fdScore} (> ${GOOD_FD_THRESHOLD}) and is in good standing for consideration.`
-        const memoPath = buildMemoPath(req.id, req.user_id)
+      const { data: accountsExecUsers } = await admin
+        .from("user_profiles")
+        .select("id")
+        .in("role", ["accounts_executive", "admin"])
+        .eq("is_active", true)
 
-        await notifyUsers(
-          admin,
-          [req.user_id],
-          isCarLoan ? "Car Loan in Committee Hold Queue" : "Good FD Standing Confirmed",
-          staffMemo,
-          isCarLoan ? "loan_committee_hold" : "loan_fd_good",
-          { request_id: req.id, fd_score: fdScore, memo: staffMemo, memo_path: memoPath },
-        )
-      } else if (toStatus === "rejected_fd") {
-        // FD rejection for loans that don't qualify for HR Office processing
-        const rejectionMemo = buildFdRejectionMemo(req, fdScore, note)
-        const memoPath = buildMemoPath(req.id, req.user_id)
-        await notifyUsers(
-          admin,
-          [req.user_id],
-          "Loan Request Auto-Rejected by FD Threshold",
-          rejectionMemo,
-          "loan_fd_rejected",
-          { request_id: req.id, fd_score: fdScore, threshold: GOOD_FD_THRESHOLD, reason: note || null, memo: rejectionMemo, memo_path: memoPath },
-        )
-
-        const approverIds = [req.hod_reviewer_id, req.loan_office_reviewer_id, req.hr_officer_id, req.director_hr_id]
-          .filter((id: any) => Boolean(id))
-          .map((id: any) => String(id))
-
-        if (approverIds.length > 0) {
-          await notifyUsers(
-            admin,
-            Array.from(new Set(approverIds)),
-            "FD Rejection Issued",
-            `Request ${req.request_number} was rejected at Accounts. FD ${fdScore} below ${GOOD_FD_THRESHOLD}.${note ? ` Reason: ${note}` : ""}`,
-            "loan_fd_rejected_approver_notice",
-            { request_id: req.id, fd_score: fdScore, threshold: GOOD_FD_THRESHOLD, reason: note || null, memo_path: memoPath },
-          )
-        }
-      } else if (toStatus === "sent_to_hr_office") {
-        // Forward to HR Loan Office for processing (for Funeral, Repair, Issuance loans with positive FD below threshold)
-        const forwardMemo = `Your ${req.loan_type_label} request (${req.request_number}) has been forwarded to the HR Loan Office for processing. Your Fixed Deposit (FD) score of ${fdScore} is being processed further.${note ? ` Note: ${note}` : ""}`
-        const memoPath = buildMemoPath(req.id, req.user_id)
-        
-        await notifyUsers(
-          admin,
-          [req.user_id],
-          "Loan Request Forwarded to HR Loan Office",
-          forwardMemo,
-          "loan_forwarded_to_hr_office",
-          { request_id: req.id, fd_score: fdScore, memo: forwardMemo, memo_path: memoPath },
-        )
-
-        // Notify HR Office staff about the forwarded request
-        const { data: hrOfficeUsers } = await admin
-          .from("user_profiles")
-          .select("id")
-          .in("role", ["loan_office", "hr_loan_office", "accounts_loan_office", "hr_officer", "manager_hr", "admin"])
-          .eq("is_active", true)
-
-        await notifyUsers(
-          admin,
-          (hrOfficeUsers || []).map((u: any) => u.id),
-          "Low FD Loan Request Forwarded",
-          `Request ${req.request_number} (${req.loan_type_label}) has FD ${fdScore} and has been forwarded from Accounts for your processing.${note ? ` Account Note: ${note}` : ""}`,
-          "loan_low_fd_forwarded",
-          { request_id: req.id, fd_score: fdScore, loan_type: req.loan_type_label, note },
-        )
-      }
+      await notifyUsers(
+        admin,
+        (accountsExecUsers || []).map((u: any) => u.id),
+        "FD Ready for Accounts Executive Decision",
+        `Request ${req.request_number} has an FD score of ${fdScore}% submitted by Accounts and is awaiting your approval or rejection.`,
+        "loan_fd_pending_executive_review",
+        { request_id: req.id, fd_score: fdScore },
+      )
 
       const { data: loanOfficeUsers } = await admin
         .from("user_profiles")
         .select("id")
-        .in("role", ["loan_officer", "hr_officer", "admin"])
+        .in("role", ["loan_officer", "loan_office", "hr_loan_office", "hr_officer", "admin"])
         .eq("is_active", true)
 
       await notifyUsers(
         admin,
         (loanOfficeUsers || []).map((u: any) => u.id),
-        "Accounts FD Response Received",
-        `Request ${req.request_number}: FD score ${fdScore}. Decision: ${fdGood ? "cleared" : "below threshold"}.${note ? ` Note: ${note}` : ""}`,
+        "Accounts FD Submitted",
+        `Request ${req.request_number}: FD score ${fdScore}% submitted and awaiting Accounts Executive decision.${note ? ` Note: ${note}` : ""}`,
         "loan_accounts_fd_feedback",
-        { request_id: req.id, fd_score: fdScore, fd_good: fdGood, note },
+        { request_id: req.id, fd_score: fdScore, note },
       )
-
-      if (toStatus === "awaiting_committee") {
-        const { data: committeeUsers } = await admin
-          .from("user_profiles")
-          .select("id")
-          .in("role", ["loan_committee", "committee_member", "admin"])
-          .eq("is_active", true)
-        await notifyUsers(
-          admin,
-          (committeeUsers || []).map((r: any) => r.id),
-          "Car Loan Committee Queue Updated",
-          `Request ${req.request_number} is ready for committee decision after FD confirmation.`,
-          "loan_committee_pending",
-          { request_id: req.id },
-        )
-      }
     }
 
     if (action === "committee_decision") {
@@ -667,7 +547,7 @@ export async function POST(request: NextRequest) {
       if (refInput) {
         const normalizedReference = normalizeReferenceNumber(refInput)
         if (!normalizedReference) {
-          return NextResponse.json({ error: "Reference number format must be QCC/HRD/SWL/V.2/<sequence>" }, { status: 400 })
+          return NextResponse.json({ error: "Reference number must start with QCC/HRD/SWL/V.2/ and contain only letters, numbers, /, ., _ or -" }, { status: 400 })
         }
         update.reference_number = normalizedReference
       }
@@ -675,6 +555,13 @@ export async function POST(request: NextRequest) {
       update.recovery_start_date = recoveryStartDate
       update.hr_forwarded_at = new Date().toISOString()
       if (body.memo_cc) update.memo_cc = body.memo_cc
+      const hrDirectorLetter = String(body.director_letter || "").trim()
+      if (hrDirectorLetter) {
+        update.director_letter = hrDirectorLetter
+        if (!String(req.director_letter_original || "").trim()) {
+          update.director_letter_original = hrDirectorLetter
+        }
+      }
 
       // Track who is expected to sign/finalize the memo.
       if (selectedDirectorApproverId) {
@@ -1015,7 +902,13 @@ export async function POST(request: NextRequest) {
         const recoveryMonth = body.recovery_start_date.trim()
         update.recovery_start_date = recoveryMonth.length === 7 ? `${recoveryMonth}-01` : body.recovery_start_date
       }
-      if (body.reference_number) update.reference_number = body.reference_number
+      if (body.reference_number) {
+        const normalizedReference = normalizeReferenceNumber(String(body.reference_number))
+        if (!normalizedReference) {
+          return NextResponse.json({ error: "Reference number must start with QCC/HRD/SWL/V.2/ and contain only letters, numbers, /, ., _ or -" }, { status: 400 })
+        }
+        update.reference_number = normalizedReference
+      }
     }
 
     if (!actionHandled) {

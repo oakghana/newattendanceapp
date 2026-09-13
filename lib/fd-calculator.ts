@@ -6,15 +6,16 @@
  *   Consolidated Monthly Salary  = Salary Per Annum / 12
  *   Gross Monthly Salary         = Consolidated Monthly Salary + Other Allowances
  *   Approx. Loan Installment     = Loan Amount / Recovery Period (months)
- *   Total Deduction              = Gross Deduction (existing) + Loan Installment
+ *   Outstanding monthly burden   = Total outstanding balances / Recovery Period
+ *   Total Deduction              = Gross Deduction + New loan installment + Outstanding burden
  *   Net Salary                   = Gross Monthly Salary - Total Deduction
  *   1/2 Gross Monthly            = Gross Monthly Salary / 2
  *   FD Good                      = Net Salary > 1/2 Gross Monthly Salary
  *   Percentage of Net to Gross   = Net Salary / Gross Monthly Salary
  *   FD Score (%)                 = round(Percentage × 100)
  *
- * Outstanding balances are recorded for exposure / "Loan Required" total but do NOT
- * change net salary (existing monthly burden is already in Gross Deduction).
+ * Outstanding balances reduce FD: they are converted to a monthly equivalent
+ * (balance ÷ recovery months), the same way the new loan installment is derived.
  *
  * Verified against FD-HANA Sheet2 (TWUM CASTRO): 42.97% → 43%
  * and Sheet1 (AHULU): 50.41% → 50%
@@ -96,6 +97,8 @@ export interface FDCalculationResult {
   gross_salary_per_month: number
   gross_deduction_monthly: number
   loan_installment_monthly: number
+  /** Outstanding balances spread over the recovery period */
+  outstanding_installment_monthly: number
   total_deduction_monthly: number
   net_salary_monthly: number
   half_gross_salary_per_month: number
@@ -148,12 +151,15 @@ export function calculateFD(input: FDCalculationInput): FDCalculationResult {
   const loan_installment_monthly =
     recovery_period_months > 0 ? requested_loan_amount / recovery_period_months : 0
 
-  const total_deduction_monthly = gross_deduction_monthly + loan_installment_monthly
+  const total_outstanding = sumOutstanding(input.outstanding_loans)
+  const outstanding_installment_monthly =
+    recovery_period_months > 0 && total_outstanding > 0 ? total_outstanding / recovery_period_months : 0
+  const total_loan_exposure = requested_loan_amount + total_outstanding
+
+  const total_deduction_monthly =
+    gross_deduction_monthly + loan_installment_monthly + outstanding_installment_monthly
   const net_salary_monthly = gross_salary_per_month - total_deduction_monthly
   const half_gross_salary_per_month = gross_salary_per_month / 2
-
-  const total_outstanding = sumOutstanding(input.outstanding_loans)
-  const total_loan_exposure = requested_loan_amount + total_outstanding
 
   // QCC rule: good standing when net > half of gross
   const fd_good = net_salary_monthly > half_gross_salary_per_month
@@ -175,6 +181,7 @@ export function calculateFD(input: FDCalculationInput): FDCalculationResult {
     gross_salary_per_month,
     gross_deduction_monthly,
     loan_installment_monthly,
+    outstanding_installment_monthly,
     total_deduction_monthly,
     net_salary_monthly,
     half_gross_salary_per_month,

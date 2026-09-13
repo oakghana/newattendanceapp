@@ -221,21 +221,21 @@ export function HODResumptionConfirmations({ viewerRole }: HODResumptionConfirma
                 : 'border-slate-200'
             }`}
           >
-            <CardContent className="pt-6">
-              <div className="flex items-start justify-between gap-4">
+            <CardContent className="p-4 sm:pt-6">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                 <div className="flex-1 space-y-2">
                   <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
+                    <User className="h-4 w-4 text-muted-foreground shrink-0" />
                     <div>
-                      <p className="font-medium text-slate-900">{staffName}</p>
+                      <p className="font-semibold text-sm sm:text-base text-slate-900">{staffName}</p>
                       <p className="text-xs text-muted-foreground">{employeeId}</p>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
                     <Badge variant="outline">{leaveType}</Badge>
-                    <div className="flex items-center gap-1 text-muted-foreground">
-                      <Calendar className="h-3 w-3" />
+                    <div className="flex items-center gap-1 text-muted-foreground text-xs">
+                      <Calendar className="h-3 w-3 shrink-0" />
                       <span>
                         {req.preferred_end_date
                           ? (() => {
@@ -248,28 +248,28 @@ export function HODResumptionConfirmations({ viewerRole }: HODResumptionConfirma
                   </div>
 
                   <div className="flex items-center gap-2 pt-1">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <Badge className={
-                      isDarkRed ? 'bg-red-600 text-white' :
-                      isRed ? 'bg-amber-600 text-white' :
-                      'bg-slate-200 text-slate-700'
+                      isDarkRed ? 'bg-red-600 text-white text-xs' :
+                      isRed ? 'bg-amber-600 text-white text-xs' :
+                      'bg-slate-200 text-slate-700 text-xs'
                     }>
                       {req.daysOverdue} days overdue
                     </Badge>
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col sm:flex-col gap-2 w-full sm:w-auto shrink-0">
                   {req.hod_confirmed ? (
-                    <Badge className="bg-green-600 text-white flex items-center gap-1 w-fit">
-                      <CheckCircle2 className="h-3 w-3" />
+                    <Badge className="bg-green-600 text-white flex items-center gap-1 w-full sm:w-fit justify-center py-1">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
                       Confirmed
                     </Badge>
                   ) : (
-                    <>
+                    <div className="grid grid-cols-2 sm:flex sm:flex-col gap-2 w-full">
                       <Button
                         size="sm"
-                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-9"
                         onClick={() => openActionDialog(req, 'confirmed')}
                         disabled={confirming === req.id}
                       >
@@ -280,7 +280,7 @@ export function HODResumptionConfirmations({ viewerRole }: HODResumptionConfirma
                           </>
                         ) : (
                           <>
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
                             Confirm Return
                           </>
                         )}
@@ -288,17 +288,17 @@ export function HODResumptionConfirmations({ viewerRole }: HODResumptionConfirma
                       <Button
                         size="sm"
                         variant="outline"
-                        className="border-red-200 text-red-700 hover:bg-red-50"
+                        className="border-red-200 text-red-700 hover:bg-red-50 text-xs h-9"
                         onClick={() => openActionDialog(req, 'not_resumed')}
                         disabled={confirming === req.id}
                       >
                         Not Resumed
                       </Button>
-                    </>
+                    </div>
                   )}
                   {req.hod_confirmed_at && (
-                    <p className="text-xs text-green-600 text-right">
-                      Confirmed {new Date(req.hod_confirmed_at).toLocaleDateString()}
+                    <p className="text-[11px] text-green-600 text-left sm:text-right">
+                      Verified {new Date(req.hod_confirmed_at).toLocaleDateString()}
                     </p>
                   )}
                 </div>

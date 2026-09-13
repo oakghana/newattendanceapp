@@ -176,6 +176,75 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: confirmationError.message || 'Failed to record HOD/RM confirmation' }, { status: 500 })
     }
 
+    const confirmationId = existingConfirmation?.id
+
+    // Audit trail
+    try {
+      await admin.from('resumption_confirmation_audit').insert({
+        confirmation_id: confirmationId,
+        user_id: staffUserId,
+        action: `hod_${action}`,
+        decision_maker_id: user.id,
+        decision_maker_role: 'hod_or_rm',
+        notes: notes || null,
+      })
+    } catch {}
+
+    // Dispatch notifications
+    try {
+      const { data: staffData } = await admin
+        .from('user_profiles')
+        .select('first_name, last_name, full_name')
+        .eq('id', staffUserId)
+        .single()
+
+      const staffName = staffData?.full_name || `${staffData?.first_name || ''} ${staffData?.last_name || ''}`.trim() || 'Staff member'
+
+      if (isConfirmed) {
+        const { data: hrUsers } = await admin
+          .from('user_profiles')
+          .select('id')
+          .in('role', ['hr_leave_office', 'hr_executive', 'director_hr'])
+          .eq('is_active', true)
+
+        const hrNotifs = (hrUsers || [])
+          .filter((u: any) => u.id !== user.id)
+          .map((u: any) => ({
+            recipient_id: u.id,
+            sender_id: user.id,
+            sender_role: 'hod_or_rm',
+            sender_label: 'HOD/RM Confirmation',
+            message: `${staffName} has been verified as resumed by their HOD/RM. Status is now confirmed.`,
+            notification_type: 'leave_resumption_confirmed',
+            is_read: false,
+          }))
+
+        if (hrNotifs.length > 0) {
+          await admin.from('staff_notifications').insert(hrNotifs)
+        }
+
+        await admin.from('staff_notifications').insert({
+          recipient_id: staffUserId,
+          sender_id: user.id,
+          sender_role: 'system',
+          sender_label: 'Leave Resumption Confirmed',
+          message: `Your resumption from leave has been officially verified and confirmed by your supervisor.`,
+          notification_type: 'leave_resumption_confirmed_staff',
+          is_read: false,
+        })
+      } else {
+        await admin.from('staff_notifications').insert({
+          recipient_id: staffUserId,
+          sender_id: user.id,
+          sender_role: 'system',
+          sender_label: 'Leave Resumption Notice',
+          message: `Your supervisor indicated that you have not resumed duty. Please contact your department head or HR immediately.${notes ? ` Note: ${notes}` : ''}`,
+          notification_type: 'leave_resumption_rejected',
+          is_read: false,
+        })
+      }
+    } catch {}
+
     return NextResponse.json({
       success: true,
       message: isConfirmed ? 'Staff resumption confirmed successfully' : 'Staff marked as not resumed',

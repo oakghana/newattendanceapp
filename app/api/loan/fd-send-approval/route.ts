@@ -1,4 +1,5 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { canSendFdForAccountsExecutiveReview } from "@/lib/loan-workflow"
 import { NextResponse } from "next/server"
 
 export const runtime = 'nodejs'
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
 
     const { data: profile } = await supabase
       .from("user_profiles")
-      .select("role")
+      .select("role, departments(name, code)")
       .eq("id", user.id)
       .single()
 
@@ -31,11 +32,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    const roleNorm = String(profile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const isAccountsLoanOffice = roleNorm === "accounts_loan_office"
+    const role = String(profile.role || "")
+    const deptName = (profile as any)?.departments?.name || null
+    const deptCode = (profile as any)?.departments?.code || null
 
-    if (!isAccountsLoanOffice) {
-      return NextResponse.json({ error: "Only Accounts Loan Office can send FD for approval" }, { status: 403 })
+    if (!canSendFdForAccountsExecutiveReview(role, deptName, deptCode)) {
+      return NextResponse.json({ error: "Only Accounts staff can send FD for Accounts Executive review" }, { status: 403 })
     }
 
     const body = await request.json()

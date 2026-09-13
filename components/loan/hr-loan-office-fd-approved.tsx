@@ -11,20 +11,51 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { useEffect } from 'react'
-import { GOOD_FD_THRESHOLD } from '@/lib/loan-workflow'
+import { GOOD_FD_THRESHOLD, parseFdScoreAdjustment } from '@/lib/loan-workflow'
 
 interface FDApprovedLoan {
   id: string
   staff_name: string
   staff_number?: string
+  staff_user_id?: string
   loan_type?: string
   request_number?: string
   requested_amount?: number
   fd_score?: number
   fd_value?: number
+  fd_note?: string
+  fd_original_score?: number
+  fd_adjustment_reason?: string
   status: string
   submission_date: string
   approval_date?: string
+}
+
+function normalizeFdApprovedLoan(loan: Record<string, unknown>): FDApprovedLoan {
+  const staffNumber = String(loan.staff_number || loan.employee_id || '').trim()
+  const staffUserId = String(loan.user_id || loan.staff_user_id || '').trim()
+  const staffName = String(loan.staff_full_name || loan.staff_name || '').trim()
+  const staffIdentifier = staffNumber || staffUserId
+  const fdNote = String(loan.fd_note || '').trim() || undefined
+  const adjustment = parseFdScoreAdjustment(fdNote)
+
+  return {
+    id: String(loan.id || ''),
+    staff_name: staffName || (staffIdentifier ? `Staff ID: ${staffIdentifier}` : String(loan.request_number || 'Staff ID unavailable')),
+    staff_number: staffNumber || undefined,
+    staff_user_id: staffUserId || undefined,
+    loan_type: String(loan.loan_type_label || loan.loan_type || loan.loan_type_key || '').trim() || undefined,
+    request_number: String(loan.request_number || '').trim() || undefined,
+    requested_amount: Number(loan.requested_amount ?? loan.fixed_amount ?? 0),
+    fd_score: loan.fd_score == null ? undefined : Number(loan.fd_score),
+    fd_value: loan.fd_value == null ? undefined : Number(loan.fd_value),
+    fd_note: fdNote,
+    fd_original_score: adjustment?.originalScore,
+    fd_adjustment_reason: adjustment?.reason,
+    status: String(loan.status || ''),
+    submission_date: String(loan.submitted_at || loan.submission_date || loan.created_at || ''),
+    approval_date: String(loan.fd_checked_at || loan.approval_date || loan.updated_at || '').trim() || undefined,
+  }
 }
 
 export function HRLoanOfficeFDApproved() {
@@ -47,9 +78,9 @@ export function HRLoanOfficeFDApproved() {
       
       if (data.inbox?.loanOffice) {
         // Filter for loans in pending_hr_loan_office status (approved FD from Accounts Executive)
-        const approvedFdLoans = data.inbox.loanOffice.filter(
-          (loan: any) => loan.status === 'pending_hr_loan_office'
-        )
+        const approvedFdLoans = data.inbox.loanOffice
+          .filter((loan: Record<string, unknown>) => loan.status === 'pending_hr_loan_office')
+          .map(normalizeFdApprovedLoan)
         setFdApprovedLoans(approvedFdLoans)
       }
     } catch (error) {
@@ -66,7 +97,7 @@ export function HRLoanOfficeFDApproved() {
 
   // Filter loans based on search
   const filteredLoans = useMemo(() => {
-    let result = fdApprovedLoans
+    let result = [...fdApprovedLoans]
     
     if (searchTerm) {
       result = result.filter(loan =>
@@ -241,6 +272,7 @@ export function HRLoanOfficeFDApproved() {
                     <th className="px-4 py-3 text-left font-medium text-slate-600">Loan Type</th>
                     <th className="px-4 py-3 text-right font-medium text-slate-600">Amount</th>
                     <th className="px-4 py-3 text-center font-medium text-slate-600">FD Score</th>
+                    <th className="px-4 py-3 text-left font-medium text-slate-600">FD Change Reason</th>
                     <th className="px-4 py-3 text-left font-medium text-slate-600">Status</th>
                     <th className="px-4 py-3 text-left font-medium text-slate-600">Approved Date</th>
                     <th className="px-4 py-3 text-right font-medium text-slate-600">Actions</th>
@@ -251,8 +283,10 @@ export function HRLoanOfficeFDApproved() {
                     <tr key={loan.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3">
                         <div>
-                          <p className="font-medium text-slate-900">{loan.staff_name || 'Unknown Staff'}</p>
-                          <p className="text-xs text-slate-500">{loan.request_number}</p>
+                          <p className="font-medium text-slate-900">{loan.staff_name}</p>
+                          <p className="text-xs text-slate-500">
+                            {[loan.staff_number, loan.request_number].filter(Boolean).join(' · ') || loan.staff_user_id}
+                          </p>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-slate-600">{loan.loan_type || '-'}</td>
@@ -261,6 +295,16 @@ export function HRLoanOfficeFDApproved() {
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getFDStatusColor(loan.fd_score)}`}>
                           {loan.fd_score ?? 'N/A'}%
                         </span>
+                        {loan.fd_adjustment_reason && loan.fd_original_score != null && (
+                          <p className="mt-1 text-[11px] text-amber-700">Was {Math.round(loan.fd_original_score)}%</p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-600 max-w-xs">
+                        {loan.fd_adjustment_reason ? (
+                          <span title={loan.fd_adjustment_reason}>{loan.fd_adjustment_reason}</span>
+                        ) : (
+                          <span className="text-slate-400">No manual change</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">{getStatusBadge(loan.status)}</td>
                       <td className="px-4 py-3 text-slate-600 text-xs">
@@ -332,7 +376,7 @@ export function HRLoanOfficeFDApproved() {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Staff</p>
                   <p className="font-medium text-slate-900">{selectedDetailLoan.staff_name}</p>
-                  <p className="text-sm text-slate-600">{selectedDetailLoan.staff_number || '—'}</p>
+                  <p className="text-sm text-slate-600">{selectedDetailLoan.staff_number || selectedDetailLoan.staff_user_id || 'Staff ID unavailable'}</p>
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Request</p>
@@ -350,6 +394,18 @@ export function HRLoanOfficeFDApproved() {
                   </p>
                 </div>
               </div>
+
+              {selectedDetailLoan.fd_adjustment_reason && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  <p className="font-semibold">Accounts Executive FD change</p>
+                  <p className="mt-1">
+                    Calculated {selectedDetailLoan.fd_original_score != null ? `${Math.round(selectedDetailLoan.fd_original_score)}%` : 'N/A'}
+                    {' → '}
+                    Verified {selectedDetailLoan.fd_score ?? 'N/A'}%
+                  </p>
+                  <p className="mt-2 whitespace-pre-wrap"><span className="font-semibold">Reason:</span> {selectedDetailLoan.fd_adjustment_reason}</p>
+                </div>
+              )}
 
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
                 <p className="font-semibold">Next step</p>
@@ -395,6 +451,18 @@ export function HRLoanOfficeFDApproved() {
                   </p>
                 </div>
               </div>
+
+              {selectedForPush.fd_adjustment_reason && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-900">
+                  <p className="text-xs font-semibold">Accounts Executive changed the FD value</p>
+                  <p className="mt-1 text-xs">
+                    Calculated {selectedForPush.fd_original_score != null ? `${Math.round(selectedForPush.fd_original_score)}%` : 'N/A'}
+                    {' → '}
+                    Verified {selectedForPush.fd_score ?? 'N/A'}%
+                  </p>
+                  <p className="mt-1 text-xs whitespace-pre-wrap"><span className="font-semibold">Reason:</span> {selectedForPush.fd_adjustment_reason}</p>
+                </div>
+              )}
 
               {/* Info Box */}
               <div className="p-3 bg-blue-50 border border-blue-200 rounded">

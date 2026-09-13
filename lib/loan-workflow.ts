@@ -76,6 +76,51 @@ export function formatFdPercent(score: number | string | null | undefined): stri
   return `${Math.round(n)}%`
 }
 
+export type FdScoreAdjustment = {
+  originalScore: number
+  verifiedScore: number
+  reason: string
+}
+
+/** Structured memo when Accounts Executive overrides the calculated FD without recalculation. */
+export function formatFdScoreAdjustmentMemo(
+  originalScore: number,
+  verifiedScore: number,
+  reason: string,
+): string {
+  return `FD SCORE ADJUSTMENT: original=${Math.round(originalScore)}; verified=${Math.round(verifiedScore)}; reason=${String(reason || "").trim()}`
+}
+
+/**
+ * Parse an Accounts Executive FD override from fd_note / timeline text.
+ * Supports the structured memo and the older "32% -> 45%. Reason: ..." format.
+ */
+export function parseFdScoreAdjustment(source?: string | null): FdScoreAdjustment | null {
+  const text = String(source || "")
+  if (!text) return null
+
+  const structured = text.match(
+    /FD SCORE ADJUSTMENT:\s*original\s*=\s*(-?\d+(?:\.\d+)?)\s*;\s*verified\s*=\s*(-?\d+(?:\.\d+)?)\s*;\s*reason\s*=\s*([^\n\r]*)/i,
+  )
+  if (structured) {
+    const originalScore = Number(structured[1])
+    const verifiedScore = Number(structured[2])
+    const reason = String(structured[3] || "").trim()
+    if (!Number.isFinite(originalScore) || !Number.isFinite(verifiedScore) || !reason) return null
+    return { originalScore, verifiedScore, reason }
+  }
+
+  const legacy = text.match(
+    /FD SCORE ADJUSTMENT:\s*(-?\d+(?:\.\d+)?)%\s*->\s*(-?\d+(?:\.\d+)?)%\.\s*Reason:\s*([^\n\r]*)/i,
+  )
+  if (!legacy) return null
+  const originalScore = Number(legacy[1])
+  const verifiedScore = Number(legacy[2])
+  const reason = String(legacy[3] || "").trim()
+  if (!Number.isFinite(originalScore) || !Number.isFinite(verifiedScore) || !reason) return null
+  return { originalScore, verifiedScore, reason }
+}
+
 export const SCHEMA_MISSING_CODES = new Set(["PGRST200", "PGRST204", "PGRST205", "42P01", "42703"])
 
 export function isSchemaIssue(error: any): boolean {
@@ -147,20 +192,41 @@ export function canEnterFdScore(role: string, deptName?: string | null, deptCode
   const normalizedRole = normalizeRole(role)
   return (
     isAdminRole(normalizedRole) ||
+    normalizedRole === "accounts" ||
     normalizedRole === "accounts_loan_office" ||
     normalizedRole === "accounts_loan_officer" ||
+    normalizedRole.includes("account") ||
+    isAccountsDepartment(deptName, deptCode) ||
     isLoanOfficeDepartment(deptName, deptCode)
   )
 }
 
-export function canApproveFdScore(role: string, deptName?: string | null, deptCode?: string | null): boolean {
+/** Any Accounts role may calculate FD and send it to Accounts Executive for review. */
+export function canSendFdForAccountsExecutiveReview(
+  role: string,
+  deptName?: string | null,
+  deptCode?: string | null,
+): boolean {
   const normalizedRole = normalizeRole(role)
   return (
     isAdminRole(normalizedRole) ||
-    normalizedRole === "accounts_executive" ||
-    normalizedRole === "accounts" ||
+    normalizedRole.includes("account") ||
     isAccountsDepartment(deptName, deptCode)
   )
+}
+
+export function isAccountsExecutiveRole(role: string): boolean {
+  const normalizedRole = normalizeRole(role)
+  return (
+    normalizedRole === "accounts_executive" ||
+    normalizedRole === "account_executive" ||
+    normalizedRole === "accounts_exec"
+  )
+}
+
+export function canApproveFdScore(role: string, _deptName?: string | null, _deptCode?: string | null): boolean {
+  const normalizedRole = normalizeRole(role)
+  return isAdminRole(normalizedRole) || isAccountsExecutiveRole(normalizedRole)
 }
 
 export function canDoAccounts(role: string, deptName?: string | null, deptCode?: string | null): boolean {

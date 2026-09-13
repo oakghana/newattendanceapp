@@ -287,14 +287,78 @@
   animation: loan-dev-blink 1.4s ease-in-out infinite;
 }
 
-.loan-theme button:not(.bg-destructive):not([class*="destructive"]) {
+.loan-theme button:not(.bg-destructive):not([class*="destructive"]):not([data-loan-section-toggle]):not([data-loan-repayment-item]) {
   background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 60%, #7c3aed 100%) !important;
   color: #ede9fe !important;
   border-color: #7c3aed !important;
 }
 
-.loan-theme button:hover:not(.bg-destructive):not([class*="destructive"]) {
+.loan-theme button[data-loan-repayment-item] {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+  filter: none !important;
+}
+
+.loan-theme button[data-loan-repayment-item]:hover {
+  background: #f8fafc !important;
+  filter: none !important;
+}
+
+.loan-theme button[data-loan-repayment-item] .font-medium,
+.loan-theme button[data-loan-repayment-item] div {
+  color: #0f172a !important;
+}
+
+.loan-theme button[data-loan-repayment-item] .text-xs {
+  color: #475569 !important;
+}
+
+.loan-theme button:hover:not(.bg-destructive):not([class*="destructive"]):not([data-loan-section-toggle]):not([data-loan-repayment-item]) {
   filter: brightness(1.15);
+}
+
+.loan-theme button[data-loan-section-toggle] {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+  filter: none !important;
+}
+
+.loan-theme button[data-loan-section-toggle]:hover {
+  background: #f8fafc !important;
+  filter: none !important;
+}
+
+.loan-theme button[data-loan-section-toggle] p:first-of-type {
+  color: #0f172a !important;
+}
+
+.loan-theme button[data-loan-section-toggle] p:last-of-type {
+  color: #475569 !important;
+}
+
+.loan-theme button[data-loan-section-toggle] svg {
+  color: #475569 !important;
+}
+
+.dark .loan-theme button[data-loan-section-toggle] {
+  background: #1e293b !important;
+  color: #f8fafc !important;
+  border-color: #475569 !important;
+}
+
+.dark .loan-theme button[data-loan-section-toggle]:hover {
+  background: #334155 !important;
+}
+
+.dark .loan-theme button[data-loan-section-toggle] p:first-of-type {
+  color: #f8fafc !important;
+}
+
+.dark .loan-theme button[data-loan-section-toggle] p:last-of-type,
+.dark .loan-theme button[data-loan-section-toggle] svg {
+  color: #cbd5e1 !important;
 }
 
 .loan-theme [role="tab"] {

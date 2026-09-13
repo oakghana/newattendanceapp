@@ -37,6 +37,9 @@ interface FDReview {
   submission_memo: string
   fd_note?: string
   status?: string
+  calculated_by_name?: string | null
+  calculated_by_role?: string | null
+  accounts_reviewer_name?: string | null
   review_status: 'pending_review' | 'approved' | 'rejected'
 }
 
@@ -115,6 +118,7 @@ function openFdSheetPrintView(review: FDReview) {
         <tr><td>Loan Type</td><td>${review.loan_type || 'N/A'}</td></tr>
         <tr><td>Requested Amount</td><td>GHS ${Number(review.requested_amount || 0).toLocaleString()}</td></tr>
         <tr><td>FD Score</td><td>${formatFdPercentLocal(review.fd_score)}</td></tr>
+        <tr><td>Calculated by</td><td>${review.calculated_by_name || 'N/A'}${review.calculated_by_role ? ` (${review.calculated_by_role})` : ''}</td></tr>
         <tr><td>Review Status</td><td>${review.review_status}</td></tr>
         ${rows || '<tr><td colspan="2">No structured routing fields found</td></tr>'}
       </tbody>
@@ -350,7 +354,11 @@ export function AccountsExecutiveFDDashboard({
       return
     }
     if (Math.round(score) !== Math.round(Number(selectedReview.fd_score)) && !adjustmentReason.trim()) {
-      toast({ title: 'Adjustment reason required', description: 'Document why the generated FD score was adjusted.', variant: 'destructive' })
+      toast({
+        title: 'Reason required',
+        description: 'Enter a reason whenever you type a new FD value instead of using the calculated score.',
+        variant: 'destructive',
+      })
       return
     }
 
@@ -396,6 +404,20 @@ export function AccountsExecutiveFDDashboard({
   const handleReject = async () => {
     if (!selectedReview) return
 
+    const score = adjustedFdScore.trim() === '' ? Number(selectedReview.fd_score) : Number(adjustedFdScore)
+    if (!Number.isFinite(score) || score < 0 || score > 100) {
+      toast({ title: 'Invalid FD score', description: 'Enter a whole percentage between 0 and 100.', variant: 'destructive' })
+      return
+    }
+    if (Math.round(score) !== Math.round(Number(selectedReview.fd_score)) && !adjustmentReason.trim()) {
+      toast({
+        title: 'Reason required',
+        description: 'Enter a reason whenever you type a new FD value instead of using the calculated score.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     try {
       setSubmitting(true)
       const res = await fetch('/api/loan/fd-review', {
@@ -406,6 +428,8 @@ export function AccountsExecutiveFDDashboard({
           review_status: 'rejected',
           fd_verification_memo: verificationMemo,
           review_decision: reviewDecision,
+          adjusted_fd_score: Math.round(score),
+          adjustment_reason: adjustmentReason.trim(),
         }),
       })
 
@@ -416,6 +440,8 @@ export function AccountsExecutiveFDDashboard({
         setSelectedReview(null)
         setVerificationMemo('')
         setReviewDecision('')
+        setAdjustedFdScore('')
+        setAdjustmentReason('')
         fetchPendingReviews()
       } else {
         toast({ title: 'Error', description: data.error, variant: 'destructive' })
@@ -445,7 +471,7 @@ export function AccountsExecutiveFDDashboard({
             FD Verification Queue
           </CardTitle>
           <CardDescription>
-            Review FD requests submitted by Loan Office. Verify calculations and supporting documents.
+            Review FD calculations submitted by Accounts Office. The calculator&apos;s name is shown so you can follow up if the FD value looks wrong.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -484,6 +510,9 @@ export function AccountsExecutiveFDDashboard({
                         Amount: ₵{Number(review.requested_amount).toLocaleString()} &bull; {review.repayment_months}mo
                       </p>
                     )}
+                    <p className="text-xs font-medium text-violet-800 mt-1">
+                      Calculated by: {review.calculated_by_name || 'Unknown Accounts officer'}
+                    </p>
                   </div>
                   <div className="flex flex-wrap gap-2 sm:justify-end">
                     {showAutoReject && (
@@ -509,12 +538,16 @@ export function AccountsExecutiveFDDashboard({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4 mb-4 p-3 bg-slate-50 rounded">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 mb-4 p-3 bg-slate-50 rounded">
                   <div>
                     <p className="text-xs text-slate-500">FD Score (%)</p>
                     <p className={`font-bold text-lg ${poorFD ? 'text-red-600' : 'text-green-600'}`}>
                       {formatFdPercentLocal(review.fd_score)}
                     </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Calculated by</p>
+                    <p className="text-sm font-medium text-slate-900">{review.calculated_by_name || 'Unknown'}</p>
                   </div>
                   <div>
                     <p className="text-xs text-slate-500">Submitted</p>
@@ -618,6 +651,10 @@ export function AccountsExecutiveFDDashboard({
                   <p className="text-xs font-semibold text-slate-600">Staff</p>
                   <p className="text-sm font-medium truncate">{selectedReview.staff_name || 'N/A'}</p>
                 </div>
+                <div className="bg-violet-50 p-3 rounded">
+                  <p className="text-xs font-semibold text-violet-700">Calculated by (Accounts)</p>
+                  <p className="text-sm font-medium truncate text-violet-950">{selectedReview.calculated_by_name || 'Unknown Accounts officer'}</p>
+                </div>
                 <div className="bg-slate-50 p-3 rounded">
                   <p className="text-xs font-semibold text-slate-600">Loan Type</p>
                   <p className="text-sm font-medium truncate">{selectedReview.loan_type || 'N/A'}</p>
@@ -681,7 +718,8 @@ export function AccountsExecutiveFDDashboard({
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="text-xs font-semibold text-slate-700">Verified FD Score (%)</label>
+                    <label className="text-xs font-semibold text-slate-700">FD value (%)</label>
+                    <p className="text-[11px] text-slate-500 mt-1">You may keep the calculated score or type a new value without recalculation.</p>
                     <Input
                       type="number"
                       min={0}
@@ -691,11 +729,16 @@ export function AccountsExecutiveFDDashboard({
                       onChange={e => setAdjustedFdScore(e.target.value)}
                       className="mt-2"
                     />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Calculated score: {Math.round(Number(selectedReview.fd_score) || 0)}%
+                    </p>
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-slate-700">Adjustment reason {Math.round(Number(adjustedFdScore) || 0) !== Math.round(Number(selectedReview.fd_score) || 0) ? '*' : '(if changed)'}</label>
+                    <label className="text-xs font-semibold text-slate-700">
+                      Reason for change {Math.round(Number(adjustedFdScore) || 0) !== Math.round(Number(selectedReview.fd_score) || 0) ? '*' : '(required if you change the value)'}
+                    </label>
                     <Textarea
-                      placeholder="Required when the verified score differs from the generated score..."
+                      placeholder="Required when you enter a new FD value without calculation. HR Loan Office will see this reason."
                       value={adjustmentReason}
                       onChange={e => setAdjustmentReason(e.target.value)}
                       className="mt-2 min-h-16 text-sm"
@@ -738,8 +781,10 @@ export function AccountsExecutiveFDDashboard({
             {/* Calculate if rejection is allowed based on FD score and loan type */}
             {(() => {
               const isExceptionLoanType = isFdExemptLoanTypeLocal(selectedReview?.loan_type, selectedReview?.loan_type)
-              const fdScore = selectedReview?.fd_score ?? 0
-              const canReject = selectedReview ? canRejectByScoreRule(selectedReview) : false
+              const fdScore = adjustedFdScore.trim() === '' ? Number(selectedReview?.fd_score ?? 0) : Number(adjustedFdScore)
+              const canReject = selectedReview
+                ? !isExceptionLoanType && isPoorFdScoreLocal(fdScore, selectedReview.fd_good)
+                : false
 
               return (
                 <>

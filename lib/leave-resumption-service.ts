@@ -75,40 +75,217 @@ export async function createLeaveResumptionTrackingForLeaveRequest(leaveRequest:
  * - 0-9 days after leave end: Mark as resumed + notify supervisors
  * - 10+ days after leave end: Block check-in + trigger query memos
  */
-export async function trackLeaveResumption(userId: string, checkInDate: Date) {
+export async function trackLeaveResumption(userId: string, checkInDate: Date = new Date()) {
+  return processStaffResumptionCheckIn(userId, format(checkInDate, 'yyyy-MM-dd'))
+}
+
+/**
+ * Unified and robust handler for staff checking in on or after their leave resumption date.
+ * Updates leave_resumption_notifications, creates/updates leave_resumption_confirmations,
+ * records audit trail, and issues in-app staff_notifications to HOD/RM, staff, and HR.
+ */
+export async function processStaffResumptionCheckIn(userId: string, checkInDateStr?: string) {
   try {
-    // Find pending leave records for this user
+    const today = checkInDateStr || format(new Date(), 'yyyy-MM-dd')
+
+    // Find any unconfirmed/pending leave resumption record for this user
     const { data: resumptionRecords, error: fetchError } = await supabase
       .from('leave_resumption_notifications')
-      .select('*')
+      .select('id, user_id, leave_request_id, leave_end_date, confirmation_status, status')
       .eq('user_id', userId)
-      .in('status', ['pending', 'warning_sent', 'letter_sent'])
-      .is('first_check_in_date', null)
+      .or('confirmation_status.is.null,confirmation_status.eq.unconfirmed,confirmation_status.eq.pending,confirmation_status.eq.pending_hod_rm')
+      .order('leave_end_date', { ascending: false })
 
     if (fetchError) {
       console.error('[v0] Error fetching leave resumption records:', fetchError)
-      return
     }
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    
-    for (const record of resumptionRecords || []) {
-      const leaveEndDate = new Date(record.leave_end_date)
-      leaveEndDate.setHours(0, 0, 0, 0)
-      
-      const daysAfterLeaveEnd = Math.floor((today.getTime() - leaveEndDate.getTime()) / (1000 * 60 * 60 * 24))
-      
-      // The leave end date is still covered leave. Resumption starts on the next day
-      // and remains confirmable through day 9; day 10 is handled by escalation/blocking.
-      if (daysAfterLeaveEnd >= 1 && daysAfterLeaveEnd <= 9) {
-        await markAsResumed(record.id, userId, checkInDate)
+    let targetRecord = (resumptionRecords || []).find((r: any) => {
+      // If leave has reached end date or is within the resumption window
+      return !r.leave_end_date || r.leave_end_date <= today
+    }) || (resumptionRecords && resumptionRecords[0])
+
+    // If no record exists in leave_resumption_notifications, check if there is an approved leave in leave_plan_requests
+    if (!targetRecord) {
+      const { data: approvedLeave } = await supabase
+        .from('leave_plan_requests')
+        .select('id, user_id, preferred_end_date, adjusted_end_date, leave_type_key')
+        .eq('user_id', userId)
+        .in('status', ['hr_approved', 'approved', 'completed'])
+        .order('preferred_end_date', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (approvedLeave) {
+        const effectiveEnd = String(approvedLeave.adjusted_end_date || approvedLeave.preferred_end_date || '').slice(0, 10)
+        const { data: newRecord } = await supabase
+          .from('leave_resumption_notifications')
+          .insert({
+            user_id: userId,
+            leave_request_id: approvedLeave.id,
+            leave_end_date: effectiveEnd || today,
+            status: 'pending',
+            confirmation_status: 'unconfirmed',
+            days_overdue: 0,
+          })
+          .select('id, user_id, leave_request_id, leave_end_date, confirmation_status, status')
+          .single()
+
+        if (newRecord) {
+          targetRecord = newRecord
+        }
       }
-      // If 10+ days past leave end, checkAndEscalateNonResumption will handle with query memos
-      // During leave (daysAfterLeaveEnd < 0), do nothing — check-in is allowed but not confirmed
+    }
+
+    if (!targetRecord) {
+      return { success: true, triggered: false, message: 'No active leave found requiring resumption confirmation' }
+    }
+
+    // Update leave_resumption_notifications
+    await supabase
+      .from('leave_resumption_notifications')
+      .update({
+        first_check_in_date: today,
+        resumption_date: today,
+        confirmation_status: 'pending_hod_rm',
+        status: 'resumed',
+        days_overdue: 0,
+      })
+      .eq('id', targetRecord.id)
+
+    // Check existing confirmation record
+    const { data: existingConfirmation } = await supabase
+      .from('leave_resumption_confirmations')
+      .select('id')
+      .eq('leave_resumption_id', targetRecord.id)
+      .maybeSingle()
+
+    let confirmationId = existingConfirmation?.id
+
+    if (!confirmationId) {
+      const { data: newConfirmation, error: confirmErr } = await supabase
+        .from('leave_resumption_confirmations')
+        .insert({
+          leave_resumption_id: targetRecord.id,
+          user_id: userId,
+          staff_check_in_date: today,
+          staff_check_in_time: new Date().toISOString(),
+          final_status: 'pending_verification',
+        })
+        .select('id')
+        .single()
+
+      if (confirmErr) {
+        console.error('[v0] Error creating leave resumption confirmation:', confirmErr)
+      } else {
+        confirmationId = newConfirmation?.id
+      }
+    } else {
+      await supabase
+        .from('leave_resumption_confirmations')
+        .update({
+          staff_check_in_date: today,
+          staff_check_in_time: new Date().toISOString(),
+          final_status: 'pending_verification',
+        })
+        .eq('id', confirmationId)
+    }
+
+    // Audit trail logging
+    try {
+      if (confirmationId) {
+        await supabase.from('resumption_confirmation_audit').insert({
+          confirmation_id: confirmationId,
+          user_id: userId,
+          action: 'check_in_claimed',
+          notes: `Staff checked in on ${today}, initiating HOD/RM verification requirement`,
+        })
+      }
+      await supabase.from('leave_resumption_audit').insert({
+        leave_resumption_id: targetRecord.id,
+        user_id: userId,
+        event_type: 'check_in_claimed',
+        event_description: `Staff checked in on ${today}. Awaiting HOD/RM verification.`,
+      })
+    } catch (auditErr) {
+      console.warn('[v0] Resumption audit log warning:', auditErr)
+    }
+
+    // Fetch staff details for notification messages
+    const { data: staffUser } = await supabase
+      .from('user_profiles')
+      .select('id, first_name, last_name, full_name, employee_id, department_id, supervisor_id')
+      .eq('id', userId)
+      .single()
+
+    const staffDisplayName = staffUser?.full_name || `${staffUser?.first_name || ''} ${staffUser?.last_name || ''}`.trim() || 'Staff member'
+
+    // 1. Notify HOD / Regional Manager
+    const { data: hodLinks } = await supabase
+      .from('loan_hod_linkages')
+      .select('hod_user_id')
+      .eq('staff_user_id', userId)
+
+    let hodIds = (hodLinks || []).map((h: any) => h.hod_user_id).filter(Boolean)
+    if (staffUser?.supervisor_id && !hodIds.includes(staffUser.supervisor_id)) {
+      hodIds.push(staffUser.supervisor_id)
+    }
+
+    if (hodIds.length > 0) {
+      const hodNotifs = hodIds.map((hodId: string) => ({
+        recipient_id: hodId,
+        sender_id: userId,
+        sender_role: 'system',
+        sender_label: 'Leave Resumption',
+        message: `${staffDisplayName} has checked in today (${today}) and resumed from leave. Please verify their presence on the All Requests tab under Leave Administration.`,
+        notification_type: 'leave_resumption_needs_hod_verification',
+        is_read: false,
+      }))
+      await supabase.from('staff_notifications').insert(hodNotifs).catch(() => {})
+    }
+
+    // 2. Notify the Staff Member
+    await supabase.from('staff_notifications').insert({
+      recipient_id: userId,
+      sender_id: userId,
+      sender_role: 'system',
+      sender_label: 'Leave Resumption Notice',
+      message: `Welcome back! You have checked in on ${today}. Your leave resumption notice has been logged and sent to your HOD/Regional Manager for verification.`,
+      notification_type: 'leave_resumption_staff_checked_in',
+      is_read: false,
+    }).catch(() => {})
+
+    // 3. Notify HR Leave Office / HR Executive
+    const { data: hrUsers } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .in('role', ['hr_leave_office', 'hr_executive', 'director_hr'])
+      .eq('is_active', true)
+
+    const hrIds = (hrUsers || []).map((u: any) => u.id).filter((id: string) => id !== userId && !hodIds.includes(id))
+    if (hrIds.length > 0) {
+      const hrNotifs = hrIds.map((hrId: string) => ({
+        recipient_id: hrId,
+        sender_id: userId,
+        sender_role: 'system',
+        sender_label: 'Leave Resumption',
+        message: `${staffDisplayName} checked in on ${today} to resume duty after leave.`,
+        notification_type: 'leave_resumption_claimed',
+        is_read: false,
+      }))
+      await supabase.from('staff_notifications').insert(hrNotifs).catch(() => {})
+    }
+
+    return {
+      success: true,
+      triggered: true,
+      resumptionId: targetRecord.id,
+      confirmationId,
+      message: 'Leave resumption workflow initiated successfully',
     }
   } catch (error) {
-    console.error('[v0] Error tracking leave resumption:', error)
+    console.error('[v0] Error processing staff resumption check-in:', error)
+    return { success: false, error }
   }
 }
 

@@ -175,44 +175,44 @@ export function HrLeaveOfficCountdownDashboard() {
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card className="border-red-200 bg-red-50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-red-700">Critical (≤2 days)</CardTitle>
+          <CardHeader className="pb-2 p-3 sm:p-4">
+            <CardTitle className="text-xs sm:text-sm font-medium text-red-700">Critical (≤2 days)</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-red-600">{criticalCount}</div>
-            <p className="text-xs text-red-600 mt-1">🚨 Immediate action required</p>
+          <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0">
+            <div className="text-2xl sm:text-3xl font-bold text-red-600">{criticalCount}</div>
+            <p className="text-[10px] sm:text-xs text-red-600 mt-1">🚨 Immediate action</p>
           </CardContent>
         </Card>
 
         <Card className="border-yellow-200 bg-yellow-50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-yellow-700">Warning (3-5 days)</CardTitle>
+          <CardHeader className="pb-2 p-3 sm:p-4">
+            <CardTitle className="text-xs sm:text-sm font-medium text-yellow-700">Warning (3-5 days)</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-yellow-600">{warningCount}</div>
-            <p className="text-xs text-yellow-600 mt-1">⏰ Plan ahead</p>
+          <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0">
+            <div className="text-2xl sm:text-3xl font-bold text-yellow-600">{warningCount}</div>
+            <p className="text-[10px] sm:text-xs text-yellow-600 mt-1">⏰ Plan ahead</p>
           </CardContent>
         </Card>
 
         <Card className="border-blue-200 bg-blue-50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-blue-700">Total Returning</CardTitle>
+          <CardHeader className="pb-2 p-3 sm:p-4">
+            <CardTitle className="text-xs sm:text-sm font-medium text-blue-700">Total Returning</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-blue-600">{countdowns.length}</div>
-            <p className="text-xs text-blue-600 mt-1">within 5 days</p>
+          <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0">
+            <div className="text-2xl sm:text-3xl font-bold text-blue-600">{countdowns.length}</div>
+            <p className="text-[10px] sm:text-xs text-blue-600 mt-1">within 5 days</p>
           </CardContent>
         </Card>
 
         <Card className="border-orange-200 bg-orange-50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-orange-700">Pending Warnings</CardTitle>
+          <CardHeader className="pb-2 p-3 sm:p-4">
+            <CardTitle className="text-xs sm:text-sm font-medium text-orange-700">Pending Warnings</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-orange-600">{pendingWarnings}</div>
-            <p className="text-xs text-orange-600 mt-1">awaiting response</p>
+          <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0">
+            <div className="text-2xl sm:text-3xl font-bold text-orange-600">{pendingWarnings}</div>
+            <p className="text-[10px] sm:text-xs text-orange-600 mt-1">awaiting response</p>
           </CardContent>
         </Card>
       </div>

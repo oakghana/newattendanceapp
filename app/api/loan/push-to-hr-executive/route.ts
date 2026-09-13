@@ -1,27 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const admin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-)
+import { createAdminClient, createClientAndGetUser } from '@/lib/supabase/server'
+import { canDoHrOffice, normalizeRole } from '@/lib/loan-workflow'
 
 export async function POST(request: NextRequest) {
   try {
-    const { loan_request_id, hr_loan_office_memo, action } = await request.json()
+    const { loan_request_id, hr_loan_office_memo } = await request.json()
 
     if (!loan_request_id) {
       return NextResponse.json({ error: 'loan_request_id is required' }, { status: 400 })
     }
 
-    // Get current user from session
-    const authHeader = request.headers.get('authorization')
-    let userId = null
+    const memo = String(hr_loan_office_memo || '').trim()
+    if (!memo) {
+      return NextResponse.json({ error: 'HR Loan Office processing memo is required' }, { status: 400 })
+    }
 
-    if (authHeader) {
-      const token = authHeader.split(' ')[1]
-      const { data: userData } = await admin.auth.getUser(token)
-      userId = userData?.user?.id
+    const { user, authError } = await createClientAndGetUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const admin = await createAdminClient()
+    const { data: profile } = await admin
+      .from('user_profiles')
+      .select('role, departments(name, code)')
+      .eq('id', user.id)
+      .single()
+
+    const role = normalizeRole(profile?.role)
+    const department = (profile as unknown as {
+      departments?: { name?: string | null; code?: string | null } | null
+    } | null)?.departments
+    if (!canDoHrOffice(role, department?.name, department?.code)) {
+      return NextResponse.json({ error: 'Only HR Loan Office users can push loans to HR Executive' }, { status: 403 })
     }
 
     // Fetch the loan request to verify it exists and get current status
@@ -44,12 +55,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Update loan status to awaiting_director_hr
+    const now = new Date().toISOString()
     const { data: updatedLoan, error: updateError } = await admin
       .from('loan_requests')
       .update({
         status: 'awaiting_director_hr',
-        hr_loan_office_processing_memo: hr_loan_office_memo,
-        updated_at: new Date().toISOString(),
+        hr_note: memo,
+        hr_officer_id: user.id,
+        hr_forwarded_at: now,
+        updated_at: now,
       })
       .eq('id', loan_request_id)
       .select()
@@ -65,12 +79,12 @@ export async function POST(request: NextRequest) {
       .from('loan_request_timeline')
       .insert({
         loan_request_id: loan_request_id,
-        actor_id: userId,
-        actor_role: 'hr_loan_office',
+        actor_id: user.id,
+        actor_role: role || 'hr_loan_office',
         action_key: 'pushed_to_hr_executive',
         from_status: 'pending_hr_loan_office',
         to_status: 'awaiting_director_hr',
-        note: `HR Loan Office pushed approved FD loan to HR Executive for signing and approval. Memo: ${hr_loan_office_memo}`,
+        note: `HR Loan Office pushed approved FD loan to HR Executive for signing and approval. Memo: ${memo}`,
       })
 
     if (timelineError) {

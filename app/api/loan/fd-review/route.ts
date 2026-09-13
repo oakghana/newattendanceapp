@@ -1,8 +1,54 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
-import { canRejectFdByScore, GOOD_FD_THRESHOLD, isFdExemptLoanType } from "@/lib/loan-workflow"
+import { canApproveFdScore, canEnterFdScore, canRejectFdByScore, formatFdScoreAdjustmentMemo, GOOD_FD_THRESHOLD, isFdExemptLoanType } from "@/lib/loan-workflow"
+import { createMemoToken } from "@/lib/secure-memo"
 
 export const runtime = 'nodejs'
+
+function memoReference(loan: any): string {
+  const raw = String(loan?.reference_number || "").trim()
+  if (raw) return raw
+  const fallbackSeq = String(loan?.request_number || "").split("-").pop() || "—"
+  return `QCC/HRD/SWL/V.2/${fallbackSeq}`
+}
+
+function buildMemoPath(loanId: string, recipientUserId: string) {
+  const token = createMemoToken({ loanId, userId: recipientUserId, exp: Date.now() + 7 * 24 * 60 * 60 * 1000 })
+  return `/api/loan/memo/${loanId}?token=${encodeURIComponent(token)}`
+}
+
+function buildFdRejectionMemo(loan: any, fdScore: number, reason?: string | null) {
+  return [
+    `Reference: ${memoReference(loan)}`,
+    "Loan Request Feedback: FD Threshold Not Met",
+    "",
+    `FD Score: ${fdScore}%`,
+    `Minimum Required FD Score: ${GOOD_FD_THRESHOLD}%`,
+    `Reason from Accounts Executive: ${reason || "FD value below required threshold."}`,
+    "",
+    "You may improve your FD position and submit a new request in a future cycle.",
+  ].join("\n")
+}
+
+function buildCarLoanHoldNotice(loan: any) {
+  return [
+    `Reference: ${memoReference(loan)}`,
+    "Car Loan Committee Scheduling Notice",
+    "",
+    "Your request has passed FD verification and remains active.",
+    "The Car Loan Committee meets periodically (typically once per year).",
+    "You will be notified immediately once your request is scheduled for final committee sitting.",
+    "",
+    "Please hold on for the committee schedule update.",
+  ].join("\n")
+}
+
+async function notifyUsers(admin: any, userIds: string[], title: string, message: string, type = "loan_update", data: any = {}) {
+  if (!userIds.length) return
+  await admin.from("staff_notifications").insert(
+    userIds.map((uid) => ({ recipient_id: uid, title, message, type, data, is_read: false })),
+  )
+}
 
 /**
  * GET /api/loan/fd-review
@@ -33,17 +79,20 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    const roleNorm = String(profile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const isAccountsExecutive = roleNorm === "accounts_executive" || roleNorm === "accounts"
-    const isLoanOffice = roleNorm === "loan_office" || roleNorm === "hr_loan_office" || roleNorm === "accounts_loan_office"
+    const role = String(profile.role || "")
+    const roleNorm = role.toLowerCase().replace(/[\s-]+/g, "_")
     const isAdmin = roleNorm === "admin"
+    const canViewFdQueue = canEnterFdScore(role) || canApproveFdScore(role)
 
-    if (!isAccountsExecutive && !isLoanOffice && !isAdmin) {
+    if (!canViewFdQueue && !isAdmin) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
 
     const url = new URL(request.url)
     const statusParam = url.searchParams.get("status") || "pending_review"
+    if (statusParam === "pending_review" && !canApproveFdScore(role) && !isAdmin) {
+      return NextResponse.json({ error: "Only Accounts Executive can view the FD approval queue" }, { status: 403 })
+    }
 
     // Map the requested status filter to actual loan_requests statuses
     // Accounts Executive sees loans where Loan Office has set FD and is awaiting AE decision
@@ -97,6 +146,8 @@ export async function GET(request: Request) {
         created_at,
         submitted_at,
         loan_office_forwarded_at,
+        loan_office_reviewer_id,
+        accounts_reviewer_id,
         user_id
       `)
       .not("fd_score", "is", null)
@@ -114,12 +165,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Database query failed", details: queryError.message }, { status: 500 })
     }
 
-    // Fetch user profiles to get complete staff names
-    const userIds = (loanRequests || []).map(lr => lr.user_id).filter(Boolean)
+    // Fetch user profiles to get complete staff names and FD calculator identity
+    const userIds = Array.from(new Set(
+      (loanRequests || [])
+        .flatMap((lr) => [lr.user_id, lr.loan_office_reviewer_id, lr.accounts_reviewer_id])
+        .filter(Boolean),
+    ))
     const { data: userProfiles, error: profilesError } = userIds.length > 0
       ? await admin
           .from("user_profiles")
-          .select("id, first_name, last_name, employee_id")
+          .select("id, first_name, last_name, employee_id, role")
           .in("id", userIds)
       : { data: [], error: null }
 
@@ -129,20 +184,26 @@ export async function GET(request: Request) {
 
     // Create a map of user profiles for easy lookup
     const profileMap = new Map((userProfiles || []).map(p => [p.id, p]))
+    const fullName = (p?: { first_name?: string | null; last_name?: string | null } | null) =>
+      p ? `${p.first_name || ""} ${p.last_name || ""}`.trim() : ""
 
     // Map to the shape the FD dashboard component expects
     const reviews = (loanRequests || []).map(loan => {
       // Get staff name from profile if loan_requests.staff_full_name is missing
       const profile = profileMap.get(loan.user_id)
-      const staffName = loan.staff_full_name || 
-        (profile ? `${profile.first_name} ${profile.last_name}`.trim() : undefined) ||
-        "Unknown Staff"
+      const calculator = profileMap.get(loan.loan_office_reviewer_id)
+      const reviewer = profileMap.get(loan.accounts_reviewer_id)
+      const staffName = loan.staff_full_name || fullName(profile) || "Unknown Staff"
+      const calculatedByName = fullName(calculator) || null
       
       return {
       id: loan.id,
       loan_request_id: loan.id,
       staff_user_id: loan.user_id,
       staff_name: staffName,
+      calculated_by_name: calculatedByName,
+      calculated_by_role: calculator?.role || null,
+      accounts_reviewer_name: fullName(reviewer) || null,
       staff_number: loan.staff_number,
       loan_type: loan.loan_type_label || loan.loan_type_key,
       requested_amount: loan.requested_amount,
@@ -196,12 +257,14 @@ export async function PATCH(request: Request) {
 
     const { data: profile } = await supabase
       .from("user_profiles")
-      .select("role")
+      .select("role, departments(name, code)")
       .eq("id", user.id)
       .single()
 
-    const roleNorm = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    if (roleNorm !== "accounts_executive" && roleNorm !== "accounts" && roleNorm !== "admin") {
+    const role = String(profile?.role || "")
+    const deptName = (profile as any)?.departments?.name || null
+    const deptCode = (profile as any)?.departments?.code || null
+    if (!canApproveFdScore(role, deptName, deptCode)) {
       return NextResponse.json({ error: "Only Accounts Executive can review FD requests" }, { status: 403 })
     }
 
@@ -217,7 +280,7 @@ export async function PATCH(request: Request) {
     // First, fetch the current loan to preserve original fd_note with calculation details
     const { data: currentLoan, error: fetchError } = await admin
       .from("loan_requests")
-      .select("fd_note, staff_full_name, fd_score, fd_good, loan_type_key, loan_type_label, status")
+      .select("fd_note, staff_full_name, fd_score, fd_good, loan_type_key, loan_type_label, status, user_id, request_number, reference_number, committee_required, hod_reviewer_id, loan_office_reviewer_id, hr_officer_id, director_hr_id")
       .eq("id", review_id)
       .single()
 
@@ -237,10 +300,12 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "FD score must be a whole percentage between 0 and 100." }, { status: 400 })
     }
 
+    const normalizedOriginalScore = Number.isFinite(originalScore) ? Math.round(originalScore) : originalScore
     const normalizedFinalScore = Math.round(finalScore)
-    const scoreChanged = normalizedFinalScore !== Math.round(originalScore)
-    if (scoreChanged && !String(adjustment_reason || "").trim()) {
-      return NextResponse.json({ error: "Provide an adjustment reason when changing the FD score." }, { status: 400 })
+    const scoreChanged = normalizedFinalScore !== normalizedOriginalScore
+    const trimmedAdjustmentReason = String(adjustment_reason || "").trim()
+    if (scoreChanged && !trimmedAdjustmentReason) {
+      return NextResponse.json({ error: "Provide a reason when entering a new FD value without recalculation." }, { status: 400 })
     }
 
     // Block illegal rejections: exempt loan types and scores >= threshold
@@ -277,11 +342,15 @@ export async function PATCH(request: Request) {
     const originalNote = currentLoan?.fd_note || ""
     const approvalMemo = [fd_verification_memo, review_decision].filter(Boolean).join(" | ")
     const adjustmentMemo = scoreChanged
-      ? `FD SCORE ADJUSTMENT: ${Math.round(originalScore)}% -> ${normalizedFinalScore}%. Reason: ${String(adjustment_reason).trim()}`
+      ? formatFdScoreAdjustmentMemo(normalizedOriginalScore, normalizedFinalScore, trimmedAdjustmentReason)
       : ""
     const updatedNote = originalNote 
       ? `${originalNote}\n\n--- Accounts Executive Review (${new Date().toLocaleDateString()}) ---\n${[adjustmentMemo, approvalMemo].filter(Boolean).join("\n")}`
       : [adjustmentMemo, approvalMemo].filter(Boolean).join("\n")
+
+    // Car loans still need Car Loan Committee sign-off after Accounts Executive clears FD.
+    const isCarLoan = Boolean((currentLoan as any)?.committee_required)
+    const finalStatus = isApproved ? (isCarLoan ? "awaiting_committee" : "pending_hr_loan_office") : "fd_rejected"
 
     // Update the loan_requests row directly
     const { data: updatedLoan, error: updateError } = await admin
@@ -289,8 +358,8 @@ export async function PATCH(request: Request) {
       .update({
         fd_score: normalizedFinalScore,
         fd_good: finalFdGood,
-        // Move to next stage: approved FD goes to HR loan office; rejected goes back
-        status: isApproved ? "pending_hr_loan_office" : "fd_rejected",
+        // Move to next stage: approved FD goes to HR loan office (or committee for car loans); rejected goes back
+        status: finalStatus,
         accounts_reviewer_id: user.id,
         fd_note: updatedNote,
         fd_checked_at: new Date().toISOString(),
@@ -314,8 +383,16 @@ export async function PATCH(request: Request) {
         actor_role: "accounts_executive",
         action_key: isApproved ? "fd_approved" : "fd_rejected",
         from_status: "pending_accounts_fd_review",
-        to_status: isApproved ? "pending_hr_loan_office" : "fd_rejected",
+        to_status: finalStatus,
         note: [adjustmentMemo, review_decision || (isApproved ? "FD approved by Accounts Executive" : "FD rejected by Accounts Executive")].filter(Boolean).join(" | "),
+        metadata: scoreChanged
+          ? {
+              fd_original_score: normalizedOriginalScore,
+              fd_verified_score: normalizedFinalScore,
+              fd_adjustment_reason: trimmedAdjustmentReason,
+              fd_manual_override: true,
+            }
+          : { fd_verified_score: normalizedFinalScore, fd_manual_override: false },
       })
 
     if (timelineError) {
@@ -323,12 +400,87 @@ export async function PATCH(request: Request) {
       // Don't fail the whole operation if timeline logging fails
     }
 
+    // Accounts Executive's decision is what issues the rejection letter (or approval
+    // notice) to the staff member — Accounts Office never sends this notification.
+    try {
+      const staffId = String((currentLoan as any)?.user_id || "").trim()
+      const loanForMemo = { ...currentLoan, request_number: updatedLoan?.request_number || (currentLoan as any)?.request_number }
+      const approverIds = [
+        (currentLoan as any)?.hod_reviewer_id,
+        (currentLoan as any)?.loan_office_reviewer_id,
+        (currentLoan as any)?.hr_officer_id,
+        (currentLoan as any)?.director_hr_id,
+      ]
+        .filter(Boolean)
+        .map((id: any) => String(id))
+
+      if (isApproved) {
+        if (staffId) {
+          const staffMemo = isCarLoan
+            ? buildCarLoanHoldNotice(loanForMemo)
+            : `Your request ${loanForMemo.request_number} has FD ${normalizedFinalScore}% (>= ${GOOD_FD_THRESHOLD}%) and is in good standing for consideration.`
+          const memoPath = buildMemoPath(review_id, staffId)
+          await notifyUsers(
+            admin,
+            [staffId],
+            isCarLoan ? "Car Loan in Committee Hold Queue" : "Good FD Standing Confirmed",
+            staffMemo,
+            isCarLoan ? "loan_committee_hold" : "loan_fd_good",
+            { request_id: review_id, fd_score: normalizedFinalScore, memo: staffMemo, memo_path: memoPath },
+          )
+        }
+
+        if (isCarLoan) {
+          const { data: committeeUsers } = await admin
+            .from("user_profiles")
+            .select("id")
+            .in("role", ["loan_committee", "committee_member", "admin"])
+            .eq("is_active", true)
+          await notifyUsers(
+            admin,
+            (committeeUsers || []).map((r: any) => r.id),
+            "Car Loan Committee Queue Updated",
+            `Request ${loanForMemo.request_number} is ready for committee decision after FD confirmation.`,
+            "loan_committee_pending",
+            { request_id: review_id },
+          )
+        }
+      } else {
+        const rejectionReason = review_decision || fd_verification_memo || null
+        const rejectionMemo = buildFdRejectionMemo(loanForMemo, normalizedFinalScore, rejectionReason)
+        if (staffId) {
+          const memoPath = buildMemoPath(review_id, staffId)
+          await notifyUsers(
+            admin,
+            [staffId],
+            "Loan Request Rejected by Accounts Executive",
+            rejectionMemo,
+            "loan_fd_rejected",
+            { request_id: review_id, fd_score: normalizedFinalScore, threshold: GOOD_FD_THRESHOLD, reason: rejectionReason, memo: rejectionMemo, memo_path: memoPath },
+          )
+        }
+
+        if (approverIds.length > 0) {
+          await notifyUsers(
+            admin,
+            Array.from(new Set(approverIds)),
+            "FD Rejection Issued by Accounts Executive",
+            `Request ${loanForMemo.request_number} was rejected by Accounts Executive. FD ${normalizedFinalScore}% below ${GOOD_FD_THRESHOLD}%.${rejectionReason ? ` Reason: ${rejectionReason}` : ""}`,
+            "loan_fd_rejected_approver_notice",
+            { request_id: review_id, fd_score: normalizedFinalScore, threshold: GOOD_FD_THRESHOLD, reason: rejectionReason },
+          )
+        }
+      }
+    } catch (notifyError) {
+      console.warn("[v0] FD decision notification error (non-critical):", notifyError)
+    }
+
     return NextResponse.json({
       success: true,
       review: updatedLoan,
       message: isApproved
-        ? "FD approved. Loan forwarded to HR Loan Office."
-        : "FD rejected. Loan Office has been notified.",
+        ? (isCarLoan ? "FD approved. Loan forwarded to the Car Loan Committee." : "FD approved. Loan forwarded to HR Loan Office.")
+        : "FD rejected by Accounts Executive. Staff and Loan Office have been notified.",
     })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Internal server error"
@@ -360,13 +512,16 @@ export async function POST(request: Request) {
 
     const { data: profile } = await supabase
       .from("user_profiles")
-      .select("role")
+      .select("role, departments(name, code)")
       .eq("id", user.id)
       .single()
 
-    const roleNorm = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    if (!["loan_office", "hr_loan_office", "accounts_loan_office", "admin"].includes(roleNorm)) {
-      return NextResponse.json({ error: "Only Loan Office can submit FD values" }, { status: 403 })
+    const role = String(profile?.role || "")
+    const roleNorm = role.toLowerCase().replace(/[\s-]+/g, "_")
+    const deptName = (profile as any)?.departments?.name || null
+    const deptCode = (profile as any)?.departments?.code || null
+    if (!canEnterFdScore(role, deptName, deptCode)) {
+      return NextResponse.json({ error: "Only Accounts staff can submit FD values for executive review" }, { status: 403 })
     }
 
     const body = await request.json()
@@ -449,6 +604,7 @@ Automated FD Calculation (HR Loan Office):
 - Gross Monthly Salary: GH¢ ${fd_calculation_data.gross_salary_monthly?.toFixed(2)}
 - Existing Gross Deductions: GH¢ ${fd_calculation_data.gross_deductions_monthly?.toFixed(2)}
 - Approx Loan Installment: GH¢ ${fd_calculation_data.loan_installment_monthly?.toFixed(2)}
+- Outstanding monthly burden: GH¢ ${fd_calculation_data.outstanding_installment_monthly?.toFixed(2) ?? "0.00"}
 - Total Monthly Deductions: GH¢ ${fd_calculation_data.total_deductions_monthly?.toFixed(2)}
 - Net Monthly Salary: GH¢ ${fd_calculation_data.net_salary_monthly?.toFixed(2)}
 - ½ of Gross Monthly Salary: GH¢ ${fd_calculation_data.half_gross_monthly?.toFixed(2)}

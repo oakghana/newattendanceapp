@@ -97,6 +97,27 @@ function applySignatureSideWatermark(doc: jsPDF, sigY: number, marginLeft: numbe
   doc.text(MEMO_WATERMARK_TEXT, marginLeft + 2, sigY + 8, { angle: -15 })
 }
 
+async function resolvePdfSignatureImage(source?: string | null) {
+  const signatureSource = String(source || "").trim()
+  if (!signatureSource) return null
+
+  const embeddedMatch = signatureSource.match(/^data:image\/(png|jpe?g|webp);base64,/i)
+  if (embeddedMatch) {
+    return {
+      dataUrl: signatureSource,
+      imageType: embeddedMatch[1].toLowerCase().startsWith("jp") ? "JPEG" : embeddedMatch[1].toUpperCase(),
+    }
+  }
+
+  if (!/^https?:\/\//i.test(signatureSource)) return null
+  const response = await fetch(signatureSource)
+  if (!response.ok) return null
+  const contentType = response.headers.get("content-type") || "image/png"
+  const imageType = contentType.includes("jpeg") || contentType.includes("jpg") ? "JPEG" : contentType.includes("webp") ? "WEBP" : "PNG"
+  const imageBase64 = Buffer.from(await response.arrayBuffer()).toString("base64")
+  return { dataUrl: `data:${contentType};base64,${imageBase64}`, imageType }
+}
+
 async function resolveThroRecipient(admin: any, loan: any, applicantId: string) {
   let reviewerId = loan.hod_reviewer_id ? String(loan.hod_reviewer_id) : ""
 
@@ -372,13 +393,13 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       mdApproverId
         ? admin
             .from("user_profiles")
-            .select("id, first_name, last_name, position, role, signature_data_url")
+            .select("id, first_name, last_name, position, role, signature_data_url, md_signature_url")
             .eq("id", mdApproverId)
             .single()
         : // Fallback: find by role managing_director
           admin
             .from("user_profiles")
-            .select("id, first_name, last_name, position, role, signature_data_url")
+            .select("id, first_name, last_name, position, role, signature_data_url, md_signature_url")
             .eq("role", "managing_director")
             .eq("is_active", true)
             .limit(1)
@@ -414,7 +435,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     // ─── Fetch actual MD signature (for the approval stamp) ────────────
     // Uses mdApproverId (loan.md_approved_by) — NOT the HR Executive
-    let mdStampSignatureUrl = ""
+    let mdStampSignatureUrl = String((mdProfile as any)?.md_signature_url || (mdProfile as any)?.signature_data_url || "").trim()
     let mdStampSignatureText = ""
     const mdProfileId = (mdProfile as any)?.id || mdApproverId
     if (mdProfileId) {
@@ -436,13 +457,16 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
           else if (best?.signature_text) mdStampSignatureText = best.signature_text
         }
       } catch { /* skip */ }
-      // Fallback: signature_data_url from user_profiles
+      // Fallback: the dedicated MD signature field, then the general profile signature.
       if (!mdStampSignatureUrl) {
         try {
-          const { data: mdProf2 } = await admin.from("user_profiles").select("signature_data_url").eq("id", mdProfileId).single()
-          if ((mdProf2 as any)?.signature_data_url) mdStampSignatureUrl = (mdProf2 as any).signature_data_url
+          const { data: mdProf2 } = await admin.from("user_profiles").select("md_signature_url, signature_data_url").eq("id", mdProfileId).single()
+          mdStampSignatureUrl = String((mdProf2 as any)?.md_signature_url || (mdProf2 as any)?.signature_data_url || "").trim()
         } catch { /* skip */ }
       }
+    }
+    if (!mdStampSignatureUrl && !mdStampSignatureText) {
+      mdStampSignatureText = fmtName(mdProfile) || String((loan as any).md_approved_by_name || "").trim()
     }
 
     // Load QCC logo
@@ -730,27 +754,22 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       doc.setLineWidth(0.3)
       doc.line(stampX + 4, stampTopY + 10.5, stampX + stampW - 4, stampTopY + 10.5)
 
-      // ── MD signature image — drawn FIRST so APPROVED text renders on top
+      // ── MD signature image — centred above the dashed signature line
       if (mdStampSignatureUrl) {
         try {
-          const sigResp = await fetch(mdStampSignatureUrl)
-          if (sigResp.ok) {
-            const sigBuf = await sigResp.arrayBuffer()
-            const sigB64 = Buffer.from(sigBuf).toString("base64")
-            const ct = sigResp.headers.get("content-type") || "image/png"
-            const imgType = ct.includes("jpeg") ? "JPEG" : "PNG"
-            const sigHeight = 22
-            doc.addImage(`data:${ct};base64,${sigB64}`, imgType, stampX + 2, stampTopY + 10, stampW - 4, sigHeight)
+          const signatureImage = await resolvePdfSignatureImage(mdStampSignatureUrl)
+          if (signatureImage) {
+            doc.addImage(signatureImage.dataUrl, signatureImage.imageType, cx - 23, stampTopY + 19, 46, 10)
           }
         } catch { /* signature optional */ }
       } else if (mdStampSignatureText) {
         doc.setFont("times", "bolditalic")
-        doc.setFontSize(14)
+        doc.setFontSize(11)
         doc.setTextColor(inkR, inkG, inkB)
-        doc.text(mdStampSignatureText, cx, stampTopY + 24, { align: "center" })
+        doc.text(mdStampSignatureText, cx, stampTopY + 27, { align: "center" })
       }
 
-      // ── "APPROVED" — drawn AFTER signature so it appears on top, bold and visible
+      // ── "APPROVED"
       doc.setFont("helvetica", "bold")
       doc.setFontSize(17)
       doc.setTextColor(inkR, inkG, inkB)

@@ -178,10 +178,10 @@ export async function GET(request: NextRequest) {
         `${req.user_id}::${req.adjusted_end_date || req.preferred_end_date}`
       ] || null
       const confirmationStatus = confirmation?.confirmation_status || (
-        confirmation?.first_check_in_date
+        confirmation?.first_hod_rm_check_in_date
           ? 'confirmed'
-          : confirmation?.first_hod_rm_check_in_date
-            ? 'pending_hr_manual'
+          : confirmation?.first_check_in_date
+            ? 'pending_hod_rm'
             : null
       )
 

@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 import { getDeviceInfo } from "@/lib/device-info"
-import { trackLeaveResumption, checkLeaveOverdueBlock } from "@/lib/leave-resumption-service"
+import { trackLeaveResumption, processStaffResumptionCheckIn, checkLeaveOverdueBlock } from "@/lib/leave-resumption-service"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 30
@@ -235,25 +235,12 @@ export async function POST(request: NextRequest) {
       // Non-fatal — continue
     }
 
-    // Track leave resumption (0-9 day window). The confirmation endpoint
-    // below changes the record to pending HOD/RM verification.
+    // Track leave resumption (0-9 day window) and trigger confirmation workflow
     try {
-      await trackLeaveResumption(supabaseUser.id, new Date())
+      const todayStr = new Date().toISOString().split('T')[0]
+      await processStaffResumptionCheckIn(supabaseUser.id, todayStr)
     } catch (resumptionError) {
-      console.error("[v0] Error tracking leave resumption:", resumptionError)
-    }
-
-    try {
-      await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/leave/resumption/trigger-check-in`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: supabaseUser.id,
-          check_in_date: new Date().toISOString().split('T')[0],
-        }),
-      })
-    } catch (confirmationError) {
-      console.error('[v0] Error triggering fast check-in resumption confirmation:', confirmationError)
+      console.error("[v0] Error processing fast check-in resumption confirmation:", resumptionError)
     }
 
     const elapsedTime = performance.now() - startTime

@@ -55,16 +55,20 @@ export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
 
   const candidates = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return (loans || [])
-      .filter((l) => TRACKABLE.has(String(l.status || '')) || Boolean(l.repayment_status))
-      .filter((l) => {
-        if (!q) return true
-        return [l.staff_full_name, l.staff_number, l.request_number, l.loan_type_label]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
-      })
+    const unique = new Map<string, LoanLite>()
+    for (const loan of loans || []) {
+      if (!loan?.id || unique.has(loan.id)) continue
+      if (!TRACKABLE.has(String(loan.status || '')) && !loan.repayment_status) continue
+      unique.set(loan.id, loan)
+    }
+    return Array.from(unique.values()).filter((l) => {
+      if (!q) return true
+      return [l.staff_full_name, l.staff_number, l.request_number, l.loan_type_label]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(q)
+    })
   }, [loans, search])
 
   useEffect(() => {
@@ -169,18 +173,19 @@ export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
                   <button
                     key={loan.id}
                     type="button"
+                    data-loan-repayment-item
                     onClick={() => setSelectedId(loan.id)}
                     className={`w-full rounded-lg border p-3 text-left text-sm transition ${
-                      selectedId === loan.id ? 'border-violet-400 bg-violet-50' : 'border-slate-200 hover:bg-slate-50'
+                      selectedId === loan.id ? 'border-violet-400 bg-violet-50' : 'border-slate-200 bg-white hover:bg-slate-50'
                     }`}
                   >
                     <div className="font-medium text-slate-900">{loan.staff_full_name || 'Staff'}</div>
-                    <div className="text-xs text-slate-500">
+                    <div className="text-xs text-slate-600">
                       {loan.request_number} · {loan.loan_type_label || 'Loan'}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-1">
-                      <Badge variant="outline" className="text-[10px]">{loan.status}</Badge>
-                      <Badge variant="outline" className="text-[10px]">
+                      <Badge variant="outline" className="border-slate-300 bg-white text-[10px] text-slate-700">{loan.status}</Badge>
+                      <Badge variant="outline" className="border-slate-300 bg-white text-[10px] text-slate-700">
                         GHc {amount(loan).toLocaleString('en-GH', { minimumFractionDigits: 2 })}
                       </Badge>
                     </div>

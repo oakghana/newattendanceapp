@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 import { requiresLatenessReason, isExemptFromAttendanceReasons, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept, shouldSkipSystemAutoCheckout } from "@/lib/attendance-utils"
-import { trackLeaveResumption, checkLeaveOverdueBlock } from "@/lib/leave-resumption-service"
+import { trackLeaveResumption, processStaffResumptionCheckIn, checkLeaveOverdueBlock } from "@/lib/leave-resumption-service"
 import { validateAttendanceReason } from "@/lib/meaningful-text"
 
 export const runtime = 'nodejs'
@@ -906,30 +906,12 @@ export async function POST(request: NextRequest) {
 
     // Track the return check-in and immediately move the leave record into
     // HOD/RM verification. This prevents the stale warning from remaining
-    // visible after a valid check-in.
+    // visible after a valid check-in and dispatches alerts directly.
     try {
-      await trackLeaveResumption(user.id, new Date())
+      const todayStr = new Date().toISOString().split('T')[0]
+      await processStaffResumptionCheckIn(user.id, todayStr)
     } catch (resumptionError) {
-      console.error('[v0] Non-critical error tracking leave resumption:', resumptionError)
-    }
-
-    // ── Trigger resumption confirmation workflow ──────────────────────────
-    // If staff is checking in after leave ended, notify HOD/RM for verification
-    try {
-      const confirmationRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/leave/resumption/trigger-check-in`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: user.id,
-          check_in_date: new Date().toISOString().split('T')[0],
-        }),
-      })
-      if (!confirmationRes.ok) {
-        console.warn('[v0] Confirmation workflow trigger failed (non-fatal)')
-      }
-    } catch (confirmErr) {
-      console.error('[v0] Error triggering confirmation workflow:', confirmErr)
-      // Non-fatal — don't block check-in
+      console.error('[v0] Non-critical error processing leave resumption check-in:', resumptionError)
     }
 
     return NextResponse.json({ 
