@@ -3,8 +3,10 @@
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, Clock, FileText, Loader2, Download } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { CheckCircle2, Clock, FileText, Loader2, Download, Eye, ShieldAlert } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { canConfirmDisbursement } from "@/lib/role-capabilities"
 
 interface DisbursedLoan {
   id: string
@@ -32,7 +34,18 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
   const supabase = createClient()
   const { toast } = useToast()
 
+  const canConfirm = canConfirmDisbursement(userProfile?.role)
+
   const handleConfirmDisbursement = async (loanId: string) => {
+    if (!canConfirm) {
+      toast({
+        title: "Permission Denied",
+        description: "Only Accounts Executive / Accounts Officers are authorized to confirm loan disbursements.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setConfirmingId(loanId)
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -169,23 +182,30 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
                         <span className="text-xs text-slate-400">{loan.loan_type_label}</span>
                       </div>
                     </div>
-                    <Button
-                      onClick={() => handleConfirmDisbursement(loan.id)}
-                      disabled={confirmingId === loan.id}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-2 rounded-lg inline-flex items-center gap-2 transition-all disabled:opacity-50"
-                    >
-                      {confirmingId === loan.id ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Confirming...
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 className="h-4 w-4" />
-                          Confirm Received
-                        </>
-                      )}
-                    </Button>
+                    {canConfirm ? (
+                      <Button
+                        onClick={() => handleConfirmDisbursement(loan.id)}
+                        disabled={confirmingId === loan.id}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-2 rounded-lg inline-flex items-center gap-2 transition-all disabled:opacity-50"
+                      >
+                        {confirmingId === loan.id ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Confirming...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="h-4 w-4" />
+                            Confirm Received
+                          </>
+                        )}
+                      </Button>
+                    ) : (
+                      <Badge variant="outline" className="bg-slate-100 text-slate-600 border-slate-300 font-medium px-3 py-1.5 flex items-center gap-1.5">
+                        <Eye className="h-3.5 w-3.5 text-slate-500" />
+                        View Only (Accounts Only)
+                      </Badge>
+                    )}
                   </div>
                 </div>
               ))}
