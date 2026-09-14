@@ -4,8 +4,9 @@ import { NextRequest, NextResponse } from "next/server"
 export const dynamic = "force-dynamic"
 
 /**
- * GET: Fetch payment advice memos submitted by the current HR LEAVE_OFFICE user
- * Used for Monthly Summary tab to prevent duplicate submissions
+ * GET: Fetch the shared payment advice queue for HR Leave Office
+ * Used by the Monthly Summary tab and duplicate checks so officers see requests
+ * submitted by every HR Leave Office user.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -20,11 +21,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const { data: userProfile, error: profileError } = await admin
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single()
+
+    const normalizedRole = String(userProfile?.role || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[-\s]+/g, "_")
+    const canViewHrPaymentQueue = ["admin", "hr_leave_office", "leave_office"].includes(normalizedRole)
+
+    if (profileError || !canViewHrPaymentQueue) {
+      return NextResponse.json(
+        { error: "Only HR Leave Office staff can view submitted payment advice requests" },
+        { status: 403 },
+      )
+    }
+
     // Get month filter from query params (format: YYYY-MM)
     const { searchParams } = new URL(request.url)
     const month = searchParams.get("month")
 
-    // Build query to fetch memos SUBMITTED BY this HR Leave Office user
+    // HR Leave Office needs one shared queue. Do not scope this to the
+    // current officer, otherwise another officer can create a duplicate.
     let query = admin
       .from("leave_payment_memos")
       .select(
@@ -45,7 +66,6 @@ export async function GET(request: NextRequest) {
         status
       `
       )
-      .eq("hr_leave_office_id", user.id) // Memos submitted BY this user
       .order("created_at", { ascending: false })
 
     // Filter by month if provided (format: YYYY-MM)
@@ -98,7 +118,7 @@ export async function GET(request: NextRequest) {
       )]
 
       // Fetch signer profiles with signatures
-      let signerMap: Record<string, { name: string; position: string; signature_data_url: string }> = {}
+      const signerMap: Record<string, { name: string; position: string; signature_data_url: string }> = {}
       if (signerIds.length > 0) {
         const { data: signers } = await admin
           .from("user_profiles")

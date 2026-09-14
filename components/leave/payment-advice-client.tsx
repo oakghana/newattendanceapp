@@ -96,7 +96,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [approvedPage, setApprovedPage] = useState(1)
   const ITEMS_PER_PAGE = 10
 
-  // HR LEAVE_OFFICE: Track submitted memos to prevent duplicates
+  // HR LEAVE_OFFICE: Track every memo in the shared office queue to prevent duplicates
   const [submittedMemos, setSubmittedMemos] = useState<any[]>([])
   const [loadingSubmittedMemos, setLoadingSubmittedMemos] = useState(false)
   const [summaryMonth, setSummaryMonth] = useState(new Date().toISOString().slice(0, 7))
