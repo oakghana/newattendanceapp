@@ -740,9 +740,8 @@ export async function GET(request: NextRequest) {
     const isHrApprover = isHrApproverRole(role, departmentName, departmentCode)
     const isHr = isHrOffice || isHrApprover || isHrPlanningRole(role, departmentName, departmentCode)
 
-    // Resolve HOD linkage early — HR executives who are also linked as HODs
-    // must bypass the hr_office branch and enter the HOD/manager branch so
-    // they can see and act on leave requests from their assigned staff.
+    // Resolve HOD linkage early so HR users who are also linked as HODs can
+    // receive the separate HOD review queue as well as their HR Office queue.
     const { data: earlyHodLinkRows } = await admin
       .from("loan_hod_linkages")
       .select("staff_user_id")
@@ -751,8 +750,11 @@ export async function GET(request: NextRequest) {
     const isLinkedHodEarly = (earlyHodLinkRows || []).length > 0
 
     // ── HR Leave Office mode: sees HOD-approved requests, can adjust & forward ─
-    // Skip this branch if user is also a linked HOD so they enter HOD mode instead.
-    if (isHrOffice && !isHrApprover && !isLinkedHodEarly) {
+    // HR Leave Office users must always retain their office queue even when they
+    // are also linked as a HOD. The HOD review queue is loaded separately; using
+    // the linkage as a reason to skip this branch made their HR Office queue
+    // appear empty while requests were still waiting at HR Leave Office.
+    if (isHrOffice && !isHrApprover) {
       let officeQuery = admin
         .from("leave_plan_requests")
         .select(`
