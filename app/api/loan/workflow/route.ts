@@ -104,6 +104,9 @@ function stageOwnerForDelay(row: any) {
   if (status === "awaiting_hr_terms") {
     return { ownerId: row.hr_officer_id || null, ownerRole: "hr_office", stage: "HR Terms" }
   }
+  if (status === "awaiting_hr_executives") {
+    return { ownerId: row.hr_officer_id || null, ownerRole: "hr_executive", stage: "HR Executive" }
+  }
   if (status === "awaiting_director_hr") {
     return { ownerId: row.director_hr_id || null, ownerRole: "director_hr", stage: "Director HR" }
   }
@@ -116,7 +119,7 @@ async function broadcastDelayedPostLoanOfficeRequests(admin: any) {
   const { data: staleRows, error } = await admin
     .from("loan_requests")
     .select("id, request_number, status, updated_at, accounts_reviewer_id, committee_reviewer_id, hr_officer_id, director_hr_id")
-    .in("status", ["sent_to_accounts", "awaiting_committee", "awaiting_hr_terms", "awaiting_director_hr"])
+    .in("status", ["sent_to_accounts", "awaiting_committee", "awaiting_hr_terms", "awaiting_hr_executives", "awaiting_director_hr"])
     .lte("updated_at", cutoffIso)
 
   if (error || !staleRows || staleRows.length === 0) return
@@ -504,7 +507,7 @@ export async function GET() {
         : Promise.resolve({ data: [], error: null } as any),
       hrOfficeQ,
       showDirectorHr
-        ? admin.from("loan_requests").select("*").in("status", ["awaiting_director_hr", "pending_hr_executive_review"]).order("created_at", { ascending: false })
+        ? admin.from("loan_requests").select("*").in("status", ["awaiting_hr_executives", "awaiting_director_hr", "pending_hr_executive_review"]).order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null } as any),
       showDirectorHr
         ? admin

@@ -2,10 +2,16 @@ import { createClient } from '@supabase/supabase-js'
 import { differenceInDays, format } from 'date-fns'
 import { sendNotification, sendEmail } from './notification-service'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
+function getSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!url || !serviceRoleKey) {
+    throw new Error('Supabase environment variables are not configured')
+  }
+
+  return createClient(url, serviceRoleKey)
+}
 
 export interface LeaveResumptionRecord {
   id: string
@@ -27,7 +33,7 @@ export async function createLeaveResumptionTrackingForLeaveRequest(leaveRequest:
   end_date: string
 }) {
   try {
-    const { data: existingRecord, error: existingError } = await supabase
+    const { data: existingRecord, error: existingError } = await getSupabase()
       .from('leave_resumption_notifications')
       .select('id')
       .eq('leave_request_id', leaveRequest.id)
@@ -42,7 +48,7 @@ export async function createLeaveResumptionTrackingForLeaveRequest(leaveRequest:
       return existingRecord
     }
 
-    const { data: createdRecord, error: insertError } = await supabase
+    const { data: createdRecord, error: insertError } = await getSupabase()
       .from('leave_resumption_notifications')
       .insert({
         user_id: leaveRequest.user_id,
@@ -89,7 +95,7 @@ export async function processStaffResumptionCheckIn(userId: string, checkInDateS
     const today = checkInDateStr || format(new Date(), 'yyyy-MM-dd')
 
     // Find any unconfirmed/pending leave resumption record for this user
-    const { data: resumptionRecords, error: fetchError } = await supabase
+    const { data: resumptionRecords, error: fetchError } = await getSupabase()
       .from('leave_resumption_notifications')
       .select('id, user_id, leave_request_id, leave_end_date, confirmation_status, status')
       .eq('user_id', userId)
@@ -107,7 +113,7 @@ export async function processStaffResumptionCheckIn(userId: string, checkInDateS
 
     // If no record exists in leave_resumption_notifications, check if there is an approved leave in leave_plan_requests
     if (!targetRecord) {
-      const { data: approvedLeave } = await supabase
+      const { data: approvedLeave } = await getSupabase()
         .from('leave_plan_requests')
         .select('id, user_id, preferred_end_date, adjusted_end_date, leave_type_key')
         .eq('user_id', userId)
@@ -118,7 +124,7 @@ export async function processStaffResumptionCheckIn(userId: string, checkInDateS
 
       if (approvedLeave) {
         const effectiveEnd = String(approvedLeave.adjusted_end_date || approvedLeave.preferred_end_date || '').slice(0, 10)
-        const { data: newRecord } = await supabase
+        const { data: newRecord } = await getSupabase()
           .from('leave_resumption_notifications')
           .insert({
             user_id: userId,
@@ -142,7 +148,7 @@ export async function processStaffResumptionCheckIn(userId: string, checkInDateS
     }
 
     // Update leave_resumption_notifications
-    await supabase
+    await getSupabase()
       .from('leave_resumption_notifications')
       .update({
         first_check_in_date: today,
@@ -154,7 +160,7 @@ export async function processStaffResumptionCheckIn(userId: string, checkInDateS
       .eq('id', targetRecord.id)
 
     // Check existing confirmation record
-    const { data: existingConfirmation } = await supabase
+    const { data: existingConfirmation } = await getSupabase()
       .from('leave_resumption_confirmations')
       .select('id')
       .eq('leave_resumption_id', targetRecord.id)
@@ -163,7 +169,7 @@ export async function processStaffResumptionCheckIn(userId: string, checkInDateS
     let confirmationId = existingConfirmation?.id
 
     if (!confirmationId) {
-      const { data: newConfirmation, error: confirmErr } = await supabase
+      const { data: newConfirmation, error: confirmErr } = await getSupabase()
         .from('leave_resumption_confirmations')
         .insert({
           leave_resumption_id: targetRecord.id,
@@ -181,7 +187,7 @@ export async function processStaffResumptionCheckIn(userId: string, checkInDateS
         confirmationId = newConfirmation?.id
       }
     } else {
-      await supabase
+      await getSupabase()
         .from('leave_resumption_confirmations')
         .update({
           staff_check_in_date: today,
@@ -194,14 +200,14 @@ export async function processStaffResumptionCheckIn(userId: string, checkInDateS
     // Audit trail logging
     try {
       if (confirmationId) {
-        await supabase.from('resumption_confirmation_audit').insert({
+        await getSupabase().from('resumption_confirmation_audit').insert({
           confirmation_id: confirmationId,
           user_id: userId,
           action: 'check_in_claimed',
           notes: `Staff checked in on ${today}, initiating HOD/RM verification requirement`,
         })
       }
-      await supabase.from('leave_resumption_audit').insert({
+      await getSupabase().from('leave_resumption_audit').insert({
         leave_resumption_id: targetRecord.id,
         user_id: userId,
         event_type: 'check_in_claimed',
@@ -212,7 +218,7 @@ export async function processStaffResumptionCheckIn(userId: string, checkInDateS
     }
 
     // Fetch staff details for notification messages
-    const { data: staffUser } = await supabase
+    const { data: staffUser } = await getSupabase()
       .from('user_profiles')
       .select('id, first_name, last_name, full_name, employee_id, department_id, supervisor_id')
       .eq('id', userId)
@@ -221,7 +227,7 @@ export async function processStaffResumptionCheckIn(userId: string, checkInDateS
     const staffDisplayName = staffUser?.full_name || `${staffUser?.first_name || ''} ${staffUser?.last_name || ''}`.trim() || 'Staff member'
 
     // 1. Notify HOD / Regional Manager
-    const { data: hodLinks } = await supabase
+    const { data: hodLinks } = await getSupabase()
       .from('loan_hod_linkages')
       .select('hod_user_id')
       .eq('staff_user_id', userId)
@@ -241,11 +247,11 @@ export async function processStaffResumptionCheckIn(userId: string, checkInDateS
         notification_type: 'leave_resumption_needs_hod_verification',
         is_read: false,
       }))
-      await supabase.from('staff_notifications').insert(hodNotifs).catch(() => {})
+      await getSupabase().from('staff_notifications').insert(hodNotifs).catch(() => {})
     }
 
     // 2. Notify the Staff Member
-    await supabase.from('staff_notifications').insert({
+    await getSupabase().from('staff_notifications').insert({
       recipient_id: userId,
       sender_id: userId,
       sender_role: 'system',
@@ -256,7 +262,7 @@ export async function processStaffResumptionCheckIn(userId: string, checkInDateS
     }).catch(() => {})
 
     // 3. Notify HR Leave Office / HR Executive
-    const { data: hrUsers } = await supabase
+    const { data: hrUsers } = await getSupabase()
       .from('user_profiles')
       .select('id')
       .in('role', ['hr_leave_office', 'hr_executive', 'director_hr'])
@@ -273,7 +279,7 @@ export async function processStaffResumptionCheckIn(userId: string, checkInDateS
         notification_type: 'leave_resumption_claimed',
         is_read: false,
       }))
-      await supabase.from('staff_notifications').insert(hrNotifs).catch(() => {})
+      await getSupabase().from('staff_notifications').insert(hrNotifs).catch(() => {})
     }
 
     return {
@@ -299,7 +305,7 @@ export async function markAsResumed(
 ) {
   try {
     // Update record as resumed
-    const { data: updatedRecord, error: updateError } = await supabase
+    const { data: updatedRecord, error: updateError } = await getSupabase()
       .from('leave_resumption_notifications')
       .update({
         status: 'resumed',
@@ -316,7 +322,7 @@ export async function markAsResumed(
     }
 
     // Get staff details
-    const { data: staffUser } = await supabase
+    const { data: staffUser } = await getSupabase()
       .from('user_profiles')
       .select('*')
       .eq('id', userId)
@@ -342,7 +348,7 @@ export async function markAsResumed(
  */
 export async function checkLeaveOverdueBlock(userId: string): Promise<{ isBlocked: boolean; daysOverdue?: number; leaveEndDate?: string }> {
   try {
-    const { data: overdueRecords, error } = await supabase
+    const { data: overdueRecords, error } = await getSupabase()
       .from('leave_resumption_notifications')
       .select('*')
       .eq('user_id', userId)
@@ -397,7 +403,7 @@ export async function checkAndEscalateNonResumption() {
     const today = new Date()
 
     // Find all pending leave records
-    const { data: pendingRecords, error: fetchError } = await supabase
+    const { data: pendingRecords, error: fetchError } = await getSupabase()
       .from('leave_resumption_notifications')
       .select('*, user_profiles:user_id(full_name, email, department, supervisor_id)')
       .in('status', ['pending', 'warning_sent', 'letter_sent'])
@@ -440,7 +446,7 @@ export async function sendEscalationNotification(
     }
 
     // Get supervisors (HOD, RM, HR roles)
-    const { data: supervisors } = await supabase
+    const { data: supervisors } = await getSupabase()
       .from('user_profiles')
       .select('*')
       .or(`id.eq.${staffUser.supervisor_id},role.in.("department_head","regional_manager","hr_executive","hr_leave_office","director_hr")`)
@@ -454,7 +460,7 @@ export async function sendEscalationNotification(
     }
 
     // Update record status
-    await supabase
+    await getSupabase()
       .from('leave_resumption_notifications')
       .update({
         status: statusMap[level],
@@ -627,7 +633,7 @@ async function generateAndSendResumptionMemo(
  */
 async function notifySupervisorsOfResumption(staff: any, record: any) {
   // Get supervisors
-  const { data: supervisors } = await supabase
+  const { data: supervisors } = await getSupabase()
     .from('user_profiles')
     .select('*')
     .or(`id.eq.${staff.supervisor_id},role.in.("department_head","regional_manager","hr_executive","hr_leave_office")`)
@@ -655,7 +661,7 @@ async function logAuditTrail(
   description: string
 ) {
   try {
-    await supabase.from('leave_resumption_audit').insert({
+    await getSupabase().from('leave_resumption_audit').insert({
       leave_resumption_id: recordId,
       user_id: userId,
       event_type: eventType,

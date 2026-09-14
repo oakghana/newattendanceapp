@@ -47,6 +47,8 @@ interface MonthlySummaryData {
 const statusColors: Record<string, { bg: string; text: string }> = {
   draft: { bg: "bg-gray-100", text: "text-gray-800" },
   ready_for_review: { bg: "bg-yellow-100", text: "text-yellow-800" },
+  forwarded_to_accounts: { bg: "bg-blue-100", text: "text-blue-800" },
+  acknowledged_by_accounts: { bg: "bg-indigo-100", text: "text-indigo-800" },
   reviewed_by_hr: { bg: "bg-green-100", text: "text-green-800" },
   approved: { bg: "bg-green-100", text: "text-green-800" },
   finalized: { bg: "bg-green-100", text: "text-green-800" },
@@ -55,6 +57,8 @@ const statusColors: Record<string, { bg: string; text: string }> = {
 const statusLabels: Record<string, string> = {
   draft: "Draft",
   ready_for_review: "Ready for Review",
+  forwarded_to_accounts: "Forwarded to Accounts",
+  acknowledged_by_accounts: "Acknowledged by Accounts",
   reviewed_by_hr: "Approved",
   approved: "Approved",
   finalized: "Finalized",
@@ -268,7 +272,7 @@ export function MonthlySummaryTab() {
       <Card>
         <CardHeader>
           <CardTitle>Monthly Summary - {monthDisplay}</CardTitle>
-          <CardDescription>View and download payment advice memos for all staff categories</CardDescription>
+            <CardDescription>View every annual leave payment advice request sent to the HR Leave Office, including its current signing status.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -297,6 +301,8 @@ export function MonthlySummaryTab() {
                   <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="draft">Draft</SelectItem>
                   <SelectItem value="ready_for_review">Ready for Review</SelectItem>
+                  <SelectItem value="forwarded_to_accounts">Forwarded to Accounts</SelectItem>
+                  <SelectItem value="acknowledged_by_accounts">Acknowledged by Accounts</SelectItem>
                   <SelectItem value="reviewed_by_hr,approved,finalized">Approved Only</SelectItem>
                 </SelectContent>
               </Select>

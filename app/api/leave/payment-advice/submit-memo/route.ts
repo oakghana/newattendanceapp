@@ -84,8 +84,22 @@ export async function POST(request: NextRequest) {
 
     // CRITICAL VALIDATION: Verify signer has HR Executive role
     // All roles that can sign/approve payment advice memos
-    const validHrRoles = ["hr_executive", "hr_manager", "hr_director", "director_hr", "hr_officer", "manager_hr", "manager", "deputy_hr"]
-    if (!validHrRoles.includes(signerProfile.role)) {
+    const signerRole = String(signerProfile.role || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[-\s]+/g, "_")
+    const validHrRoles = [
+      "hr_executive",
+      "hr_executive_officer",
+      "hr_manager",
+      "hr_director",
+      "director_hr",
+      "hr_officer",
+      "manager_hr",
+      "manager",
+      "deputy_hr",
+    ]
+    if (!validHrRoles.includes(signerRole)) {
       console.warn("[v0] Invalid signer role attempt:", {
         signerId: selectedSigner.id,
         signerRole: signerProfile.role,
@@ -162,21 +176,46 @@ export async function POST(request: NextRequest) {
     const errors: string[] = []
     const skippedDuplicates: string[] = []
 
-    // Check for existing memos to prevent duplicates
+    // Check every existing memo, including drafts, so an annual leave request
+    // cannot be entered twice before the first memo reaches a signer.
     const staffIds = staffList.map((s: any) => s.user_id).filter(Boolean)
-    const { data: existingMemos } = await admin
-      .from("leave_payment_memos")
-      .select("staff_id, memo_subject, status")
-      .in("staff_id", staffIds)
-      .like("memo_subject", `%${month}%`)
-      .in("status", ["ready_for_review", "reviewed_by_hr", "forwarded_to_accounts"])
+    const leaveRequestIds = staffList.map((s: any) => s.leave_plan_request_id).filter(Boolean)
+    const existingMemosByRequest = leaveRequestIds.length
+      ? await admin
+          .from("leave_payment_memos")
+          .select("leave_plan_request_id, staff_id, memo_subject, status")
+          .in("leave_plan_request_id", leaveRequestIds)
+      : { data: [], error: null }
+    const existingMemosByStaffAndMonth = staffIds.length
+      ? await admin
+          .from("leave_payment_memos")
+          .select("leave_plan_request_id, staff_id, memo_subject, status")
+          .in("staff_id", staffIds)
+          .like("memo_subject", `%${month}%`)
+      : { data: [], error: null }
 
-    const existingStaffIds = new Set(existingMemos?.map((m) => m.staff_id) || [])
+    if (existingMemosByRequest.error || existingMemosByStaffAndMonth.error) {
+      console.error("[v0] Could not check existing payment memos:", {
+        requestError: existingMemosByRequest.error,
+        staffMonthError: existingMemosByStaffAndMonth.error,
+      })
+      return NextResponse.json(
+        { error: "Could not verify existing payment advice requests. Please try again." },
+        { status: 500 },
+      )
+    }
+
+    const existingRequestIds = new Set(
+      (existingMemosByRequest.data || []).map((memo: any) => memo.leave_plan_request_id).filter(Boolean),
+    )
+    const existingStaffIds = new Set(
+      (existingMemosByStaffAndMonth.data || []).map((memo: any) => memo.staff_id).filter(Boolean),
+    )
 
     for (const staff of staffList) {
-      // Skip if this staff already has a memo for this month
-      if (existingStaffIds.has(staff.user_id)) {
-        skippedDuplicates.push(`${staff.full_name} already has a pending/approved payment memo for ${month}`)
+      // Skip if this leave request or staff/month already has a memo.
+      if (existingRequestIds.has(staff.leave_plan_request_id) || existingStaffIds.has(staff.user_id)) {
+        skippedDuplicates.push(`${staff.full_name} already has a payment memo recorded for ${month}`)
         continue
       }
 
