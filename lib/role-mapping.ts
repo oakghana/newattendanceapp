@@ -4,8 +4,13 @@
  */
 
 // API role mapping: converts UI roles to database storage format
+//
+// NOTE: 'accounts' and 'accounts_executive' are DISTINCT roles and must never be
+// collapsed into one another here. Accounts staff calculate/forward FD values;
+// Accounts Executives review and approve those forwarded FD values before they
+// reach the HR Loan Office. Merging them breaks the FD Approval workflow and
+// makes the two roles indistinguishable in the UI.
 export const API_ROLE_MAPPINGS: Record<string, string> = {
-  'accounts_executive': 'accounts',
   'hr_executive': 'hr_leave_office',
   'driver': 'driver',
   'managing_director': 'managing_director'
@@ -13,7 +18,6 @@ export const API_ROLE_MAPPINGS: Record<string, string> = {
 
 // Reverse mapping: converts database roles back to UI display format
 const REVERSE_ROLE_MAPPINGS: Record<string, string> = {
-  'accounts': 'accounts_executive',
   'hr_office': 'hr_leave_office',
   'hr_leave_office': 'hr_leave_office',
 };

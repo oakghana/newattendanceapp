@@ -111,10 +111,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     } = body
     let { role } = body
 
-    // Map non-database roles to their database equivalents
-    if (role === "accounts_executive") {
-      role = "accounts"
-    }
+    // Map non-database roles to their database equivalents.
+    // NOTE: 'accounts' and 'accounts_executive' are distinct roles (Accounts forwards
+    // FD values, Accounts Executive reviews/approves them) and must NOT be collapsed.
     if (role === "hr_executive") {
       role = "hr_leave_office"
     }
