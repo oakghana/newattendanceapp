@@ -35,10 +35,16 @@ export async function GET(request: NextRequest) {
     }
 
     // Only allow HR staff to view all memos
+    const normalizedRole = String(userProfile.role || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[-\s]+/g, "_")
     const hrRoles = [
       "hr_executive",
+      "hr_executive_officer",
       "hr_manager",
       "hr_director",
+      "director_hr",
       "hr_officer",
       "manager_hr",
       "manager",
@@ -47,7 +53,7 @@ export async function GET(request: NextRequest) {
       "leave_office",
       "admin",
     ]
-    if (!hrRoles.includes(userProfile.role)) {
+    if (!hrRoles.includes(normalizedRole)) {
       return NextResponse.json(
         { error: `Access denied. Your role (${userProfile.role}) is not authorized to view payment memos.` },
         { status: 403 }

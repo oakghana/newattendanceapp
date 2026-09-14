@@ -24,9 +24,32 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Admins and HR Executives can see ALL pending memos (admin client bypasses RLS)
-    // Show memos that are in ready_for_review status (submitted by HR Leave Office for approval)
-    // We filter for status = ready_for_review which indicates HR Leave Office has completed processing
+    const { data: profile } = await admin
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single()
+    const userRole = String(profile?.role || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[-\s]+/g, "_")
+    const canReviewPaymentAdvice = [
+      "admin",
+      "hr_executive",
+      "hr_executive_officer",
+      "hr_manager",
+      "hr_director",
+      "director_hr",
+      "manager_hr",
+      "deputy_hr",
+    ].includes(userRole)
+
+    if (!canReviewPaymentAdvice) {
+      return NextResponse.json({ error: "Only HR Executives can review payment advice" }, { status: 403 })
+    }
+
+    // HR Leave Office submits memos with ready_for_review. Those are the
+    // requests HR Executive users must see and approve.
     const { data: pendingMemos, error } = await admin
       .from("leave_payment_memos")
       .select(
@@ -66,7 +89,7 @@ export async function GET(request: NextRequest) {
     const memoList = pendingMemos || []
     const staffIds = [...new Set(memoList.map((m: any) => m.staff_id).filter(Boolean))]
 
-    let locationMap: Record<string, string> = {}
+    const locationMap: Record<string, string> = {}
     if (staffIds.length > 0) {
       const { data: profiles } = await admin
         .from("user_profiles")
@@ -75,7 +98,7 @@ export async function GET(request: NextRequest) {
 
       if (profiles && profiles.length > 0) {
         const locationIds = [...new Set(profiles.map((p: any) => p.assigned_location_id).filter(Boolean))]
-        let geoMap: Record<string, string> = {}
+        const geoMap: Record<string, string> = {}
 
         if (locationIds.length > 0) {
           const { data: locations } = await admin
