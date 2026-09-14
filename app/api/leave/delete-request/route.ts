@@ -1,16 +1,22 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
-const admin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
+function getAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!url || !serviceRoleKey) {
+    throw new Error('Supabase environment variables are not configured')
+  }
+
+  return createClient(url, serviceRoleKey)
+}
 
 /**
  * DELETE /api/leave/delete-request
  * 
  * Safely deletes a specific leave request from the database.
- * Only admin users can delete leave requests.
+ * Only authorized users can delete leave requests.
  * Deletes related data in proper order to avoid foreign key violations.
  */
 export async function DELETE(request: NextRequest) {
@@ -26,7 +32,7 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Get the current user to verify they are an admin
+    // Get the current user to verify their identity
     const authHeader = request.headers.get('Authorization') || ''
     const token = authHeader.replace('Bearer ', '')
 
@@ -37,7 +43,7 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    const { data: { user }, error: authError } = await admin.auth.getUser(token)
+    const { data: { user }, error: authError } = await getAdmin().auth.getUser(token)
 
     if (authError || !user) {
       return NextResponse.json(
@@ -46,8 +52,8 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Verify user is admin
-    const { data: profile } = await admin
+    // Verify user is getAdmin()
+    const { data: profile } = await getAdmin()
       .from('user_profiles')
       .select('role')
       .eq('id', user.id)
@@ -61,7 +67,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Get the leave request details first for audit logging
-    const { data: leaveRequest, error: fetchError } = await admin
+    const { data: leaveRequest, error: fetchError } = await getAdmin()
       .from('leave_requests')
       .select('*')
       .eq('id', leaveRequestId)
@@ -78,43 +84,43 @@ export async function DELETE(request: NextRequest) {
 
     // Delete related records in dependency order
     // 1. Delete from leave_balance_transactions (if any)
-    await admin
+    await getAdmin()
       .from('leave_balance_transactions')
       .delete()
       .eq('leave_request_id', leaveRequestId)
 
     // 2. Delete from leave_status (if any)
-    await admin
+    await getAdmin()
       .from('leave_status')
       .delete()
       .eq('leave_request_id', leaveRequestId)
 
     // 3. Delete from leave_payment_memos (if any)
-    await admin
+    await getAdmin()
       .from('leave_payment_memos')
       .delete()
       .eq('leave_request_id', leaveRequestId)
 
     // 4. Delete from leave_notifications (if any)
-    await admin
+    await getAdmin()
       .from('leave_notifications')
       .delete()
       .eq('leave_request_id', leaveRequestId)
 
     // 5. Delete from leave_archive_log (if any)
-    await admin
+    await getAdmin()
       .from('leave_archive_log')
       .delete()
       .eq('leave_request_id', leaveRequestId)
 
     // 6. Delete from leave_change_proposals (if any)
-    await admin
+    await getAdmin()
       .from('leave_change_proposals')
       .delete()
       .eq('leave_request_id', leaveRequestId)
 
     // 7. Finally, delete the leave request itself
-    const { error: deleteError } = await admin
+    const { error: deleteError } = await getAdmin()
       .from('leave_requests')
       .delete()
       .eq('id', leaveRequestId)
@@ -166,7 +172,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if the leave request exists
-    const { data: leaveRequest, error: fetchError } = await admin
+    const { data: leaveRequest, error: fetchError } = await getAdmin()
       .from('leave_requests')
       .select('id, staff_name, status, preferred_start_date')
       .eq('id', leaveRequestId)
@@ -186,19 +192,19 @@ export async function GET(request: NextRequest) {
       { count: memoCount },
       { count: notificationCount },
     ] = await Promise.all([
-      admin
+      getAdmin()
         .from('leave_balance_transactions')
         .select('id', { count: 'exact', head: true })
         .eq('leave_request_id', leaveRequestId),
-      admin
+      getAdmin()
         .from('leave_status')
         .select('id', { count: 'exact', head: true })
         .eq('leave_request_id', leaveRequestId),
-      admin
+      getAdmin()
         .from('leave_payment_memos')
         .select('id', { count: 'exact', head: true })
         .eq('leave_request_id', leaveRequestId),
-      admin
+      getAdmin()
         .from('leave_notifications')
         .select('id', { count: 'exact', head: true })
         .eq('leave_request_id', leaveRequestId),

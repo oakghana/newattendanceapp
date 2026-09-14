@@ -1,10 +1,16 @@
 import { createClient } from '@supabase/supabase-js'
 import { emailService } from './email-service'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
+function getSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!url || !serviceRoleKey) {
+    throw new Error('Supabase environment variables are not configured')
+  }
+
+  return createClient(url, serviceRoleKey)
+}
 
 export interface NotificationOptions {
   userId: string
@@ -33,7 +39,7 @@ export async function sendNotification(options: NotificationOptions) {
     const { userId, title, message, type, severity = 'medium', actionUrl, data } = options
 
     // Get user details
-    const { data: user } = await supabase
+    const { data: user } = await getSupabase()
       .from('user_profiles')
       .select('email')
       .eq('id', userId)
@@ -45,7 +51,7 @@ export async function sendNotification(options: NotificationOptions) {
     }
 
     // Create notification record in database using staff_notifications (live table)
-    const { error } = await supabase.from('staff_notifications').insert({
+    const { error } = await getSupabase().from('staff_notifications').insert({
       recipient_id: userId,
       sender_id: userId,       // system notification — sender = self
       sender_role: 'system',
@@ -105,7 +111,7 @@ export async function createDashboardNotification(
   severity: 'low' | 'medium' | 'high' | 'critical'
 ) {
   try {
-    const { error } = await supabase
+    const { error } = await getSupabase()
       .from('dashboard_notifications')
       .insert({
         user_id: userId,
