@@ -87,7 +87,7 @@ export function MonthlySummaryTab() {
   })
   const [statusFilter, setStatusFilter] = useState("all")
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(["Manager", "Senior", "Junior"]))
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(["Manager", "Senior", "Junior", "Unassigned"]))
   const { toast } = useToast()
 
   // Fetch monthly summary on mount and when filters change
@@ -210,7 +210,7 @@ export function MonthlySummaryTab() {
   return (
     <div className="space-y-6">
       {/* Summary Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-gray-600">Total Memos</CardTitle>
@@ -266,6 +266,25 @@ export function MonthlySummaryTab() {
             </div>
           </CardContent>
         </Card>
+
+        <Card className="border-blue-200">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-gray-600">Sent for Approval</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-baseline gap-2">
+              <div className="text-3xl font-bold text-blue-600">
+                {(summaryData?.summary.byStatus.ready_for_review || 0) +
+                  (summaryData?.summary.byStatus.forwarded_to_accounts || 0) +
+                  (summaryData?.summary.byStatus.acknowledged_by_accounts || 0) +
+                  (summaryData?.summary.byStatus.reviewed_by_hr || 0) +
+                  (summaryData?.summary.byStatus.approved || 0) +
+                  (summaryData?.summary.byStatus.finalized || 0)}
+              </div>
+              <CheckCircle className="h-4 w-4 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters Card */}
@@ -311,6 +330,18 @@ export function MonthlySummaryTab() {
         </CardContent>
       </Card>
 
+      {/* Staff-level register */}
+      {!loading && summaryData && summaryData.memos.length > 0 && (
+        <Card className="border-2 border-blue-200">
+          <CardHeader className="bg-blue-50">
+            <CardTitle className="text-base">Who Has Been Sent for Approval</CardTitle>
+            <CardDescription>
+              Each row is one annual leave payment advice request. Use the status and signer columns to avoid creating a duplicate.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+
       {/* Staff Category Sections */}
       {loading ? (
         <Card>
@@ -328,7 +359,7 @@ export function MonthlySummaryTab() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {["Manager", "Senior", "Junior"].map((category) => {
+          {["Manager", "Senior", "Junior", "Unassigned"].map((category) => {
             const categoryMemos = memosByCategory[category] || []
             const categoryCount = categoryMemos.length
 
@@ -350,7 +381,7 @@ export function MonthlySummaryTab() {
                           {category} Staff - {selectedMonth}
                         </CardTitle>
                         <CardDescription>
-                          {categoryCount} staff member{categoryCount !== 1 ? "s" : ""} pending approval
+                          {categoryCount} payment request{categoryCount !== 1 ? "s" : ""} in this month
                         </CardDescription>
                       </div>
                     </div>
@@ -366,9 +397,10 @@ export function MonthlySummaryTab() {
                   <CardContent className="space-y-4 pt-0">
                     {/* Header Row */}
                     <div className="grid grid-cols-12 gap-2 text-sm font-semibold text-gray-700 bg-gray-100 p-3 rounded">
-                      <div className="col-span-3">Name</div>
-                      <div className="col-span-2">Staff No.</div>
-                      <div className="col-span-2">Rank</div>
+                      <div className="col-span-2">Name</div>
+                      <div className="col-span-1">Staff No.</div>
+                      <div className="col-span-1">Rank</div>
+                      <div className="col-span-3">Leave Period</div>
                       <div className="col-span-2">Signer</div>
                       <div className="col-span-2">Status</div>
                       <div className="col-span-1 text-center">Action</div>
@@ -381,12 +413,16 @@ export function MonthlySummaryTab() {
 
                       return (
                         <div key={memo.id} className="grid grid-cols-12 gap-2 items-center p-3 border rounded hover:bg-gray-50">
-                          <div className="col-span-3">
+                          <div className="col-span-2">
                             <p className="font-medium text-gray-900">{memo.staff_name}</p>
                           </div>
-                          <div className="col-span-2 text-sm text-gray-700">{memo.staff_number}</div>
-                          <div className="col-span-2 text-sm text-gray-700">{memo.rank || "N/A"}</div>
-                          <div className="col-span-2 text-sm text-gray-700">{memo.signer_name || "Pending"}</div>
+                          <div className="col-span-1 text-sm text-gray-700">{memo.staff_number}</div>
+                          <div className="col-span-1 text-sm text-gray-700">{memo.rank || "N/A"}</div>
+                          <div className="col-span-3 text-sm text-gray-700">
+                            <div>{formatDate(memo.leave_period_start)} – {formatDate(memo.leave_period_end)}</div>
+                            <div className="text-xs text-gray-500">{memo.approved_days} day{memo.approved_days !== 1 ? "s" : ""}</div>
+                          </div>
+                          <div className="col-span-2 text-sm text-gray-700">{memo.signer_name || "Pending assignment"}</div>
                           <div className="col-span-2">
                             <Badge className={`text-xs font-semibold ${statusColor.bg} ${statusColor.text} border-0`}>
                               {statusLabels[memo.status] || memo.status}
