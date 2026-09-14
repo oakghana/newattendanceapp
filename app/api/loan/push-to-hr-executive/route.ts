@@ -54,12 +54,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update loan status to awaiting_director_hr
+    // HR Loan Office forwards first to the HR Executive stage. The HR Executive
+    // then approves and advances the request to the Director HR/MD stage.
     const now = new Date().toISOString()
     const { data: updatedLoan, error: updateError } = await admin
       .from('loan_requests')
       .update({
-        status: 'awaiting_director_hr',
+        status: 'awaiting_hr_executives',
+        director_hr_id: null,
         hr_note: memo,
         hr_officer_id: user.id,
         hr_forwarded_at: now,
