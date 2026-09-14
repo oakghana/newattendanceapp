@@ -28,7 +28,10 @@ export function isRegionalManagerRole(role: string | null | undefined) {
 }
 
 export function isDepartmentHeadRole(role: string | null | undefined) {
-  return ["department_head", "hod", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(normalizeWorkflowRole(role))
+  // Accounts Executive is the department head of the Accounts department at
+  // non-regional/head-office locations: they apply for their own leave (with
+  // the same HOD self-leave bypass) and approve leave for their staff.
+  return ["department_head", "hod", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director", "accounts_executive"].includes(normalizeWorkflowRole(role))
 }
 
 export function isSelfLeaveRole(role: string | null | undefined, locationName?: string | null) {
@@ -280,11 +283,14 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
     hodId = eligible?.id || null
   }
   if (!hodId && profile.department_id && isExcludedLocation(assignedLocation?.name)) {
+    // Accounts Executive is the department head of Accounts at non-regional
+    // locations, so they qualify for this same-department fallback alongside
+    // the literal "department_head" role.
     const { data: departmentHod } = await admin
       .from("user_profiles")
       .select("id")
       .eq("department_id", profile.department_id)
-      .eq("role", "department_head")
+      .in("role", ["department_head", "accounts_executive"])
       .eq("is_active", true)
       .limit(1)
       .maybeSingle()
