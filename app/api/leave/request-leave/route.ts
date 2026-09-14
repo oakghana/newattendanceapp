@@ -334,11 +334,14 @@ export async function POST(request: NextRequest) {
         }
 
         if (legacyHodIds.length === 0 && (staffProfile as any)?.department_id) {
+          // Accounts Executive is the department head of Accounts at
+          // non-regional/head-office locations, so they qualify as a fallback
+          // HOD for their department's staff alongside the literal HOD roles.
           const { data: deptHods } = await admin
             .from("user_profiles")
             .select("id, role")
             .eq("department_id", (staffProfile as any).department_id)
-            .in("role", ["department_head", "manager_hr", "director_hr"])
+            .in("role", ["department_head", "manager_hr", "director_hr", "accounts_executive"])
             .eq("is_active", true)
             .limit(20)
 
