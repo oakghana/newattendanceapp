@@ -202,14 +202,28 @@ async function resolveManagerReviewers(admin: any, userId: string, departmentId:
     .eq("staff_user_id", userId)
     .limit(20)
 
-  for (const row of linkages || []) {
-    const reviewerId = String((row as any)?.hod_user_id || "")
-    if (reviewerId && !linkedReviewerIds.includes(reviewerId)) linkedReviewerIds.push(reviewerId)
+  const linkedHodIds = (linkages || [])
+    .map((row: any) => String(row?.hod_user_id || ""))
+    .filter(Boolean)
+  const { data: linkedHodProfiles } = linkedHodIds.length
+    ? await admin.from("user_profiles").select("id, role").in("id", linkedHodIds).eq("is_active", true)
+    : { data: [] }
+  const eligibleLinkedHodIds = new Set(
+    (linkedHodProfiles || [])
+      .filter((profile: any) => ["department_head", "hr_executive"].includes(normalizeRoleValue(profile.role)))
+      .map((profile: any) => String(profile.id)),
+  )
+
+  for (const reviewerId of linkedHodIds) {
+    if (eligibleLinkedHodIds.has(reviewerId) && !linkedReviewerIds.includes(reviewerId)) {
+      linkedReviewerIds.push(reviewerId)
+    }
   }
 
-  // Legacy/non-regional requests must resolve only to Department Heads.
-  // Regional Managers are created by the regional pipeline, never this path.
-  const HOD_ROLES = ["department_head"]
+  // HR Leave Office is an operations role, not an HOD role. HR Executive
+  // may act as HOD; the explicit role filter above prevents stale linkages
+  // from granting HOD access to HR Leave Office users.
+  const HOD_ROLES = ["department_head", "hr_executive"]
 
   if (linkedReviewerIds.length > 0) {
     const { data: linkedReviewers } = await admin
@@ -220,7 +234,7 @@ async function resolveManagerReviewers(admin: any, userId: string, departmentId:
       .eq("is_active", true)
 
     const reviewers = (linkedReviewers || []).filter((r: any) =>
-      r.role === "department_head" &&
+      ["department_head", "hr_executive"].includes(normalizeRoleValue(r.role)) &&
       String(r.assigned_location_id || "") === assignedLocationId &&
       Boolean(r.department_id && departmentId && r.department_id === departmentId),
     ).map((r: any) => ({
@@ -238,7 +252,7 @@ async function resolveManagerReviewers(admin: any, userId: string, departmentId:
     .eq("is_active", true)
 
   return (reviewers || []).filter((r: any) => {
-    return r.role === "department_head" && Boolean(r.department_id && departmentId && r.department_id === departmentId)
+    return ["department_head", "hr_executive"].includes(normalizeRoleValue(r.role)) && Boolean(r.department_id && departmentId && r.department_id === departmentId)
   }).map((r: any) => ({ id: String(r.id), role: String(r.role || "") }))
 }
 
@@ -742,12 +756,19 @@ export async function GET(request: NextRequest) {
 
     // Resolve HOD linkage early so HR users who are also linked as HODs can
     // receive the separate HOD review queue as well as their HR Office queue.
-    const { data: earlyHodLinkRows } = await admin
-      .from("loan_hod_linkages")
-      .select("staff_user_id")
-      .eq("hod_user_id", user.id)
-      .limit(1)
-    const isLinkedHodEarly = (earlyHodLinkRows || []).length > 0
+  const { data: earlyHodLinkRows } = await admin
+    .from("loan_hod_linkages")
+    .select("staff_user_id")
+    .eq("hod_user_id", user.id)
+    .limit(20)
+  const linkedStaffIds = (earlyHodLinkRows || []).map((row: any) => String(row?.staff_user_id || "")).filter(Boolean)
+  const { data: earlyHodProfile } = await admin
+    .from("user_profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle()
+  const isLinkedHodEarly =
+    ["department_head", "hr_executive"].includes(normalizeRoleValue(earlyHodProfile?.role)) && linkedStaffIds.length > 0
 
     // ── HR Leave Office mode: sees HOD-approved requests, can adjust & forward ─
     // HR Leave Office users must always retain their office queue even when they

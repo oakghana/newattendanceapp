@@ -600,17 +600,15 @@ export function StaffManagement() {
     setHodLinkError(null)
     try {
       // Fetch all roles that act as head of department in parallel
-      const [resDH, resRM, resMHR, resDHR] = await Promise.all([
+      const [resDH, resRM, resHRE] = await Promise.all([
         authenticatedFetch("/api/admin/staff?role=department_head&limit=200"),
         authenticatedFetch("/api/admin/staff?role=regional_manager&limit=200"),
-        authenticatedFetch("/api/admin/staff?role=manager_hr&limit=200"),
-        authenticatedFetch("/api/admin/staff?role=director_hr&limit=200"),
+        authenticatedFetch("/api/admin/staff?role=hr_executive&limit=200"),
       ])
-      const [dh, rm, mhr, dhr]: StaffMember[][] = await Promise.all([
+      const [dh, rm, hre]: StaffMember[][] = await Promise.all([
         resDH.json().then((d: any) => d.data || []),
         resRM.json().then((d: any) => d.data || []),
-        resMHR.json().then((d: any) => d.data || []),
-        resDHR.json().then((d: any) => d.data || []),
+        resHRE.json().then((d: any) => d.data || []),
       ])
       const staffLocationId = String(member.assigned_location_id || "")
       const staffLocationName = normalizeLocationName(member.geofence_locations?.name)
@@ -679,7 +677,7 @@ export function StaffManagement() {
       }
 
       const seen = new Set<string>()
-      const unique = [...rm, ...dh, ...mhr, ...dhr]
+      const unique = [...rm, ...dh, ...hre]
         .filter((s) => {
           if (!s?.id || s.id === member.id || s.is_active === false || seen.has(s.id)) return false
           seen.add(s.id)
