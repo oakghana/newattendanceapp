@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 // Roles permitted to approve payments
 const HR_APPROVER_ROLES = ["hr_executive", "hr_leave_office", "admin"]
-const ACCOUNTS_APPROVER_ROLES = ["accounts_executive", "accounts", "admin"]
+const ACCOUNTS_APPROVER_ROLES = ["accounts_executive", "admin"]
 
 export async function PUT(request: NextRequest) {
   try {
@@ -52,6 +52,11 @@ export async function PUT(request: NextRequest) {
     }
     if (!approvalStatus || !["approved", "rejected"].includes(approvalStatus)) {
       return NextResponse.json({ error: "Invalid approvalStatus: must be 'approved' or 'rejected'" }, { status: 400 })
+    }
+
+    // HR has audit visibility but does not approve or clear repayment schedules.
+    if (approvalType === "hr") {
+      return NextResponse.json({ error: "HR can audit payment evidence, but only an Accounts Executive can approve and clear a settlement." }, { status: 403 })
     }
 
     // Check authorization based on approval type
@@ -106,6 +111,13 @@ export async function PUT(request: NextRequest) {
     if (updateError) {
       console.error("[v0] Error updating payment record:", updateError)
       return NextResponse.json({ error: "Failed to update payment record" }, { status: 500 })
+    }
+
+    if (approvalType === "accounts" && approvalStatus === "approved" && String(paymentRecord.description || "").startsWith("[FULL SETTLEMENT]")) {
+      const { error: scheduleError } = await admin.from("loan_repayment_schedule").update({ status: "paid", paid_date: paymentRecord.payment_date, payment_record_id: paymentRecord.id }).eq("loan_request_id", paymentRecord.loan_request_id).neq("status", "paid")
+      if (scheduleError) console.error("[v0] Settlement schedule close error:", scheduleError)
+      await admin.from("loan_requests").update({ status: "payment_completed", repayment_status: "completed" }).eq("id", paymentRecord.loan_request_id)
+      await admin.from("loan_payment_records").update({ overall_status: "completed" }).eq("id", paymentRecord.id)
     }
 
     // Send notification to the approver and staff member

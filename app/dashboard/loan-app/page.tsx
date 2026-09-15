@@ -26,6 +26,7 @@ import { FDCalculationSubmission } from "@/components/loan/fd-calculation-submis
 import { HRLoanOfficeFDApproved } from "@/components/loan/hr-loan-office-fd-approved"
 import { RepaymentTrackingPanel } from "@/components/loan/repayment-tracking-panel"
 import { RunningLoansReport } from "@/components/loan/running-loans-report"
+import { SettlementInitiationPanel } from "@/components/loan/settlement-initiation-panel"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { GOOD_FD_THRESHOLD, canEnterFdScore as canEnterFdScoreForRole, isPoorFdScore } from "@/lib/loan-workflow"
@@ -1849,7 +1850,7 @@ export default function LoanAppPage() {
   // Fetch payment records for approval
   useEffect(() => {
     const fetchPaymentRecords = async () => {
-      const isApprover = ["hr_executive", "accounts_executive", "admin"].includes(data?.profile?.role || "")
+      const isApprover = ["hr_executive", "hr_leave_office", "hr_loan_office", "accounts_loan_office", "accounts_executive", "admin"].includes(data?.profile?.role || "")
       if (!isApprover) return
 
       setPaymentRecordsLoading(true)
@@ -3835,7 +3836,7 @@ export default function LoanAppPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="loan-office" className="space-y-5">
+        <TabsContent value="loan-office" className="flex flex-col gap-5">
           <ReadOnlyHint canAct={Boolean(p?.loanOffice || p?.hrOffice)} roleLabel="Loan Office / HR Office" />
 
           {/* ── Section navigator ── */}
@@ -3895,7 +3896,7 @@ export default function LoanAppPage() {
           </div>
 
           {/* ── Processing Queue ── */}
-          <div id="loan-office-loanOfficeQueue" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div id="loan-office-loanOfficeQueue" className="order-2 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
             {/* section header */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
               <button type="button" data-loan-section-toggle className="flex flex-1 items-center gap-2 text-left" onClick={() => toggleSection("loanOfficeQueue")}>
@@ -4136,7 +4137,7 @@ export default function LoanAppPage() {
           </div>
 
           {/* ── HR Terms Queue ── */}
-          <div id="loan-office-hrTermsQueue" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div id="loan-office-hrTermsQueue" className="order-1 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
               <button type="button" data-loan-section-toggle className="flex flex-1 items-center gap-2 text-left" onClick={() => toggleSection("hrTermsQueue")}>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.hrTermsQueue ? "-rotate-90" : ""}`} />
@@ -4264,7 +4265,7 @@ export default function LoanAppPage() {
 
           {/* ── Payment Completion Queue ── */}
           {p?.hrOffice && (
-            <div id="loan-office-paymentCompletion" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div id="loan-office-paymentCompletion" className="order-3 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
               <button type="button" data-loan-section-toggle className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("paymentCompletion")}>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.paymentCompletion ? "-rotate-90" : ""}`} />
                 <div>
@@ -4305,7 +4306,7 @@ export default function LoanAppPage() {
 
           {/* ── Loan type breakdown ── */}
           {loanOfficeTypeSummary.length > 0 && (
-            <div id="loan-office-loanTypeBreakdown" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div id="loan-office-loanTypeBreakdown" className="order-3 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
               <button type="button" data-loan-section-toggle className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("loanTypeBreakdown")}>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.loanTypeBreakdown ? "-rotate-90" : ""}`} />
                 <div>
@@ -4341,7 +4342,7 @@ export default function LoanAppPage() {
           )}
 
           {/* ── Analytics strip ── */}
-          <div id="loan-office-loanOfficeAnalytics" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div id="loan-office-loanOfficeAnalytics" className="order-3 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
             <button type="button" data-loan-section-toggle className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("loanOfficeAnalytics")}>
               <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.loanOfficeAnalytics ? "-rotate-90" : ""}`} />
               <div>
@@ -4404,7 +4405,7 @@ export default function LoanAppPage() {
           </div>
 
           {/* ── FD-Approved from Accounts Executive ── */}
-          <div id="loan-office-loanOfficeFdApproved" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div id="loan-office-loanOfficeFdApproved" className="order-3 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
             <button type="button" data-loan-section-toggle className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("loanOfficeFdApproved")}>
               <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.loanOfficeFdApproved ? "-rotate-90" : ""}`} />
               <div>
@@ -5637,10 +5638,11 @@ export default function LoanAppPage() {
                 {(() => {
                   // For HR/Accounts executives, fetch pending payments for their approval
                   const userRole = data?.profile?.role || ""
-                  const isHrApprover = ["hr_executive", "admin"].includes(userRole)
+                  const isHrApprover = ["hr_executive", "hr_leave_office", "hr_loan_office", "admin"].includes(userRole)
                   const isAccountsApprover = ["accounts_executive", "admin"].includes(userRole)
+                  const isAuditViewer = ["hr_executive", "hr_leave_office", "hr_loan_office", "accounts_loan_office", "accounts_executive", "admin"].includes(userRole)
                   
-                  if (!isHrApprover && !isAccountsApprover) {
+                  if (!isAuditViewer) {
                     return (
                       <div className="rounded-lg border border-slate-200 p-6 text-center text-slate-500">
                         <Receipt className="h-12 w-12 text-slate-300 mx-auto mb-3" />
@@ -5670,8 +5672,8 @@ export default function LoanAppPage() {
                   return paymentRecords.map((payment) => {
                     const needsHrApproval = isHrApprover && payment.hr_approval_status === "pending"
                     const needsAccountsApproval = isAccountsApprover && payment.accounts_approval_status === "pending"
-                    const canApprove = needsHrApproval || needsAccountsApproval
-                    const approvalType = needsHrApproval ? "hr" : needsAccountsApproval ? "accounts" : null
+                    const canApprove = isAccountsApprover && needsAccountsApproval
+                    const approvalType = canApprove ? "accounts" : null
 
                     return (
                       <div key={payment.id} className="rounded-lg border border-slate-200 p-4">
@@ -5778,9 +5780,10 @@ export default function LoanAppPage() {
         </TabsContent>
 
         {/* ── Repayment Tracking ── */}
-        <TabsContent value="running-loans" className="space-y-4">
-          <RunningLoansReport />
-        </TabsContent>
+<TabsContent value="running-loans" className="space-y-4">
+  {normalizedRole === "hr_loan_office" && <SettlementInitiationPanel />}
+  <RunningLoansReport />
+  </TabsContent>
 
         <TabsContent value="repayment-tracking" className="space-y-4">
           <RepaymentTrackingPanel
@@ -7771,7 +7774,7 @@ export default function LoanAppPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Memo Review Modal (Executive HR / Director HR) ──────────── */}
+      {/* ���─ Memo Review Modal (Executive HR / Director HR) ──────────── */}
       <Dialog open={memoReviewModal.open} onOpenChange={(o) => {
         setMemoReviewModal((s) => ({ ...s, open: o }))
         if (!o && actionModal.actionType === "hr_terms" && actionModal.row) {
@@ -8063,8 +8066,7 @@ export default function LoanAppPage() {
               Submit Payment Evidence
             </DialogTitle>
             <DialogDescription>
-              Upload supporting evidence of payment (receipt, bank transfer confirmation, etc.) for HR Executive approval.
-              Once approved, the loan will be marked as fully repaid.
+Upload one full-settlement evidence record for HR audit and Accounts Executive approval. HR and the Accounts Loan Office can submit evidence; only an Accounts Executive can approve and clear the repayment schedule.
             </DialogDescription>
           </DialogHeader>
 
@@ -8252,8 +8254,9 @@ export default function LoanAppPage() {
                       paymentMethod: paymentEvidenceModal.paymentMethod,
                       referenceNumber: paymentEvidenceModal.referenceNumber,
                       description: paymentEvidenceModal.description || null,
-                      evidenceFileUrl: null,
-                    }),
+  evidenceFileUrl: null,
+  isFullSettlement: true,
+  }),
                   })
 
                   if (!response.ok) {
