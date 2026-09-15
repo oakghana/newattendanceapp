@@ -599,15 +599,19 @@ export function StaffManagement() {
     setHodLinkHodIds(((member as any).hod_links || []).map((hod: any) => String(hod.id)))
     setHodLinkError(null)
     try {
-      // Only Department Heads and Regional Managers can be selected as HODs.
-      // Regional HR/HR Leave Office users must never appear in this list.
-      const [resDH, resRM] = await Promise.all([
+      // Only HR Executive, Accounts Executive, Regional Manager, and
+      // Department Head users can be selected as HODs.
+      const [resDH, resRM, resHRE, resAE] = await Promise.all([
         authenticatedFetch("/api/admin/staff?role=department_head&limit=200"),
         authenticatedFetch("/api/admin/staff?role=regional_manager&limit=200"),
+        authenticatedFetch("/api/admin/staff?role=hr_executive&limit=200"),
+        authenticatedFetch("/api/admin/staff?role=accounts_executive&limit=200"),
       ])
-      const [dh, rm]: StaffMember[][] = await Promise.all([
+      const [dh, rm, hre, ae]: StaffMember[][] = await Promise.all([
         resDH.json().then((d: any) => d.data || []),
         resRM.json().then((d: any) => d.data || []),
+        resHRE.json().then((d: any) => d.data || []),
+        resAE.json().then((d: any) => d.data || []),
       ])
       const staffLocationId = String(member.assigned_location_id || "")
       const staffLocationName = normalizeLocationName(member.geofence_locations?.name)
@@ -676,7 +680,7 @@ export function StaffManagement() {
       }
 
       const seen = new Set<string>()
-      const unique = [...rm, ...dh]
+      const unique = [...rm, ...dh, ...hre, ...ae]
         .filter((s) => {
           if (!s?.id || s.id === member.id || s.is_active === false || seen.has(s.id)) return false
           seen.add(s.id)
