@@ -171,11 +171,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       // For now, just allow the assignment (validation would be on the linking table)
     }
 
-    if (profile.role === "it-admin" && (targetProfile.role === "admin" || targetProfile.role === "it-admin")) {
-      console.error("[v0] Staff API PUT - IT-Admin tried to edit admin/it-admin user")
+    const normalizedTargetRole = String(targetProfile.role || "").trim().toLowerCase().replace(/[-\s]+/g, "_")
+    const protectedItAdminTarget = ["admin", "administrator", "it_admin", "itadmin"].includes(normalizedTargetRole)
+    const normalizedRequesterRole = String(profile.role || "").trim().toLowerCase().replace(/[-\s]+/g, "_")
+
+    if (normalizedRequesterRole === "it_admin" && protectedItAdminTarget) {
+      console.error("[v0] Staff API PUT - IT-Admin tried to modify protected account")
       return NextResponse.json(
         {
-          error: "IT-Admin users cannot edit Admin or IT-Admin accounts",
+          error: "IT-Admin users cannot modify Administrator or IT-Admin accounts",
         },
         { status: 403 },
       )

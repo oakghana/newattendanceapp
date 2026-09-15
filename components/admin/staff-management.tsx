@@ -599,16 +599,19 @@ export function StaffManagement() {
     setHodLinkHodIds(((member as any).hod_links || []).map((hod: any) => String(hod.id)))
     setHodLinkError(null)
     try {
-      // Fetch all roles that act as head of department in parallel
-      const [resDH, resRM, resHRE] = await Promise.all([
+      // Only HR Executive, Accounts Executive, Regional Manager, and
+      // Department Head users can be selected as HODs.
+      const [resDH, resRM, resHRE, resAE] = await Promise.all([
         authenticatedFetch("/api/admin/staff?role=department_head&limit=200"),
         authenticatedFetch("/api/admin/staff?role=regional_manager&limit=200"),
         authenticatedFetch("/api/admin/staff?role=hr_executive&limit=200"),
+        authenticatedFetch("/api/admin/staff?role=accounts_executive&limit=200"),
       ])
-      const [dh, rm, hre]: StaffMember[][] = await Promise.all([
+      const [dh, rm, hre, ae]: StaffMember[][] = await Promise.all([
         resDH.json().then((d: any) => d.data || []),
         resRM.json().then((d: any) => d.data || []),
         resHRE.json().then((d: any) => d.data || []),
+        resAE.json().then((d: any) => d.data || []),
       ])
       const staffLocationId = String(member.assigned_location_id || "")
       const staffLocationName = normalizeLocationName(member.geofence_locations?.name)
@@ -677,7 +680,7 @@ export function StaffManagement() {
       }
 
       const seen = new Set<string>()
-      const unique = [...rm, ...dh, ...hre]
+      const unique = [...rm, ...dh, ...hre, ...ae]
         .filter((s) => {
           if (!s?.id || s.id === member.id || s.is_active === false || seen.has(s.id)) return false
           seen.add(s.id)
@@ -1526,7 +1529,11 @@ export function StaffManagement() {
                                 : "h-8 gap-1.5 px-2.5 bg-chart-2 text-white hover:bg-chart-2/90"
                             }
                             disabled={
-                              isItAdmin && (member.role === "admin" || member.role === "it-admin")
+                              isItAdmin &&
+                              member.is_active &&
+                              ["admin", "administrator", "it-admin", "it_admin"].includes(
+                                String(member.role || "").trim().toLowerCase().replace(/[-\s]+/g, "_"),
+                              )
                             }
                           >
                             {member.is_active ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}

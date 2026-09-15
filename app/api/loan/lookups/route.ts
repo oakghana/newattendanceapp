@@ -75,11 +75,11 @@ function validateStaffHodRule(
   // Any HOD-capable approver may be linked to any staff member regardless of
   // location. Location (regional staff) and department (non-regional staff)
   // only drive the recommended ordering in the UI, not eligibility.
-  const allowedHodRoles = ["department_head", "regional_manager", "hr_executive"]
+  const allowedHodRoles = ["department_head", "regional_manager", "hr_executive", "accounts_executive"]
   if (!allowedHodRoles.includes(hodRole)) {
     return {
       ok: false,
-      reason: "Only Department Heads, Regional Managers, or HR Executives can be assigned as an HOD. HR Leave Office users cannot be HODs.",
+      reason: "Only HR Executives, Accounts Executives, Regional Managers, or Department Heads can be assigned as an HOD.",
     }
   }
 
