@@ -1,24 +1,31 @@
 import { NextResponse } from "next/server"
 import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
+import {
+  canDoAccounts,
+  canDoHrOffice,
+  canDoLoanOffice,
+  isAccountsExecutiveRole,
+  isAdminRole,
+  normalizeRole,
+} from "@/lib/loan-workflow"
 
 const ALLOWED_ROLES = new Set([
-  "admin",
-  "administrator",
-  "super_admin",
-  "god",
   "accounts",
   "accounts_executive",
+  "account_executive",
+  "accounts_exec",
+  "accounts_loan_office",
   "hr_loan_office",
-  "hr-loan-office",
   "hr_loan",
+  "loan_office",
+  "loan_officer",
+  "hr_office",
+  "manager_hr",
+  "director_hr",
+  "hr_executive",
+  "loan_committee",
+  "committee",
 ])
-
-function normalizeRole(value?: string | null) {
-  return String(value || "")
-    .toLowerCase()
-    .trim()
-    .replace(/[\s-]+/g, "_")
-}
 
 export async function GET() {
   try {
@@ -26,8 +33,26 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const admin = await createAdminClient()
-    const { data: profile } = await admin.from("user_profiles").select("id, role, full_name, staff_number").eq("id", user.id).maybeSingle()
-    if (!profile || !ALLOWED_ROLES.has(normalizeRole(profile.role))) {
+    const { data: profile } = await admin
+      .from("user_profiles")
+      .select("id, role, full_name, staff_number, position")
+      .eq("id", user.id)
+      .maybeSingle()
+    const role = normalizeRole(profile?.role)
+    const departmentName = String((profile as any)?.department_name || "")
+    const departmentCode = String((profile as any)?.department_code || "")
+    const canViewRunningLoans = Boolean(
+      profile && (
+        isAdminRole(role) ||
+        ALLOWED_ROLES.has(role) ||
+        canDoAccounts(role, departmentName, departmentCode) ||
+        canDoLoanOffice(role, departmentName, departmentCode) ||
+        canDoHrOffice(role, departmentName, departmentCode) ||
+        isAccountsExecutiveRole(role) ||
+        /admin|administrator/i.test(String(profile.position || ""))
+      ),
+    )
+    if (!canViewRunningLoans) {
       return NextResponse.json({ error: "You are not authorized to view running loans" }, { status: 403 })
     }
 
