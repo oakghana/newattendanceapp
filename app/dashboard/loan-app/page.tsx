@@ -1650,8 +1650,12 @@ export default function LoanAppPage() {
   }, [loanOfficeTypeOptions, loanOfficeWorkspaceRows])
 
   const filteredLoanOfficeStageRows = useMemo(() => {
-    const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loanOfficeStageBuckets] || []
-    return filterAndSortRows(bucketRows, loanOfficeSearch, loanOfficeStatus, loanOfficeSort, loanOfficeLocation, loanOfficeDept)
+const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loanOfficeStageBuckets] || []
+  const rows = filterAndSortRows(bucketRows, loanOfficeSearch, loanOfficeStatus, loanOfficeSort, loanOfficeLocation, loanOfficeDept)
+  return rows.sort((a, b) => {
+    const priority = (status: string) => status === "hod_approved" ? 0 : status === "pending_hod" ? 1 : 2
+    return priority(String(a.status || "")) - priority(String(b.status || ""))
+  })
   }, [loanOfficeStageBuckets, loanOfficeStageTab, loanOfficeSearch, loanOfficeStatus, loanOfficeSort, loanOfficeLocation, loanOfficeDept])
 
   const loanOfficeAnalytics = useMemo(() => {
