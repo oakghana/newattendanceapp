@@ -200,7 +200,7 @@ ADD COLUMN IF NOT EXISTS repayment_status TEXT DEFAULT 'not_started' CHECK (
 -- ============================================================================
 -- 6. FUNCTION: Auto-generate repayment schedule
 -- ============================================================================
-CREATE OR REPLACE FUNCTION generate_repayment_schedule(
+CREATE OR REPLACE FUNCTION public.generate_repayment_schedule(
   p_loan_request_id TEXT,
   p_start_date DATE DEFAULT CURRENT_DATE,
   p_duration_months INTEGER DEFAULT 12
@@ -212,38 +212,37 @@ DECLARE
   v_current_date DATE;
   v_installment INTEGER := 1;
 BEGIN
-  -- Get loan amount
+  IF p_duration_months IS NULL OR p_duration_months < 1 OR p_duration_months > 120 THEN
+    RAISE EXCEPTION 'Duration must be between 1 and 120 months';
+  END IF;
+
   SELECT fixed_amount INTO v_loan_amount
-  FROM loan_requests
-  WHERE id = p_loan_request_id;
+  FROM public.loan_requests
+  WHERE id::text = p_loan_request_id;
 
   IF v_loan_amount IS NULL THEN
     RAISE EXCEPTION 'Loan request not found: %', p_loan_request_id;
   END IF;
 
-  -- Calculate monthly payment
-  v_monthly_amount := v_loan_amount / p_duration_months;
-  v_current_date := p_start_date + INTERVAL '1 month';
+  v_monthly_amount := round(v_loan_amount / p_duration_months, 2);
+  v_current_date := coalesce(p_start_date, current_date) + INTERVAL '1 month';
 
-  -- Delete existing schedule if any
-  DELETE FROM loan_repayment_schedule WHERE loan_request_id = p_loan_request_id;
+  DELETE FROM public.loan_repayment_schedule WHERE loan_request_id::text = p_loan_request_id;
 
-  -- Generate monthly installments
   FOR v_installment IN 1..p_duration_months LOOP
-    INSERT INTO loan_repayment_schedule (
-      loan_request_id,
-      installment_number,
-      due_date,
-      monthly_amount,
-      status
+    INSERT INTO public.loan_repayment_schedule (
+      loan_request_id, installment_number, due_date, monthly_amount, status
     ) VALUES (
-      p_loan_request_id,
+      p_loan_request_id::uuid,
       v_installment,
-      v_current_date,
-      v_monthly_amount,
+      v_current_date::date,
+      CASE WHEN v_installment = p_duration_months
+        THEN v_loan_amount - (v_monthly_amount * (p_duration_months - 1))
+        ELSE v_monthly_amount
+      END,
       'pending'
     )
-    RETURNING id, v_monthly_amount INTO schedule_id, monthly_amount;
+    RETURNING id::text, monthly_amount INTO schedule_id, monthly_amount;
 
     v_current_date := v_current_date + INTERVAL '1 month';
     RETURN NEXT;

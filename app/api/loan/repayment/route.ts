@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error("[v0] Error generating repayment schedule:", error)
-      return NextResponse.json({ error: "Failed to generate repayment schedule" }, { status: 500 })
+      return NextResponse.json({ error: error.message || "Failed to generate repayment schedule", code: error.code }, { status: 500 })
     }
 
     // Update the loan request with repayment plan generation timestamp
