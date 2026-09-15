@@ -82,7 +82,7 @@ function generateVerificationCode(): string {
  * scheme/host, which most phone camera scanners cannot open as a link.
  */
 async function getBaseUrl(): Promise<string> {
-  const explicit = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://qccgh.com"
+  const explicit = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://updates.qccapps.com"
   return explicit.replace(/\/$/, "")
 }
 
