@@ -1,6 +1,7 @@
 import "server-only"
 import crypto from "crypto"
 import QRCode from "qrcode"
+import { headers } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/server"
 
 /**
@@ -70,15 +71,34 @@ function generateVerificationCode(): string {
   return `ATT-${code.slice(0, 4)}-${code.slice(4, 8)}-${code.slice(8, 12)}`
 }
 
-function getBaseUrl(): string {
+/**
+ * Resolves the fully-qualified origin that should be encoded into a memo's
+ * verification QR code. Prefers the host the current request actually
+ * arrived on (so the QR always points at whatever domain staff are using -
+ * custom domain, preview alias, etc.), then falls back to explicit env vars,
+ * then the Vercel-assigned deployment URL for contexts with no request (e.g.
+ * background jobs). A relative-only fallback would encode a QR code with no
+ * scheme/host, which most phone camera scanners cannot open as a link.
+ */
+async function getBaseUrl(): Promise<string> {
+  try {
+    const headerList = await headers()
+    const host = headerList.get("x-forwarded-host") || headerList.get("host")
+    if (host) {
+      const proto = headerList.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https")
+      return `${proto}://${host}`.replace(/\/$/, "")
+    }
+  } catch {
+    // headers() throws outside a request scope (e.g. scripts/cron); fall through.
+  }
   const explicit = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL
   if (explicit) return explicit.replace(/\/$/, "")
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
   return ""
 }
 
-export function buildVerifyUrl(verificationCode: string): string {
-  const base = getBaseUrl()
+export async function buildVerifyUrl(verificationCode: string): Promise<string> {
+  const base = await getBaseUrl()
   return `${base}/verify/${verificationCode}`
 }
 
@@ -178,7 +198,7 @@ export async function ensureMemoSecurity(params: EnsureMemoSecurityParams): Prom
           metadata: { expectedHash: existing.content_hash, actualHash: currentHash },
         })
       }
-      const verifyUrl = buildVerifyUrl(existing.verification_code)
+      const verifyUrl = await buildVerifyUrl(existing.verification_code)
       return {
         verificationCode: existing.verification_code,
         contentHash: existing.content_hash,
@@ -209,7 +229,7 @@ export async function ensureMemoSecurity(params: EnsureMemoSecurityParams): Prom
       actorId: issuedBy,
     })
 
-    const verifyUrl = buildVerifyUrl(existing.verification_code)
+    const verifyUrl = await buildVerifyUrl(existing.verification_code)
     return {
       verificationCode: existing.verification_code,
       contentHash: currentHash,
@@ -259,7 +279,7 @@ export async function ensureMemoSecurity(params: EnsureMemoSecurityParams): Prom
     actorId: issuedBy,
   })
 
-  const verifyUrl = buildVerifyUrl(verificationCode)
+  const verifyUrl = await buildVerifyUrl(verificationCode)
   return {
     verificationCode,
     contentHash: currentHash,

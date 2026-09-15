@@ -71,6 +71,16 @@ export default async function VerifyMemoPage({ params }: { params: Promise<{ cod
           )}
         </div>
 
+        {result.found && (
+          <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 p-4 text-center">
+            <p className="text-lg font-semibold text-foreground text-balance">{result.staffName || "—"}</p>
+            <p className="mt-1 font-mono text-sm font-medium text-foreground">{result.referenceNumber || "—"}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {result.lockedAt ? formatDate(result.lockedAt) : formatDate(result.issuedAt)}
+            </p>
+          </div>
+        )}
+
         <div className="rounded-md border border-border bg-secondary/50 p-4">
           <dl className="space-y-3 text-sm">
             <div className="flex items-center justify-between gap-4">

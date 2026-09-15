@@ -58,16 +58,14 @@ export function HODReviewSection({ userDepartmentId, viewerRole }: HODReviewSect
       }
 
       const data = await res.json()
-      
-      // Filter requests for user's department if available
-      let requests = Array.isArray(data.requests) ? data.requests : []
-      if (userDepartmentId) {
-        requests = requests.filter((req: any) => {
-          const deptName = req.user_profiles?.departments?.name?.toLowerCase() || ''
-          return deptName.includes(userDepartmentId.toLowerCase())
-        })
-      }
-      
+
+      // The API already scopes requests to the authenticated HOD (by explicit
+      // hod_user_id assignment or active staff-to-HOD linkage), so no further
+      // client-side department filtering is applied here. A previous filter
+      // checked req.user_profiles.departments.name, a field the API never
+      // returns, which silently hid every request from this view.
+      const requests = Array.isArray(data.requests) ? data.requests : []
+
       setRequests(requests)
     } catch (err) {
       console.error('[v0] HOD Review fetch error:', err)
