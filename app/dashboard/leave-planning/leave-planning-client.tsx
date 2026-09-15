@@ -3993,8 +3993,13 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                   const annualCalc = isAnnualRow
                                     ? computeAnnualAdjustedEndDate(adjStart, annualEntitlementDays, priorD + holidayD, outstandingD, travelD)
                                     : null
+                                  // HR Leave Office and Regional HR Office can type an end date directly to
+                                  // override the auto-calculated one below — e.g. an approved exception that
+                                  // legitimately exceeds entitlement. The auto-calculated value is only the
+                                  // default; it must never freeze out a manual adjustment.
+                                  const annualEndOverride = officeAdjEnd[req.id] || ""
                                   const adjEnd = isAnnualRow
-                                    ? (annualCalc?.endDateIso || "")
+                                    ? (annualEndOverride || annualCalc?.endDateIso || "")
                                     : (officeAdjEnd[req.id] || req.preferred_end_date || "")
                                   // Only the dedicated Day Adjustment Breakdown fields affect totals.
                                   // “Reason for Adjustment” is confirmation text, never numeric input.
@@ -4006,9 +4011,13 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                         ? calculateWorkingDays(adjStart, adjEnd, holidayDatesForRender).workingDays
                                         : Number(req.requested_days || 0))
                                   // Public holidays and prior leave are deductions; travelling days are additions.
-                                  // Annual leave uses the shared breakdown directly so this always matches adjEnd above.
+                                  // Annual leave uses the shared breakdown directly so this always matches adjEnd
+                                  // above — unless the office typed an explicit end date override, in which case
+                                  // the granted days follow the actual working days of that manually chosen range.
                                   const finalDays = isAnnualRow
-                                    ? (annualCalc?.grantedDays ?? 0)
+                                    ? (annualEndOverride && adjStart && adjEnd
+                                        ? calculateWorkingDays(adjStart, adjEnd, holidayDatesForRender).workingDays
+                                        : (annualCalc?.grantedDays ?? 0))
                                     : Math.max(0, baseDays - holidayD - priorD + travelD)
   const generatedReason = [
   outstandingD > 0 ? `${outstandingD} outstanding leave day(s) added` : "",
@@ -4143,7 +4152,15 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                 return key.includes(leaveType) || key.includes("approval")
                               }) || templateOptions[0]
                               setOfficeAdjStart((p) => ({ ...p, [req.id]: req.preferred_start_date || "" }))
-                              setOfficeAdjEnd((p) => ({ ...p, [req.id]: req.preferred_end_date || "" }))
+                              // Annual leave defaults to the auto-calculated end date (derived from the
+                              // breakdown fields below), so it's left unset here — only a manual edit to
+                              // the field should populate an override. Non-annual leave types have no
+                              // auto-calculation, so they start from the request's own end date.
+                              if (String(req.leave_type_key || "").toLowerCase() !== "annual") {
+                                setOfficeAdjEnd((p) => ({ ...p, [req.id]: req.preferred_end_date || "" }))
+                              } else {
+                                setOfficeAdjEnd((p) => ({ ...p, [req.id]: "" }))
+                              }
                               setOfficeTemplateKey((p) => ({ ...p, [req.id]: matchingTemplate?.template_key || getDefaultMemoTemplateKey(String(req.leave_type_key || "annual")) }))
                               const memoTpl = buildMemoTemplate(req)
                               const renderedTemplate = matchingTemplate ? renderTemplateForRequest(matchingTemplate, req) : memoTpl
@@ -4203,20 +4220,15 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                               <div className="space-y-1">
                                 <Label className="text-xs font-semibold">
                                   Adjusted End Date
-                                  {isAnnualRow && <span className="text-slate-400 font-normal ml-1">(auto-calculated)</span>}
+                                  {isAnnualRow && <span className="text-slate-400 font-normal ml-1">(auto-calculated, editable)</span>}
                                 </Label>
-                                {isAnnualRow ? (
-                                  <Input type="date" value={adjEnd} readOnly disabled
-                                    className="h-9 bg-slate-100 text-slate-700 cursor-not-allowed" />
-                                ) : (
-                                  <Input type="date" value={adjEnd}
-                                    onChange={(e) => setOfficeAdjEnd((p) => ({ ...p, [req.id]: e.target.value }))} className="h-9" />
-                                )}
+                                <Input type="date" value={adjEnd}
+                                  onChange={(e) => setOfficeAdjEnd((p) => ({ ...p, [req.id]: e.target.value }))} className="h-9" />
                               </div>
                             </div>
                             {isAnnualRow && (
                               <p className="text-xs text-slate-500 -mt-2">
-                                End Date is calculated from Start Date using Entitlement ({annualEntitlementDays}d) − Enjoyed/Holidays ({priorD + holidayD}d) + Outstanding ({outstandingD}d) + Travel ({travelD}d) = {finalDays} granted working day(s). Adjust the breakdown fields below to change it.
+                                End Date defaults to Start Date + Entitlement ({annualEntitlementDays}d) − Enjoyed/Holidays ({priorD + holidayD}d) + Outstanding ({outstandingD}d) + Travel ({travelD}d) = {annualCalc?.grantedDays ?? 0} granted working day(s). Adjust the breakdown fields below, or type an end date directly to override — even beyond entitlement if needed.
                               </p>
                             )}
 

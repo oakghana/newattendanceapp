@@ -305,6 +305,7 @@ export async function POST(request: NextRequest) {
     let nextEndDate = leavePlan.preferred_end_date
     let nextRequestedDays = calculateRequestedDays(nextStartDate, nextEndDate)
     let effectiveEntitlement = Number(leavePlan.entitlement_days || 0)
+    let entitlementExceededWarning: string | null = null
 
     if (isRegionalForward || decision === "recommend_change") {
       nextStartDate = adjusted_preferred_start_date
@@ -318,17 +319,14 @@ export async function POST(request: NextRequest) {
   const entitlementDays = Number(leavePlan.entitlement_days || 0)
   const outstandingDays = Number(adjustment_breakdown?.outstanding_days || 0)
   effectiveEntitlement = entitlementDays + outstandingDays
-  // Outstanding days are an HR-approved carryover and intentionally allow the
-  // adjusted regional annual leave period to exceed the original request and
-  // base entitlement. HR has already documented the adjustment in the memo.
-  // Keep the strict entitlement guard only when no outstanding days exist.
-  if (effectiveEntitlement > 0 && nextRequestedDays > effectiveEntitlement && outstandingDays <= 0) {
-    return NextResponse.json(
-      {
-        error: `Adjusted request (${nextRequestedDays} day(s)) exceeds entitlement (${entitlementDays} day(s)).`,
-      },
-      { status: 400 },
-    )
+  // HR Leave Office and the Regional HR Office are the ones adjusting this
+  // request and are trusted to decide the final adjusted period — an
+  // over-entitlement adjustment is common (outstanding carryover, approved
+  // exception, etc.) and must never block them from pushing the request to
+  // the next stage. Flag it as a warning on the response instead of a hard
+  // 400 so the office can still see and document the excess.
+  if (effectiveEntitlement > 0 && nextRequestedDays > effectiveEntitlement) {
+    entitlementExceededWarning = `Adjusted request (${nextRequestedDays} day(s)) exceeds entitlement (${entitlementDays}${outstandingDays > 0 ? ` + ${outstandingDays} outstanding` : ""} day(s)).`
   }
     }
 
@@ -544,7 +542,11 @@ export async function POST(request: NextRequest) {
       }).catch(() => {})
     }
 
-    return NextResponse.json({ success: true, status: isRegionalManagerApprovalComplete ? "approved" : nextStatus })
+    return NextResponse.json({
+  success: true,
+  status: isRegionalManagerApprovalComplete ? "approved" : nextStatus,
+  ...(entitlementExceededWarning ? { warning: entitlementExceededWarning } : {}),
+  })
   } catch (error) {
     if (isSchemaIssue(error)) {
       return schemaIssueResponse(error)
