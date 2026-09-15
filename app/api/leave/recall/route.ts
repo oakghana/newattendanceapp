@@ -39,6 +39,8 @@ export async function POST(request: NextRequest) {
       "department_head",
       "regional_manager",
       "hr_officer",
+      "hr_leave_office",
+      "regional_hr",
       "manager_hr",
       "director_hr",
       "hr_director",

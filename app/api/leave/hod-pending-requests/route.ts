@@ -84,9 +84,15 @@ export async function GET(_request: NextRequest) {
     const currentHodStaffIds = new Set(
       allLinkages.filter((link: any) => String(link.hod_user_id) === String(user.id)).map((link: any) => String(link.staff_user_id)),
     )
-    const enrichedRequests = planRequests.filter((req: any) =>
-      String(req.hod_user_id || "") === String(user.id) || currentHodStaffIds.has(String(req.user_id)),
-    ).map((req: any) => {
+    const enrichedRequests = planRequests.filter((req: any) => {
+      const assignedHodId = String(req.hod_user_id || "")
+      const staffId = String(req.user_id || "")
+      // A request with an explicit HOD assignment must match that HOD. For
+      // legacy rows without hod_user_id, use the active staff-to-HOD linkage.
+      return assignedHodId
+        ? assignedHodId === String(user.id)
+        : currentHodStaffIds.has(staffId)
+    }).map((req: any) => {
       const createdDate = new Date(req.submitted_at || req.created_at)
       const daysPending = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
 
