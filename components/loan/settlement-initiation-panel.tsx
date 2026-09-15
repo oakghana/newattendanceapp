@@ -60,7 +60,7 @@ export function SettlementInitiationPanel() {
     const settlementAmount = Number(amount)
     if (!settlementAmount || settlementAmount <= 0) return setFormError("Enter the full outstanding settlement amount.")
     if (settlementAmount < selectedLoan.outstanding_balance) return setFormError(`Amount must cover the outstanding balance of ${money(selectedLoan.outstanding_balance)}.`)
-    if (!evidenceUrl) return setFormError("Upload payment evidence before submitting.")
+    if (!evidenceUrl) return setFormError("Please upload the payment proof first.")
     setSubmitting(true); setFormError(null); setMessage(null)
     try {
       const response = await fetch("/api/loan/payment-evidence", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ loanRequestId: selectedLoan.id, paymentDate, paymentAmount: settlementAmount, paymentMethod: "full_settlement", referenceNumber, description, evidenceFileUrl: evidenceUrl, isFullSettlement: true }) })
@@ -73,21 +73,21 @@ export function SettlementInitiationPanel() {
   }
 
   return <Card>
-    <CardHeader><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><CardTitle>Initiate full loan settlement</CardTitle><CardDescription>HR Loan Office can select any active, disbursed staff loan and submit one payment record for audit. Only Accounts Executive can approve and clear the schedule.</CardDescription></div><Button variant="outline" size="sm" onClick={() => mutate()}><RefreshCw data-icon="inline-start" />Refresh loans</Button></div></CardHeader>
+    <CardHeader><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><CardTitle>Full loan settlement</CardTitle><CardDescription>Select a staff loan, upload proof of payment, and send it to Accounts for approval.</CardDescription></div><Button variant="outline" size="sm" onClick={() => mutate()}><RefreshCw data-icon="inline-start" />Refresh loans</Button></div></CardHeader>
     <CardContent className="flex flex-col gap-4">
       {isLoading && <p className="text-sm text-muted-foreground">Loading all active staff loans…</p>}
       {error && <p className="text-sm text-destructive">{error.message}</p>}
-      {!isLoading && !error && loans.length === 0 && <p className="rounded-md border border-dashed p-5 text-sm text-muted-foreground">No active MD-approved and disbursed loans are available for settlement.</p>}
+      {!isLoading && !error && loans.length === 0 && <p className="rounded-md border border-dashed p-5 text-sm text-muted-foreground">No active loans are available for settlement.</p>}
       {loans.length > 0 && <div className="grid gap-4 md:grid-cols-2">
-        <div className="flex flex-col gap-2 md:col-span-2"><Label>Staff loan</Label><Select value={selectedId} onValueChange={(value) => { setSelectedId(value); const loan = loans.find((item) => item.id === value); setAmount(loan ? String(loan.outstanding_balance) : "") }}><SelectTrigger><SelectValue placeholder="Select staff and running loan" /></SelectTrigger><SelectContent>{loans.map((loan) => <SelectItem key={loan.id} value={loan.id}>{loan.staff?.full_name || "Unknown staff"} · {loan.staff?.staff_number || "No employee ID"} · {loan.request_number || loan.loan_type_label || "Loan"} · Outstanding {money(loan.outstanding_balance)}</SelectItem>)}</SelectContent></Select></div>
+        <div className="flex flex-col gap-2 md:col-span-2"><Label>Staff loan</Label><Select value={selectedId} onValueChange={(value) => { setSelectedId(value); const loan = loans.find((item) => item.id === value); setAmount(loan ? String(loan.outstanding_balance) : "") }}><SelectTrigger><SelectValue placeholder="Select staff loan" /></SelectTrigger><SelectContent>{loans.map((loan) => <SelectItem key={loan.id} value={loan.id}>{loan.staff?.full_name || "Unknown staff"} · {loan.staff?.staff_number || "No employee ID"} · {loan.request_number || loan.loan_type_label || "Loan"} · Outstanding {money(loan.outstanding_balance)}</SelectItem>)}</SelectContent></Select></div>
         {selectedLoan && <div className="rounded-md bg-muted p-3 text-sm md:col-span-2"><strong>{selectedLoan.staff?.full_name}</strong> · {selectedLoan.loan_type_label || selectedLoan.request_number} · Paid {money(selectedLoan.paid_to_date)} · Outstanding {money(selectedLoan.outstanding_balance)}</div>}
-        <div className="flex flex-col gap-2"><Label htmlFor="settlement-amount">Full settlement amount</Label><Input id="settlement-amount" type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} /></div>
+        <div className="flex flex-col gap-2"><Label htmlFor="settlement-amount">Amount paid</Label><Input id="settlement-amount" type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} /></div>
         <div className="flex flex-col gap-2"><Label htmlFor="settlement-date">Payment date</Label><Input id="settlement-date" type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} /></div>
         <div className="flex flex-col gap-2"><Label htmlFor="settlement-reference">Payment reference</Label><Input id="settlement-reference" value={referenceNumber} onChange={(event) => setReferenceNumber(event.target.value)} placeholder="Bank or receipt reference" /></div>
         <div className="flex flex-col gap-2"><Label htmlFor="settlement-evidence">Payment evidence</Label><Input id="settlement-evidence" type="file" accept="image/*,.pdf" disabled={uploading} onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadEvidence(file) }} />{uploading && <span className="text-xs text-muted-foreground"><Loader2 className="mr-1 inline size-3 animate-spin" />Uploading…</span>}{evidenceUrl && <span className="text-xs text-green-700"><CheckCircle2 className="mr-1 inline size-3" />Evidence uploaded</span>}</div>
-        <div className="flex flex-col gap-2 md:col-span-2"><Label htmlFor="settlement-description">Audit note</Label><Textarea id="settlement-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Add payment or audit details" /></div>
+        <div className="flex flex-col gap-2 md:col-span-2"><Label htmlFor="settlement-description">Audit note</Label><Textarea id="settlement-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Add a short note, if needed" /></div>
         {formError && <p className="text-sm text-destructive md:col-span-2">{formError}</p>}{message && <p className="text-sm text-green-700 md:col-span-2">{message}</p>}
-        <div className="md:col-span-2"><Button onClick={() => void submit()} disabled={submitting || uploading}>{submitting ? <Loader2 className="animate-spin" /> : <FileUp />}Submit settlement for Accounts approval</Button></div>
+        <div className="md:col-span-2"><Button onClick={() => void submit()} disabled={submitting || uploading}>{submitting ? <Loader2 className="animate-spin" /> : <FileUp />}Send to Accounts for approval</Button></div>
       </div>}
     </CardContent>
   </Card>
