@@ -33,23 +33,36 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const admin = await createAdminClient()
-    const profileFields = "id, role, full_name, staff_number, position, department"
-    const { data: profileById, error: profileError } = await admin
+    const profileFields = "id, user_id, role, full_name, staff_number, position, department"
+    const { data: profileByUserId, error: profileError } = await admin
       .from("user_profiles")
       .select(profileFields)
-      .eq("id", user.id)
+      .eq("user_id", user.id)
       .maybeSingle()
-    const { data: profileByEmail } = !profileById && user.email
+    const { data: profileById } = !profileByUserId
+      ? await admin.from("user_profiles").select(profileFields).eq("id", user.id).maybeSingle()
+      : { data: null }
+    const { data: profileByEmail } = !profileByUserId && !profileById && user.email
       ? await admin.from("user_profiles").select(profileFields).eq("email", user.email).maybeSingle()
       : { data: null }
-    const profile = profileById || profileByEmail
+    const profile = profileByUserId || profileById || profileByEmail
     const metadataRole = (user.user_metadata as Record<string, unknown> | undefined)?.role
     const role = normalizeRole(profile?.role || String(metadataRole || ""))
     const departmentName = String((profile as any)?.department || "")
-    const departmentCode = ""
+    const departmentCode = String((profile as any)?.department_code || "")
+    const accountAccessText = [
+      role,
+      String(profile?.position || ""),
+      departmentName,
+      departmentCode,
+      String((user.user_metadata as Record<string, unknown> | undefined)?.department || ""),
+    ].join(" ").toLowerCase()
     const canViewRunningLoans = Boolean(
       isAdminRole(role) ||
       ALLOWED_ROLES.has(role) ||
+      role.includes("account") ||
+      accountAccessText.includes("account") ||
+      accountAccessText.includes("finance") ||
       canDoAccounts(role, departmentName, departmentCode) ||
       canDoLoanOffice(role, departmentName, departmentCode) ||
       canDoHrOffice(role, departmentName, departmentCode) ||
