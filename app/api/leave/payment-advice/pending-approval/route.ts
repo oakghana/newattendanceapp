@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
     // Get user profile for full name
     const { data: profile } = await admin
       .from("user_profiles")
-      .select("first_name, last_name")
+      .select("first_name, last_name, signature_data_url")
       .eq("id", user.id)
       .single()
 
@@ -190,6 +190,10 @@ export async function POST(request: NextRequest) {
       .from("leave_payment_memos")
       .update({
         status: newStatus,
+        signer_id: approved ? user.id : null,
+        signer_name: approved ? fullName : null,
+        signature_data_url: approved ? (profile as any)?.signature_data_url || null : null,
+        forwarded_at: approved ? new Date().toISOString() : null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", memoId)

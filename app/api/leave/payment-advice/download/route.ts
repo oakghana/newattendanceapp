@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
+import { ensureMemoSecurity } from "@/lib/memo-security"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -156,8 +157,32 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // ── Resolve fallback position/location from the memo itself ──────────────
+    // This is the value the HR Leave Office actually recorded at submission time
+    // (memoBody.staff_position / memoBody.staff_location_name), computed up front
+    // so live-profile enrichment below can never silently replace a good value
+    // with an empty one — the account memo must always show a station.
+    let bodyForFallback: any = {}
+    try {
+      bodyForFallback = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
+    } catch { bodyForFallback = {} }
+    const fallbackPosition =
+      bodyForFallback?.staff_position ||
+      bodyForFallback?.staffList?.[0]?.position ||
+      bodyForFallback?.staffList?.[0]?.rank ||
+      ""
+    const fallbackLocation =
+      bodyForFallback?.staff_location_name ||
+      bodyForFallback?.staffList?.[0]?.location_name ||
+      bodyForFallback?.staffList?.[0]?.assigned_location_name ||
+      bodyForFallback?.staffList?.[0]?.location ||
+      bodyForFallback?.staff_department ||
+      "HQ" // Every memo to Accounts must show a station — never leave this blank.
+
     // ── Live-enrich staffList location from geofence_locations if missing ────
-    // This handles both single-staff memos and older memos that didn't store location_name
+    // This handles both single-staff memos and older memos that didn't store location_name.
+    // A live lookup only ever WINS if it actually returns a name — an empty/missing
+    // geofence result must never overwrite the fallback recorded at submission time.
     const userIdForLocation = memoBodyUserId || memo.user_id || memo.staff_id || null
     if (userIdForLocation) {
       const { data: liveProfile } = await admin
@@ -166,6 +191,9 @@ export async function GET(request: NextRequest) {
         .eq("id", userIdForLocation)
         .maybeSingle()
 
+      let liveLoc = ""
+      const livePos = liveProfile?.position || ""
+
       if (liveProfile?.assigned_location_id) {
         const { data: liveLocation } = await admin
           .from("geofence_locations")
@@ -173,26 +201,26 @@ export async function GET(request: NextRequest) {
           .eq("id", liveProfile.assigned_location_id)
           .maybeSingle()
 
-        const liveLoc = liveLocation?.name || ""
-        const livePos = liveProfile.position || ""
+        liveLoc = liveLocation?.name || ""
+      }
 
-        if (staffList.length === 0) {
-          // Single-staff memo — build the row from live data
-          staffList = [{
-            name: `${liveProfile.first_name || ""} ${liveProfile.last_name || ""}`.trim().toUpperCase() || memo.staff_name || "",
-            employeeId: liveProfile.employee_id || memo.staff_number || "",
-            position: livePos,
-            location_name: liveLoc,
-            leaveDate: "",
-          }]
-        } else {
-          // Patch any rows that are missing location or position
-          staffList = staffList.map((s: any) => ({
-            ...s,
-            position: s.position || livePos,
-            location_name: s.location_name || liveLoc,
-          }))
-        }
+      if (staffList.length === 0) {
+        // Single-staff memo — build the row from live data, falling back to the
+        // value recorded at submission time if the live lookup found nothing.
+        staffList = [{
+          name: `${liveProfile?.first_name || ""} ${liveProfile?.last_name || ""}`.trim().toUpperCase() || memo.staff_name || "",
+          employeeId: liveProfile?.employee_id || memo.staff_number || "",
+          position: livePos || fallbackPosition,
+          location_name: liveLoc || fallbackLocation,
+          leaveDate: "",
+        }]
+      } else {
+        // Patch any rows that are missing location or position
+        staffList = staffList.map((s: any) => ({
+          ...s,
+          position: s.position || livePos || fallbackPosition,
+          location_name: s.location_name || liveLoc || fallbackLocation,
+        }))
       }
     }
 
@@ -295,26 +323,8 @@ export async function GET(request: NextRequest) {
     y += bodyLines1.length * 4 + 4
 
     // === STAFF TABLE ===
-    // Build fallback single-staff row extracting position/location from memo_body if needed
-    const fallbackPosition = (() => { 
-      try { 
-        const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-        // staff_position is stored at top level in memoBody (set during submit-memo)
-        return b?.staff_position || b?.staffList?.[0]?.position || b?.staffList?.[0]?.rank || "" 
-      } catch { 
-        return "" 
-      } 
-    })()
-    const fallbackLocation = (() => { 
-      try { 
-        const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-        // staff_location_name is stored at top level in memoBody (set during submit-memo)
-        return b?.staff_location_name || b?.staffList?.[0]?.location_name || b?.staffList?.[0]?.assigned_location_name || b?.staffList?.[0]?.location || "" 
-      } catch { 
-        return "" 
-      } 
-    })()
-
+    // fallbackPosition/fallbackLocation were resolved earlier (before live-profile
+    // enrichment) so this single-staff row always has a station, never blank.
     const tableData = (staffList.length > 0 ? staffList : [
       {
         name: memo.staff_name,
@@ -327,8 +337,8 @@ export async function GET(request: NextRequest) {
       String(idx + 1),
       s.name || s.staff_name || "",
       s.employeeId || s.staff_number || s.sno || "",
-      s.position || s.rank || "",
-      s.location_name || s.assigned_location_name || s.station || s.location || "",
+      s.position || s.rank || fallbackPosition || "",
+      s.location_name || s.assigned_location_name || s.station || s.location || fallbackLocation || "HQ",
       s.leaveDate || fmtDate(memo.leave_period_start),
     ])
 
@@ -443,6 +453,38 @@ export async function GET(request: NextRequest) {
     
     // Reset text color for any subsequent content
     doc.setTextColor(0, 0, 0)
+
+    // ─── Anti-forgery security stamp: verification code + QR code ─────────
+    try {
+      const memoSecurity = await ensureMemoSecurity({
+        memoType: "payment_advice",
+        memoId: String(memo.id),
+        fields: {
+          refNo,
+          staffName: memo.staff_name,
+          staffNumber: memo.staff_number,
+          leavePeriodStart: memo.leave_period_start,
+          leavePeriodEnd: memo.leave_period_end,
+          approvedDays: memo.approved_days,
+          status: memo.status,
+        },
+        referenceNumber: refNo,
+        staffId: String(memo.staff_id || ""),
+        staffName: memo.staff_name,
+        lock: true,
+      })
+
+      const pageHeight = doc.internal.pageSize.getHeight()
+      const qrSize = 16
+      const qrX = pageWidth - margin - qrSize
+      const qrY = pageHeight - 30
+      if (memoSecurity.qrDataUrl) {
+        doc.addImage(memoSecurity.qrDataUrl, "PNG", qrX, qrY, qrSize, qrSize)
+      }
+
+    } catch (securityError) {
+      console.error("[v0] Failed to stamp payment advice memo security data:", securityError)
+    }
 
     // Convert to buffer and return
     const pdfBuffer = Buffer.from(doc.output("arraybuffer"))

@@ -178,6 +178,8 @@ export function LeaveManagementClient({
   const [recallSubTab, setRecallSubTab] = useState<"tracking" | "approvals" | "submit">("tracking")
   const [defermentRequests, setDefermentRequests] = useState<any[]>([])
   const [recallRequests, setRecallRequests] = useState<any[]>([])
+  const [fetchedApprovedStaffRequests, setFetchedApprovedStaffRequests] = useState<any[]>([])
+  const [isLoadingApprovedStaffRequests, setIsLoadingApprovedStaffRequests] = useState(false)
   const [myDefermentRequests, setMyDefermentRequests] = useState<any[]>([])
   const [myRecallRequests, setMyRecallRequests] = useState<any[]>([])
   const [isLoadingMyRequests, setIsLoadingMyRequests] = useState(false)
@@ -787,17 +789,27 @@ export function LeaveManagementClient({
 
   const pendingRequests = useMemo(() => staffRequests.filter((r) => pendingStatuses.has(String(r.status || ""))), [staffRequests])
   const approvedRequests = useMemo(() => {
-    // For HOD/RM/HR: use staff's approved leaves for deferment/recall
+    // For HOD/RM/HR (incl. Regional HR Office): use staff's approved leaves for deferment/recall
     const roleNorm = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const isManagerRole = ["regional_manager", "department_head", "admin", "hr_officer", "manager_hr", "director_hr", "hr_leave_office", "hr_office", "hr"].includes(roleNorm)
-    
-    if (isManagerRole && Array.isArray(initialApprovedStaffRequests) && initialApprovedStaffRequests.length > 0) {
-      return initialApprovedStaffRequests
+    const isManagerRole = [
+      "regional_manager", "department_head", "admin", "hr_officer", "manager_hr", "director_hr",
+      "hr_leave_office", "hr_office", "hr",
+      "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office",
+    ].includes(roleNorm)
+
+    if (isManagerRole) {
+      if (Array.isArray(fetchedApprovedStaffRequests) && fetchedApprovedStaffRequests.length > 0) {
+        return fetchedApprovedStaffRequests
+      }
+      if (Array.isArray(initialApprovedStaffRequests) && initialApprovedStaffRequests.length > 0) {
+        return initialApprovedStaffRequests
+      }
+      return []
     }
-    
+
     // For staff: use their own approved leaves
     return staffRequests.filter((r) => approvedStatuses.has(String(r.status || "")))
-  }, [staffRequests, initialApprovedStaffRequests, userRole])
+  }, [staffRequests, initialApprovedStaffRequests, fetchedApprovedStaffRequests, userRole])
   
   const pendingNotifications = useMemo(() => managerNotifications.filter((n) => {
   const status = String(n.status || n.leave_requests?.status || "").toLowerCase().replace(/[\s-]+/g, "_")
@@ -1005,6 +1017,37 @@ export function LeaveManagementClient({
     }
     
     void fetchDefermentAndRecallRequests()
+  }, [userId, userRole])
+
+  // Fetch approved staff leave eligible for deferment/recall (HOD/RM/HR only).
+  // Scoping (department/region/nationwide) is enforced server-side.
+  useEffect(() => {
+    const roleNorm = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
+    const canFetchApprovedStaffLeave = [
+      "department_head", "regional_manager", "admin", "hr_officer", "manager_hr", "director_hr",
+      "hr_leave_office", "hr_office", "hr",
+      "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office",
+    ].includes(roleNorm)
+    if (!canFetchApprovedStaffLeave || !userId) return
+
+    const fetchApprovedStaffLeave = async () => {
+      setIsLoadingApprovedStaffRequests(true)
+      try {
+        const res = await fetch(
+          `/api/leave/approved-staff-leave?user_id=${encodeURIComponent(userId)}&user_role=${encodeURIComponent(roleNorm)}`,
+          { cache: "no-store" },
+        )
+        if (res.ok) {
+          const data = await res.json()
+          setFetchedApprovedStaffRequests(Array.isArray(data.requests) ? data.requests : [])
+        }
+      } catch (error) {
+        console.error("[v0] Failed to fetch approved staff leave for deferment/recall:", error)
+      } finally {
+        setIsLoadingApprovedStaffRequests(false)
+      }
+    }
+    void fetchApprovedStaffLeave()
   }, [userId, userRole])
 
   // Fetch staff's own approved payment advice memos for their dashboard

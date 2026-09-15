@@ -212,10 +212,41 @@ export async function POST(request: NextRequest) {
       (existingMemosByStaffAndMonth.data || []).map((memo: any) => memo.staff_id).filter(Boolean),
     )
 
+    // SERVER-SIDE GUARD: never trust the client's cached staffList for approval state.
+    // A payment memo may only be created once HR has fully approved the leave
+    // ("hr_approved" for the non-regional workflow, "approved" once the Regional Manager
+    // signs off on the regional workflow) — "hod_approved" is HOD-only and not payment-ready.
+    const APPROVED_FOR_PAYMENT_STATUSES = new Set(["approved", "hr_approved"])
+    const leaveStatusByRequestId = new Map<string, string>()
+    if (leaveRequestIds.length > 0) {
+      const { data: leaveRequestRows, error: leaveStatusError } = await admin
+        .from("leave_plan_requests")
+        .select("id, status")
+        .in("id", leaveRequestIds)
+      if (leaveStatusError) {
+        console.error("[v0] Could not verify leave approval status:", leaveStatusError)
+        return NextResponse.json(
+          { error: "Could not verify leave approval status. Please try again." },
+          { status: 500 },
+        )
+      }
+      for (const row of leaveRequestRows || []) {
+        leaveStatusByRequestId.set(row.id, row.status)
+      }
+    }
+
     for (const staff of staffList) {
       // Skip if this leave request or staff/month already has a memo.
       if (existingRequestIds.has(staff.leave_plan_request_id) || existingStaffIds.has(staff.user_id)) {
         skippedDuplicates.push(`${staff.full_name} already has a payment memo recorded for ${month}`)
+        continue
+      }
+
+      const currentLeaveStatus = leaveStatusByRequestId.get(staff.leave_plan_request_id)
+      if (!currentLeaveStatus || !APPROVED_FOR_PAYMENT_STATUSES.has(currentLeaveStatus)) {
+        errors.push(
+          `${staff.full_name}'s leave request is not fully approved yet (status: ${currentLeaveStatus || "unknown"}). It must be approved by HR before a payment memo can be created.`,
+        )
         continue
       }
 

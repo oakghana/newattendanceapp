@@ -84,9 +84,19 @@ export async function GET(_request: NextRequest) {
     const currentHodStaffIds = new Set(
       allLinkages.filter((link: any) => String(link.hod_user_id) === String(user.id)).map((link: any) => String(link.staff_user_id)),
     )
-    const enrichedRequests = planRequests.filter((req: any) =>
-      String(req.hod_user_id || "") === String(user.id) || currentHodStaffIds.has(String(req.user_id)),
-    ).map((req: any) => {
+    const enrichedRequests = planRequests.filter((req: any) => {
+      const assignedHodId = String(req.hod_user_id || "")
+      const staffId = String(req.user_id || "")
+      // A staff member can be linked to more than one HOD/Regional Manager
+      // (e.g. dual reporting lines). The request must appear for EVERY HOD
+      // linked to that staff member, not just whichever HOD happened to be
+      // stored on the request at submission time — otherwise the other
+      // linked HODs never see it at all. Whichever HOD/RM acts first sets
+      // hod_decision, which flips the status out of the pending list below
+      // and removes it from every other linked HOD's queue at once, so no
+      // one else can act on an already-decided request.
+      return assignedHodId === String(user.id) || currentHodStaffIds.has(staffId)
+    }).map((req: any) => {
       const createdDate = new Date(req.submitted_at || req.created_at)
       const daysPending = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
 

@@ -46,9 +46,13 @@ export async function GET() {
         payment_currency,
         created_at,
         forwarded_at,
-        acknowledged_at
+        acknowledged_at,
+        signer_id,
+        signature_data_url
       `)
       .eq('status', 'reviewed_by_hr')
+      .not('signer_id', 'is', null)
+      .not('signature_data_url', 'is', null)
       .order('created_at', { ascending: false })
 
     if (error) {

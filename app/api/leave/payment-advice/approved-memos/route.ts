@@ -59,10 +59,10 @@ export async function GET(request: NextRequest) {
         )
       `
       )
-      // HR executives see ALL memos regardless of status — no stage-based restriction
-      // DB statuses found: ready_for_review, reviewed_by_hr, forwarded_to_accounts, acknowledged_by_accounts
+      // HR executives should only see memos that have ALREADY been signed off.
+      // "ready_for_review" belongs exclusively to the Pending Approval tab — including
+      // it here made an unsigned memo show as both pending AND approved at the same time.
       .in("status", [
-        "ready_for_review",
         "reviewed_by_hr",
         "signed_by_hr_executive",
         "forwarded_to_accounts",

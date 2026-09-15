@@ -173,7 +173,7 @@ export async function GET(request: NextRequest) {
           admin
             .from("user_profiles")
             .select("id, first_name, last_name, employee_id, position, role, department_id, departments(name, code), assigned_location_id, geofence_locations!assigned_location_id(name, address, districts(name))")
-            .in("role", ["staff", "nsp", "intern", "contract", "it-admin", "it_admin", "department_head", "regional_manager", "loan_officer", "loan_office", "hr_loan_office", "accounts_loan_office", "hr_officer", "hr_office", "accounts", "director_hr", "manager_hr", "audit_staff", "loan_committee", "committee"])
+            .in("role", ["staff", "nsp", "intern", "contract", "it-admin", "it_admin", "department_head", "regional_manager", "loan_officer", "loan_office", "hr_loan_office", "accounts_loan_office", "hr_officer", "hr_office", "hr_leave_office", "accounts", "director_hr", "manager_hr", "audit_staff", "loan_committee", "committee"])
             .eq("is_active", true)
             .order("first_name", { ascending: true })
             .order("id", { ascending: true })
@@ -431,8 +431,10 @@ export async function POST(request: NextRequest) {
         admin.from("loan_hod_linkages").select("staff_user_id"),
         admin
           .from("user_profiles")
+          // hr_leave_office is intentionally excluded: they administer leave, not loans, and
+          // must never be auto-selected as a fallback HOD/loan reviewer for other staff.
           .select("id, role, assigned_location_id, position, geofence_locations!assigned_location_id(name)")
-          .in("role", ["hr_executive", "hr_executive_officer", "hr_leave_office", "manager_hr", "director_hr"])
+          .in("role", ["hr_executive", "hr_executive_officer", "manager_hr", "director_hr"])
           .eq("is_active", true),
       ])
 
@@ -441,7 +443,7 @@ export async function POST(request: NextRequest) {
       if (hrError) throw hrError
 
       const linkedStaffIds = new Set((linkageRows || []).map((row: any) => String(row.staff_user_id)))
-      const candidates = (hrRows || []).filter((candidate: any) => !["admin", "it-admin", "managing_director"].includes(normalizeRole(candidate.role)))
+      const candidates = (hrRows || []).filter((candidate: any) => !["admin", "it-admin", "managing_director", "hr_leave_office"].includes(normalizeRole(candidate.role)))
       const headOfficeCandidate = candidates.find((candidate: any) => isNonRegionalLocation(candidate?.geofence_locations?.name))
       const fallbackHead = headOfficeCandidate || candidates[0]
       if (!fallbackHead) {
