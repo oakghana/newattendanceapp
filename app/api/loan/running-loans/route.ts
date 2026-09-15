@@ -1,7 +1,24 @@
 import { NextResponse } from "next/server"
 import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
 
-const ALLOWED_ROLES = new Set(["admin", "accounts", "accounts_executive", "hr_loan_office", "hr-loan-office", "hr_loan"])
+const ALLOWED_ROLES = new Set([
+  "admin",
+  "administrator",
+  "super_admin",
+  "god",
+  "accounts",
+  "accounts_executive",
+  "hr_loan_office",
+  "hr-loan-office",
+  "hr_loan",
+])
+
+function normalizeRole(value?: string | null) {
+  return String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[\s-]+/g, "_")
+}
 
 export async function GET() {
   try {
@@ -10,7 +27,7 @@ export async function GET() {
 
     const admin = await createAdminClient()
     const { data: profile } = await admin.from("user_profiles").select("id, role, full_name, staff_number").eq("id", user.id).maybeSingle()
-    if (!profile || !ALLOWED_ROLES.has(String(profile.role || "").toLowerCase())) {
+    if (!profile || !ALLOWED_ROLES.has(normalizeRole(profile.role))) {
       return NextResponse.json({ error: "You are not authorized to view running loans" }, { status: 403 })
     }
 
