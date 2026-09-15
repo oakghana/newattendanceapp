@@ -1,7 +1,6 @@
 import "server-only"
 import crypto from "crypto"
 import QRCode from "qrcode"
-import { headers } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/server"
 
 /**
@@ -83,21 +82,8 @@ function generateVerificationCode(): string {
  * scheme/host, which most phone camera scanners cannot open as a link.
  */
 async function getBaseUrl(): Promise<string> {
-  const explicit = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL
-  if (explicit) return explicit.replace(/\/$/, "")
-
-  try {
-    const headerList = await headers()
-    const host = headerList.get("x-forwarded-host") || headerList.get("host")
-    if (host && !host.includes(".vercel.run")) {
-      const proto = headerList.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https")
-      return `${proto}://${host}`.replace(/\/$/, "")
-    }
-  } catch {
-    // headers() throws outside a request scope (e.g. scripts/cron); fall through.
-  }
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
-  return ""
+  const explicit = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://qccgh.com"
+  return explicit.replace(/\/$/, "")
 }
 
 export async function buildVerifyUrl(verificationCode: string): Promise<string> {
