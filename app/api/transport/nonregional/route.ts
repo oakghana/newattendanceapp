@@ -197,12 +197,10 @@ export async function POST(request: Request) {
   }
 
   const submitterRole = normalizeAppRole(profile?.role)
-  const { data: assignedHodLink } = await supabase
-    .from("loan_hod_linkages")
-    .select("id")
-    .eq("hod_user_id", user.id)
-    .limit(1)
-    .maybeSingle()
+  const [{ data: assignedHodLink }, { data: requesterHodLink }] = await Promise.all([
+    supabase.from("loan_hod_linkages").select("id").eq("hod_user_id", user.id).limit(1).maybeSingle(),
+    supabase.from("loan_hod_linkages").select("hod_user_id").eq("staff_user_id", user.id).limit(1).maybeSingle(),
+  ])
   const isLinkedHod = Boolean(assignedHodLink)
   if (!SUBMIT_ROLES.has(submitterRole) && !isAdminRole(profile.role) && !isLinkedHod) {
     return NextResponse.json({ error: "You are not allowed to submit non-regional transport requisitions." }, { status: 403 })
@@ -231,7 +229,7 @@ export async function POST(request: Request) {
   // their own departmental requisitions directly to the Managing Director.
   const selfAuth = (canSelfAuthorize(submitterRole) || isLinkedHod) && !isAdminRole(submitterRole)
   const signedAt = new Date().toISOString()
-  const hodId = profile.hod_id ? String(profile.hod_id) : null
+  const hodId = requesterHodLink?.hod_user_id ? String(requesterHodLink.hod_user_id) : profile.hod_id ? String(profile.hod_id) : null
 
   // Non-HOD staff must route to their linked HOD first; authorization stays blank until HOD signs.
   if (!selfAuth) {

@@ -58,6 +58,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Fall back to the canonical loan_hod_linkages table used across Loan and
+    // Transport workflows when the legacy user_profiles.hod_id column is empty.
+    if (!hodId) {
+      const { data: canonicalLinkage, error: canonicalLinkageError } = await admin
+        .from("loan_hod_linkages")
+        .select("hod_user_id")
+        .eq("staff_user_id", user.id)
+        .limit(1)
+        .maybeSingle()
+      if (canonicalLinkageError && canonicalLinkageError.code !== "42P01") {
+        throw new Error(`Failed to load Head of Department linkage: ${canonicalLinkageError.message}`)
+      }
+      hodId = canonicalLinkage?.hod_user_id ?? null
+    }
+
     // scope=self never inherits the HOD signature (non-regional staff leave authorization blank).
     const shouldUseLinkedHod = scope !== "self" && Boolean(hodId && !isDepartmentHead)
     const { data: signerProfile, error: signerError } = shouldUseLinkedHod
