@@ -25,6 +25,7 @@ import { FdCompletedArchive } from "@/components/loan/fd-completed-archive"
 import { FDCalculationSubmission } from "@/components/loan/fd-calculation-submission"
 import { HRLoanOfficeFDApproved } from "@/components/loan/hr-loan-office-fd-approved"
 import { RepaymentTrackingPanel } from "@/components/loan/repayment-tracking-panel"
+import { RunningLoansReport } from "@/components/loan/running-loans-report"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { GOOD_FD_THRESHOLD, canEnterFdScore as canEnterFdScoreForRole, isPoorFdScore } from "@/lib/loan-workflow"
@@ -1435,6 +1436,7 @@ export default function LoanAppPage() {
     // Repayment Tracking tab: for Loan Office, Accounts Office, executives, and HR Loan Office
     if (canAccessLoanOfficeWorkspace || isAccountsOffice || isAccountsExecutive || isHRLoanOffice || isAdminUser) {
       tabs.push({ key: "repayment-tracking", label: "Repayment Tracking" })
+      tabs.push({ key: "running-loans", label: "Running Loans" })
     }
 
     // Analytics tab for Loan Office, Accounts executives, and HR Loan Office (view only)
@@ -1481,7 +1483,7 @@ export default function LoanAppPage() {
     const groupDefinitions = [
       { key: "workspace", label: "My Workspace", keys: ["staff", "tracking", "my-tasks"] },
       { key: "processing", label: "Review & Processing", keys: ["hod", "loan-office", "accounts", "committee", "director", "fd-approval", "payment-approvals"] },
-      { key: "insights", label: "Insights & Administration", keys: ["repayment-tracking", "analytics", "leave-payment", "loan-payment-advice", "overview", "archive", "fd-completed", "setup"] },
+      { key: "insights", label: "Insights & Administration", keys: ["repayment-tracking", "running-loans", "analytics", "leave-payment", "loan-payment-advice", "overview", "archive", "fd-completed", "setup"] },
     ]
 
     return groupDefinitions
@@ -5776,6 +5778,10 @@ export default function LoanAppPage() {
         </TabsContent>
 
         {/* ── Repayment Tracking ── */}
+        <TabsContent value="running-loans" className="space-y-4">
+          <RunningLoansReport />
+        </TabsContent>
+
         <TabsContent value="repayment-tracking" className="space-y-4">
           <RepaymentTrackingPanel
             loans={Array.from(
