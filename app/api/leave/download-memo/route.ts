@@ -176,7 +176,7 @@ export async function GET(request: NextRequest) {
     if (!signerName) signerName = 'HR EXECUTIVE'
     if (!signerPosition) signerPosition = 'HUMAN RESOURCE MANAGER'
 
-    // ── Memo record (optional) ────────────────────────────────────────────────
+    // ── Memo record (optional) ─��──────────────────────────────────────────────
     const { data: memo } = await admin
       .from('leave_payment_memos')
       .select('signer_name, signer_position, signature_data_url, leave_period_start, leave_period_end, approved_days, created_at')
@@ -636,14 +636,7 @@ export async function GET(request: NextRequest) {
       if (memoSecurity.qrDataUrl) {
         doc.addImage(memoSecurity.qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize)
       }
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(6.5)
-      doc.setTextColor(120, 120, 120)
-      doc.text('Verify at:', qrX, qrY + qrSize + 3)
-      doc.text(memoSecurity.verifyUrl.replace(/^https?:\/\//, ''), qrX, qrY + qrSize + 6, { maxWidth: qrSize + 4 })
-      doc.setFont('helvetica', 'bold')
-      doc.setTextColor(0, 0, 0)
-      doc.text(memoSecurity.verificationCode, mL, pageH - 4)
+
     } catch (securityError) {
       console.error('[v0] Failed to stamp leave memo security data:', securityError)
     }

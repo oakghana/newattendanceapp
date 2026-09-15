@@ -481,14 +481,7 @@ export async function GET(request: NextRequest) {
       if (memoSecurity.qrDataUrl) {
         doc.addImage(memoSecurity.qrDataUrl, "PNG", qrX, qrY, qrSize, qrSize)
       }
-      doc.setFont(undefined, "normal")
-      doc.setFontSize(6.5)
-      doc.setTextColor(120, 120, 120)
-      doc.text("Verify at:", qrX, qrY + qrSize + 3)
-      doc.text(memoSecurity.verifyUrl.replace(/^https?:\/\//, ""), qrX, qrY + qrSize + 6, { maxWidth: qrSize + 4 })
-      doc.setFont(undefined, "bold")
-      doc.setTextColor(0, 0, 0)
-      doc.text(memoSecurity.verificationCode, margin, pageHeight - 4)
+
     } catch (securityError) {
       console.error("[v0] Failed to stamp payment advice memo security data:", securityError)
     }
