@@ -33,25 +33,31 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const admin = await createAdminClient()
-    const { data: profile } = await admin
+    const profileFields = "id, role, full_name, staff_number, position, department"
+    const { data: profileById, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, role, full_name, staff_number, position")
+      .select(profileFields)
       .eq("id", user.id)
       .maybeSingle()
-    const role = normalizeRole(profile?.role)
-    const departmentName = String((profile as any)?.department_name || "")
-    const departmentCode = String((profile as any)?.department_code || "")
+    const { data: profileByEmail } = !profileById && user.email
+      ? await admin.from("user_profiles").select(profileFields).eq("email", user.email).maybeSingle()
+      : { data: null }
+    const profile = profileById || profileByEmail
+    const metadataRole = (user.user_metadata as Record<string, unknown> | undefined)?.role
+    const role = normalizeRole(profile?.role || String(metadataRole || ""))
+    const departmentName = String((profile as any)?.department || "")
+    const departmentCode = ""
     const canViewRunningLoans = Boolean(
-      profile && (
-        isAdminRole(role) ||
-        ALLOWED_ROLES.has(role) ||
-        canDoAccounts(role, departmentName, departmentCode) ||
-        canDoLoanOffice(role, departmentName, departmentCode) ||
-        canDoHrOffice(role, departmentName, departmentCode) ||
-        isAccountsExecutiveRole(role) ||
-        /admin|administrator/i.test(String(profile.position || ""))
-      ),
+      isAdminRole(role) ||
+      ALLOWED_ROLES.has(role) ||
+      canDoAccounts(role, departmentName, departmentCode) ||
+      canDoLoanOffice(role, departmentName, departmentCode) ||
+      canDoHrOffice(role, departmentName, departmentCode) ||
+      isAccountsExecutiveRole(role) ||
+      /admin|administrator/i.test(String(profile?.position || "")) ||
+      /admin|administrator/i.test(String(metadataRole || "")),
     )
+    if (profileError) console.error("[v0] running loans profile lookup failed", profileError)
     if (!canViewRunningLoans) {
       return NextResponse.json({ error: "You are not authorized to view running loans" }, { status: 403 })
     }
