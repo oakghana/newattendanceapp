@@ -96,15 +96,21 @@ export async function GET() {
     })
     const ids = confirmedLoans.map((loan) => loan.id)
     const staffIds = [...new Set(confirmedLoans.map((loan) => loan.staff_id || loan.user_id).filter(Boolean))]
-    const [{ data: payments }, { data: schedules }, { data: staff }] = await Promise.all([
-      ids.length ? admin.from("loan_payment_records").select("loan_request_id, amount_paid, overall_status, payment_date").in("loan_request_id", ids).eq("overall_status", "approved") : Promise.resolve({ data: [] }),
-      ids.length ? admin.from("loan_repayment_schedule").select("loan_request_id, due_date, monthly_amount, paid_amount, status").in("loan_request_id", ids).order("due_date", { ascending: true }) : Promise.resolve({ data: [] }),
+    const [{ data: payments }, { data: schedules }, { data: staffById }, { data: staffByEmployeeId }] = await Promise.all([
+      ids.length ? admin.from("loan_payment_records").select("loan_request_id, amount_paid, overall_status, accounts_approval_status, payment_date, submitted_at").in("loan_request_id", ids).eq("accounts_approval_status", "approved") : Promise.resolve({ data: [] }),
+      ids.length ? admin.from("loan_repayment_schedule").select("loan_request_id, due_date, monthly_amount, paid_amount, paid_date, status").in("loan_request_id", ids).order("due_date", { ascending: true }) : Promise.resolve({ data: [] }),
       staffIds.length ? admin.from("user_profiles").select("id, employee_id, first_name, last_name, department_id").in("id", staffIds) : Promise.resolve({ data: [] }),
+      staffIds.length ? admin.from("user_profiles").select("id, employee_id, first_name, last_name, department_id").in("employee_id", staffIds) : Promise.resolve({ data: [] }),
     ])
 
-    const staffMap = new Map((staff || []).map((person) => [person.id, person]))
+    const staffMap = new Map([...(staffById || []), ...(staffByEmployeeId || [])].map((person: any) => [String(person.id), person]))
+    for (const person of staffByEmployeeId || []) staffMap.set(String(person.employee_id), person)
     const paymentsByLoan = new Map<string, number>()
-    for (const payment of payments || []) paymentsByLoan.set(payment.loan_request_id, (paymentsByLoan.get(payment.loan_request_id) || 0) + Number(payment.amount_paid || 0))
+    const approvedPaymentDates = new Map<string, string[]>()
+    for (const payment of payments || []) {
+      paymentsByLoan.set(payment.loan_request_id, (paymentsByLoan.get(payment.loan_request_id) || 0) + Number(payment.amount_paid || 0))
+      approvedPaymentDates.set(payment.loan_request_id, [...(approvedPaymentDates.get(payment.loan_request_id) || []), payment.payment_date || payment.submitted_at])
+    }
     const scheduleByLoan = new Map<string, any[]>()
     for (const item of schedules || []) scheduleByLoan.set(item.loan_request_id, [...(scheduleByLoan.get(item.loan_request_id) || []), item])
 
@@ -114,8 +120,10 @@ export async function GET() {
       const outstanding = Math.max(total - paidToDate, 0)
       const schedule = scheduleByLoan.get(loan.id) || []
       const remaining = schedule.filter((item) => item.status !== "paid" && item.status !== "waived")
-      const completionDate = remaining.at(-1)?.due_date || schedule.at(-1)?.due_date || null
+      const completionDate = schedule.at(-1)?.due_date || null
       const nextPayment = remaining[0] || null
+      const approvedFullPaymentDate = outstanding <= 0 ? (approvedPaymentDates.get(loan.id) || []).sort().at(-1) || null : null
+      const isCompleted = outstanding <= 0
       return {
         ...loan,
         staff: (() => {
@@ -136,9 +144,11 @@ export async function GET() {
         next_payment_due: nextPayment?.due_date || null,
         next_payment_amount: Number(nextPayment?.monthly_amount || 0),
         expected_completion_date: completionDate,
-        repayment_status: outstanding <= 0 ? "completed" : remaining.some((item) => item.status === "overdue") ? "overdue" : "on_track",
+        completed_payment_date: approvedFullPaymentDate,
+        reapplication_eligible: isCompleted,
+        repayment_status: isCompleted ? "completed" : remaining.some((item) => item.status === "overdue") ? "overdue" : "on_track",
       }
-    }).filter((loan) => loan.outstanding_balance > 0)
+    })
 
     return NextResponse.json({ data: rows, generated_at: new Date().toISOString() })
   } catch (error) {
