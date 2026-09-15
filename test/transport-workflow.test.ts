@@ -3,6 +3,7 @@ import {
   deskStagesForRole,
   isAssignableRegionalStage,
   isCompletableTransportStage,
+  isCompletedTransportRequest,
   transportSla,
   transportStageLabel,
 } from "../lib/transport-workflow"
@@ -51,5 +52,11 @@ describe("transport-workflow", () => {
     expect(deskStagesForRole("transport_manager")).toContain("referenced")
     expect(isAssignableRegionalStage("referenced")).toBe(true)
     expect(isCompletableTransportStage("assigned", "assigned")).toBe(true)
+  })
+
+  it("treats a recorded trip completion as completed even if status is stale", () => {
+    expect(isCompletedTransportRequest({ status: "assigned", trip_completed_at: "2026-09-03T15:00:00Z" })).toBe(true)
+    expect(isCompletedTransportRequest({ status: "assigned" })).toBe(false)
+    expect(isCompletedTransportRequest({ status: "closed" })).toBe(true)
   })
 })

@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { ResumptionDelayDocumentEditor } from '@/components/leave/resumption-delay-document-editor'
 
 // Types
 interface Holiday {
@@ -448,7 +449,7 @@ export default function HRLeaveAdminClient({ profile }: { profile?: { id: string
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4 bg-slate-800">
+        <TabsList className="grid w-full grid-cols-5 bg-slate-800">
           <TabsTrigger value="holidays" className="flex items-center gap-2">
             <Calendar className="w-4 h-4" />
             Holidays
@@ -463,7 +464,14 @@ export default function HRLeaveAdminClient({ profile }: { profile?: { id: string
           <TabsTrigger value="deferments" className="flex items-center gap-2">
             Deferments
           </TabsTrigger>
+          <TabsTrigger value="resumption-documents" className="flex items-center gap-2">
+            Resumption documents
+          </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="resumption-documents" className="mt-6">
+          <ResumptionDelayDocumentEditor />
+        </TabsContent>
 
         {/* HOLIDAYS TAB */}
         <TabsContent value="holidays" className="mt-6">

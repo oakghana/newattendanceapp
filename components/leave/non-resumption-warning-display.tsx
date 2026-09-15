@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { NonResumptionWarningBanner } from './non-resumption-warning-banner'
+import { NonResumptionWarningModal } from './non-resumption-warning-modal'
 
 export async function NonResumptionWarningDisplay() {
   try {
@@ -29,7 +29,7 @@ export async function NonResumptionWarningDisplay() {
     const warning = warnings[0]
 
     return (
-      <NonResumptionWarningBanner
+      <NonResumptionWarningModal
         leaveEndDate={warning.leave_end_date}
         status={warning.status}
         daysOverdue={warning.days_overdue || 0}
