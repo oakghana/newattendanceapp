@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id)
       .single()
 
-    const role = profileData?.role
+    const role = String(profileData?.role || "").trim().toLowerCase().replace(/[\s-]+/g, "_")
     if (!role || !ALLOWED_ROLES.includes(role)) {
       return NextResponse.json(
         { error: "Only Accounts/HR staff can submit payment evidence" },

@@ -26,6 +26,7 @@ import { FDCalculationSubmission } from "@/components/loan/fd-calculation-submis
 import { HRLoanOfficeFDApproved } from "@/components/loan/hr-loan-office-fd-approved"
 import { RepaymentTrackingPanel } from "@/components/loan/repayment-tracking-panel"
 import { RunningLoansReport } from "@/components/loan/running-loans-report"
+import { SettlementInitiationPanel } from "@/components/loan/settlement-initiation-panel"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { GOOD_FD_THRESHOLD, canEnterFdScore as canEnterFdScoreForRole, isPoorFdScore } from "@/lib/loan-workflow"
@@ -5779,9 +5780,10 @@ export default function LoanAppPage() {
         </TabsContent>
 
         {/* ── Repayment Tracking ── */}
-        <TabsContent value="running-loans" className="space-y-4">
-          <RunningLoansReport />
-        </TabsContent>
+<TabsContent value="running-loans" className="space-y-4">
+  {normalizedRole === "hr_loan_office" && <SettlementInitiationPanel />}
+  <RunningLoansReport />
+  </TabsContent>
 
         <TabsContent value="repayment-tracking" className="space-y-4">
           <RepaymentTrackingPanel
