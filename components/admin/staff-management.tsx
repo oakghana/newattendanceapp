@@ -1529,7 +1529,11 @@ export function StaffManagement() {
                                 : "h-8 gap-1.5 px-2.5 bg-chart-2 text-white hover:bg-chart-2/90"
                             }
                             disabled={
-                              isItAdmin && (member.role === "admin" || member.role === "it-admin")
+                              isItAdmin &&
+                              member.is_active &&
+                              ["admin", "administrator", "it-admin", "it_admin"].includes(
+                                String(member.role || "").trim().toLowerCase().replace(/[-\s]+/g, "_"),
+                              )
                             }
                           >
                             {member.is_active ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
