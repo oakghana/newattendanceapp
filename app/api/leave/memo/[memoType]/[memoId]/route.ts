@@ -2,8 +2,16 @@ import { NextRequest, NextResponse } from "next/server"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { ensureMemoSecurity, type MemoType } from "@/lib/memo-security"
 
 export const runtime = "nodejs"
+
+function mapMemoTypeParam(memoType: string): MemoType {
+  if (memoType === "deferment") return "deferment"
+  if (memoType === "recall") return "recall"
+  if (memoType === "payment-advice") return "payment_advice"
+  return "leave_generic"
+}
 
 // Helper: Format date for memo
 function fmtDate(value?: string | null): string {
@@ -522,6 +530,43 @@ Yours faithfully,
     doc.setTextColor(180, 180, 180)
     doc.text("Powered by ITD", pageWidth - 40, pageHeight - 5, { align: "right" })
     doc.setTextColor(0, 0, 0)
+
+    // ─── Anti-forgery security stamp: verification code + QR code ─────────
+    try {
+      const memoSecurity = await ensureMemoSecurity({
+        memoType: mapMemoTypeParam(memoType),
+        memoId: String(memoId),
+        fields: {
+          memoType,
+          staffName,
+          mdApprovedAt: memoData?.md_approved_at,
+          bodySnapshot: typeof memoBody === "object" ? JSON.stringify(memoBody) : String(memoBody || ""),
+        },
+        referenceNumber: memoData?.reference_number || String(memoId).slice(0, 8),
+        staffId: memoData?.staff?.id || memoData?.staff_id || null,
+        staffName,
+        lock: true,
+      })
+
+      const stampPage = doc.getNumberOfPages()
+      doc.setPage(stampPage)
+      const qrSize = 16
+      const qrX = pageWidth - marginRight - qrSize
+      const qrY = pageHeight - 32
+      if (memoSecurity.qrDataUrl) {
+        doc.addImage(memoSecurity.qrDataUrl, "PNG", qrX, qrY, qrSize, qrSize)
+      }
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(6.5)
+      doc.setTextColor(120, 120, 120)
+      doc.text("Verify at:", qrX, qrY + qrSize + 3)
+      doc.text(memoSecurity.verifyUrl.replace(/^https?:\/\//, ""), qrX, qrY + qrSize + 6, { maxWidth: qrSize + 4 })
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(0, 0, 0)
+      doc.text(memoSecurity.verificationCode, marginLeft, pageHeight - 4)
+    } catch (securityError) {
+      console.error("[v0] Failed to stamp memo security data:", securityError)
+    }
 
     // Generate PDF and return
     const pdf = doc.output("arraybuffer")

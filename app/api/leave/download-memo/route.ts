@@ -5,6 +5,16 @@ import fs from 'fs'
 import path from 'path'
 import { calculateAnnualLeaveMemoBreakdown, calculateAnnualLeaveMemoDates, extractAlreadyEnjoyedDays } from '@/lib/annual-leave-calculator'
 import { resolveEntitlementFromProfile } from '@/lib/annual-leave-entitlement'
+import { ensureMemoSecurity, type MemoType } from '@/lib/memo-security'
+
+function mapLeaveTypeToMemoType(leaveTypeKey: string): MemoType {
+  const key = String(leaveTypeKey || '').toLowerCase()
+  const known = new Set([
+    'annual', 'casual', 'sick', 'maternity', 'paternity', 'study', 'compassionate', 'part', 'no_pay', 'absence',
+  ])
+  if (known.has(key)) return `leave_${key}` as MemoType
+  return 'leave_generic'
+}
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -342,7 +352,7 @@ export async function GET(request: NextRequest) {
       sigImageBase64 = signerSigDataUrl // already a data URL from DB
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════════��══════
     // BUILD PDF — Official QCC/COCOBOD format
     // ═══════════════════════════════════════════════════════════════════════
     const doc = new jsPDF({ unit: 'mm', format: 'a4' })
@@ -602,6 +612,41 @@ export async function GET(request: NextRequest) {
       footerY,
       { align: 'center' },
     )
+
+    // ─── Anti-forgery security stamp: verification code + QR code ─────────────
+    try {
+      const memoSecurity = await ensureMemoSecurity({
+        memoType: mapLeaveTypeToMemoType(req.leave_type_key),
+        memoId: String(req.id),
+        fields: {
+          status: req.status,
+          leaveType: req.leave_type_key,
+          applicant: staffFullName,
+          hrApprovedAt: req.hr_approved_at,
+        },
+        referenceNumber: String(req.id),
+        staffId: String(req.user_id || ''),
+        staffName: staffFullName,
+        lock: true,
+      })
+
+      const qrSize = 16
+      const qrX = pageW - mR - qrSize
+      const qrY = pageH - 34
+      if (memoSecurity.qrDataUrl) {
+        doc.addImage(memoSecurity.qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize)
+      }
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(6.5)
+      doc.setTextColor(120, 120, 120)
+      doc.text('Verify at:', qrX, qrY + qrSize + 3)
+      doc.text(memoSecurity.verifyUrl.replace(/^https?:\/\//, ''), qrX, qrY + qrSize + 6, { maxWidth: qrSize + 4 })
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(0, 0, 0)
+      doc.text(memoSecurity.verificationCode, mL, pageH - 4)
+    } catch (securityError) {
+      console.error('[v0] Failed to stamp leave memo security data:', securityError)
+    }
 
     // ── Output ────────────────────────────────────────────────────────────────
     const pdfBuffer = Buffer.from(doc.output('arraybuffer') as ArrayBuffer)

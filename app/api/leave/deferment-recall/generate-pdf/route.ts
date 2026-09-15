@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 import jsPDF from "jspdf"
+import { ensureMemoSecurity } from "@/lib/memo-security"
 
 // Ordinal suffix helper: 1st, 2nd, 3rd …
 function ordinal(n: number): string {
@@ -327,6 +328,42 @@ async function generateRecallPDF(recallId: string): Promise<NextResponse> {
     `Ref: ${refNo}  |  Generated: ${new Date().toLocaleDateString("en-GB")}`,
     pageW / 2, pageH - 8, { align: "center" }
   )
+
+  // ─── Anti-forgery security stamp: verification code + QR code ─────────────
+  try {
+    const memoSecurity = await ensureMemoSecurity({
+      memoType: "recall",
+      memoId: String(recall.id),
+      fields: {
+        refNo,
+        staffName,
+        recallDate: recall.recall_date,
+        recallReason: recall.recall_reason,
+        hrDecision: recall.hr_decision,
+      },
+      referenceNumber: refNo,
+      staffId: String(recall.staff_user_id || ""),
+      staffName,
+      lock: true,
+    })
+
+    const qrSize = 16
+    const qrX = pageW - marginL - qrSize
+    const qrY = pageH - 30
+    if (memoSecurity.qrDataUrl) {
+      doc.addImage(memoSecurity.qrDataUrl, "PNG", qrX, qrY, qrSize, qrSize)
+    }
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(6.5)
+    doc.setTextColor(120, 120, 120)
+    doc.text("Verify at:", qrX, qrY + qrSize + 3)
+    doc.text(memoSecurity.verifyUrl.replace(/^https?:\/\//, ""), qrX, qrY + qrSize + 6, { maxWidth: qrSize + 4 })
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(0, 0, 0)
+    doc.text(memoSecurity.verificationCode, marginL, pageH - 4)
+  } catch (securityError) {
+    console.error("[v0] Failed to stamp recall memo security data:", securityError)
+  }
 
   // ── Output ────────────────────────────────────────────────────────────────
   const pdfBuf   = Buffer.from(doc.output("arraybuffer"))

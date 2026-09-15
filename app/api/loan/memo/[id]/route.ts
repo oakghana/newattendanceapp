@@ -15,6 +15,7 @@ import {
 } from "@/lib/loan-workflow"
 import { verifyMemoToken } from "@/lib/secure-memo"
 import { getMemoLocationAddress } from "@/lib/location-mappings"
+import { ensureMemoSecurity } from "@/lib/memo-security"
 
 export const runtime = "nodejs"
 
@@ -814,6 +815,45 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     }
 
     applySignatureSideWatermark(doc, sigImgY, marginLeft)
+
+    // ─── Anti-forgery security stamp: verification code + QR code ─────────
+    try {
+      const memoSecurity = await ensureMemoSecurity({
+        memoType: "loan",
+        memoId: String(loan.id),
+        fields: {
+          requestNumber: loan.request_number,
+          status: loan.status,
+          amount: loan.amount,
+          loanType: loan.loan_type_label,
+          applicant: applicantFullName,
+          referenceNumber: refNumber,
+          mdApprovedAt: loan.md_approved_at,
+        },
+        referenceNumber: refNumber,
+        staffId: String(loan.user_id || ""),
+        staffName: applicantFullName,
+        lock: isMdApproved,
+      })
+
+      const stampPage = doc.getNumberOfPages()
+      doc.setPage(stampPage)
+      const qrSize = 16
+      const qrX = pageWidth - marginRight - qrSize
+      const qrY = pageHeight - 26
+      if (memoSecurity.qrDataUrl) {
+        doc.addImage(memoSecurity.qrDataUrl, "PNG", qrX, qrY, qrSize, qrSize)
+      }
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(6.5)
+      doc.setTextColor(120, 120, 120)
+      doc.text("Verify at:", qrX, qrY + qrSize + 3)
+      doc.text(memoSecurity.verifyUrl.replace(/^https?:\/\//, ""), qrX, qrY + qrSize + 6, { maxWidth: qrSize + 4 })
+      doc.setFont("helvetica", "bold")
+      doc.text(memoSecurity.verificationCode, marginLeft, pageHeight - 10)
+    } catch (securityError) {
+      console.error("[v0] Failed to stamp loan memo security data:", securityError)
+    }
 
     const pdfBytes = doc.output("arraybuffer")
 

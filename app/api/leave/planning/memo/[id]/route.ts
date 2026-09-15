@@ -8,8 +8,18 @@ import { isHrApproverRole, isHrLeaveOfficeRole, isManagerRole, isStaffRole, calc
 import { resolveEntitlementFromProfile } from "@/lib/annual-leave-entitlement"
 import { isHrRecordsRole } from "@/lib/hr-workflow"
 import { calculateAnnualLeaveMemoBreakdown, calculateAnnualLeaveMemoDates, extractAlreadyEnjoyedDays, getNextWorkingDay } from "@/lib/annual-leave-calculator"
+import { ensureMemoSecurity, type MemoType } from "@/lib/memo-security"
 
 export const runtime = "nodejs"
+
+function mapLeaveTypeToMemoType(leaveTypeKey: string): MemoType {
+  const key = String(leaveTypeKey || "").toLowerCase()
+  const known = new Set([
+    "annual", "casual", "sick", "maternity", "paternity", "study", "compassionate", "part", "no_pay", "absence",
+  ])
+  if (known.has(key)) return `leave_${key}` as MemoType
+  return "leave_generic"
+}
 
 function fmtName(profile?: any): string {
   const direct = String(profile?.full_name || profile?.display_name || "").trim()
@@ -1172,6 +1182,42 @@ export async function GET(
     )
 
     applySignatureSideWatermark(doc, sigImgY, marginLeft)
+
+    // ─── Anti-forgery security stamp: verification code + QR code ─────────
+    try {
+      const memoSecurity = await ensureMemoSecurity({
+        memoType: mapLeaveTypeToMemoType(leaveTypeKey),
+        memoId: String(lr.id),
+        fields: {
+          status: lr.status,
+          leaveType: leaveTypeKey,
+          applicant: applicantFullName,
+          referenceNumber: refNum || String(lr.request_number || lr.id || ""),
+        },
+        referenceNumber: refNum || String(lr.request_number || lr.id || ""),
+        staffId: String(lr.user_id || ""),
+        staffName: applicantFullName,
+        lock: true,
+      })
+
+      const stampPage = doc.getNumberOfPages()
+      doc.setPage(stampPage)
+      const qrSize = 16
+      const qrX = pageWidth - marginRight - qrSize
+      const qrY = pageHeight - 26
+      if (memoSecurity.qrDataUrl) {
+        doc.addImage(memoSecurity.qrDataUrl, "PNG", qrX, qrY, qrSize, qrSize)
+      }
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(6.5)
+      doc.setTextColor(120, 120, 120)
+      doc.text("Verify at:", qrX, qrY + qrSize + 3)
+      doc.text(memoSecurity.verifyUrl.replace(/^https?:\/\//, ""), qrX, qrY + qrSize + 6, { maxWidth: qrSize + 4 })
+      doc.setFont("helvetica", "bold")
+      doc.text(memoSecurity.verificationCode, marginLeft, pageHeight - 10)
+    } catch (securityError) {
+      console.error("[v0] Failed to stamp leave memo security data:", securityError)
+    }
 
     const pdfBytes = doc.output("arraybuffer")
 

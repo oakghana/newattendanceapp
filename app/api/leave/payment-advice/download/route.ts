@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
+import { ensureMemoSecurity } from "@/lib/memo-security"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -452,6 +453,45 @@ export async function GET(request: NextRequest) {
     
     // Reset text color for any subsequent content
     doc.setTextColor(0, 0, 0)
+
+    // ─── Anti-forgery security stamp: verification code + QR code ─────────
+    try {
+      const memoSecurity = await ensureMemoSecurity({
+        memoType: "payment_advice",
+        memoId: String(memo.id),
+        fields: {
+          refNo,
+          staffName: memo.staff_name,
+          staffNumber: memo.staff_number,
+          leavePeriodStart: memo.leave_period_start,
+          leavePeriodEnd: memo.leave_period_end,
+          approvedDays: memo.approved_days,
+          status: memo.status,
+        },
+        referenceNumber: refNo,
+        staffId: String(memo.staff_id || ""),
+        staffName: memo.staff_name,
+        lock: true,
+      })
+
+      const pageHeight = doc.internal.pageSize.getHeight()
+      const qrSize = 16
+      const qrX = pageWidth - margin - qrSize
+      const qrY = pageHeight - 30
+      if (memoSecurity.qrDataUrl) {
+        doc.addImage(memoSecurity.qrDataUrl, "PNG", qrX, qrY, qrSize, qrSize)
+      }
+      doc.setFont(undefined, "normal")
+      doc.setFontSize(6.5)
+      doc.setTextColor(120, 120, 120)
+      doc.text("Verify at:", qrX, qrY + qrSize + 3)
+      doc.text(memoSecurity.verifyUrl.replace(/^https?:\/\//, ""), qrX, qrY + qrSize + 6, { maxWidth: qrSize + 4 })
+      doc.setFont(undefined, "bold")
+      doc.setTextColor(0, 0, 0)
+      doc.text(memoSecurity.verificationCode, margin, pageHeight - 4)
+    } catch (securityError) {
+      console.error("[v0] Failed to stamp payment advice memo security data:", securityError)
+    }
 
     // Convert to buffer and return
     const pdfBuffer = Buffer.from(doc.output("arraybuffer"))

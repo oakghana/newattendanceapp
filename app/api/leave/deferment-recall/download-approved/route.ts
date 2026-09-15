@@ -1,6 +1,7 @@
 import { createAdminClient, createClient as createSessionClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 import jsPDF from "jspdf"
+import { ensureMemoSecurity } from "@/lib/memo-security"
 
 // Ordinal suffix helper: 1st, 2nd, 3rd, 4th …
 function ordinal(n: number): string {
@@ -339,7 +340,45 @@ export async function GET(request: NextRequest) {
       pageW / 2, pageH - 8, { align: "center" }
     )
 
-    // ── Output ────────────────────────────────────────────────────────────────
+    // ─── Anti-forgery security stamp: verification code + QR code ─────────────
+    try {
+      const memoSecurity = await ensureMemoSecurity({
+        memoType: "deferment",
+        memoId: String(req.id),
+        fields: {
+          refNo,
+          staffName,
+          defermentStartDate: req.deferment_start_date,
+          defermentEndDate: req.deferment_end_date,
+          rescheduledStartDate: req.rescheduled_start_date,
+          rescheduledEndDate: req.rescheduled_end_date,
+          decision: req.hr_office_decision,
+        },
+        referenceNumber: refNo,
+        staffId: String(req.user_id || ""),
+        staffName,
+        lock: true,
+      })
+
+      const qrSize = 16
+      const qrX = pageW - marginL - qrSize
+      const qrY = pageH - 30
+      if (memoSecurity.qrDataUrl) {
+        doc.addImage(memoSecurity.qrDataUrl, "PNG", qrX, qrY, qrSize, qrSize)
+      }
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(6.5)
+      doc.setTextColor(120, 120, 120)
+      doc.text("Verify at:", qrX, qrY + qrSize + 3)
+      doc.text(memoSecurity.verifyUrl.replace(/^https?:\/\//, ""), qrX, qrY + qrSize + 6, { maxWidth: qrSize + 4 })
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(0, 0, 0)
+      doc.text(memoSecurity.verificationCode, marginL, pageH - 4)
+    } catch (securityError) {
+      console.error("[v0] Failed to stamp deferment memo security data:", securityError)
+    }
+
+    // ── Output ─────────────────────────────────────────────────────────────────
     const pdfBuf  = Buffer.from(doc.output("arraybuffer"))
     const fnStaff = staffName.replace(/\s+/g, "-").toLowerCase()
     const filename = `deferment-approval-${fnStaff}-${approvalYear}.pdf`
