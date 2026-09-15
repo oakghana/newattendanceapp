@@ -15,6 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { isCompletedTransportRequest } from "@/lib/transport-workflow"
 
 export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
   const [requests, setRequests] = useState<any[]>([])
@@ -124,6 +125,7 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
     return (
       (role === "transport_manager" || role === "chief_driver" || role === "admin" || role === "it-admin") &&
       request.md_decision === "approved" &&
+      !isCompletedTransportRequest(request) &&
       request.status !== "assigned"
     )
   }
@@ -189,24 +191,26 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
     total: totalRequests,
     awaitingHod: requests.filter(awaitingHod).length,
     awaitingMd: requests.filter((request) => request.status === "awaiting_md_approval" && request.md_decision === "pending").length,
-    readyToAssign: requests.filter((request) => request.md_decision === "approved" && request.status !== "assigned").length,
-    assigned: requests.filter((request) => request.status === "assigned").length,
-    approved: requests.filter((request) => request.md_decision === "approved").length,
-    completed: requests.filter((request) => ["completed", "closed"].includes(request.status)).length,
+    readyToAssign: requests.filter((request) => request.md_decision === "approved" && !isCompletedTransportRequest(request) && request.status !== "assigned").length,
+    assigned: requests.filter((request) => request.status === "assigned" && !isCompletedTransportRequest(request)).length,
+    approved: requests.filter((request) => request.md_decision === "approved" && !isCompletedTransportRequest(request)).length,
+    completed: requests.filter(isCompletedTransportRequest).length,
   }), [requests, totalRequests])
 
   const visibleRequests = useMemo(() => requests.filter((request) => {
     const matchesQuery = `${request.department ?? ""} ${request.location ?? ""} ${request.purpose ?? ""} ${request.origin ?? ""} ${request.destination ?? ""}`
       .toLowerCase()
       .includes(query.toLowerCase().trim())
+    const completed = isCompletedTransportRequest(request)
     const matchesStage = stage === "all"
-      || (stage === "pending" && !["completed", "closed", "rejected"].includes(request.status) && request.md_decision !== "approved")
-      || (stage === "approved" && request.md_decision === "approved")
-      || (stage === "completed" && ["completed", "closed"].includes(request.status))
+      || (stage === "pending" && !completed && !["rejected"].includes(request.status) && request.md_decision !== "approved")
+      || (stage === "approved" && request.md_decision === "approved" && !completed)
+      || (stage === "completed" && completed)
     return matchesQuery && matchesStage
   }), [requests, query, stage])
 
   const workflowLabel = (request: any) => {
+    if (isCompletedTransportRequest(request)) return "Transport completed"
     if (request.status === "assigned") return "Driver assigned"
     if (request.md_decision === "approved") return "Approved - awaiting assignment"
     if (awaitingHod(request)) return "Awaiting HOD authorization"
@@ -219,15 +223,16 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
     const rejected = request.status === "rejected" || request.hod_decision === "rejected" || request.md_decision === "rejected"
     const hodApproved = request.hod_decision === "approved"
     const mdApproved = request.md_decision === "approved"
-    const assigned = request.status === "assigned" || Boolean(request.recommended_driver_id)
+    const completed = isCompletedTransportRequest(request)
+    const assigned = completed || request.status === "assigned" || Boolean(request.recommended_driver_id)
     return {
-      value: rejected ? 25 : assigned ? 100 : mdApproved ? 75 : hodApproved ? 50 : 25,
+      value: rejected ? 25 : completed ? 100 : assigned ? 100 : mdApproved ? 75 : hodApproved ? 50 : 25,
       rejected,
       steps: [
         ["Submitted", true],
         ["HOD authorization", hodApproved],
         ["MD approval", mdApproved],
-        ["Driver assignment", assigned],
+        [completed ? "Transport completed" : "Driver assignment", assigned],
       ] as const,
     }
   }
@@ -322,7 +327,7 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
                       {request.department} — {request.location}
                     </CardTitle>
                   </div>
-                  <Badge className={request.status === "assigned" ? "bg-emerald-600" : request.status === "rejected" ? "bg-destructive" : "bg-amber-500 text-amber-950 hover:bg-amber-500"}>{workflowLabel(request)}</Badge>
+                  <Badge className={isCompletedTransportRequest(request) || request.status === "assigned" ? "bg-emerald-600" : request.status === "rejected" ? "bg-destructive" : "bg-amber-500 text-amber-950 hover:bg-amber-500"}>{workflowLabel(request)}</Badge>
                 </div>
               </CardHeader>
               <CardContent className="grid gap-4 p-4">

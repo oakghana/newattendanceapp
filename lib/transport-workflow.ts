@@ -96,6 +96,19 @@ export function isCompletableTransportStage(stage?: string | null, status?: stri
   return String(stage || "") === "assigned" || String(status || "") === "assigned"
 }
 
+/** A request is complete when the workflow/status says so or the trip has a completion timestamp. */
+export function isCompletedTransportRequest(request: {
+  status?: string | null
+  workflow_stage?: string | null
+  trip_completed_at?: string | null
+}): boolean {
+  return (
+    ["completed", "closed"].includes(String(request.status || "").toLowerCase()) ||
+    ["completed", "closed"].includes(String(request.workflow_stage || "").toLowerCase()) ||
+    Boolean(request.trip_completed_at)
+  )
+}
+
 export function formatTransportEventAction(action?: string | null): string {
   return String(action || "update")
     .replace(/^transport_/, "")
