@@ -172,10 +172,20 @@ export function isLoanOfficeDepartment(name?: string | null, code?: string | nul
   return n.includes("loan") || c.includes("loan") || n.includes("welfare")
 }
 
+/**
+ * Roles that must never be treated as an HOD/loan reviewer, no matter what
+ * loan_hod_linkages rows exist for them. HR Leave Office administers leave
+ * requests and is not a department head/regional manager — a staff member
+ * being (mistakenly, or via a batch "link unassigned staff" fallback)
+ * recorded as their hod_user_id must not grant them the HOD Review tab.
+ */
+const NEVER_HOD_ROLES = new Set(["hr_leave_office"])
+
 export function canDoHodReview(role: string, isLinkedHod = false): boolean {
   const normalized = normalizeRole(role)
+  if (NEVER_HOD_ROLES.has(normalized)) return false
   return isAdminRole(normalized) || ["regional_manager", "department_head", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(normalized) || Boolean(isLinkedHod)
-}
+  }
 
 export function canDoLoanOffice(role: string, deptName?: string | null, deptCode?: string | null): boolean {
   const normalizedRole = normalizeRole(role)

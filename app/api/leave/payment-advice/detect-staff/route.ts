@@ -28,11 +28,15 @@ export async function POST(request: NextRequest) {
       monthStart,
       monthEnd,
       leaveTypeKey: "annual",
-      statuses: ["approved", "hr_approved", "hod_approved"],
+      statuses: ["approved", "hr_approved"],
     })
 
-    // Query staff on annual leave for this month
-    // Status can be: approved, hr_approved, hod_approved (all are approved states)
+    // Query staff on annual leave for this month.
+    // Only "approved" (regional workflow: Regional Manager has given final approval) and
+    // "hr_approved" (non-regional workflow: HR Executive/HR Records has given final approval)
+    // count as fully approved. "hod_approved" is deliberately excluded here — it means only
+    // the HOD has signed off and the request is still awaiting HR Leave Office / HR Executive
+    // review, so it must not be treated as payment-ready.
     // FIXED: Use START DATE ONLY to prevent multi-month leaves from appearing in multiple months
     // This ensures each leave generates only ONE payment memo in the month it starts
     // CRITICAL: Use admin client to bypass RLS policies - HR Leave Office needs to see ALL approved leave requests, not just their own
@@ -69,7 +73,7 @@ export async function POST(request: NextRequest) {
           `
           )
           .eq("leave_type_key", "annual")
-          .in("status", ["approved", "hr_approved", "hod_approved"])
+          .in("status", ["approved", "hr_approved"])
           // Filter by START DATE ONLY - leave must start in this month
           .gte("preferred_start_date", monthStart)
           .lte("preferred_start_date", monthEnd)
@@ -97,7 +101,7 @@ export async function POST(request: NextRequest) {
           `
           )
           .eq("leave_type_key", "annual")
-          .in("status", ["approved", "hr_approved", "hod_approved"])
+          .in("status", ["approved", "hr_approved"])
           .gte("preferred_start_date", monthStart)
           .lte("preferred_start_date", monthEnd)
 

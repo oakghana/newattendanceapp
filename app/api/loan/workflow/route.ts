@@ -18,6 +18,40 @@ const POST_LOAN_OFFICE_DELAY_DAYS = 5
 const ADMIN_DB_ROLE_ALIASES = ["admin", "super_admin", "god"]
 // Note: it_admin is NOT included - IT Admin users should only see My Loans and My Tasks tabs
 
+// Postgres/PostgREST rejects requests whose query string grows too large, so embedding
+// hundreds+ of UUIDs directly into a `user_id.in.(...)` filter (as legacy code did) can
+// return a plain 400 Bad Request with no useful detail. This chunks large id lists into
+// safe batches, runs them in parallel, and merges/dedupes the rows in JS instead.
+const STAFF_ID_CHUNK_SIZE = 150
+
+async function fetchLoanRequestsForStaffIds(
+  admin: any,
+  staffIds: string[],
+  applyFilter: (query: any) => any,
+): Promise<{ data: any[]; error: any }> {
+  if (staffIds.length === 0) return { data: [], error: null }
+  const uniqueIds = Array.from(new Set(staffIds))
+  const chunks: string[][] = []
+  for (let i = 0; i < uniqueIds.length; i += STAFF_ID_CHUNK_SIZE) {
+    chunks.push(uniqueIds.slice(i, i + STAFF_ID_CHUNK_SIZE))
+  }
+  const results = await Promise.all(
+    chunks.map((chunk) => applyFilter(admin.from("loan_requests").select("*").in("user_id", chunk))),
+  )
+  const error = results.find((r: any) => r?.error)?.error || null
+  const seen = new Set<string>()
+  const data: any[] = []
+  for (const result of results) {
+    for (const row of result?.data || []) {
+      if (!seen.has(row.id)) {
+        seen.add(row.id)
+        data.push(row)
+      }
+    }
+  }
+  return { data, error }
+}
+
 async function notifyUsers(admin: any, userIds: string[], title: string, message: string, type = "loan_update", data: any = {}) {
   if (!userIds.length) return
   await admin.from("staff_notifications").insert(
@@ -497,16 +531,21 @@ export async function GET() {
           .order("created_at", { ascending: false })
       }
 
-      const scopedFilter = reviewerScopedStaffIds.length > 0
-        ? `,user_id.in.(${reviewerScopedStaffIds.join(",")})`
-        : ""
-
-      return admin
-        .from("loan_requests")
-        .select("*")
-        .eq("status", "pending_hod")
-        .or(`hod_reviewer_id.eq.${user.id}${scopedFilter}`)
-        .order("created_at", { ascending: false })
+      const [directRes, linkedRes] = await Promise.all([
+        admin.from("loan_requests").select("*").eq("status", "pending_hod").eq("hod_reviewer_id", user.id),
+        fetchLoanRequestsForStaffIds(admin, reviewerScopedStaffIds, (q) => q.eq("status", "pending_hod")),
+      ])
+      const error = directRes.error || linkedRes.error
+      const seen = new Set<string>()
+      const data: any[] = []
+      for (const row of [...(directRes.data || []), ...linkedRes.data]) {
+        if (!seen.has(row.id)) {
+          seen.add(row.id)
+          data.push(row)
+        }
+      }
+      data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      return { data, error }
     })()
 
     const showHod = permissions.hod || viewAllTabs
@@ -557,50 +596,62 @@ export async function GET() {
       (viewAllTabs || permissions.allLoans)
         ? admin.from("loan_requests").select("*").order("created_at", { ascending: false })
         : (isRegionalManager || isDepartmentHead || isLinkedHod)
-          ? admin
-              .from("loan_requests")
-              .select("*")
-              .or(
-                `hod_reviewer_id.eq.${user.id}${
-                  reviewerScopedStaffIds.length > 0 ? `,user_id.in.(${reviewerScopedStaffIds.join(",")})` : ""
-                }`,
-              )
-              .order("created_at", { ascending: false })
+          ? (async () => {
+              const [directRes, linkedRes] = await Promise.all([
+                admin.from("loan_requests").select("*").eq("hod_reviewer_id", user.id),
+                fetchLoanRequestsForStaffIds(admin, reviewerScopedStaffIds, (q) => q),
+              ])
+              const error = directRes.error || linkedRes.error
+              const seen = new Set<string>()
+              const data: any[] = []
+              for (const row of [...(directRes.data || []), ...linkedRes.data]) {
+                if (!seen.has(row.id)) {
+                  seen.add(row.id)
+                  data.push(row)
+                }
+              }
+              data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+              return { data, error }
+            })()
           : Promise.resolve({ data: [], error: null } as any),
       myRequestIds.length > 0
         ? admin.from("loan_request_timeline").select("*").in("loan_request_id", myRequestIds).order("created_at", { ascending: true })
         : Promise.resolve({ data: [], error: null } as any),
       (async () => {
-        // First, get all staff members where the current user is a linked HOD
-        const { data: hodLinkages } = await admin
-          .from("loan_hod_linkages")
-          .select("staff_user_id")
-          .eq("hod_user_id", user.id)
-        
-        const linkedStaffIds = hodLinkages?.map((l) => l.staff_user_id) || []
-        
-        // Then query loans where user is reviewer OR is linked as HOD to staff
-        const orConditions: string[] = [
-          `hod_reviewer_id.eq.${user.id}`,
-          `loan_office_reviewer_id.eq.${user.id}`,
-          `accounts_reviewer_id.eq.${user.id}`,
-          `committee_reviewer_id.eq.${user.id}`,
-          `hr_officer_id.eq.${user.id}`,
-          `director_hr_id.eq.${user.id}`,
-        ]
-        
-        // If user has linked HOD relationships, also include pending_hod loans for those staff
-        if (linkedStaffIds.length > 0) {
-          orConditions.push(`and(user_id.in.(${linkedStaffIds.join(",")}),status.eq.pending_hod)`)
-        }
-        
-        const query = admin
+        // Loans where the user is an explicit reviewer at any stage (small, safe .or() filter).
+        const reviewerRes = await admin
           .from("loan_requests")
           .select("*")
-          .or(orConditions.join(","))
-          .order("updated_at", { ascending: false })
-        
-        return query
+          .or(
+            [
+              `hod_reviewer_id.eq.${user.id}`,
+              `loan_office_reviewer_id.eq.${user.id}`,
+              `accounts_reviewer_id.eq.${user.id}`,
+              `committee_reviewer_id.eq.${user.id}`,
+              `hr_officer_id.eq.${user.id}`,
+              `director_hr_id.eq.${user.id}`,
+            ].join(","),
+          )
+
+        // Plus pending_hod loans for staff linked to this user as HOD — but only when the
+        // role is actually eligible to review as an HOD. This keeps roles like hr_leave_office
+        // from ever picking up "My Tasks" work through a (possibly stale) linkage row, and
+        // chunks the id list so a large team never produces an oversized request.
+        const linkedRes = canDoHodReview(role, isLinkedHod)
+          ? await fetchLoanRequestsForStaffIds(admin, linkedStaffIds, (q) => q.eq("status", "pending_hod"))
+          : { data: [], error: null }
+
+        const error = reviewerRes.error || linkedRes.error
+        const seen = new Set<string>()
+        const data: any[] = []
+        for (const row of [...(reviewerRes.data || []), ...(linkedRes.data || [])]) {
+          if (!seen.has(row.id)) {
+            seen.add(row.id)
+            data.push(row)
+          }
+        }
+        data.sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime())
+        return { data, error }
       })(),
     ])
 
