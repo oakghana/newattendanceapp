@@ -5,6 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { Clock, User, Calendar, CheckCircle2, XCircle, Loader2, AlertCircle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { HODResumptionConfirmations } from './hod-resumption-confirmations'
@@ -39,6 +47,9 @@ export function HODReviewSection({ userDepartmentId, viewerRole }: HODReviewSect
   const [requests, setRequests] = useState<LeaveRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [actingId, setActingId] = useState<string | null>(null)
+  const [rejectTarget, setRejectTarget] = useState<string | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
   const { toast } = useToast()
 
   useEffect(() => {
@@ -82,38 +93,59 @@ export function HODReviewSection({ userDepartmentId, viewerRole }: HODReviewSect
     return 'bg-red-100 text-red-700'
   }
 
-  const handleApprove = async (requestId: string) => {
+  const submitDecision = async (requestId: string, action: 'approve' | 'reject', recommendation?: string) => {
+    setActingId(requestId)
     try {
-      const res = await fetch(`/api/leave/requests/${requestId}`, {
-        method: 'PATCH',
+      const res = await fetch('/api/leave/planning/review', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'approved', hod_review_status: 'approved' }),
+        body: JSON.stringify({ leave_plan_request_id: requestId, action, recommendation: recommendation || undefined }),
       })
+      const json = await res.json().catch(() => ({}))
 
-      if (!res.ok) throw new Error('Failed to approve')
+      if (!res.ok) {
+        // 409 means another HOD/RM linked to this staff member already
+        // acted on this request first — remove it from this view instead
+        // of letting the user retry an action that can no longer apply.
+        if (res.status === 409) {
+          setRequests((prev) => prev.filter((r) => r.id !== requestId))
+          toast({
+            title: 'Already handled',
+            description: json.error || 'Another supervisor already reviewed this request.',
+          })
+          return
+        }
+        throw new Error(json.error || `Failed to ${action} request`)
+      }
 
-      toast({ title: 'Success', description: 'Leave request approved' })
+      toast({
+        title: 'Success',
+        description: action === 'approve' ? 'Leave request approved' : 'Leave request rejected',
+      })
       fetchDepartmentRequests()
     } catch (err) {
-      toast({ title: 'Error', description: 'Failed to approve request', variant: 'destructive' })
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : `Failed to ${action} request`,
+        variant: 'destructive',
+      })
+    } finally {
+      setActingId(null)
     }
   }
 
-  const handleDeny = async (requestId: string) => {
-    try {
-      const res = await fetch(`/api/leave/requests/${requestId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'rejected', hod_review_status: 'rejected' }),
-      })
+  const handleApprove = (requestId: string) => submitDecision(requestId, 'approve')
 
-      if (!res.ok) throw new Error('Failed to deny')
+  const openRejectDialog = (requestId: string) => {
+    setRejectReason('')
+    setRejectTarget(requestId)
+  }
 
-      toast({ title: 'Success', description: 'Leave request rejected' })
-      fetchDepartmentRequests()
-    } catch (err) {
-      toast({ title: 'Error', description: 'Failed to deny request', variant: 'destructive' })
-    }
+  const confirmReject = async () => {
+    if (!rejectTarget || !rejectReason.trim()) return
+    const requestId = rejectTarget
+    setRejectTarget(null)
+    await submitDecision(requestId, 'reject', rejectReason.trim())
   }
 
   if (loading) {
@@ -230,15 +262,21 @@ export function HODReviewSection({ userDepartmentId, viewerRole }: HODReviewSect
                   size="sm"
                   variant="default"
                   className="bg-green-600 hover:bg-green-700"
+                  disabled={actingId === req.id}
                   onClick={() => handleApprove(req.id)}
                 >
-                  <CheckCircle2 className="h-4 w-4 mr-1" />
+                  {actingId === req.id ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                  )}
                   Approve
                 </Button>
                 <Button
                   size="sm"
                   variant="destructive"
-                  onClick={() => handleDeny(req.id)}
+                  disabled={actingId === req.id}
+                  onClick={() => openRejectDialog(req.id)}
                 >
                   <XCircle className="h-4 w-4 mr-1" />
                   Deny
@@ -250,6 +288,29 @@ export function HODReviewSection({ userDepartmentId, viewerRole }: HODReviewSect
       })}
         </div>
       </div>
+
+      <Dialog open={Boolean(rejectTarget)} onOpenChange={(open) => !open && setRejectTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reason for rejecting this leave request</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="Explain why this leave request is being rejected"
+            rows={4}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectTarget(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" disabled={!rejectReason.trim()} onClick={confirmReject}>
+              <XCircle className="h-4 w-4 mr-1" />
+              Confirm Rejection
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* HOD Resumption Confirmations Section */}
       <div>

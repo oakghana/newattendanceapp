@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
     // not authoritative and older review cards do not include workflow_route.
     const { data: workflowRequest, error: workflowRequestError } = await admin
       .from("leave_plan_requests")
-      .select("workflow_route, memo_reference")
+      .select("workflow_route, memo_reference, status")
       .eq("id", leave_plan_request_id)
       .maybeSingle()
     if (workflowRequestError && isSchemaIssue(workflowRequestError)) return schemaIssueResponse(workflowRequestError)
@@ -114,6 +114,25 @@ export async function POST(request: NextRequest) {
     const isRegionalManagerApproval = role === "regional_manager"
     const isRegionalRequest = action === "forward_to_regional_manager"
       || String(workflowRequest.workflow_route || "").toLowerCase() === "regional"
+
+    // A staff member can be linked to more than one HOD/Regional HR/Regional
+    // Manager. All of them see the request, but only the first one to act may
+    // endorse or approve it — once any of them has already moved it past this
+    // stage, every other linked supervisor must be blocked from acting on the
+    // same request. Check the persisted status (not the client's stale copy)
+    // right before doing anything else.
+    const currentStatus = String((workflowRequest as any).status || "")
+    const stillActionableForThisStage = isRegionalForward
+      ? currentStatus === "pending_regional_hr_review"
+      : isRegionalManagerApproval
+        ? currentStatus === "pending_regional_manager_approval"
+        : ["pending_hod_review", "pending_manager_review"].includes(currentStatus)
+    if (!stillActionableForThisStage) {
+      return NextResponse.json(
+        { error: "This request has already been reviewed by another supervisor and no longer needs your action." },
+        { status: 409 },
+      )
+    }
     if (isRegionalManagerApproval && isRegionalRequest && decision === "approved" && !isRegionalForward) {
       const profileHasSignature = Boolean(String((profile as any).signature_data_url || "").trim())
       const { data: registeredSignature } = await admin
@@ -161,10 +180,13 @@ export async function POST(request: NextRequest) {
     if (reviewError || !reviews || reviews.length === 0) {
       const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
       const isRegionalManager = role === "regional_manager"
-      // Older forwarded regional requests can be visible in the manager queue
-      // without a matching leave_plan_reviews row. Validate the request scope
-      // below, then create the manager assignment before applying the decision.
-      if (!isRegionalHr && !isRegionalManager) {
+      const isDepartmentHeadReviewer = role === "department_head"
+      // Older/forwarded requests can be visible in a manager's queue without
+      // a matching leave_plan_reviews row yet (regional hand-off, or a
+      // department head reached via loan_hod_linkages rather than a
+      // pre-seeded review row). Validate the request scope below, then
+      // create this manager's own assignment before applying the decision.
+      if (!isRegionalHr && !isRegionalManager && !isDepartmentHeadReviewer) {
         return NextResponse.json({ error: "Review assignment not found for this manager." }, { status: 404 })
       }
 
@@ -183,15 +205,31 @@ export async function POST(request: NextRequest) {
       if (isRegionalForward && (targetRequest as any).regional_hr_office_user_id && (targetRequest as any).regional_hr_office_user_id !== user.id) {
         return NextResponse.json({ error: "This request is assigned to another Regional HR Office." }, { status: 403 })
       }
-      const targetProfile = Array.isArray(targetRequest.user_profiles) ? targetRequest.user_profiles[0] : targetRequest.user_profiles
-      const sameScope = profile.assigned_location_id
-        ? targetProfile?.assigned_location_id === profile.assigned_location_id
-        : Boolean((profile as any).region_id && targetProfile?.region_id === (profile as any).region_id)
       if (role === "regional_manager" && String((targetRequest as any).workflow_route || "").toLowerCase() !== "regional") {
         return NextResponse.json({ error: "Regional Managers can review only regional leave requests." }, { status: 403 })
       }
-      if (!sameScope) {
-        return NextResponse.json({ error: "This request is outside your assigned location or region." }, { status: 403 })
+
+      if (isDepartmentHeadReviewer) {
+        // Department heads are scoped by an explicit staff-to-HOD linkage
+        // (a staff member can be linked to more than one HOD), not by
+        // location/region — that scoping is for the regional pipeline only.
+        const { data: hodLinkage } = await admin
+          .from("loan_hod_linkages")
+          .select("id")
+          .eq("hod_user_id", user.id)
+          .eq("staff_user_id", (targetRequest as any).user_id)
+          .maybeSingle()
+        if (!hodLinkage) {
+          return NextResponse.json({ error: "This staff member is not linked to you as HOD." }, { status: 403 })
+        }
+      } else {
+        const targetProfile = Array.isArray(targetRequest.user_profiles) ? targetRequest.user_profiles[0] : targetRequest.user_profiles
+        const sameScope = profile.assigned_location_id
+          ? targetProfile?.assigned_location_id === profile.assigned_location_id
+          : Boolean((profile as any).region_id && targetProfile?.region_id === (profile as any).region_id)
+        if (!sameScope) {
+          return NextResponse.json({ error: "This request is outside your assigned location or region." }, { status: 403 })
+        }
       }
 
       if (!isRegionalForward) {

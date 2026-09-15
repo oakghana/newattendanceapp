@@ -87,11 +87,15 @@ export async function GET(_request: NextRequest) {
     const enrichedRequests = planRequests.filter((req: any) => {
       const assignedHodId = String(req.hod_user_id || "")
       const staffId = String(req.user_id || "")
-      // A request with an explicit HOD assignment must match that HOD. For
-      // legacy rows without hod_user_id, use the active staff-to-HOD linkage.
-      return assignedHodId
-        ? assignedHodId === String(user.id)
-        : currentHodStaffIds.has(staffId)
+      // A staff member can be linked to more than one HOD/Regional Manager
+      // (e.g. dual reporting lines). The request must appear for EVERY HOD
+      // linked to that staff member, not just whichever HOD happened to be
+      // stored on the request at submission time — otherwise the other
+      // linked HODs never see it at all. Whichever HOD/RM acts first sets
+      // hod_decision, which flips the status out of the pending list below
+      // and removes it from every other linked HOD's queue at once, so no
+      // one else can act on an already-decided request.
+      return assignedHodId === String(user.id) || currentHodStaffIds.has(staffId)
     }).map((req: any) => {
       const createdDate = new Date(req.submitted_at || req.created_at)
       const daysPending = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))

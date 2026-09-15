@@ -41,6 +41,16 @@ interface OutstandingLeave {
 
 const ITEMS_PER_PAGE = 10
 
+// Leave year periods are stored as "2024/2025" (spanning two calendar years)
+// so filtering and the carryover API keep working against existing data, but
+// dropdowns should show a single year to the user instead of a slashed pair.
+function startYear(period: string): string {
+  return period.split("/")[0] || period
+}
+function endYear(period: string): string {
+  return period.split("/")[1] || period.split("/")[0] || period
+}
+
 export function OutstandingLeavePanel() {
   const [outstandingLeave, setOutstandingLeave] = useState<OutstandingLeave[]>([])
   const [page, setPage] = useState(1)
@@ -407,9 +417,9 @@ export function OutstandingLeavePanel() {
               }}
               className="px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-white text-sm"
             >
-              <option value="2024/2025">2024/2025</option>
-              <option value="2025/2026">2025/2026</option>
-              <option value="2026/2027">2026/2027</option>
+              <option value="2024/2025">{startYear("2024/2025")}</option>
+              <option value="2025/2026">{startYear("2025/2026")}</option>
+              <option value="2026/2027">{startYear("2026/2027")}</option>
             </select>
           </div>
         </CardHeader>
@@ -610,9 +620,9 @@ export function OutstandingLeavePanel() {
                   onChange={(e) => setFormData((f) => ({ ...f, leave_year_period: e.target.value }))}
                   className="w-full px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-white"
                 >
-                  <option value="2024/2025">2024/2025</option>
-                  <option value="2025/2026">2025/2026</option>
-                  <option value="2026/2027">2026/2027</option>
+                  <option value="2024/2025">{startYear("2024/2025")}</option>
+                  <option value="2025/2026">{startYear("2025/2026")}</option>
+                  <option value="2026/2027">{startYear("2026/2027")}</option>
                 </select>
               </div>
 
@@ -787,9 +797,9 @@ export function OutstandingLeavePanel() {
                     onChange={(e) => setYearFilter(e.target.value)}
                     className="w-full px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-white h-10"
                   >
-                    <option value="2024/2025">2024/2025</option>
-                    <option value="2025/2026">2025/2026</option>
-                    <option value="2026/2027">2026/2027</option>
+                    <option value="2024/2025">{startYear("2024/2025")}</option>
+                    <option value="2025/2026">{startYear("2025/2026")}</option>
+                    <option value="2026/2027">{startYear("2026/2027")}</option>
                   </select>
                 </div>
               </div>
@@ -823,7 +833,7 @@ export function OutstandingLeavePanel() {
                 </p>
                 <p className="text-sm text-slate-300">
                   <span className="text-slate-400">Leave year:</span>{" "}
-                  <strong className="text-white">{yearFilter}</strong>
+                  <strong className="text-white">{startYear(yearFilter)}</strong>
                 </p>
                 <p className="text-sm text-slate-300">
                   <span className="text-slate-400">Location:</span>{" "}
@@ -873,9 +883,9 @@ export function OutstandingLeavePanel() {
                     onChange={(e) => setCarryoverFromYear(e.target.value)}
                     className="w-full px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-white h-10"
                   >
-                    <option value="2024/2025">2024/2025</option>
-                    <option value="2025/2026">2025/2026</option>
-                    <option value="2026/2027">2026/2027</option>
+                    <option value="2024/2025">{endYear("2024/2025")}</option>
+                    <option value="2025/2026">{endYear("2025/2026")}</option>
+                    <option value="2026/2027">{endYear("2026/2027")}</option>
                   </select>
                 </div>
 
@@ -887,9 +897,9 @@ export function OutstandingLeavePanel() {
                     onChange={(e) => setCarryoverToYear(e.target.value)}
                     className="w-full px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-white h-10"
                   >
-                    <option value="2025/2026">2025/2026</option>
-                    <option value="2026/2027">2026/2027</option>
-                    <option value="2027/2028">2027/2028</option>
+                    <option value="2025/2026">{startYear("2025/2026")}</option>
+                    <option value="2026/2027">{startYear("2026/2027")}</option>
+                    <option value="2027/2028">{startYear("2027/2028")}</option>
                   </select>
                 </div>
 
