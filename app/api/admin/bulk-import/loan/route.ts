@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import * as XLSX from "xlsx"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { getNextQccReference } from "@/lib/reference-number"
+import { notifyLoanHodApproved } from "@/lib/workflow-emails"
 
 function genRequestNumber() {
   const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "")
@@ -31,6 +32,41 @@ function parseExcelDate(value: unknown): string | null {
   return null
 }
 
+async function addTimeline(
+  admin: any,
+  loanRequestId: string,
+  actorId: string,
+  actorRole: string,
+  actionKey: string,
+  fromStatus: string | null,
+  toStatus: string | null,
+  note?: string | null,
+) {
+  await admin.from("loan_request_timeline").insert({
+    loan_request_id: loanRequestId,
+    actor_id: actorId,
+    actor_role: actorRole,
+    action_key: actionKey,
+    from_status: fromStatus,
+    to_status: toStatus,
+    note: note || null,
+  })
+}
+
+async function notifyStaffUsers(admin: any, userIds: string[], title: string, message: string, data: any = {}) {
+  if (!userIds.length) return
+  await admin.from("staff_notifications").insert(
+    userIds.map((uid) => ({
+      recipient_id: uid,
+      title,
+      message,
+      type: "loan_update",
+      data,
+      is_read: false,
+    })),
+  )
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -48,6 +84,8 @@ export async function POST(request: NextRequest) {
     }
 
     const admin = await createAdminClient()
+    const importerId = user.id
+    const importerRole = String(profile.role || "admin")
     const formData = await request.formData()
     const file = formData.get("file") as File | null
 
@@ -174,7 +212,9 @@ export async function POST(request: NextRequest) {
         continue
       }
 
-      // Find HOD reviewer for the user
+      // Best-effort lookup of the staff member's HOD, kept for record-keeping only.
+      // Bulk-imported loans are created directly as HOD Approved, so a missing HOD
+      // linkage must never block the import — it just means hod_reviewer_id stays null.
       let hodReviewerId: string | null = null
       if (userDeptId) {
         try {
@@ -192,7 +232,6 @@ export async function POST(request: NextRequest) {
       }
 
       if (!hodReviewerId) {
-        // Try loan_hod_linkages
         try {
           const { data: linkage } = await admin
             .from("loan_hod_linkages")
@@ -206,16 +245,6 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (!hodReviewerId) {
-        results.failed++
-        results.errors.push({
-          row: rowNum,
-          error: `No HOD reviewer found for staff "${employeeId || email}". Assign a department_head to their department first.`,
-          field: "employee_id",
-        })
-        continue
-      }
-
       let referenceNumber: string
       try {
         referenceNumber = await getNextQccReference(admin)
@@ -227,6 +256,11 @@ export async function POST(request: NextRequest) {
         ? Number(loanType.fixed_amount)
         : (requestedAmount || null)
 
+      const nowIso = new Date().toISOString()
+
+      // Bulk-imported loans skip the pending_hod stage entirely: they are created
+      // directly as HOD Approved so they land in the Loan/HR Office review queue
+      // and are ready to be forwarded to Accounts for FD review.
       const payload = {
         request_number: genRequestNumber(),
         reference_number: referenceNumber,
@@ -246,12 +280,19 @@ export async function POST(request: NextRequest) {
         supporting_document_url: null,
         committee_required: Boolean(loanType.requires_committee),
         requires_fd_check: loanType.requires_fd_check !== false,
-        status: "pending_hod",
+        status: "hod_approved",
         hod_reviewer_id: hodReviewerId,
-        submitted_at: new Date().toISOString(),
+        hod_review_note: "Bulk imported by Administrator — created directly as HOD Approved, pending Loan/HR Office review.",
+        hod_decision_at: nowIso,
+        submitted_at: nowIso,
       }
 
-      const { error: insertError } = await admin.from("loan_requests").insert(payload)
+      const { data: insertedLoan, error: insertError } = await admin
+        .from("loan_requests")
+        .insert(payload)
+        .select("id, request_number")
+        .single()
+
       if (insertError) {
         results.failed++
         results.errors.push({
@@ -259,6 +300,37 @@ export async function POST(request: NextRequest) {
           error: insertError.message || "Database insert failed",
         })
         continue
+      }
+
+      // Timeline audit trail: record both the (skipped) staff submission and the
+      // immediate HOD-approved decision so the request history reads correctly.
+      try {
+        await addTimeline(admin, insertedLoan.id, importerId, importerRole, "staff_submit", null, "hod_approved", `Bulk imported by Administrator. Reason: ${reason}`)
+        await addTimeline(admin, insertedLoan.id, importerId, importerRole, "hod_auto_approved", "hod_approved", "hod_approved", "Imported directly as HOD Approved — ready for Loan/HR Office review and forwarding to Accounts.")
+      } catch {
+        // Timeline is best-effort; do not fail the import if it cannot be written.
+      }
+
+      // Notify the staff member instantly so it shows on their dashboard, and
+      // notify the Loan/HR Office queue so they see it awaiting review.
+      try {
+        await notifyStaffUsers(
+          admin,
+          [userId],
+          "Loan Request Submitted on Your Behalf",
+          `A ${loanType.loan_label} loan request (${insertedLoan.request_number}) has been submitted for you by HR/Admin and is HOD Approved, awaiting Loan/HR Office review before it is forwarded to Accounts.`,
+          { request_id: insertedLoan.id },
+        )
+        await notifyLoanHodApproved(admin, {
+          loanRequestId: insertedLoan.id,
+          staffName: `${(userStaffNumber ? `${userStaffNumber} — ` : "")}${userEmail || employeeId || "Staff Member"}`,
+          loanType: loanType.loan_label,
+          requestNumber: insertedLoan.request_number,
+          hodName: "Administrator (Bulk Import)",
+          amount: finalRequestedAmount,
+        })
+      } catch {
+        // Notifications/emails are best-effort; do not fail the import on delivery issues.
       }
 
       results.success++
