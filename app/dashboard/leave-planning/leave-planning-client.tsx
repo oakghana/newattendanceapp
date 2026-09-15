@@ -2488,7 +2488,11 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
     const annualCalc = isAnnualLeave
       ? computeAnnualAdjustedEndDate(adjStart, annualEntitlementDays, annualPriorDeducted + annualHolidayDeducted, outstandingDays, annualTravelAdded)
       : null
-    const adjEnd = isAnnualLeave ? (annualCalc?.endDateIso || "") : officeAdjEnd[requestId]
+    // HR Leave Office / Regional HR Office may type an end date directly to override the
+    // auto-calculated one — e.g. an approved exception that legitimately exceeds entitlement.
+    // The auto-calculated value is only the default; a manual edit always wins.
+    const annualEndOverride = isAnnualLeave ? (officeAdjEnd[requestId] || "") : ""
+    const adjEnd = isAnnualLeave ? (annualEndOverride || annualCalc?.endDateIso || "") : officeAdjEnd[requestId]
     const annualAdjustmentRemark = isAnnualLeave && outstandingDays > 0
       ? `${String(rsn || "Annual leave adjustment").trim()} ${outstandingDays} outstanding day(s) added to entitlement.`
       : String(rsn || "").trim()
@@ -2541,7 +2545,11 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
         })
         const json = await res.json()
         if (!res.ok) throw new Error(json.error || "Could not forward request")
-        toast({ title: "Request forwarded to Regional Manager", description: "The adjusted non-annual request is ready for final approval." })
+        if (json.warning) {
+          toast({ title: "Forwarded — entitlement exceeded", description: json.warning, variant: "destructive" })
+        } else {
+          toast({ title: "Request forwarded to Regional Manager", description: "The adjusted request is ready for final approval." })
+        }
         setOfficeExpanded(null)
         await loadData()
       } catch (e) {
