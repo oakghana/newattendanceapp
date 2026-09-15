@@ -34,7 +34,7 @@ export async function GET() {
 
     const admin = await createAdminClient()
     // user_profiles is keyed by auth user id; only select columns that exist in the live schema.
-    const profileFields = "id, role, full_name, staff_number, position, department_id, email"
+    const profileFields = "id, role, position, department_id, email"
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
       .select(profileFields)
@@ -99,7 +99,7 @@ export async function GET() {
     const [{ data: payments }, { data: schedules }, { data: staff }] = await Promise.all([
       ids.length ? admin.from("loan_payment_records").select("loan_request_id, amount_paid, overall_status, payment_date").in("loan_request_id", ids).eq("overall_status", "approved") : Promise.resolve({ data: [] }),
       ids.length ? admin.from("loan_repayment_schedule").select("loan_request_id, due_date, monthly_amount, paid_amount, status").in("loan_request_id", ids).order("due_date", { ascending: true }) : Promise.resolve({ data: [] }),
-      staffIds.length ? admin.from("user_profiles").select("id, full_name, staff_number, department").in("id", staffIds) : Promise.resolve({ data: [] }),
+      staffIds.length ? admin.from("user_profiles").select("id, employee_id, first_name, last_name, department_id").in("id", staffIds) : Promise.resolve({ data: [] }),
     ])
 
     const staffMap = new Map((staff || []).map((person) => [person.id, person]))
@@ -118,7 +118,18 @@ export async function GET() {
       const nextPayment = remaining[0] || null
       return {
         ...loan,
-        staff: staffMap.get(loan.staff_id || loan.user_id) || null,
+        staff: (() => {
+          const person: any = staffMap.get(loan.staff_id || loan.user_id)
+          return person ? {
+            ...person,
+            full_name: [person.first_name, person.last_name].filter(Boolean).join(" ") || loan.staff_full_name || "Unknown staff",
+            staff_number: person.employee_id || loan.staff_number || "",
+          } : {
+            full_name: loan.staff_full_name || "Unknown staff",
+            staff_number: loan.staff_number || "",
+            department_id: loan.department_id || "",
+          }
+        })(),
         total_amount: total,
         paid_to_date: paidToDate,
         outstanding_balance: outstanding,

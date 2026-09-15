@@ -10,10 +10,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
-const fetcher = (url: string) => fetch(url).then(async (response) => {
-  if (!response.ok) throw new Error((await response.json()).error || "Failed to load report")
-  return response.json()
-})
+const fetcher = async (url: string) => {
+  const response = await fetch(url, { headers: { Accept: "application/json" } })
+  const contentType = response.headers.get("content-type") || ""
+  const body = contentType.includes("application/json") ? await response.json() : await response.text()
+  if (!response.ok) {
+    const message = typeof body === "object" && body?.error ? body.error : `Running Loans request failed (${response.status})`
+    throw new Error(message)
+  }
+  if (typeof body === "string") throw new Error("Running Loans returned an invalid server response")
+  return body
+}
 
 const money = (value: number) => new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS", maximumFractionDigits: 2 }).format(value)
 const date = (value: string | null) => value ? new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value)) : "—"
@@ -29,7 +36,7 @@ type LoanRow = {
   next_payment_amount: number
   expected_completion_date: string | null
   repayment_status: string
-  staff?: { full_name?: string; staff_number?: string; department?: string } | null
+  staff?: { full_name?: string; first_name?: string; last_name?: string; employee_id?: string; staff_number?: string; department?: string; department_id?: string } | null
 }
 
 export function RunningLoansReport() {
