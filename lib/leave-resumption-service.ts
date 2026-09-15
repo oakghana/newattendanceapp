@@ -390,8 +390,8 @@ export function getResumptionEscalationLevel(
   currentStatus: LeaveResumptionRecord['status']
 ): 'warning' | 'letter' | 'memo' | null {
   if (daysOverdue >= 10 && !['memo_sent'].includes(currentStatus)) return 'memo'
-  if (daysOverdue >= 5 && !['letter_sent', 'memo_sent'].includes(currentStatus)) return 'letter'
-  if (daysOverdue >= 2 && !['warning_sent', 'letter_sent', 'memo_sent'].includes(currentStatus)) return 'warning'
+  if (daysOverdue >= 5 && !['warning_sent', 'memo_sent'].includes(currentStatus)) return 'warning'
+  return null
   return null
 }
 
@@ -406,7 +406,7 @@ export async function checkAndEscalateNonResumption() {
     const { data: pendingRecords, error: fetchError } = await getSupabase()
       .from('leave_resumption_notifications')
       .select('*, user_profiles:user_id(full_name, email, department, supervisor_id)')
-      .in('status', ['pending', 'warning_sent', 'letter_sent'])
+      .in('status', ['pending', 'warning_sent', 'letter_sent', 'memo_sent'])
 
     if (fetchError) {
       console.error('[v0] Error fetching pending records:', fetchError)
@@ -416,7 +416,7 @@ export async function checkAndEscalateNonResumption() {
     for (const record of pendingRecords || []) {
       const daysOverdue = differenceInDays(today, new Date(record.leave_end_date))
 
-      if (daysOverdue < 2) continue // Not yet overdue
+      if (daysOverdue < 5) continue // Management warning starts after five calendar days
 
       const escalationLevel = getResumptionEscalationLevel(daysOverdue, record.status)
 
@@ -499,7 +499,7 @@ async function sendWarningNotification(
   // Send to staff - dashboard alert
   await sendNotification({
     userId: staff.id,
-    title: '⚠️ Non-Resumption Warning (Day 2)',
+    title: '⚠️ Non-Resumption Warning (Day 5)',
     message: `📍 You have not resumed duty for ${daysOverdue} days. Please check in immediately to avoid escalation.`,
     type: 'warning',
     severity: 'high',
@@ -556,6 +556,26 @@ async function sendQueryMemo(
   supervisors: any[]
 ) {
   const memoHtml = generateQueryMemoHTML(staff, daysOverdue)
+
+  // Publish an editable, read-only-to-staff portal copy. Admin and HR Leave can revise it later.
+  const { data: existingDocument } = await getSupabase()
+    .from('leave_resumption_delay_documents')
+    .select('id, version')
+    .eq('staff_user_id', staff.id)
+    .eq('document_type', 'day_10_serious_warning')
+    .eq('is_published', true)
+    .maybeSingle()
+
+  if (!existingDocument) {
+    await getSupabase().from('leave_resumption_delay_documents').insert({
+      staff_user_id: staff.id,
+      document_type: 'day_10_serious_warning',
+      title: 'Serious Warning Letter: Non-Resumption of Duty',
+      body: memoHtml,
+      is_published: true,
+      published_at: new Date().toISOString(),
+    })
+  }
 
   // Send to staff - email
   await sendEmail({
