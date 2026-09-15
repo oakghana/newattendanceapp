@@ -173,7 +173,7 @@ export async function GET(request: NextRequest) {
           admin
             .from("user_profiles")
             .select("id, first_name, last_name, employee_id, position, role, department_id, departments(name, code), assigned_location_id, geofence_locations!assigned_location_id(name, address, districts(name))")
-            .in("role", ["staff", "nsp", "intern", "contract", "it-admin", "it_admin", "department_head", "regional_manager", "loan_officer", "loan_office", "hr_loan_office", "accounts_loan_office", "hr_officer", "hr_office", "accounts", "director_hr", "manager_hr", "audit_staff", "loan_committee", "committee"])
+            .in("role", ["staff", "nsp", "intern", "contract", "it-admin", "it_admin", "department_head", "regional_manager", "loan_officer", "loan_office", "hr_loan_office", "accounts_loan_office", "hr_officer", "hr_office", "hr_leave_office", "accounts", "director_hr", "manager_hr", "audit_staff", "loan_committee", "committee"])
             .eq("is_active", true)
             .order("first_name", { ascending: true })
             .order("id", { ascending: true })

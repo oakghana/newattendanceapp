@@ -342,25 +342,38 @@ export async function GET() {
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false }),
+      // A staff member may legitimately have more than one HOD linked (e.g. Department
+      // Head + Regional Manager, or a batch assignment from Loan Administration), so we
+      // fetch every linkage row here instead of limiting to a single arbitrary one.
       admin
         .from("loan_hod_linkages")
         .select("hod_user_id")
-        .eq("staff_user_id", user.id)
-        .limit(1)
-        .maybeSingle(),
+        .eq("staff_user_id", user.id),
     ])
 
+    const linkedHodUserIds = Array.from(
+      new Set((myHodLinkRes.data || []).map((row: any) => String(row.hod_user_id || "")).filter(Boolean)),
+    )
+
     let linkedHodName: string | null = null
-    if (myHodLinkRes.data?.hod_user_id) {
-      const { data: hodProfile } = await admin
+    let currentHodProfile: any = null
+    let currentHodProfiles: any[] = []
+    if (linkedHodUserIds.length > 0) {
+      const { data: hodProfiles } = await admin
         .from("user_profiles")
-        .select("first_name, last_name, position")
-        .eq("id", myHodLinkRes.data.hod_user_id)
-        .maybeSingle()
-      if (hodProfile) {
-        const name = `${hodProfile.first_name || ""} ${hodProfile.last_name || ""}`.trim()
-        linkedHodName = hodProfile.position ? `${name} (${hodProfile.position})` : name || null
-      }
+        .select("id, first_name, last_name, position, geofence_locations!assigned_location_id(name)")
+        .in("id", linkedHodUserIds)
+      currentHodProfiles = (hodProfiles || []).map((hodProfile: any) => ({
+        id: hodProfile.id,
+        name: `${hodProfile.first_name || ""} ${hodProfile.last_name || ""}`.trim() || null,
+        rank: hodProfile.position || null,
+        location: hodProfile?.geofence_locations?.name || null,
+      }))
+      linkedHodName = currentHodProfiles
+        .map((hodProfile) => (hodProfile.rank ? `${hodProfile.name} (${hodProfile.rank})` : hodProfile.name))
+        .filter(Boolean)
+        .join(", ") || null
+      currentHodProfile = currentHodProfiles[0] || null
     }
 
     const { data: directorApproverRows } = await admin
@@ -398,7 +411,27 @@ export async function GET() {
         {
           degraded: true,
           warning: "Loan module tables are not available yet. Run scripts/051_loan_module_workflow.sql in Supabase SQL Editor.",
-          profile,
+          profile: {
+            id: (profile as any).id,
+            firstName: (profile as any).first_name,
+            lastName: (profile as any).last_name,
+            employeeId: (profile as any).employee_id,
+            email: (profile as any).email || user.email,
+            role: (profile as any).role,
+            position: (profile as any).position,
+            staffCategory,
+            yearsOfService,
+            dateOfAppointment,
+            departmentId: (profile as any).department_id,
+            assignedLocationId: (profile as any).assigned_location_id,
+            departmentName: (profile as any)?.departments?.name || null,
+            assignedLocationName: (profile as any)?.geofence_locations?.name || null,
+            assignedLocationAddress: (profile as any)?.geofence_locations?.address || null,
+            assignedDistrictName: (profile as any)?.geofence_locations?.districts?.name || null,
+            linkedHodName,
+            currentHodProfile,
+            currentHodProfiles,
+          },
           role,
           loanTypes: [],
           myRequests: [],
@@ -433,6 +466,10 @@ export async function GET() {
     if (resolvedTypesRes.error) throw resolvedTypesRes.error
     if (myRes.error) throw myRes.error
 
+    // From here on, a failure in any secondary query (inbox counts, timelines, etc.)
+    // must never blank out the identity/HOD data we already resolved above — that is
+    // exactly what a staff member needs to see even when something else is degraded.
+    try {
     await autoAdvanceStaleHodRequests(admin)
     await broadcastDelayedPostLoanOfficeRequests(admin)
 
@@ -771,23 +808,8 @@ export async function GET() {
       entries: timelinesMap[id] || [],
     }))
 
-    // Build current HOD profile data (for dynamic resolution in loan requests)
-    let currentHodProfile: any = null
-    if (myHodLinkRes.data?.hod_user_id) {
-      const { data: currentHodData } = await admin
-        .from("user_profiles")
-        .select("id, first_name, last_name, position, geofence_locations!assigned_location_id(name)")
-        .eq("id", myHodLinkRes.data.hod_user_id)
-        .maybeSingle()
-      if (currentHodData) {
-        currentHodProfile = {
-          id: currentHodData.id,
-          name: `${currentHodData.first_name || ""} ${currentHodData.last_name || ""}`.trim() || null,
-          rank: currentHodData.position || null,
-          location: (currentHodData as any)?.geofence_locations?.name || null,
-        }
-      }
-    }
+    // currentHodProfile / currentHodProfiles were already resolved earlier from every
+    // loan_hod_linkages row for this staff member (supports multi-HOD assignments).
 
     return NextResponse.json({
       degraded: false,
@@ -810,6 +832,7 @@ export async function GET() {
         assignedDistrictName: (profile as any)?.geofence_locations?.districts?.name || null,
         linkedHodName,
         currentHodProfile,
+        currentHodProfiles,
       },
       role,
       permissions,
@@ -842,6 +865,71 @@ export async function GET() {
         allLoans: attachDirectorName(attachAccountsReviewerName(attachName(allLoansRes.data || []))),
       },
     })
+    } catch (secondaryError: any) {
+      console.error("loan workflow secondary data error (returning degraded profile-only response)", secondaryError)
+      const viewAllTabsFallback = isAdminRole(role)
+      return NextResponse.json(
+        {
+          degraded: true,
+          warning: secondaryError?.message
+            ? `Some loan data could not be loaded right now (${secondaryError.message}). Your profile and HOD assignment are shown below; other loan data will refresh automatically.`
+            : "Some loan data could not be loaded right now. Your profile and HOD assignment are shown below; other loan data will refresh automatically.",
+          profile: {
+            id: (profile as any).id,
+            firstName: (profile as any).first_name,
+            lastName: (profile as any).last_name,
+            employeeId: (profile as any).employee_id,
+            email: (profile as any).email || user.email,
+            role: (profile as any).role,
+            position: (profile as any).position,
+            staffCategory,
+            yearsOfService,
+            dateOfAppointment,
+            departmentId: (profile as any).department_id,
+            assignedLocationId: (profile as any).assigned_location_id,
+            departmentName: (profile as any)?.departments?.name || null,
+            assignedLocationName: (profile as any)?.geofence_locations?.name || null,
+            assignedLocationAddress: (profile as any)?.geofence_locations?.address || null,
+            assignedDistrictName: (profile as any)?.geofence_locations?.districts?.name || null,
+            linkedHodName,
+            currentHodProfile,
+            currentHodProfiles,
+          },
+          role,
+          loanTypes: resolvedTypesRes.data || [],
+          // Note: myRes.data rows here are not enriched with reviewer/director names
+          // (those helpers are only in scope inside the inner try block), but the raw
+          // rows still carry status/amount/etc. so "My Loans" keeps working in degraded mode.
+          myRequests: myRes.data || [],
+          myTimelines: [],
+          directorApprovers,
+          myTasks: [],
+          hrExecutives: [],
+          inbox: {
+            hod: [],
+            loanOffice: [],
+            accounts: [],
+            accountsSigned: [],
+            committee: [],
+            hrOffice: [],
+            directorHr: [],
+            directorGoodFd: [],
+            allLoans: [],
+          },
+          permissions: {
+            hod: canDoHodReview(role, isLinkedHod),
+            loanOffice: canDoLoanOffice(role, deptName, deptCode),
+            accounts: canDoAccounts(role, deptName, deptCode),
+            committee: canDoCommittee(role),
+            hrOffice: canDoHrOffice(role, deptName, deptCode),
+            directorHr: canDoDirectorHr(role, deptName, deptCode),
+            viewAllTabs: viewAllTabsFallback,
+            allLoans: isAdminRole(role) || ["loan_office", "loan_officer", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
+          },
+        },
+        { status: 200 },
+      )
+    }
   } catch (error: any) {
     console.error("loan workflow get error", error)
     return NextResponse.json({ error: error?.message || "Failed to load loan workflow" }, { status: 500 })

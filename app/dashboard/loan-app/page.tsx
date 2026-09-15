@@ -202,6 +202,12 @@ type WorkflowResponse = {
       rank: string | null
       location: string | null
     } | null
+    currentHodProfiles?: Array<{
+      id: string
+      name: string | null
+      rank: string | null
+      location: string | null
+    }>
   }
   permissions: {
     hod: boolean
@@ -3206,13 +3212,25 @@ export default function LoanAppPage() {
                   <div><strong>Assigned District:</strong>{" "}
                     {loading ? <span className="inline-block h-4 w-24 animate-pulse rounded bg-slate-200 align-middle" /> : <span className="text-slate-600">{data?.profile.assignedDistrictName || <span className="text-slate-400">Not assigned</span>}</span>}
                   </div>
-                  <div><strong>Linked HOD:</strong>{" "}
-                    {loading
-                      ? <span className="inline-block h-4 w-40 animate-pulse rounded bg-slate-200 align-middle" />
-                      : data?.profile.currentHodProfile?.name
-                        ? <span className="text-slate-600">{data.profile.currentHodProfile.name} <span className="text-slate-400 text-xs">({data.profile.currentHodProfile.rank})</span></span>
-                        : <span className="text-slate-400">Not yet assigned</span>}
-                  </div>
+          <div><strong>Linked HOD:</strong>{" "}
+          {loading
+          ? <span className="inline-block h-4 w-40 animate-pulse rounded bg-slate-200 align-middle" />
+          : (data?.profile.currentHodProfiles && data.profile.currentHodProfiles.length > 0)
+          ? (
+            <span className="text-slate-600">
+              {data.profile.currentHodProfiles.map((hod, index) => (
+                <span key={hod.id}>
+                  {index > 0 ? ", " : ""}
+                  {hod.name}
+                  {hod.rank ? <span className="text-slate-400 text-xs"> ({hod.rank})</span> : null}
+                </span>
+              ))}
+            </span>
+          )
+          : data?.profile.currentHodProfile?.name
+          ? <span className="text-slate-600">{data.profile.currentHodProfile.name} <span className="text-slate-400 text-xs">({data.profile.currentHodProfile.rank})</span></span>
+          : <span className="text-slate-400">Not yet assigned</span>}
+          </div>
                   <div className="md:col-span-2"><strong>Location Address:</strong>{" "}
                     {loading ? <span className="inline-block h-4 w-56 animate-pulse rounded bg-slate-200 align-middle" /> : <span className="text-slate-600">{data?.profile.assignedLocationAddress || <span className="text-slate-400">Not set</span>}</span>}
                   </div>
