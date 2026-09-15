@@ -202,9 +202,6 @@ export async function POST(request: NextRequest) {
       if (isSelfLeaveWorkflowRoute((targetRequest as any).workflow_route)) {
         return NextResponse.json({ error: "Self-leave requests do not require HOD, Regional HR, or Regional Manager endorsement." }, { status: 403 })
       }
-      if (isRegionalForward && (targetRequest as any).regional_hr_office_user_id && (targetRequest as any).regional_hr_office_user_id !== user.id) {
-        return NextResponse.json({ error: "This request is assigned to another Regional HR Office." }, { status: 403 })
-      }
       if (role === "regional_manager" && String((targetRequest as any).workflow_route || "").toLowerCase() !== "regional") {
         return NextResponse.json({ error: "Regional Managers can review only regional leave requests." }, { status: 403 })
       }
