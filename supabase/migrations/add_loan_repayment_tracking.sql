@@ -211,6 +211,7 @@ DECLARE
   v_monthly_amount NUMERIC;
   v_current_date DATE;
   v_installment INTEGER := 1;
+  v_installment_amount NUMERIC;
 BEGIN
   IF p_duration_months IS NULL OR p_duration_months < 1 OR p_duration_months > 120 THEN
     RAISE EXCEPTION 'Duration must be between 1 and 120 months';
@@ -230,20 +231,23 @@ BEGIN
   DELETE FROM public.loan_repayment_schedule WHERE loan_request_id::text = p_loan_request_id;
 
   FOR v_installment IN 1..p_duration_months LOOP
+    v_installment_amount := CASE WHEN v_installment = p_duration_months
+      THEN v_loan_amount - (v_monthly_amount * (p_duration_months - 1))
+      ELSE v_monthly_amount
+    END;
+
     INSERT INTO public.loan_repayment_schedule (
       loan_request_id, installment_number, due_date, monthly_amount, status
     ) VALUES (
       p_loan_request_id::uuid,
       v_installment,
       v_current_date::date,
-      CASE WHEN v_installment = p_duration_months
-        THEN v_loan_amount - (v_monthly_amount * (p_duration_months - 1))
-        ELSE v_monthly_amount
-      END,
+      v_installment_amount,
       'pending'
     )
-    RETURNING id::text, monthly_amount INTO schedule_id, monthly_amount;
+    RETURNING id::text INTO schedule_id;
 
+    monthly_amount := v_installment_amount;
     v_current_date := v_current_date + INTERVAL '1 month';
     RETURN NEXT;
   END LOOP;
