@@ -34,7 +34,7 @@ export async function GET() {
 
     const admin = await createAdminClient()
     // user_profiles is keyed by auth user id; only select columns that exist in the live schema.
-    const profileFields = "id, role, full_name, staff_number, position, department_id, email"
+    const profileFields = "id, role, position, department_id, email"
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
       .select(profileFields)
@@ -77,34 +77,32 @@ export async function GET() {
       .from("loan_requests")
       .select("*")
       // Start with All Loans, then keep only MD-approved loans with a confirmed disbursement.
-      .in("status", ["partially_recovered", "active", "approved", "approved_director", "director_approved"])
+      .in("status", ["partially_recovered", "payment_completed"])
+      .not("md_approved_at", "is", null)
+      .not("disbursement_date", "is", null)
       .order("created_at", { ascending: false })
     if (loansError) throw loansError
 
     const confirmedLoans = (loans || []).filter((loan: any) => {
-      const mdApproved = ["approved", "approved_director", "director_approved"].includes(String(loan.status || "")) ||
-        ["approved", "approved_director", "director_approved"].includes(String(loan.director_decision || "")) ||
-        Boolean(loan.director_decision_at || loan.director_hr_id || loan.md_approved_at || loan.md_decided_at || loan.managing_director_id)
-      const accountsConfirmed = Boolean(
-        loan.accounts_confirmation ||
-        loan.accounts_confirmed_at ||
-        loan.accounts_reviewed_at ||
-        loan.accounts_reviewer_id ||
-        ["partially_recovered", "active"].includes(String(loan.status || "")),
-      )
-      return mdApproved && accountsConfirmed
+      return Boolean(loan.md_approved_at && loan.disbursement_date) && ["partially_recovered", "payment_completed"].includes(String(loan.status || ""))
     })
     const ids = confirmedLoans.map((loan) => loan.id)
     const staffIds = [...new Set(confirmedLoans.map((loan) => loan.staff_id || loan.user_id).filter(Boolean))]
-    const [{ data: payments }, { data: schedules }, { data: staff }] = await Promise.all([
-      ids.length ? admin.from("loan_payment_records").select("loan_request_id, amount_paid, overall_status, payment_date").in("loan_request_id", ids).eq("overall_status", "approved") : Promise.resolve({ data: [] }),
-      ids.length ? admin.from("loan_repayment_schedule").select("loan_request_id, due_date, monthly_amount, paid_amount, status").in("loan_request_id", ids).order("due_date", { ascending: true }) : Promise.resolve({ data: [] }),
-      staffIds.length ? admin.from("user_profiles").select("id, full_name, staff_number, department").in("id", staffIds) : Promise.resolve({ data: [] }),
+    const [{ data: payments }, { data: schedules }, { data: staffById }, { data: staffByEmployeeId }] = await Promise.all([
+      ids.length ? admin.from("loan_payment_records").select("loan_request_id, amount_paid, overall_status, accounts_approval_status, payment_date, submitted_at").in("loan_request_id", ids).eq("accounts_approval_status", "approved") : Promise.resolve({ data: [] }),
+      ids.length ? admin.from("loan_repayment_schedule").select("loan_request_id, due_date, monthly_amount, paid_amount, paid_date, status").in("loan_request_id", ids).order("due_date", { ascending: true }) : Promise.resolve({ data: [] }),
+      staffIds.length ? admin.from("user_profiles").select("id, employee_id, first_name, last_name, department_id").in("id", staffIds) : Promise.resolve({ data: [] }),
+      staffIds.length ? admin.from("user_profiles").select("id, employee_id, first_name, last_name, department_id").in("employee_id", staffIds) : Promise.resolve({ data: [] }),
     ])
 
-    const staffMap = new Map((staff || []).map((person) => [person.id, person]))
+    const staffMap = new Map([...(staffById || []), ...(staffByEmployeeId || [])].map((person: any) => [String(person.id), person]))
+    for (const person of staffByEmployeeId || []) staffMap.set(String(person.employee_id), person)
     const paymentsByLoan = new Map<string, number>()
-    for (const payment of payments || []) paymentsByLoan.set(payment.loan_request_id, (paymentsByLoan.get(payment.loan_request_id) || 0) + Number(payment.amount_paid || 0))
+    const approvedPaymentDates = new Map<string, string[]>()
+    for (const payment of payments || []) {
+      paymentsByLoan.set(payment.loan_request_id, (paymentsByLoan.get(payment.loan_request_id) || 0) + Number(payment.amount_paid || 0))
+      approvedPaymentDates.set(payment.loan_request_id, [...(approvedPaymentDates.get(payment.loan_request_id) || []), payment.payment_date || payment.submitted_at])
+    }
     const scheduleByLoan = new Map<string, any[]>()
     for (const item of schedules || []) scheduleByLoan.set(item.loan_request_id, [...(scheduleByLoan.get(item.loan_request_id) || []), item])
 
@@ -114,20 +112,35 @@ export async function GET() {
       const outstanding = Math.max(total - paidToDate, 0)
       const schedule = scheduleByLoan.get(loan.id) || []
       const remaining = schedule.filter((item) => item.status !== "paid" && item.status !== "waived")
-      const completionDate = remaining.at(-1)?.due_date || schedule.at(-1)?.due_date || null
+      const completionDate = schedule.at(-1)?.due_date || null
       const nextPayment = remaining[0] || null
+      const approvedFullPaymentDate = outstanding <= 0 ? (approvedPaymentDates.get(loan.id) || []).sort().at(-1) || null : null
+      const isCompleted = outstanding <= 0
       return {
         ...loan,
-        staff: staffMap.get(loan.staff_id || loan.user_id) || null,
+        staff: (() => {
+          const person: any = staffMap.get(loan.staff_id || loan.user_id)
+          return person ? {
+            ...person,
+            full_name: [person.first_name, person.last_name].filter(Boolean).join(" ") || loan.staff_full_name || "Unknown staff",
+            staff_number: person.employee_id || loan.staff_number || "",
+          } : {
+            full_name: loan.staff_full_name || "Unknown staff",
+            staff_number: loan.staff_number || "",
+            department_id: loan.department_id || "",
+          }
+        })(),
         total_amount: total,
         paid_to_date: paidToDate,
         outstanding_balance: outstanding,
         next_payment_due: nextPayment?.due_date || null,
         next_payment_amount: Number(nextPayment?.monthly_amount || 0),
         expected_completion_date: completionDate,
-        repayment_status: outstanding <= 0 ? "completed" : remaining.some((item) => item.status === "overdue") ? "overdue" : "on_track",
+        completed_payment_date: approvedFullPaymentDate,
+        reapplication_eligible: isCompleted,
+        repayment_status: isCompleted ? "completed" : remaining.some((item) => item.status === "overdue") ? "overdue" : "on_track",
       }
-    }).filter((loan) => loan.outstanding_balance > 0)
+    })
 
     return NextResponse.json({ data: rows, generated_at: new Date().toISOString() })
   } catch (error) {

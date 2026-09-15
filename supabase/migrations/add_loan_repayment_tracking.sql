@@ -200,7 +200,7 @@ ADD COLUMN IF NOT EXISTS repayment_status TEXT DEFAULT 'not_started' CHECK (
 -- ============================================================================
 -- 6. FUNCTION: Auto-generate repayment schedule
 -- ============================================================================
-CREATE OR REPLACE FUNCTION generate_repayment_schedule(
+CREATE OR REPLACE FUNCTION public.generate_repayment_schedule(
   p_loan_request_id TEXT,
   p_start_date DATE DEFAULT CURRENT_DATE,
   p_duration_months INTEGER DEFAULT 12
@@ -211,40 +211,43 @@ DECLARE
   v_monthly_amount NUMERIC;
   v_current_date DATE;
   v_installment INTEGER := 1;
+  v_installment_amount NUMERIC;
 BEGIN
-  -- Get loan amount
+  IF p_duration_months IS NULL OR p_duration_months < 1 OR p_duration_months > 120 THEN
+    RAISE EXCEPTION 'Duration must be between 1 and 120 months';
+  END IF;
+
   SELECT fixed_amount INTO v_loan_amount
-  FROM loan_requests
-  WHERE id = p_loan_request_id;
+  FROM public.loan_requests
+  WHERE id::text = p_loan_request_id;
 
   IF v_loan_amount IS NULL THEN
     RAISE EXCEPTION 'Loan request not found: %', p_loan_request_id;
   END IF;
 
-  -- Calculate monthly payment
-  v_monthly_amount := v_loan_amount / p_duration_months;
-  v_current_date := p_start_date + INTERVAL '1 month';
+  v_monthly_amount := round(v_loan_amount / p_duration_months, 2);
+  v_current_date := coalesce(p_start_date, current_date) + INTERVAL '1 month';
 
-  -- Delete existing schedule if any
-  DELETE FROM loan_repayment_schedule WHERE loan_request_id = p_loan_request_id;
+  DELETE FROM public.loan_repayment_schedule WHERE loan_request_id::text = p_loan_request_id;
 
-  -- Generate monthly installments
   FOR v_installment IN 1..p_duration_months LOOP
-    INSERT INTO loan_repayment_schedule (
-      loan_request_id,
-      installment_number,
-      due_date,
-      monthly_amount,
-      status
+    v_installment_amount := CASE WHEN v_installment = p_duration_months
+      THEN v_loan_amount - (v_monthly_amount * (p_duration_months - 1))
+      ELSE v_monthly_amount
+    END;
+
+    INSERT INTO public.loan_repayment_schedule (
+      loan_request_id, installment_number, due_date, monthly_amount, status
     ) VALUES (
-      p_loan_request_id,
+      p_loan_request_id::uuid,
       v_installment,
-      v_current_date,
-      v_monthly_amount,
+      v_current_date::date,
+      v_installment_amount,
       'pending'
     )
-    RETURNING id, v_monthly_amount INTO schedule_id, monthly_amount;
+    RETURNING id::text INTO schedule_id;
 
+    monthly_amount := v_installment_amount;
     v_current_date := v_current_date + INTERVAL '1 month';
     RETURN NEXT;
   END LOOP;
@@ -323,3 +326,20 @@ CREATE TRIGGER trg_update_repayment_on_payment
   AFTER UPDATE ON loan_payment_records
   FOR EACH ROW
   EXECUTE FUNCTION update_repayment_on_payment();
+
+-- Monthly Accounts confirmation of each scheduled deduction.
+CREATE TABLE IF NOT EXISTS loan_monthly_payment_confirmations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  loan_request_id UUID NOT NULL REFERENCES loan_requests(id) ON DELETE CASCADE,
+  schedule_id UUID NOT NULL REFERENCES loan_repayment_schedule(id) ON DELETE CASCADE,
+  confirmation_month DATE NOT NULL,
+  payment_status TEXT NOT NULL CHECK (payment_status IN ('paid', 'not_paid')),
+  confirmed_by UUID NOT NULL REFERENCES auth.users(id),
+  confirmed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  notes TEXT,
+  UNIQUE(schedule_id, confirmation_month)
+);
+
+ALTER TABLE loan_monthly_payment_confirmations ENABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS idx_monthly_payment_confirmations_loan ON loan_monthly_payment_confirmations(loan_request_id);
+CREATE INDEX IF NOT EXISTS idx_monthly_payment_confirmations_month ON loan_monthly_payment_confirmations(confirmation_month);
