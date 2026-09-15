@@ -1849,7 +1849,7 @@ export default function LoanAppPage() {
   // Fetch payment records for approval
   useEffect(() => {
     const fetchPaymentRecords = async () => {
-      const isApprover = ["hr_executive", "accounts_executive", "admin"].includes(data?.profile?.role || "")
+      const isApprover = ["hr_executive", "hr_leave_office", "hr_loan_office", "accounts_loan_office", "accounts_executive", "admin"].includes(data?.profile?.role || "")
       if (!isApprover) return
 
       setPaymentRecordsLoading(true)
@@ -5637,10 +5637,11 @@ export default function LoanAppPage() {
                 {(() => {
                   // For HR/Accounts executives, fetch pending payments for their approval
                   const userRole = data?.profile?.role || ""
-                  const isHrApprover = ["hr_executive", "admin"].includes(userRole)
+                  const isHrApprover = ["hr_executive", "hr_leave_office", "hr_loan_office", "admin"].includes(userRole)
                   const isAccountsApprover = ["accounts_executive", "admin"].includes(userRole)
+                  const isAuditViewer = ["hr_executive", "hr_leave_office", "hr_loan_office", "accounts_loan_office", "accounts_executive", "admin"].includes(userRole)
                   
-                  if (!isHrApprover && !isAccountsApprover) {
+                  if (!isAuditViewer) {
                     return (
                       <div className="rounded-lg border border-slate-200 p-6 text-center text-slate-500">
                         <Receipt className="h-12 w-12 text-slate-300 mx-auto mb-3" />
@@ -5670,8 +5671,8 @@ export default function LoanAppPage() {
                   return paymentRecords.map((payment) => {
                     const needsHrApproval = isHrApprover && payment.hr_approval_status === "pending"
                     const needsAccountsApproval = isAccountsApprover && payment.accounts_approval_status === "pending"
-                    const canApprove = needsHrApproval || needsAccountsApproval
-                    const approvalType = needsHrApproval ? "hr" : needsAccountsApproval ? "accounts" : null
+                    const canApprove = isAccountsApprover && needsAccountsApproval
+                    const approvalType = canApprove ? "accounts" : null
 
                     return (
                       <div key={payment.id} className="rounded-lg border border-slate-200 p-4">
@@ -7771,7 +7772,7 @@ export default function LoanAppPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Memo Review Modal (Executive HR / Director HR) ──────────── */}
+      {/* ���─ Memo Review Modal (Executive HR / Director HR) ──────────── */}
       <Dialog open={memoReviewModal.open} onOpenChange={(o) => {
         setMemoReviewModal((s) => ({ ...s, open: o }))
         if (!o && actionModal.actionType === "hr_terms" && actionModal.row) {
@@ -8063,8 +8064,7 @@ export default function LoanAppPage() {
               Submit Payment Evidence
             </DialogTitle>
             <DialogDescription>
-              Upload supporting evidence of payment (receipt, bank transfer confirmation, etc.) for HR Executive approval.
-              Once approved, the loan will be marked as fully repaid.
+Upload one full-settlement evidence record for HR audit and Accounts Executive approval. HR and the Accounts Loan Office can submit evidence; only an Accounts Executive can approve and clear the repayment schedule.
             </DialogDescription>
           </DialogHeader>
 
@@ -8252,8 +8252,9 @@ export default function LoanAppPage() {
                       paymentMethod: paymentEvidenceModal.paymentMethod,
                       referenceNumber: paymentEvidenceModal.referenceNumber,
                       description: paymentEvidenceModal.description || null,
-                      evidenceFileUrl: null,
-                    }),
+  evidenceFileUrl: null,
+  isFullSettlement: true,
+  }),
                   })
 
                   if (!response.ok) {

@@ -2,7 +2,7 @@ import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server
 import { NextRequest, NextResponse } from "next/server"
 
 // Roles permitted to submit payment evidence
-const ALLOWED_ROLES = ["admin", "accounts", "loan_office", "hr_loan_office", "accounts_loan_office", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "it-admin"]
+const ALLOWED_ROLES = ["admin", "accounts", "accounts_executive", "loan_office", "hr_loan_office", "accounts_loan_office", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "it-admin"]
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
       referenceNumber,
       description,
       evidenceFileUrl,
+      isFullSettlement = false,
     } = body
 
     // Validation
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
     // Verify loan exists and get details
     const { data: loanData, error: loanError } = await admin
       .from("loan_requests")
-      .select("id, user_id, fixed_amount, requested_amount, status")
+      .select("id, user_id, fixed_amount, requested_amount, status, md_approved_at, disbursement_date")
       .eq("id", loanRequestId)
       .single()
 
@@ -82,9 +83,9 @@ export async function POST(request: NextRequest) {
       "staff_receiving_funds",
       "partially_recovered",
     ]
-    if (!activeStatuses.includes(loanData.status)) {
+    if (!activeStatuses.includes(loanData.status) || (isFullSettlement && (!loanData.md_approved_at || !loanData.disbursement_date))) {
       return NextResponse.json(
-        { error: "Loan is not in an active state for payment evidence submission" },
+        { error: "Loan is not eligible for payment evidence submission. It must be MD-approved and disbursed." },
         { status: 400 }
       )
     }
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
         amount_paid: amount,
         payment_method: paymentMethod || null,
         reference_number: referenceNumber || null,
-        description: description || null,
+        description: isFullSettlement ? `[FULL SETTLEMENT] ${description || "Full loan settlement"}` : description || null,
         evidence_file_path: evidenceFileUrl || null,
         submitted_by: user.id,
         // Dual approval workflow: both HR and Accounts must approve
@@ -196,6 +197,10 @@ export async function GET(request: NextRequest) {
     const admin = await createAdminClient()
     const { user } = await createClientAndGetUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const { data: viewer } = await admin.from("user_profiles").select("role").eq("id", user.id).maybeSingle()
+    const auditRoles = ["hr_executive", "hr_leave_office", "hr_loan_office", "accounts_loan_office", "accounts_executive", "admin"]
+    if (!auditRoles.includes(String(viewer?.role || ""))) return NextResponse.json({ error: "Payment evidence is restricted to HR and loan accounts audit staff." }, { status: 403 })
 
     const { searchParams } = new URL(request.url)
     const loanRequestId = searchParams.get("loanRequestId")
