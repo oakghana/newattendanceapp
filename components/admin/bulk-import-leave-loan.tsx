@@ -203,7 +203,7 @@ function ImportTab({ type }: { type: ImportType }) {
             {isLeave ? "leave requests" : "loan applications"} in bulk.
             {isLeave
               ? " Each imported leave will enter the standard approval workflow starting at Pending."
-              : " Each imported loan will enter the workflow at Pending HOD Review."}
+              : " Each imported loan is created directly as HOD Approved — it skips the HOD stage and lands in the Loan/HR Office queue, ready to be reviewed and forwarded to Accounts for FD processing. The staff member sees it on their dashboard immediately."}
           </p>
         </div>
         <Button
@@ -240,6 +240,17 @@ function ImportTab({ type }: { type: ImportType }) {
           </ul>
         )}
       </div>
+
+      {!isLeave && (
+        <Alert role="status" className="border-emerald-200 bg-emerald-50">
+          <CheckCircle2 className="h-4 w-4 text-emerald-700" aria-hidden="true" />
+          <AlertDescription className="text-emerald-800">
+            Imported loans start at <strong>HOD Approved</strong> automatically — no separate HOD step
+            needed. They appear right away in the Loan/HR Office queue for review and forwarding to
+            Accounts for FD, and the staff member is notified on their dashboard instantly.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* File picker */}
       <div className="space-y-1">
