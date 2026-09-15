@@ -3836,7 +3836,7 @@ export default function LoanAppPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="loan-office" className="space-y-5">
+        <TabsContent value="loan-office" className="flex flex-col gap-5">
           <ReadOnlyHint canAct={Boolean(p?.loanOffice || p?.hrOffice)} roleLabel="Loan Office / HR Office" />
 
           {/* ── Section navigator ── */}
@@ -3896,7 +3896,7 @@ export default function LoanAppPage() {
           </div>
 
           {/* ── Processing Queue ── */}
-          <div id="loan-office-loanOfficeQueue" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div id="loan-office-loanOfficeQueue" className="order-2 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
             {/* section header */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
               <button type="button" data-loan-section-toggle className="flex flex-1 items-center gap-2 text-left" onClick={() => toggleSection("loanOfficeQueue")}>
@@ -4137,7 +4137,7 @@ export default function LoanAppPage() {
           </div>
 
           {/* ── HR Terms Queue ── */}
-          <div id="loan-office-hrTermsQueue" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div id="loan-office-hrTermsQueue" className="order-1 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
               <button type="button" data-loan-section-toggle className="flex flex-1 items-center gap-2 text-left" onClick={() => toggleSection("hrTermsQueue")}>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.hrTermsQueue ? "-rotate-90" : ""}`} />
@@ -4265,7 +4265,7 @@ export default function LoanAppPage() {
 
           {/* ── Payment Completion Queue ── */}
           {p?.hrOffice && (
-            <div id="loan-office-paymentCompletion" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div id="loan-office-paymentCompletion" className="order-3 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
               <button type="button" data-loan-section-toggle className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("paymentCompletion")}>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.paymentCompletion ? "-rotate-90" : ""}`} />
                 <div>
@@ -4306,7 +4306,7 @@ export default function LoanAppPage() {
 
           {/* ── Loan type breakdown ── */}
           {loanOfficeTypeSummary.length > 0 && (
-            <div id="loan-office-loanTypeBreakdown" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div id="loan-office-loanTypeBreakdown" className="order-3 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
               <button type="button" data-loan-section-toggle className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("loanTypeBreakdown")}>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.loanTypeBreakdown ? "-rotate-90" : ""}`} />
                 <div>
@@ -4342,7 +4342,7 @@ export default function LoanAppPage() {
           )}
 
           {/* ── Analytics strip ── */}
-          <div id="loan-office-loanOfficeAnalytics" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div id="loan-office-loanOfficeAnalytics" className="order-3 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
             <button type="button" data-loan-section-toggle className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("loanOfficeAnalytics")}>
               <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.loanOfficeAnalytics ? "-rotate-90" : ""}`} />
               <div>
@@ -4405,7 +4405,7 @@ export default function LoanAppPage() {
           </div>
 
           {/* ── FD-Approved from Accounts Executive ── */}
-          <div id="loan-office-loanOfficeFdApproved" className="scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div id="loan-office-loanOfficeFdApproved" className="order-3 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
             <button type="button" data-loan-section-toggle className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("loanOfficeFdApproved")}>
               <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.loanOfficeFdApproved ? "-rotate-90" : ""}`} />
               <div>
