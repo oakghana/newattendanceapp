@@ -323,3 +323,20 @@ CREATE TRIGGER trg_update_repayment_on_payment
   AFTER UPDATE ON loan_payment_records
   FOR EACH ROW
   EXECUTE FUNCTION update_repayment_on_payment();
+
+-- Monthly Accounts confirmation of each scheduled deduction.
+CREATE TABLE IF NOT EXISTS loan_monthly_payment_confirmations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  loan_request_id UUID NOT NULL REFERENCES loan_requests(id) ON DELETE CASCADE,
+  schedule_id UUID NOT NULL REFERENCES loan_repayment_schedule(id) ON DELETE CASCADE,
+  confirmation_month DATE NOT NULL,
+  payment_status TEXT NOT NULL CHECK (payment_status IN ('paid', 'not_paid')),
+  confirmed_by UUID NOT NULL REFERENCES auth.users(id),
+  confirmed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  notes TEXT,
+  UNIQUE(schedule_id, confirmation_month)
+);
+
+ALTER TABLE loan_monthly_payment_confirmations ENABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS idx_monthly_payment_confirmations_loan ON loan_monthly_payment_confirmations(loan_request_id);
+CREATE INDEX IF NOT EXISTS idx_monthly_payment_confirmations_month ON loan_monthly_payment_confirmations(confirmation_month);

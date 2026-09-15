@@ -77,22 +77,14 @@ export async function GET() {
       .from("loan_requests")
       .select("*")
       // Start with All Loans, then keep only MD-approved loans with a confirmed disbursement.
-      .in("status", ["partially_recovered", "active", "approved", "approved_director", "director_approved"])
+      .in("status", ["partially_recovered", "payment_completed"])
+      .not("md_approved_at", "is", null)
+      .not("disbursement_date", "is", null)
       .order("created_at", { ascending: false })
     if (loansError) throw loansError
 
     const confirmedLoans = (loans || []).filter((loan: any) => {
-      const mdApproved = ["approved", "approved_director", "director_approved"].includes(String(loan.status || "")) ||
-        ["approved", "approved_director", "director_approved"].includes(String(loan.director_decision || "")) ||
-        Boolean(loan.director_decision_at || loan.director_hr_id || loan.md_approved_at || loan.md_decided_at || loan.managing_director_id)
-      const accountsConfirmed = Boolean(
-        loan.accounts_confirmation ||
-        loan.accounts_confirmed_at ||
-        loan.accounts_reviewed_at ||
-        loan.accounts_reviewer_id ||
-        ["partially_recovered", "active"].includes(String(loan.status || "")),
-      )
-      return mdApproved && accountsConfirmed
+      return Boolean(loan.md_approved_at && loan.disbursement_date) && ["partially_recovered", "payment_completed"].includes(String(loan.status || ""))
     })
     const ids = confirmedLoans.map((loan) => loan.id)
     const staffIds = [...new Set(confirmedLoans.map((loan) => loan.staff_id || loan.user_id).filter(Boolean))]

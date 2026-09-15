@@ -20,6 +20,7 @@ type LoanLite = {
   repayment_duration_months?: number | null
   recovery_start_date?: string | null
   disbursement_date?: string | null
+  md_approved_at?: string | null
   repayment_status?: string | null
 }
 
@@ -34,16 +35,7 @@ type ScheduleRow = {
   status?: string
 }
 
-const TRACKABLE = new Set([
-  'approved_director',
-  'md_final_approved',
-  'awaiting_hr_terms',
-  'awaiting_director_hr',
-  'staff_receiving_funds',
-  'partially_recovered',
-  'payment_completed',
-  'pending_hr_loan_office',
-])
+const TRACKABLE = new Set(['partially_recovered', 'payment_completed'])
 
 export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
   const [loading, setLoading] = useState(false)
@@ -52,13 +44,14 @@ export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
   const [selectedId, setSelectedId] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
 
   const candidates = useMemo(() => {
     const q = search.trim().toLowerCase()
     const unique = new Map<string, LoanLite>()
     for (const loan of loans || []) {
       if (!loan?.id || unique.has(loan.id)) continue
-      if (!TRACKABLE.has(String(loan.status || '')) && !loan.repayment_status) continue
+      if (!TRACKABLE.has(String(loan.status || '')) || !loan.md_approved_at || !loan.disbursement_date) continue
       unique.set(loan.id, loan)
     }
     return Array.from(unique.values()).filter((l) => {
@@ -136,6 +129,17 @@ export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
 
   const amount = (l: LoanLite) => Number(l.fixed_amount || l.requested_amount || 0)
 
+  const confirmPayment = async (row: ScheduleRow, paymentStatus: 'paid' | 'not_paid') => {
+    setConfirmingId(row.id)
+    setError(null)
+    try {
+      const res = await fetch('/api/loan/repayment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'confirm_payment', scheduleId: row.id, paymentStatus }) })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Unable to save payment confirmation')
+      await loadSchedule(selectedId)
+    } catch (e: any) { setError(e?.message || 'Unable to save payment confirmation') } finally { setConfirmingId(null) }
+  }
+
   return (
     <div className="space-y-4">
       <Card>
@@ -145,7 +149,7 @@ export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
             Repayment Tracking
           </CardTitle>
           <CardDescription>
-            Track installment schedules for loans that have cleared Accounts / HR stages. Generate a schedule if none exists yet.
+            Track monthly repayments only after MD approval and Accounts confirms the loan was disbursed. Accounts must confirm each scheduled payment as paid or not paid.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -225,6 +229,7 @@ export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
                               <th className="px-2 py-2">Amount</th>
                               <th className="px-2 py-2">Paid</th>
                               <th className="px-2 py-2">Status</th>
+                              <th className="px-2 py-2">Accounts confirmation</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -240,6 +245,12 @@ export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
                                 </td>
                                 <td className="px-2 py-2">
                                   <Badge variant="outline" className="text-[10px]">{row.status || 'pending'}</Badge>
+                                </td>
+                                <td className="px-2 py-2">
+                                  <div className="flex gap-1">
+                                    <Button size="sm" variant="outline" disabled={confirmingId === row.id} onClick={() => void confirmPayment(row, 'paid')}>Paid</Button>
+                                    <Button size="sm" variant="ghost" disabled={confirmingId === row.id} onClick={() => void confirmPayment(row, 'not_paid')}>Not paid</Button>
+                                  </div>
                                 </td>
                               </tr>
                             ))}
