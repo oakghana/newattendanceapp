@@ -33,26 +33,24 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const admin = await createAdminClient()
-    const profileFields = "id, user_id, role, full_name, staff_number, position, department"
-    const { data: profileByUserId, error: profileError } = await admin
+    // user_profiles is keyed by auth user id; only select columns that exist in the live schema.
+    const profileFields = "id, role, full_name, staff_number, position, department_id, email"
+    const { data: profile, error: profileError } = await admin
       .from("user_profiles")
       .select(profileFields)
-      .eq("user_id", user.id)
+      .eq("id", user.id)
       .maybeSingle()
-    const { data: profileById } = !profileByUserId
-      ? await admin.from("user_profiles").select(profileFields).eq("id", user.id).maybeSingle()
-      : { data: null }
-    const { data: profileByEmail } = !profileByUserId && !profileById && user.email
+    const { data: profileByEmail } = !profile && user.email
       ? await admin.from("user_profiles").select(profileFields).eq("email", user.email).maybeSingle()
       : { data: null }
-    const profile = profileByUserId || profileById || profileByEmail
+    const resolvedProfile = profile || profileByEmail
     const metadataRole = (user.user_metadata as Record<string, unknown> | undefined)?.role
-    const role = normalizeRole(profile?.role || String(metadataRole || ""))
-    const departmentName = String((profile as any)?.department || "")
-    const departmentCode = String((profile as any)?.department_code || "")
+    const role = normalizeRole(resolvedProfile?.role || String(metadataRole || ""))
+    const departmentName = ""
+    const departmentCode = String((resolvedProfile as any)?.department_id || "")
     const accountAccessText = [
       role,
-      String(profile?.position || ""),
+      String(resolvedProfile?.position || ""),
       departmentName,
       departmentCode,
       String((user.user_metadata as Record<string, unknown> | undefined)?.department || ""),
@@ -67,7 +65,7 @@ export async function GET() {
       canDoLoanOffice(role, departmentName, departmentCode) ||
       canDoHrOffice(role, departmentName, departmentCode) ||
       isAccountsExecutiveRole(role) ||
-      /admin|administrator/i.test(String(profile?.position || "")) ||
+      /admin|administrator/i.test(String(resolvedProfile?.position || "")) ||
       /admin|administrator/i.test(String(metadataRole || "")),
     )
     if (profileError) console.error("[v0] running loans profile lookup failed", profileError)
