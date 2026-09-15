@@ -1042,7 +1042,7 @@ export async function GET(
       doc.setFontSize(9.5)
       const closingLines = doc.splitTextToSize(closingLine, contentWidth)
       doc.text(closingLines, marginLeft, y)
-      y += closingLines.length * 5.5 + 12
+      y += closingLines.length * 5.5 + 6
     } else {
       y += 7
     }
