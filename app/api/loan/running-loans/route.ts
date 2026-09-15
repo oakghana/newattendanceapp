@@ -58,13 +58,27 @@ export async function GET() {
 
     const { data: loans, error: loansError } = await admin
       .from("loan_requests")
-      .select("id, request_number, staff_id, fixed_amount, loan_type_label, status, repayment_duration_months, repayment_plan_generated_at")
-      .in("status", ["approved_director", "approved", "active", "director_approved"])
+      .select("*")
+      // Start with All Loans, then keep only MD-approved loans with a confirmed disbursement.
+      .in("status", ["partially_recovered", "active", "approved", "approved_director", "director_approved"])
       .order("created_at", { ascending: false })
     if (loansError) throw loansError
 
-    const ids = (loans || []).map((loan) => loan.id)
-    const staffIds = [...new Set((loans || []).map((loan) => loan.staff_id).filter(Boolean))]
+    const confirmedLoans = (loans || []).filter((loan: any) => {
+      const mdApproved = ["approved", "approved_director", "director_approved"].includes(String(loan.status || "")) ||
+        ["approved", "approved_director", "director_approved"].includes(String(loan.director_decision || "")) ||
+        Boolean(loan.director_decision_at || loan.director_hr_id || loan.md_approved_at || loan.md_decided_at || loan.managing_director_id)
+      const accountsConfirmed = Boolean(
+        loan.accounts_confirmation ||
+        loan.accounts_confirmed_at ||
+        loan.accounts_reviewed_at ||
+        loan.accounts_reviewer_id ||
+        ["partially_recovered", "active"].includes(String(loan.status || "")),
+      )
+      return mdApproved && accountsConfirmed
+    })
+    const ids = confirmedLoans.map((loan) => loan.id)
+    const staffIds = [...new Set(confirmedLoans.map((loan) => loan.staff_id || loan.user_id).filter(Boolean))]
     const [{ data: payments }, { data: schedules }, { data: staff }] = await Promise.all([
       ids.length ? admin.from("loan_payment_records").select("loan_request_id, amount_paid, overall_status, payment_date").in("loan_request_id", ids).eq("overall_status", "approved") : Promise.resolve({ data: [] }),
       ids.length ? admin.from("loan_repayment_schedule").select("loan_request_id, due_date, monthly_amount, paid_amount, status").in("loan_request_id", ids).order("due_date", { ascending: true }) : Promise.resolve({ data: [] }),
@@ -77,7 +91,7 @@ export async function GET() {
     const scheduleByLoan = new Map<string, any[]>()
     for (const item of schedules || []) scheduleByLoan.set(item.loan_request_id, [...(scheduleByLoan.get(item.loan_request_id) || []), item])
 
-    const rows = (loans || []).map((loan) => {
+    const rows = confirmedLoans.map((loan) => {
       const total = Number(loan.fixed_amount || 0)
       const paidToDate = paymentsByLoan.get(loan.id) || 0
       const outstanding = Math.max(total - paidToDate, 0)
@@ -87,7 +101,7 @@ export async function GET() {
       const nextPayment = remaining[0] || null
       return {
         ...loan,
-        staff: staffMap.get(loan.staff_id) || null,
+        staff: staffMap.get(loan.staff_id || loan.user_id) || null,
         total_amount: total,
         paid_to_date: paidToDate,
         outstanding_balance: outstanding,
