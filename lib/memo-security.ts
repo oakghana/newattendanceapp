@@ -1,6 +1,7 @@
 import "server-only"
 import crypto from "crypto"
 import QRCode from "qrcode"
+import { headers } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/server"
 
 /**
@@ -72,16 +73,23 @@ function generateVerificationCode(): string {
 
 /**
  * Resolves the fully-qualified origin that should be encoded into a memo's
- * verification QR code. Prefers the explicit branded company domain (APP_URL /
- * NEXT_PUBLIC_APP_URL) so every memo - regardless of which host it was
- * generated from (custom domain, vercel.app preview, sandbox preview) -
- * always encodes the company's own URL rather than an internal Vercel
- * hostname. Falls back to the host the current request actually arrived on,
- * then the Vercel-assigned deployment URL for contexts with no request (e.g.
- * background jobs). A relative-only fallback would encode a QR code with no
- * scheme/host, which most phone camera scanners cannot open as a link.
+ * verification QR code. The request host is preferred so a QR generated from
+ * the working deployment points to the same working deployment and its
+ * verification lookup. Explicit domains are used only when no request host
+ * is available (for example, a background job).
  */
 async function getBaseUrl(): Promise<string> {
+  try {
+    const headerList = await headers()
+    const host = headerList.get("x-forwarded-host") || headerList.get("host")
+    if (host) {
+      const proto = headerList.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https")
+      return `${proto}://${host}`.replace(/\/$/, "")
+    }
+  } catch {
+    // headers() is unavailable outside a request scope.
+  }
+
   const explicit = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://updates.qccapps.com"
   return explicit.replace(/\/$/, "")
 }
