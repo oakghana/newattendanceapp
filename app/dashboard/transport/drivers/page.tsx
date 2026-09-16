@@ -25,7 +25,7 @@ export default async function DriverLicensesPage() {
   const hasNationwideScope = hasNationwideFleetScope(profile.role)
   const isScopedToRegion = isChiefDriverRole(profile.role) || isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role)
   const ownedLocationIds = isScopedToRegion
-    ? await resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id)
+    ? await resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id, regionId)
     : []
   let driversQuery = supabase.from("transport_drivers").select("*").order("expiry_date")
   const { data: queriedDrivers } = await driversQuery

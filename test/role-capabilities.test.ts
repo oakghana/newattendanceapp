@@ -25,11 +25,12 @@ describe("Disbursement confirmation access", () => {
 })
 
 describe("Chief Driver transport permissions", () => {
-  it("allows a Chief Driver to manage local transport and fleet condition", () => {
+  it("allows a Chief Driver to manage local transport with read-only fleet access", () => {
     expect(isChiefDriverRole("chief driver")).toBe(true)
     expect(canManageTransport("chief_driver")).toBe(true)
-    expect(canEditFleetInventory("chief_driver")).toBe(true)
+    expect(canEditFleetInventory("chief_driver")).toBe(false)
     expect(canViewFleetInventory("chief_driver")).toBe(true)
+    expect(canEditDriverLicenses("chief_driver")).toBe(false)
   })
 
   it("does not give a Chief Driver nationwide fleet scope", async () => {
