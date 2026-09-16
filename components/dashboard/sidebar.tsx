@@ -457,6 +457,8 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
   const ROLE_RESTRICTED_MAIN_HREFS = new Set([
     "/dashboard/disbursement-confirmation",
     "/offpremises-approvals",
+    "/dashboard/secretary-memos",
+    "/dashboard/excuse-duty-review",
   ])
 
   const HR_RECORDS_SIDEBAR_ROLES = new Set(["hr_records", "hr_records_officer", "hr_records_manager"])
@@ -485,7 +487,7 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
   const isChiefDriver = ["chief_driver", "regional_chief_driver"].includes(normalizedProfileRole) || effectiveRole === "chief_driver"
 
   const filteredNavItems = allNavigationItems.filter((item) => {
-  if (isChiefDriver && ["/dashboard/secretary-memos", "/offpremises-approvals", "/dashboard/excuse-duty-review"].includes(item.href)) return false
+  if (isChiefDriver && ROLE_RESTRICTED_MAIN_HREFS.has(item.href)) return false
   if (item.href === "/dashboard/transport" && !canSeeTransportMenu) return false
   if (isAttendanceOnly) return item.href === "/dashboard/attendance"
     if (isAssignedHod && item.roles.some((role) => normalizeAppRole(role) === "department_head")) return true
