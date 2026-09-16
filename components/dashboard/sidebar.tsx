@@ -78,7 +78,7 @@ interface SidebarProps {
 
 const EXEC_ROLES = ["managing_director", "secretary"] as const
 const ALL_STAFF_ROLES = [
-  "admin", "it-admin", "driver", "transport_manager", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "department_head",
+  "admin", "it-admin", "driver", "chief_driver", "regional_chief_driver", "transport_manager", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "department_head",
   "staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr",
   "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern",
   "contract", "managing_director", "secretary", "hr_records", "hr_records_officer", "hr_records_manager",
@@ -126,7 +126,7 @@ const navigationItems = [
     title: "Leave Administration",
     href: "/dashboard/leave-management",
     icon: Calendar,
-    roles: ALL_STAFF_ROLES,
+    roles: [...ALL_STAFF_ROLES, "chief_driver", "regional_chief_driver"],
     category: "admin",
   },
   {

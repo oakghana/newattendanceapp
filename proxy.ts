@@ -14,6 +14,8 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   // HR/Leave Management — every authenticated role may access this page
   "/dashboard/leave-management": [
     "driver",
+    "chief_driver",
+    "regional_chief_driver",
     "transport_manager",
     "admin",
     "staff",
@@ -44,6 +46,8 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   ],
   "/dashboard/leave-planning": [
     "driver",
+    "chief_driver",
+    "regional_chief_driver",
     "transport_manager",
     "admin",
     "staff",
@@ -74,7 +78,7 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   ],
   
   // Attendance check-in — the universal landing page for every role after login
-  "/dashboard/attendance": ["driver", "transport_manager", "staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_records", "regional_hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
+  "/dashboard/attendance": ["driver", "chief_driver", "regional_chief_driver", "transport_manager", "staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_records", "regional_hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
 
   // Staff Dashboard root — all roles
   "/dashboard": ["driver", "chief_driver", "regional_chief_driver", "transport_manager", "staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_records", "regional_hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
@@ -102,7 +106,7 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   "/dashboard/secretary-memos": ["secretary", "hr_records", "hr_records_officer", "hr_records_manager", "regional_hr_leave_office", "regional_hr", "regional_leave_office", "admin", "hr_executive", "hr", "manager_hr", "director_hr", "hr_executive_officer"],
 
   // Overview dashboard — all roles
-  "/dashboard/overview": ["driver", "transport_manager", "staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_records", "regional_hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
+  "/dashboard/overview": ["driver", "chief_driver", "regional_chief_driver", "transport_manager", "staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_records", "regional_hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
 };
 
 function normalizeRole(role: string | null | undefined): string {
