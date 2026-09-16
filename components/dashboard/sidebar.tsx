@@ -197,7 +197,7 @@ const navigationItems = [
     title: "Transport Management",
     href: "/dashboard/transport",
     icon: Bus,
-    roles: ["admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "department_head", "hr_executive", "hr_executive_officer", "director_hr", "manager_hr", "staff", "contract", "audit_staff", "intern", "nsp"],
+    roles: ["admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "regional_chief_driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "department_head", "hr_executive", "hr_executive_officer", "director_hr", "manager_hr", "staff", "contract", "audit_staff", "intern", "nsp"],
     category: "admin",
     subItems: [
       { title: "Requests", href: "/dashboard/transport" },
@@ -457,6 +457,8 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
   const ROLE_RESTRICTED_MAIN_HREFS = new Set([
     "/dashboard/disbursement-confirmation",
     "/offpremises-approvals",
+    "/dashboard/secretary-memos",
+    "/dashboard/excuse-duty-review",
   ])
 
   const HR_RECORDS_SIDEBAR_ROLES = new Set(["hr_records", "hr_records_officer", "hr_records_manager"])
@@ -482,8 +484,10 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
   )
   const isBasicNonRegionalRole = ["staff", "contract", "audit_staff", "intern", "nsp"].includes(normalizedProfileRole)
   const canSeeTransportMenu = !isBasicNonRegionalRole || !isRegionalOrDistrictLinked
+  const isChiefDriver = ["chief_driver", "regional_chief_driver"].includes(normalizedProfileRole) || effectiveRole === "chief_driver"
 
   const filteredNavItems = allNavigationItems.filter((item) => {
+  if (isChiefDriver && ROLE_RESTRICTED_MAIN_HREFS.has(item.href)) return false
   if (item.href === "/dashboard/transport" && !canSeeTransportMenu) return false
   if (isAttendanceOnly) return item.href === "/dashboard/attendance"
     if (isAssignedHod && item.roles.some((role) => normalizeAppRole(role) === "department_head")) return true

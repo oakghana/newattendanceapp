@@ -31,6 +31,8 @@ describe("Chief Driver transport permissions", () => {
     expect(canEditFleetInventory("chief_driver")).toBe(false)
     expect(canViewFleetInventory("chief_driver")).toBe(true)
     expect(canEditDriverLicenses("chief_driver")).toBe(false)
+    expect(isChiefDriverRole("regional_chief_driver")).toBe(true)
+    expect(isChiefDriverRole("regional_chief_driver")).toBe(true)
   })
 
   it("does not give a Chief Driver nationwide fleet scope", async () => {

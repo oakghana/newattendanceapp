@@ -24,7 +24,7 @@ export async function GET() {
   const { data: driverProfiles, error: profileError } = await supabase
     .from("user_profiles")
     .select("id, region_id, assigned_location_id, geofence_locations!user_profiles_assigned_location_id_fkey(name, districts(region_id))")
-    .in("role", ["driver", "regional_driver", "regional_drivers"])
+    .in("role", ["driver", "regional_driver", "regional_drivers", "chief_driver", "regional_chief_driver"])
     .eq("is_active", true)
   if (profileError) return NextResponse.json({ error: "Unable to resolve driver locations." }, { status: 500 })
   const scopedProfileIds = (driverProfiles ?? []).filter((driver: any) => {
@@ -44,7 +44,7 @@ export async function PATCH(request: Request) {
   const { supabase, user, profile } = await actor()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const normalizedRole = String(profile?.role ?? "").toLowerCase().trim().replace(/[\s-]+/g, "_")
-  const isDriver = normalizedRole === "driver"
+  const isDriver = ["driver", "chief_driver", "regional_chief_driver"].includes(normalizedRole)
   if (!profile?.is_active || (!canManageTransport(profile.role) && !isDriver)) return NextResponse.json({ error: "Transport license access denied." }, { status: 403 })
   const body = await request.json()
   if (isDriver) {
