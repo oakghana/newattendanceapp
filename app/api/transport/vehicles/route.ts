@@ -14,7 +14,7 @@ async function actor() {
 async function resolveFleetScope(supabase: any, profile: any) {
   if (hasNationwideFleetScope(profile.role)) return null
   if (isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role)) {
-    return resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id)
+    return resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id, profile.region_id)
   }
   return profile.assigned_location_id ? [profile.assigned_location_id] : []
 }

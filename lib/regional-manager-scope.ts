@@ -145,20 +145,43 @@ export async function findRegionalManagersForLocation(
 
 /**
  * Locations "owned" by a Regional Manager/Regional HR Office's own regional office:
- * the regional office itself plus every district office linked to it via parent_location_id.
- * Used to scope regional/district staff records to their reviewing regional office.
+ * the regional office itself plus every district office linked to it via parent_location_id
+ * or linked to the same region through districts.region_id.
  */
 export async function resolveOwnedLocationIdsForRegionalOffice(
   admin: SupabaseClient,
   regionalOfficeLocationId: string | null | undefined,
+  regionId?: string | null,
 ): Promise<string[]> {
-  if (!regionalOfficeLocationId) return []
-  const ids = new Set<string>([String(regionalOfficeLocationId)])
-  const { data, error } = await admin
-    .from("geofence_locations")
-    .select("id")
-    .eq("parent_location_id", regionalOfficeLocationId)
-  if (error) throw error
-  for (const row of data || []) ids.add(String((row as any).id))
+  if (!regionalOfficeLocationId && !regionId) return []
+  const ids = new Set<string>()
+  if (regionalOfficeLocationId) ids.add(String(regionalOfficeLocationId))
+
+  if (regionalOfficeLocationId) {
+    const { data, error } = await admin
+      .from("geofence_locations")
+      .select("id")
+      .eq("parent_location_id", regionalOfficeLocationId)
+    if (error) throw error
+    for (const row of data || []) ids.add(String((row as any).id))
+  }
+
+  if (regionId) {
+    const { data: districts, error: districtsError } = await admin
+      .from("districts")
+      .select("id")
+      .eq("region_id", regionId)
+    if (districtsError) throw districtsError
+    const districtIds = (districts || []).map((district: any) => String(district.id))
+    if (districtIds.length) {
+      const { data, error } = await admin
+        .from("geofence_locations")
+        .select("id")
+        .in("district_id", districtIds)
+      if (error) throw error
+      for (const row of data || []) ids.add(String((row as any).id))
+    }
+  }
+
   return Array.from(ids)
 }

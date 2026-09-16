@@ -19,7 +19,7 @@ export async function GET() {
   const hasNationwideScope = hasNationwideFleetScope(profile.role)
   const isRegionalScope = isChiefDriverRole(profile.role) || isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role)
   const ownedLocationIds = isRegionalScope
-    ? await resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id)
+    ? await resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id, profile.region_id)
     : []
   const { data: driverProfiles, error: profileError } = await supabase
     .from("user_profiles")
@@ -90,7 +90,7 @@ export async function PATCH(request: Request) {
     .single()
   if (!existing) return NextResponse.json({ error: "Driver license record not found." }, { status: 404 })
   if (!hasNationwideFleetScope(profile.role)) {
-    const ownedLocationIds = await resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id)
+    const ownedLocationIds = await resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id, profile.region_id)
     const driverLocationId = (existing.profile as { assigned_location_id?: string | null } | null)?.assigned_location_id
     const locationAllowed = Boolean(driverLocationId && ownedLocationIds.includes(driverLocationId))
     const regionAllowed = Boolean(profile.region_id && existing.assigned_region_id === profile.region_id)
