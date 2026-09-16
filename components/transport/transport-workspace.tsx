@@ -241,7 +241,9 @@ export function TransportWorkspace({
       title: "Transport request submitted",
       description: isActingHod
         ? "Your non-regional requisition is awaiting Managing Director approval."
-        : "Your regional request was sent to the Regional Manager for endorsement, then the Managing Director for approval.",
+        : regionalRouteRequired && form.get("regionalRoute") === "local_regional"
+          ? "Your local regional request was sent to the Regional Manager for endorsement, then the Regional Chief Driver for dispatch."
+          : "Your Head Office transport request was sent to the Regional Manager for endorsement, then the Managing Director for approval.",
     })
     router.push(isActingHod ? "/dashboard/transport/nonregional" : "/dashboard/transport/requests")
     router.refresh()

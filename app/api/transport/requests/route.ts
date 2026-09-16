@@ -314,7 +314,7 @@ workflow_stage: row.request_type === "regional_transport"
   const { data: row } = await supabase
     .from("transport_requests")
     .select(
-      "id, request_type, purpose, origin, destination, event_date, passenger_count, assigned_region_id, linked_district_id, origin_location_id, workflow_stage, status, requester_id, assigned_driver_id, assigned_vehicle_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, hr_records_amended_by, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url",
+      "id, request_type, regional_route, purpose, origin, destination, event_date, passenger_count, assigned_region_id, linked_district_id, origin_location_id, workflow_stage, status, requester_id, assigned_driver_id, assigned_vehicle_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, hr_records_amended_by, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url",
     )
     .eq("id", requestId)
     .single()
@@ -391,7 +391,9 @@ workflow_stage: row.request_type === "regional_transport"
     const locationId = profile.assigned_location_id ?? null
     const regionId = profile.region_id ?? assignedLocation?.districts?.region_id ?? null
     const isLocalPath =
-      row.request_type === "regional_local" && row.workflow_stage === "chief_driver_assignment"
+      row.request_type === "regional_transport" &&
+      row.regional_route === "local_regional" &&
+      row.workflow_stage === "chief_driver_assignment"
     const isReleasedRegional =
       (row.request_type === "regional_transport" || !row.request_type) &&
       isAssignableRegionalStage(row.workflow_stage)
@@ -554,7 +556,9 @@ workflow_stage: row.request_type === "regional_transport"
     const signedAt = new Date().toISOString()
     update = {
       status: "approved",
-      workflow_stage: row.request_type === "regional_transport" ? "referenced" : "transport_manager_assignment",
+      workflow_stage: row.request_type === "regional_transport"
+        ? row.regional_route === "local_regional" ? "chief_driver_assignment" : "referenced"
+        : "transport_manager_assignment",
       memo_subject: wasEditedByHrExecutive ? row.memo_subject : rejoinder.memoSubject,
       memo_body: wasEditedByHrExecutive ? row.memo_body : rejoinder.memoBody,
       memo_reference: wasEditedByHrExecutive ? row.memo_reference : rejoinder.memoReference,
@@ -577,7 +581,7 @@ workflow_stage: row.request_type === "regional_transport"
     }
   }
   else if (decision === "send_to_hr_executive") update = { status: "approved", workflow_stage: "hr_records_review", hr_executive_handoff_by: user.id, hr_executive_handoff_at: new Date().toISOString(), updated_at: new Date().toISOString() }
-  else if (decision === "endorse") { const { data: signer } = await supabase.from("approval_signature_registry").select("signature_data_url").eq("user_id", user.id).eq("is_active", true).maybeSingle(); const signedAt = new Date().toISOString(); let priorAmendments: Record<string, unknown> = {}; try { priorAmendments = row.memo_amendments ? JSON.parse(row.memo_amendments) as Record<string, unknown> : {} } catch { /* keep empty prior amendments */ } update = { status: row.request_type === "regional_local" ? "approved" : "endorsed", workflow_stage: row.request_type === "regional_local" ? "chief_driver_assignment" : "managing_director_approval", regional_manager_signer_id: user.id, regional_manager_signed_at: signedAt, regional_manager_signature_data_url: signer?.signature_data_url ?? null, memo_amendments: JSON.stringify({ ...priorAmendments, regional_manager_comment: String(body.comment ?? "").trim() || null, regional_manager_signer_id: user.id, regional_manager_signed_at: signedAt, regional_manager_signature_data_url: signer?.signature_data_url ?? null }), updated_at: signedAt } }
+  else if (decision === "endorse") { const { data: signer } = await supabase.from("approval_signature_registry").select("signature_data_url").eq("user_id", user.id).eq("is_active", true).maybeSingle(); const signedAt = new Date().toISOString(); let priorAmendments: Record<string, unknown> = {}; try { priorAmendments = row.memo_amendments ? JSON.parse(row.memo_amendments) as Record<string, unknown> : {} } catch { /* keep empty prior amendments */ } const isLocalRegionalRoute = row.request_type === "regional_transport" && row.regional_route === "local_regional"; update = { status: isLocalRegionalRoute ? "approved" : "endorsed", workflow_stage: isLocalRegionalRoute ? "chief_driver_assignment" : "managing_director_approval", regional_manager_signer_id: user.id, regional_manager_signed_at: signedAt, regional_manager_signature_data_url: signer?.signature_data_url ?? null, memo_amendments: JSON.stringify({ ...priorAmendments, regional_manager_comment: String(body.comment ?? "").trim() || null, regional_manager_signer_id: user.id, regional_manager_signed_at: signedAt, regional_manager_signature_data_url: signer?.signature_data_url ?? null }), updated_at: signedAt } }
   else if (decision === "deny" || decision === "reject") update = { status: "rejected", workflow_stage: "closed", updated_at: new Date().toISOString() }
   else if (decision === "return_for_correction") update = { status: "returned_for_correction", workflow_stage: "regional_hr_correction", updated_at: new Date().toISOString() }
   else if (decision === "forward_to_md") update = { status: "pending_md_approval", workflow_stage: "managing_director_approval", updated_at: new Date().toISOString() }
