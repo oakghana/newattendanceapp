@@ -14,6 +14,8 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   // HR/Leave Management — every authenticated role may access this page
   "/dashboard/leave-management": [
     "driver",
+    "chief_driver",
+    "regional_chief_driver",
     "transport_manager",
     "admin",
     "staff",
@@ -44,6 +46,8 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   ],
   "/dashboard/leave-planning": [
     "driver",
+    "chief_driver",
+    "regional_chief_driver",
     "transport_manager",
     "admin",
     "staff",
