@@ -58,6 +58,7 @@ type TransportWorkspaceProps = {
   scopeLabel?: string
   driverKind?: "regional" | "nonregional"
   isLinkedHod?: boolean
+  isChiefDriver?: boolean
 }
 
 function MetricTile({
@@ -153,6 +154,7 @@ export function TransportWorkspace({
   scopeLabel = "",
   driverKind,
   isLinkedHod = false,
+  isChiefDriver: isChiefDriverProp = false,
 }: TransportWorkspaceProps) {
   const normalizedRole = role.toLowerCase().trim().replace(/[\s-]+/g, "_")
   const isManagingDirector = ["managing_director", "director"].includes(normalizedRole)
@@ -165,7 +167,7 @@ export function TransportWorkspace({
   const isDepartmentHead = normalizedRole === "department_head"
   const isActingHod = isDepartmentHead || isLinkedHod
   const isTransportManager = normalizedRole === "transport_manager"
-  const isChiefDriver = isChiefDriverRole(normalizedRole)
+  const isChiefDriver = isChiefDriverProp || isChiefDriverRole(normalizedRole)
   const isRegionalManager = isRegionalManagerRole(normalizedRole)
   const isBasicStaff = ["staff", "contract", "audit_staff", "intern", "nsp"].includes(normalizedRole)
   const canCreateRequest = isChiefDriver || isRegionalHr || isActingHod || isBasicStaff
@@ -450,9 +452,11 @@ export function TransportWorkspace({
           ? "Your assigned regional trips only — routes, meeting times, and departure details for your region."
           : isNonRegionalDriver
             ? "Your assigned non-regional trips only — head office, stores, and archives runs."
-            : isTransportManager
-              ? "Nationwide view of approved and pending transport work — assign drivers, track fulfilment, and keep the fleet moving."
-              : "Monitor transport requests, approvals, assignments, and compliance from one control surface."
+  : isChiefDriver
+  ? "Your regional dispatch desk for local transport assignments, driver compliance, and trips awaiting dispatch."
+  : isTransportManager
+  ? "Nationwide view of approved and pending transport work — assign drivers, track fulfilment, and keep the fleet moving."
+  : "Monitor transport requests, approvals, assignments, and compliance from one control surface."
 
   const scopeNote = scopeLabel
     ? `Scope: ${scopeLabel}`
