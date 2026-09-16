@@ -63,6 +63,9 @@ interface SidebarProps {
     employee_id: string
     profile_image_url?: string | null
     role: string
+    region_id?: string | null
+    assigned_location_id?: string | null
+    assigned_location?: { name?: string | null; location_type?: string | null } | null
     departments?: {
       name: string
       code: string
@@ -467,8 +470,22 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
     "/dashboard/hr-records",
   ])
 
+  const normalizedProfileRole = normalizeAppRole(profile?.role)
+  const assignedLocationName = String(profile?.assigned_location?.name || "").toLowerCase()
+  const assignedLocationType = String(profile?.assigned_location?.location_type || "").toLowerCase()
+  const isRegionalOrDistrictLinked = Boolean(
+    profile?.region_id ||
+    assignedLocationType.includes("regional") ||
+    assignedLocationType.includes("district") ||
+    assignedLocationName.includes("regional") ||
+    assignedLocationName.includes("district")
+  )
+  const isBasicNonRegionalRole = ["staff", "contract", "audit_staff", "intern", "nsp"].includes(normalizedProfileRole)
+  const canSeeTransportMenu = !isBasicNonRegionalRole || !isRegionalOrDistrictLinked
+
   const filteredNavItems = allNavigationItems.filter((item) => {
-    if (isAttendanceOnly) return item.href === "/dashboard/attendance"
+  if (item.href === "/dashboard/transport" && !canSeeTransportMenu) return false
+  if (isAttendanceOnly) return item.href === "/dashboard/attendance"
     if (isAssignedHod && item.roles.some((role) => normalizeAppRole(role) === "department_head")) return true
     // Disbursement confirmation belongs only to Accounts/Loan Office workflows.
     // Explicitly deny it for HR Records and HR Leave Office even if a legacy

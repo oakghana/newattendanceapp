@@ -151,6 +151,8 @@ export async function POST(request: Request) {
   const eventDate = String(body.eventDate ?? "").trim()
   const passengerCount = Number(body.passengerCount)
   const supportingDocuments = Array.isArray(body.supportingDocuments) ? body.supportingDocuments.slice(0, 10).map((document: unknown) => { const item = document as Record<string, unknown>; return { name: String(item.name ?? "supporting-document"), url: String(item.url ?? ""), type: String(item.type ?? "application/octet-stream"), size: Number(item.size ?? 0) } }).filter((document: { url: string }) => document.url) : []
+  const regionalRoute = String(body.regionalRoute ?? "").trim()
+  if (isRegionalHr && !["local_regional", "head_office"].includes(regionalRoute)) return NextResponse.json({ error: "Select Local regional request or Head Office transport request." }, { status: 400 })
   if (!purpose || !origin || !destination || !eventDate || !Number.isInteger(passengerCount) || passengerCount < 1) return NextResponse.json({ error: "Complete all required request details." }, { status: 400 })
   const { data: signer } = await supabase.from("user_profiles").select("signature_data_url").eq("id", user.id).single()
   const signedAt = new Date().toISOString()
@@ -163,7 +165,8 @@ export async function POST(request: Request) {
     event_date: eventDate,
     passenger_count: passengerCount,
     status: "submitted",
-    workflow_stage: "regional_manager_endorsement",
+    workflow_stage: regionalRoute === "head_office" ? "regional_manager_endorsement" : "regional_manager_endorsement",
+    regional_route: regionalRoute || "local_regional",
     supporting_documents: supportingDocuments,
     assigned_region_id: assignedRegionId,
     linked_district_id: linkedDistrictId,
@@ -228,7 +231,7 @@ export async function PATCH(request: Request) {
     if (!((isManagingDirector && ["approve", "reject"].includes(decision)) || (isHrExecutive && ["approve_hr_memo", "reject"].includes(decision)))) return NextResponse.json({ error: "Bulk approval is not available for this role or decision." }, { status: 403 })
     if (bulkIds.length > 100) return NextResponse.json({ error: "Select no more than 100 requests at a time." }, { status: 400 })
     const requiredStage = isManagingDirector ? "managing_director_approval" : "hr_executive_signing"
-    const { data: selectedRows, error: selectedError } = await supabase.from("transport_requests").select("id, request_type, purpose, origin, destination, event_date, passenger_count, workflow_stage, memo_subject, memo_body, memo_reference, memo_date, memo_amendments, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url").in("id", bulkIds)
+    const { data: selectedRows, error: selectedError } = await supabase.from("transport_requests").select("id, request_type, regional_route, purpose, origin, destination, event_date, passenger_count, workflow_stage, memo_subject, memo_body, memo_reference, memo_date, memo_amendments, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url").in("id", bulkIds)
     if (selectedError) return NextResponse.json({ error: selectedError.message }, { status: 500 })
     if (!selectedRows || selectedRows.length !== bulkIds.length) return NextResponse.json({ error: "One or more selected requests could not be found." }, { status: 404 })
     const invalid = selectedRows.find((row) => row.workflow_stage !== requiredStage || (isHrExecutive && (row.request_type !== "regional_transport" || row.hr_executive_signed_at || row.hr_executive_signer_id || row.hr_executive_signature_data_url)))
@@ -270,7 +273,9 @@ export async function PATCH(request: Request) {
       const wasEditedByHrExecutive = Boolean(priorAmendments.hr_executive_edited_by)
       const update = {
         status: "approved",
-        workflow_stage: row.request_type === "regional_transport" ? "referenced" : "transport_manager_assignment",
+workflow_stage: row.request_type === "regional_transport"
+          ? row.regional_route === "local_regional" ? "chief_driver_assignment" : "referenced"
+          : "transport_manager_assignment",
         memo_subject: wasEditedByHrExecutive ? row.memo_subject : rejoinder.memoSubject,
         memo_body: wasEditedByHrExecutive ? row.memo_body : rejoinder.memoBody,
         memo_reference: wasEditedByHrExecutive ? row.memo_reference : rejoinder.memoReference,

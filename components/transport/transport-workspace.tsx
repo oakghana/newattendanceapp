@@ -173,6 +173,8 @@ export function TransportWorkspace({
   const canManageFleet = isManagingDirector || isChiefDriver || isRegionalHr || isRegionalManager || isTransportManager || canManage
   const [requestOpen, setRequestOpen] = useState(false)
   const router = useRouter()
+  const regionalRouteRequired = isRegionalHr && !isActingHod
+
 
   async function handleRequestSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -225,6 +227,7 @@ export function TransportWorkspace({
               eventDate: form.get("eventDate"),
               passengerCount: form.get("passengerCount"),
               supportingDocuments: documents,
+              regionalRoute: form.get("regionalRoute"),
             },
       ),
     })
@@ -775,6 +778,17 @@ export function TransportWorkspace({
                 </div>
               )}
             </div>
+            {regionalRouteRequired && (
+              <div className="grid gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] p-4">
+                <Label htmlFor="regional-route">Request route</Label>
+                <select id="regional-route" name="regionalRoute" required defaultValue="">
+                  <option value="" disabled>Select the approval route</option>
+                  <option value="local_regional">Local regional request — Regional Manager then Regional Chief Driver</option>
+                  <option value="head_office">Head Office transport request — Regional Manager, Managing Director, then HR Executive</option>
+                </select>
+                <p className="text-xs text-muted-foreground">Choose where the request must be fulfilled and approved.</p>
+              </div>
+            )}
             <div className="grid gap-2">
               <Label htmlFor="transport-purpose">Purpose</Label>
               <Input id="transport-purpose" name="purpose" required placeholder="Staff bus, official travel, funeral, or programme" />
