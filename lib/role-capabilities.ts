@@ -109,17 +109,10 @@ export function canEditDriverLicenses(role?: string | null): boolean {
   )
 }
 
-/** Fleet inventory edit (status, details, register): TM nationwide; RM / Regional HR regional only */
+/** Fleet inventory edit: Transport Manager nationwide; administrators retain emergency control. */
 export function canEditFleetInventory(role?: string | null): boolean {
   const normalizedRole = normalizeAppRole(role)
-  return (
-    isTransportManagerRole(role) ||
-    isChiefDriverRole(role) ||
-    isRegionalManagerRole(role) ||
-    isRegionalHrRole(role) ||
-    isAdminRole(role) ||
-    ["it_admin", "it-admin"].includes(normalizedRole)
-  )
+  return isTransportManagerRole(role) || isAdminRole(role) || ["it_admin", "it-admin"].includes(normalizedRole)
 }
 
 /** Fleet dashboards / read: editors + MD + department heads */

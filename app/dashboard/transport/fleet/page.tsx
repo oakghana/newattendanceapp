@@ -8,14 +8,14 @@ export default async function FleetInventoryPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
-  const { data: profile } = await supabase.from("user_profiles").select("role, is_active, assigned_location_id").eq("id", user.id).maybeSingle()
+  const { data: profile } = await supabase.from("user_profiles").select("role, is_active, region_id, assigned_location_id").eq("id", user.id).maybeSingle()
   if (!profile?.is_active || !canViewFleetInventory(profile.role)) redirect("/dashboard")
 
   let vehiclesQuery = supabase.from("transport_vehicles").select("*").order("registration_number")
   const scopedLocationIds = hasNationwideFleetScope(profile.role)
     ? []
     : (isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role))
-      ? await resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id)
+      ? await resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id, profile.region_id)
       : profile.assigned_location_id ? [profile.assigned_location_id] : []
   if (!hasNationwideFleetScope(profile.role)) {
     if (scopedLocationIds.length) vehiclesQuery = vehiclesQuery.in("assigned_location_id", scopedLocationIds)
