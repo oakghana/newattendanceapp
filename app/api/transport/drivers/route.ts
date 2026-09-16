@@ -37,7 +37,7 @@ export async function GET() {
   if (!hasNationwideScope) query = query.in("profile_id", scopedProfileIds)
   const { data, error } = await query
   if (error) return NextResponse.json({ error: "Unable to load driver licenses." }, { status: 500 })
-  return NextResponse.json({ drivers: data ?? [], canVerify: isRegionalHrRole(profile.role) })
+  return NextResponse.json({ drivers: data ?? [], canVerify: canEditDriverLicenses(profile.role) })
 }
 
 export async function PATCH(request: Request) {
@@ -83,8 +83,19 @@ export async function PATCH(request: Request) {
   const verificationStatus = String(body.verification_status ?? "")
   if (!canEditDriverLicenses(profile.role)) return NextResponse.json({ error: "Your role has read-only access to driver licenses." }, { status: 403 })
   if (!id || !["pending", "verified", "needs_correction"].includes(verificationStatus)) return NextResponse.json({ error: "Invalid verification request." }, { status: 400 })
-  const { data: existing } = await supabase.from("transport_drivers").select("assigned_region_id").eq("id", id).single()
-  if (!existing || (profile.region_id && existing.assigned_region_id !== profile.region_id)) return NextResponse.json({ error: "This driver is outside your assigned region." }, { status: 403 })
+  const { data: existing } = await supabase
+    .from("transport_drivers")
+    .select("assigned_region_id, profile_id, profile:user_profiles!profile_id(assigned_location_id)")
+    .eq("id", id)
+    .single()
+  if (!existing) return NextResponse.json({ error: "Driver license record not found." }, { status: 404 })
+  if (!hasNationwideFleetScope(profile.role)) {
+    const ownedLocationIds = await resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id)
+    const driverLocationId = (existing.profile as { assigned_location_id?: string | null } | null)?.assigned_location_id
+    const locationAllowed = Boolean(driverLocationId && ownedLocationIds.includes(driverLocationId))
+    const regionAllowed = Boolean(profile.region_id && existing.assigned_region_id === profile.region_id)
+    if (!locationAllowed && !regionAllowed) return NextResponse.json({ error: "This driver is outside your assigned location or district." }, { status: 403 })
+  }
   const updates = { full_name: String(body.full_name ?? "").trim(), license_number: String(body.license_number ?? "").trim(), license_type: String(body.license_type ?? "").trim() || null, expiry_date: String(body.expiry_date ?? ""), notes: String(body.notes ?? "").trim() || null, verification_status: verificationStatus, verified_by: verificationStatus === "verified" ? user.id : null, verified_at: verificationStatus === "verified" ? new Date().toISOString() : null, correction_note: String(body.correction_note ?? "").trim() || null, updated_at: new Date().toISOString() }
   if (!updates.full_name || !updates.license_number || !updates.expiry_date) return NextResponse.json({ error: "Name, license number, and expiry date are required." }, { status: 400 })
   const { error } = await supabase.from("transport_drivers").update(updates).eq("id", id)

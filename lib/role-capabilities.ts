@@ -99,7 +99,14 @@ export function canManageTransport(role?: string | null): boolean {
 /** Driver license register edit/verify: Transport Manager (nationwide) and Chief Driver (their location/region) only.
  *  Regional Manager / Regional HR get read-only access via canManageTransport. */
 export function canEditDriverLicenses(role?: string | null): boolean {
-  return isTransportManagerRole(role) || isChiefDriverRole(role) || isAdminRole(role) || normalizeAppRole(role) === "it-admin"
+  return (
+    isTransportManagerRole(role) ||
+    isChiefDriverRole(role) ||
+    isRegionalManagerRole(role) ||
+    isRegionalHrRole(role) ||
+    isAdminRole(role) ||
+    normalizeAppRole(role) === "it-admin"
+  )
 }
 
 /** Fleet inventory edit (status, details, register): TM nationwide; RM / Regional HR regional only */
@@ -137,9 +144,11 @@ export function hasNationwideFleetScope(role?: string | null): boolean {
 }
 
 export function canCreateTransportRequest(role?: string | null, isLinkedHod?: boolean | null): boolean {
-  // Regional HR / Chief Driver create regional requests for RM → MD.
-  // Department Heads and assigned HODs create non-regional requisitions (separate API).
-  return isRegionalHrRole(role) || isChiefDriverRole(role) || isDepartmentHeadRole(role) || isAssignedHod(isLinkedHod)
+  // Every active non-regional staff member may submit a request. Approval, driver,
+  // and fleet capabilities remain separate and are enforced by their own routes.
+  const normalizedRole = normalizeAppRole(role)
+  if (["intern", "nsp"].includes(normalizedRole)) return false
+  return Boolean(normalizedRole) && normalizedRole !== "driver" || isRegionalHrRole(role) || isChiefDriverRole(role) || isDepartmentHeadRole(role) || isAssignedHod(isLinkedHod)
 }
 
 export function isRegionalHrRole(role?: string | null): boolean {

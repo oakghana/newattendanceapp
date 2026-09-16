@@ -167,7 +167,8 @@ export function TransportWorkspace({
   const isTransportManager = normalizedRole === "transport_manager"
   const isChiefDriver = isChiefDriverRole(normalizedRole)
   const isRegionalManager = isRegionalManagerRole(normalizedRole)
-  const canCreateRequest = isChiefDriver || isRegionalHr || isActingHod
+  const isBasicStaff = ["staff", "contract", "audit_staff", "intern", "nsp"].includes(normalizedRole)
+  const canCreateRequest = isChiefDriver || isRegionalHr || isActingHod || isBasicStaff
   const canViewDriverLicense = isChiefDriver || isRegionalHr || isRegionalManager || isDriver || isTransportManager || canManage
   const canManageFleet = isManagingDirector || isChiefDriver || isRegionalHr || isRegionalManager || isTransportManager || canManage
   const [requestOpen, setRequestOpen] = useState(false)
@@ -195,7 +196,7 @@ export function TransportWorkspace({
       const uploaded = await uploadResponse.json()
       documents.push({ name: file.name, url: uploaded.url, type: file.type, size: file.size })
     }
-    const isNonRegionalRequester = isActingHod
+    const isNonRegionalRequester = isActingHod || isBasicStaff
     const submittedLocation = String(requesterLocation || "").trim()
     const approvedLocation = NON_REGIONAL_TRANSPORT_LOCATIONS.includes(submittedLocation as (typeof NON_REGIONAL_TRANSPORT_LOCATIONS)[number])
       ? submittedLocation

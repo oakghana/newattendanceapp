@@ -5,7 +5,7 @@ import { canCreateTransportRequest, canManageTransport, isChiefDriverRole, isReg
 
 const TRANSPORT_ROLES = new Set([
   "admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "transport_manager", "regional_hr", "regional hr", "regional_hr_office", "regional hr office", "regional_hr_officer", "regional hr officer", "regional_manager", "regional manager",
-  "hr_records", "hr_records_officer", "hr_records_manager", "hr", "department_head", "managing_director", "director_hr", "manager_hr", "hr_executive", "hr_executive_officer",
+  "hr_records", "hr_records_officer", "hr_records_manager", "hr", "department_head", "managing_director", "director_hr", "manager_hr", "hr_executive", "hr_executive_officer", "staff", "contract", "intern", "nsp",
 ])
 
 const APPROVED_STAGES = new Set(["approved", "referenced", "completed", "hr_records_review", "transport_manager_assignment", "assigned"])

@@ -26,6 +26,10 @@ const VIEW_ROLES = new Set([
   "admin",
   "it-admin",
   "driver",
+  "contract",
+  "audit_staff",
+  "intern",
+  "nsp",
 ])
 
 const SUBMIT_ROLES = new Set([
@@ -230,8 +234,22 @@ export async function POST(request: Request) {
   const selfAuth = (canSelfAuthorize(submitterRole) || isLinkedHod) && !isAdminRole(submitterRole)
   const signedAt = new Date().toISOString()
   const hodId = requesterHodLink?.hod_user_id ? String(requesterHodLink.hod_user_id) : profile.hod_id ? String(profile.hod_id) : null
+  let hodPrefillAuthorization: string | null = null
+  let hodSignatureDataUrl: string | null = null
+  if (hodId) {
+    const { data: hodProfile } = await supabase
+      .from("user_profiles")
+      .select("first_name, last_name, position, signature_data_url")
+      .eq("id", hodId)
+      .maybeSingle()
+    const hodName = [hodProfile?.first_name, hodProfile?.last_name].filter(Boolean).join(" ").trim()
+    hodPrefillAuthorization = hodName ? `${hodName}${hodProfile?.position ? ` — ${hodProfile.position}` : ""}`.toUpperCase() : null
+    hodSignatureDataUrl = String(hodProfile?.signature_data_url || "").trim() || null
+  }
 
-  // Non-HOD staff must route to their linked HOD first; authorization stays blank until HOD signs.
+  // Non-HOD staff route to their linked HOD. Pre-fill the linked HOD's identity
+  // and registered signature while keeping the decision and signed timestamps blank.
+
   if (!selfAuth) {
     if (!hodId) {
       return NextResponse.json(
@@ -250,8 +268,8 @@ export async function POST(request: Request) {
       required_at: String(body.requiredAt),
       return_at: body.returnAt ? String(body.returnAt) : null,
       persons_requiring_transport: personsRequiringTransport,
-      hod_authorization: null,
-      hod_signature_data_url: null,
+      hod_authorization: hodPrefillAuthorization,
+      hod_signature_data_url: hodSignatureDataUrl,
       supporting_documents: Array.isArray(body.supportingDocuments) ? body.supportingDocuments.slice(0, 10) : [],
       hod_id: hodId,
       hod_decision: "pending",
@@ -276,6 +294,7 @@ export async function POST(request: Request) {
       )
     }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!data) return NextResponse.json({ error: "Unable to create requisition." }, { status: 500 })
     return NextResponse.json(
       { id: data.id, status: data.status, next: "awaiting_hod_approval", message: "Submitted for Head of Department authorization." },
       { status: 201 },
@@ -341,6 +360,7 @@ export async function POST(request: Request) {
     ;({ data, error } = await supabase.from("nonregional_transport_requisitions").insert(fallbackPayload).select("id,status").single())
   }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!data) return NextResponse.json({ error: "Unable to create requisition." }, { status: 500 })
   return NextResponse.json(
     { id: data.id, status: data.status, next: "awaiting_md_approval", message: "Submitted for Managing Director approval." },
     { status: 201 },
