@@ -14,7 +14,7 @@ async function actor() {
 async function resolveFleetScope(supabase: any, profile: any) {
   if (hasNationwideFleetScope(profile.role)) return null
   if (isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role)) {
-    return resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id)
+    return resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id, profile.region_id)
   }
   return profile.assigned_location_id ? [profile.assigned_location_id] : []
 }
@@ -51,16 +51,21 @@ export async function POST(request: Request) {
   const model = String(body.model ?? "").trim()
   const capacity = Number(body.capacity)
   const assignedLocationId = String(body.assigned_location_id ?? "").trim()
-  if (!registrationNumber || !make || !model || !assignedLocationId || !Number.isInteger(capacity) || capacity < 1) return NextResponse.json({ error: "Registration, make, model, location, and a positive capacity are required." }, { status: 400 })
+  const chassisNumber = String(body.chassis_number ?? "").trim().toUpperCase()
+  const vehicleColour = String(body.vehicle_colour ?? "").trim()
+  const vehicleType = String(body.vehicle_type ?? "saloon").trim().toLowerCase()
+  const allowedVehicleTypes = ["saloon", "bus", "truck", "pickup", "van"]
+  if (!registrationNumber || !make || !model || !assignedLocationId || !chassisNumber || !vehicleColour || !allowedVehicleTypes.includes(vehicleType) || !Number.isInteger(capacity) || capacity < 1) return NextResponse.json({ error: "Registration, chassis number, colour, make, model, location, valid vehicle type, and a positive capacity are required." }, { status: 400 })
   const scopedLocationIds = await resolveFleetScope(supabase, profile)
   if (scopedLocationIds && !scopedLocationIds.includes(assignedLocationId)) return NextResponse.json({ error: "You can register vehicles only at locations assigned to your office." }, { status: 403 })
   const { data, error } = await supabase.from("transport_vehicles").insert({
     registration_number: registrationNumber, make, model, capacity,
-    vehicle_type: String(body.vehicle_type ?? "car").trim() || "car",
+    vehicle_type: vehicleType,
     assigned_region_id: profile.region_id ?? null,
     assigned_location_id: assignedLocationId,
     status: "available",
-    odometer_reading: body.odometer_reading === "" || body.odometer_reading == null ? null : Number(body.odometer_reading),
+    chassis_number: String(body.chassis_number ?? "").trim().toUpperCase() || null,
+    vehicle_colour: String(body.vehicle_colour ?? "").trim() || null,
     insurance_expiry_date: String(body.insurance_expiry_date ?? "") || null,
     roadworthy_expiry_date: String(body.roadworthy_expiry_date ?? "") || null,
     notes: String(body.notes ?? "").trim() || null,
@@ -77,6 +82,8 @@ export async function PATCH(request: Request) {
   const body = await request.json()
   const id = String(body.id ?? "")
   const status = String(body.status ?? "")
+  const requestedVehicleType = body.vehicle_type === undefined ? null : String(body.vehicle_type).trim().toLowerCase()
+  if (requestedVehicleType === "motorcycle" || (requestedVehicleType && !["saloon", "bus", "truck", "pickup", "van"].includes(requestedVehicleType))) return NextResponse.json({ error: "Motorcycle is not an available vehicle type." }, { status: 400 })
   if (!id || !["available", "assigned", "maintenance", "inactive"].includes(status)) return NextResponse.json({ error: "A vehicle and valid operational status are required." }, { status: 400 })
   const scopedLocationIds = await resolveFleetScope(supabase, profile)
   if (scopedLocationIds?.length === 0) return NextResponse.json({ error: "No fleet locations are assigned to this account." }, { status: 403 })
@@ -87,7 +94,7 @@ export async function PATCH(request: Request) {
   const assignedLocationId = body.assigned_location_id === undefined ? undefined : String(body.assigned_location_id ?? "").trim() || null
   if (body.assigned_location_id !== undefined && !assignedLocationId) return NextResponse.json({ error: "Vehicle location is required." }, { status: 400 })
   if (assignedLocationId && scopedLocationIds && !scopedLocationIds.includes(assignedLocationId)) return NextResponse.json({ error: "You can move vehicles only within locations assigned to your office." }, { status: 403 })
-  const { data, error } = await supabase.from("transport_vehicles").update({ status, assigned_location_id: assignedLocationId, vehicle_type: body.vehicle_type === undefined ? undefined : String(body.vehicle_type).trim() || "saloon", make: body.make === undefined ? undefined : String(body.make).trim(), model: body.model === undefined ? undefined : String(body.model).trim(), capacity: body.capacity === undefined ? undefined : Number(body.capacity), odometer_reading: body.odometer_reading == null || body.odometer_reading === "" ? undefined : Number(body.odometer_reading), insurance_expiry_date: body.insurance_expiry_date === undefined ? undefined : String(body.insurance_expiry_date) || null, roadworthy_expiry_date: body.roadworthy_expiry_date === undefined ? undefined : String(body.roadworthy_expiry_date) || null, notes: body.notes === undefined ? undefined : String(body.notes).trim() || null, updated_at: new Date().toISOString() }).eq("id", id).select("*").single()
+  const { data, error } = await supabase.from("transport_vehicles").update({ status, assigned_location_id: assignedLocationId, vehicle_type: body.vehicle_type === undefined ? undefined : String(body.vehicle_type).trim() || "saloon", make: body.make === undefined ? undefined : String(body.make).trim(), model: body.model === undefined ? undefined : String(body.model).trim(), capacity: body.capacity === undefined ? undefined : Number(body.capacity), chassis_number: body.chassis_number === undefined ? undefined : String(body.chassis_number).trim().toUpperCase() || null, vehicle_colour: body.vehicle_colour === undefined ? undefined : String(body.vehicle_colour).trim() || null, insurance_expiry_date: body.insurance_expiry_date === undefined ? undefined : String(body.insurance_expiry_date) || null, roadworthy_expiry_date: body.roadworthy_expiry_date === undefined ? undefined : String(body.roadworthy_expiry_date) || null, notes: body.notes === undefined ? undefined : String(body.notes).trim() || null, updated_at: new Date().toISOString() }).eq("id", id).select("*").single()
   if (error) return NextResponse.json({ error: "Unable to update vehicle." }, { status: 500 })
   return NextResponse.json({ vehicle: data })
 }

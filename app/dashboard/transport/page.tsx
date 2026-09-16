@@ -5,7 +5,7 @@ import { canCreateTransportRequest, canManageTransport, isChiefDriverRole, isReg
 
 const TRANSPORT_ROLES = new Set([
   "admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "transport_manager", "regional_hr", "regional hr", "regional_hr_office", "regional hr office", "regional_hr_officer", "regional hr officer", "regional_manager", "regional manager",
-  "hr_records", "hr_records_officer", "hr_records_manager", "hr", "department_head", "managing_director", "director_hr", "manager_hr", "hr_executive", "hr_executive_officer",
+  "hr_records", "hr_records_officer", "hr_records_manager", "hr", "department_head", "managing_director", "director_hr", "manager_hr", "hr_executive", "hr_executive_officer", "staff", "contract", "intern", "nsp",
 ])
 
 const APPROVED_STAGES = new Set(["approved", "referenced", "completed", "hr_records_review", "transport_manager_assignment", "assigned"])
@@ -33,7 +33,15 @@ export default async function TransportPage() {
   const departmentName = (profile as { departments?: { name?: string | null } | null } | null)?.departments?.name ?? ""
   const locationName = (profile as { geofence_locations?: { name?: string | null } | null } | null)?.geofence_locations?.name ?? ""
   const hasTransportAccess = TRANSPORT_ROLES.has(normalizedRole) || canManageTransport(profile?.role) || canCreateTransportRequest(profile?.role) || ["managing_director", "hr_executive", "hr_executive_officer", "department_head", "transport_manager"].includes(normalizedRole)
-  if (!profile || !hasTransportAccess) redirect("/dashboard")
+  const preliminaryLocation = profile?.geofence_locations as { name?: string | null } | null
+  const preliminaryLocationName = String(preliminaryLocation?.name || "").toLowerCase()
+  const isRegionalOrDistrictLinked = Boolean(
+    profile?.region_id ||
+    preliminaryLocationName.includes("regional") ||
+    preliminaryLocationName.includes("district")
+  )
+  const isBasicStaffRole = ["staff", "contract", "audit_staff", "intern", "nsp"].includes(normalizedRole)
+  if (!profile || !hasTransportAccess || (isBasicStaffRole && isRegionalOrDistrictLinked)) redirect("/dashboard")
 
   const isManagingDirector = ["managing_director", "director"].includes(normalizedRole)
   const isHrExecutive = ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)

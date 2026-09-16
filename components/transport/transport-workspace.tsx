@@ -167,11 +167,14 @@ export function TransportWorkspace({
   const isTransportManager = normalizedRole === "transport_manager"
   const isChiefDriver = isChiefDriverRole(normalizedRole)
   const isRegionalManager = isRegionalManagerRole(normalizedRole)
-  const canCreateRequest = isChiefDriver || isRegionalHr || isActingHod
+  const isBasicStaff = ["staff", "contract", "audit_staff", "intern", "nsp"].includes(normalizedRole)
+  const canCreateRequest = isChiefDriver || isRegionalHr || isActingHod || isBasicStaff
   const canViewDriverLicense = isChiefDriver || isRegionalHr || isRegionalManager || isDriver || isTransportManager || canManage
   const canManageFleet = isManagingDirector || isChiefDriver || isRegionalHr || isRegionalManager || isTransportManager || canManage
   const [requestOpen, setRequestOpen] = useState(false)
   const router = useRouter()
+  const regionalRouteRequired = isRegionalHr && !isActingHod
+
 
   async function handleRequestSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -195,7 +198,7 @@ export function TransportWorkspace({
       const uploaded = await uploadResponse.json()
       documents.push({ name: file.name, url: uploaded.url, type: file.type, size: file.size })
     }
-    const isNonRegionalRequester = isActingHod
+    const isNonRegionalRequester = isActingHod || isBasicStaff
     const submittedLocation = String(requesterLocation || "").trim()
     const approvedLocation = NON_REGIONAL_TRANSPORT_LOCATIONS.includes(submittedLocation as (typeof NON_REGIONAL_TRANSPORT_LOCATIONS)[number])
       ? submittedLocation
@@ -224,6 +227,7 @@ export function TransportWorkspace({
               eventDate: form.get("eventDate"),
               passengerCount: form.get("passengerCount"),
               supportingDocuments: documents,
+              regionalRoute: form.get("regionalRoute"),
             },
       ),
     })
@@ -237,7 +241,9 @@ export function TransportWorkspace({
       title: "Transport request submitted",
       description: isActingHod
         ? "Your non-regional requisition is awaiting Managing Director approval."
-        : "Your regional request was sent to the Regional Manager for endorsement, then the Managing Director for approval.",
+        : regionalRouteRequired && form.get("regionalRoute") === "local_regional"
+          ? "Your local regional request was sent to the Regional Manager for endorsement, then the Regional Chief Driver for dispatch."
+          : "Your Head Office transport request was sent to the Regional Manager for endorsement, then the Managing Director for approval.",
     })
     router.push(isActingHod ? "/dashboard/transport/nonregional" : "/dashboard/transport/requests")
     router.refresh()
@@ -774,6 +780,17 @@ export function TransportWorkspace({
                 </div>
               )}
             </div>
+            {regionalRouteRequired && (
+              <div className="grid gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] p-4">
+                <Label htmlFor="regional-route">Request route</Label>
+                <select id="regional-route" name="regionalRoute" required defaultValue="">
+                  <option value="" disabled>Select the approval route</option>
+                  <option value="local_regional">Local regional request — Regional Manager then Regional Chief Driver</option>
+                  <option value="head_office">Head Office transport request — Regional Manager, Managing Director, then HR Executive</option>
+                </select>
+                <p className="text-xs text-muted-foreground">Choose where the request must be fulfilled and approved.</p>
+              </div>
+            )}
             <div className="grid gap-2">
               <Label htmlFor="transport-purpose">Purpose</Label>
               <Input id="transport-purpose" name="purpose" required placeholder="Staff bus, official travel, funeral, or programme" />

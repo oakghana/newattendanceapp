@@ -115,6 +115,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             employee_id,
             role,
             profile_image_url,
+            region_id,
+            assigned_location_id,
+            assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
+              id,
+              name,
+              location_type
+            ),
             departments (
               name,
               code

@@ -63,6 +63,9 @@ interface SidebarProps {
     employee_id: string
     profile_image_url?: string | null
     role: string
+    region_id?: string | null
+    assigned_location_id?: string | null
+    assigned_location?: { name?: string | null; location_type?: string | null } | null
     departments?: {
       name: string
       code: string
@@ -194,7 +197,7 @@ const navigationItems = [
     title: "Transport Management",
     href: "/dashboard/transport",
     icon: Bus,
-    roles: ["admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "department_head", "hr_executive", "hr_executive_officer", "director_hr", "manager_hr"],
+    roles: ["admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "department_head", "hr_executive", "hr_executive_officer", "director_hr", "manager_hr", "staff", "contract", "audit_staff", "intern", "nsp"],
     category: "admin",
     subItems: [
       { title: "Requests", href: "/dashboard/transport" },
@@ -467,8 +470,22 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
     "/dashboard/hr-records",
   ])
 
+  const normalizedProfileRole = normalizeAppRole(profile?.role)
+  const assignedLocationName = String(profile?.assigned_location?.name || "").toLowerCase()
+  const assignedLocationType = String(profile?.assigned_location?.location_type || "").toLowerCase()
+  const isRegionalOrDistrictLinked = Boolean(
+    profile?.region_id ||
+    assignedLocationType.includes("regional") ||
+    assignedLocationType.includes("district") ||
+    assignedLocationName.includes("regional") ||
+    assignedLocationName.includes("district")
+  )
+  const isBasicNonRegionalRole = ["staff", "contract", "audit_staff", "intern", "nsp"].includes(normalizedProfileRole)
+  const canSeeTransportMenu = !isBasicNonRegionalRole || !isRegionalOrDistrictLinked
+
   const filteredNavItems = allNavigationItems.filter((item) => {
-    if (isAttendanceOnly) return item.href === "/dashboard/attendance"
+  if (item.href === "/dashboard/transport" && !canSeeTransportMenu) return false
+  if (isAttendanceOnly) return item.href === "/dashboard/attendance"
     if (isAssignedHod && item.roles.some((role) => normalizeAppRole(role) === "department_head")) return true
     // Disbursement confirmation belongs only to Accounts/Loan Office workflows.
     // Explicitly deny it for HR Records and HR Leave Office even if a legacy
@@ -820,7 +837,10 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
                           align="end"
                           className="w-64 shadow-lg border-border bg-background"
                         >
-                          {item.subItems.map((subItem) => (
+                          {item.subItems.filter((subItem) => {
+  if (item.href !== "/dashboard/transport") return true
+  return subItem.href === "/dashboard/transport" || !["staff", "contract", "audit_staff", "intern", "nsp"].includes(effectiveRole)
+}).map((subItem) => (
                             <DropdownMenuItem asChild key={subItem.href}>
                               <Link
                                 href={subItem.href}
