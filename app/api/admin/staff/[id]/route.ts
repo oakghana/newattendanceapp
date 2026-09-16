@@ -207,6 +207,20 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       )
     }
 
+    if (isItAdmin && role === "department_head" && mergedAssignedLocationId && mergedAssignedLocationId !== "none") {
+      const { data: assignedLocation } = await adminSupabase
+        .from("geofence_locations")
+        .select("name, location_type, parent_location_id, district_id")
+        .eq("id", mergedAssignedLocationId)
+        .maybeSingle()
+      const locationName = String(assignedLocation?.name || "").toLowerCase()
+      const locationType = String(assignedLocation?.location_type || "").toLowerCase()
+      const isRegionalOrDistrict = locationType === "regional" || locationType === "district" || /regional|district/.test(locationName)
+      if (isRegionalOrDistrict) {
+        return NextResponse.json({ error: "IT-Admin cannot assign Department Head to staff in a regional office or district location." }, { status: 403 })
+      }
+    }
+
     if (role && (role === "admin" || role === "regional_manager") && !isAdministrator) {
       console.error("[v0] Staff API PUT - Non-admin tried to assign admin or regional_manager role")
       return NextResponse.json(
@@ -341,6 +355,17 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         },
         { status: 500 },
       )
+    }
+
+    if (mergedIsActive === false && targetProfile.is_active !== false && ["department_head", "regional_manager"].includes(normalizedTargetRole)) {
+      const cleanupAt = new Date().toISOString()
+      const { error: linkageCleanupError } = await adminSupabase
+        .from("loan_hod_linkages")
+        .delete()
+        .eq("hod_user_id", id)
+      if (linkageCleanupError) console.error("[v0] HOD linkage cleanup failed:", linkageCleanupError)
+      await adminSupabase.from("user_profiles").update({ hod_id: null, updated_at: cleanupAt }).eq("hod_id", id)
+      await adminSupabase.from("nonregional_transport_requisitions").update({ hod_id: null, updated_at: cleanupAt }).eq("hod_id", id)
     }
 
     if (staff_category !== undefined && updatedProfile?.staff_category !== staff_category) {

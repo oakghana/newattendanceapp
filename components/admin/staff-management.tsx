@@ -683,6 +683,7 @@ export function StaffManagement() {
       const unique = [...rm, ...dh, ...hre, ...ae]
         .filter((s) => {
           if (!s?.id || s.id === member.id || s.is_active === false || seen.has(s.id)) return false
+          if (isItAdmin && !isNonRegionalStaff && isDepartmentHead(s)) return false
           seen.add(s.id)
           return true
         })
