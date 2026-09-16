@@ -482,8 +482,10 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
   )
   const isBasicNonRegionalRole = ["staff", "contract", "audit_staff", "intern", "nsp"].includes(normalizedProfileRole)
   const canSeeTransportMenu = !isBasicNonRegionalRole || !isRegionalOrDistrictLinked
+  const isChiefDriver = ["chief_driver", "regional_chief_driver"].includes(normalizedProfileRole) || effectiveRole === "chief_driver"
 
   const filteredNavItems = allNavigationItems.filter((item) => {
+  if (isChiefDriver && ["/dashboard/secretary-memos", "/offpremises-approvals"].includes(item.href)) return false
   if (item.href === "/dashboard/transport" && !canSeeTransportMenu) return false
   if (isAttendanceOnly) return item.href === "/dashboard/attendance"
     if (isAssignedHod && item.roles.some((role) => normalizeAppRole(role) === "department_head")) return true
