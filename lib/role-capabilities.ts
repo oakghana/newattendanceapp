@@ -6,6 +6,7 @@ export function normalizeAppRole(role?: string | null): string {
   if (["regional_hr_leave_office", "regional_leave_office", "regional_hr_office", "regional_hr_officer", "regional_leave_hr"].includes(normalized)) return "regional_hr"
   if (normalized === "head_of_department") return "department_head"
   if (["regional_driver", "regional_drivers"].includes(normalized)) return "driver"
+  if (normalized === "regional_chief_driver") return "chief_driver"
   if (normalized === "it_admin") return "it-admin"
   return normalized || "staff"
 }
@@ -31,7 +32,7 @@ export function isTransportManagerRole(role?: string | null): boolean {
 }
 
 export function isChiefDriverRole(role?: string | null): boolean {
-  return normalizeAppRole(role) === "chief_driver"
+  return ["chief_driver", "regional_chief_driver"].includes(normalizeAppRole(role))
 }
 
 /** Regional drivers are stored as a distinct raw role but normalize to "driver" for permission checks.
