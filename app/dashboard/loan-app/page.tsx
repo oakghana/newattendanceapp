@@ -3064,21 +3064,12 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
       String(row.status || "").trim().toLowerCase(),
     )
 
-  const deleteLoanRequestById = async (id: string, options?: { allowStaffOwner?: boolean; status?: string }) => {
-    const allowStaffOwner = Boolean(options?.allowStaffOwner)
-    if (!isAdmin && !allowStaffOwner) {
-      toast({ title: "Forbidden", description: "Only admin can delete selected loan requests.", variant: "destructive" })
+  const deleteLoanRequestById = async (id: string) => {
+    if (!isAdmin) {
+      toast({ title: "Forbidden", description: "Only administrators can delete loan requests.", variant: "destructive" })
       return
     }
-    if (!isAdmin && allowStaffOwner && options?.status && !canStaffDeleteLoanRequest({ status: options.status } as LoanRequest)) {
-      toast({
-        title: "Cannot delete",
-        description: "You can only delete a loan request before your HOD has approved it.",
-        variant: "destructive",
-      })
-      return
-    }
-    if (!window.confirm(isAdmin ? "Delete this loan request?" : "Delete this loan request? It will be removed only if your HOD has not approved it yet.")) {
+    if (!window.confirm("Delete this loan request?")) {
       return
     }
     const res = await fetch("/api/loan/request", {
@@ -3433,13 +3424,13 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                         <Button variant="outline" size="sm" onClick={() => beginEdit(row)}>
                           View / Edit
                         </Button>
-                        <Button
+                        {isAdmin && <Button
                           variant="destructive"
                           size="sm"
-                          onClick={() => void deleteLoanRequestById(row.id, { allowStaffOwner: true, status: row.status })}
+                          onClick={() => void deleteLoanRequestById(row.id)}
                         >
                           <Trash2 className="h-4 w-4 mr-1" /> Delete request
-                        </Button>
+                        </Button>}
                       </>
                     )}
                     {row.status === "approved_director" && (

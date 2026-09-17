@@ -764,6 +764,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (!id) return NextResponse.json({ error: "Request id is required" }, { status: 400 })
+    if (role !== "admin") {
+      return NextResponse.json({ error: "Only administrators can delete loan requests" }, { status: 403 })
+    }
 
     const { data: existing, error: existingError } = await admin
       .from("loan_requests")
