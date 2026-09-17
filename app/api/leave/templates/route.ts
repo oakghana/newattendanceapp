@@ -8,10 +8,11 @@ const TEMPLATE_EDIT_ROLES = ["admin"]
 const TEMPLATE_SELECT_COLUMNS = "id, template_key, template_name, description, subject_template, body_template, cc_recipients, is_active, updated_at"
 
 function normalizeRole(role: string | null | undefined) {
-  return String(role || "")
+  const normalized = String(role || "")
     .toLowerCase()
     .trim()
     .replace(/[-\s]+/g, "_")
+  return normalized === "administrator" ? "admin" : normalized
 }
 
 async function resolveUserAndRole() {
