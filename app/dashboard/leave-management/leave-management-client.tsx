@@ -837,8 +837,8 @@ export function LeaveManagementClient({
   const isManagerView = isAssignedHod || ["admin", "regional_manager", "regional_manager_officer", "department_head", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office", "hr", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isRegionalManager = normalizedRole === "regional_manager" || normalizedRole === "regional_manager_officer"
   const isAdminView = isAdmin
-  const canViewHrTemplates = isAdmin || ["hr_director", "hr_leave_office"].includes(normalizedRole)
-  const canEditHrTemplates = isAdmin || ["hr_director", "hr_leave_office"].includes(normalizedRole)
+  const canViewHrTemplates = isAdmin
+  const canEditHrTemplates = isAdmin
   const isHrLeaveOfficeRole = ["hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isLeaveOfficeRole = ["hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr"].includes(normalizedRole)
   const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
