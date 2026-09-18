@@ -14,10 +14,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { SearchableSelect } from "@/components/ui/searchable-select"
-import { Calendar, Loader2, Info, UserCog } from "lucide-react"
+import { Calendar, Loader2, Info, AlertTriangle } from "lucide-react"
 import { useEffect } from "react"
 import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays } from "@/lib/leave-policy"
 import { useToast } from "@/hooks/use-toast"
+import { AssignmentRequiredModal } from "@/components/shared/assignment-required-modal"
 
 interface AnnualEntitlementInfo {
   annualLeaveDays: number
@@ -43,6 +44,12 @@ export function RequestLeaveButton() {
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
   const [activePeriod, setActivePeriod] = useState("2026/2027")
   const [annualEntitlement, setAnnualEntitlement] = useState<AnnualEntitlementInfo | null>(null)
+  const [assignmentModal, setAssignmentModal] = useState<{
+    open: boolean
+    title?: string
+    description?: string
+    contactRole?: string
+  }>({ open: false })
 
   // Fetch annual leave entitlement for this user when the dialog opens
   useEffect(() => {
@@ -158,14 +165,23 @@ export function RequestLeaveButton() {
         const err = await resp.json()
         const assignmentCodes = ["HOD_ASSIGNMENT_REQUIRED", "REGIONAL_HR_ASSIGNMENT_REQUIRED"]
         if (assignmentCodes.includes(err.code)) {
+          setOpen(false)
+          setAssignmentModal({
+            open: true,
+            title: err.title,
+            description: err.error,
+            contactRole: err.contactRole,
+          })
+        } else if (err.code === "LEAVE_YEARLY_DUPLICATE") {
           toast({
-            title: err.title || "Assignment Setup Required",
+            title: "Duplicate Leave Request Warning",
             description: (
               <div className="flex items-start gap-2.5">
-                <UserCog className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                 <span>{err.error}</span>
               </div>
             ),
+            variant: "destructive",
           })
         } else {
           toast({
@@ -184,6 +200,7 @@ export function RequestLeaveButton() {
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button className="gap-2">
@@ -323,5 +340,13 @@ export function RequestLeaveButton() {
         </div>
       </DialogContent>
     </Dialog>
+    <AssignmentRequiredModal
+      open={assignmentModal.open}
+      onOpenChange={(next) => setAssignmentModal((prev) => ({ ...prev, open: next }))}
+      title={assignmentModal.title}
+      description={assignmentModal.description}
+      contactRole={assignmentModal.contactRole}
+    />
+    </>
   )
 }

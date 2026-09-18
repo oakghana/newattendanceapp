@@ -17,6 +17,71 @@ const NON_ANNUAL_REQUIRES_APPROVED_ANNUAL = new Set([
   "special_unpaid",
 ])
 
+const LEAVE_TYPE_DISPLAY_NAME: Record<string, string> = {
+  annual: "Annual",
+  sick: "Sick",
+  maternity: "Maternity",
+  paternity: "Paternity",
+  study_with_pay: "Study (With Pay)",
+  study_without_pay: "Study (Without Pay)",
+  casual: "Casual",
+  compassionate: "Compassionate",
+  special_unpaid: "Special Unpaid",
+}
+
+function leaveTypeDisplayName(leaveTypeKey: string): string {
+  return LEAVE_TYPE_DISPLAY_NAME[leaveTypeKey] || leaveTypeKey.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+// Prevents a staff member from being approved twice for the same leave type
+// within the same calendar year, and warns them off resubmitting while an
+// earlier request of the same type is still open.
+async function findYearlyDuplicateLeaveRequest(
+  admin: any,
+  userId: string,
+  leaveTypeKey: string,
+  excludeId?: string,
+) {
+  const year = new Date().getFullYear()
+  const yearStart = `${year}-01-01T00:00:00.000Z`
+  const yearEnd = `${year}-12-31T23:59:59.999Z`
+
+  let query = admin
+    .from("leave_requests")
+    .select("id, status, reference_number, leave_type")
+    .eq("user_id", userId)
+    .eq("leave_type", leaveTypeKey)
+    .gte("created_at", yearStart)
+    .lte("created_at", yearEnd)
+    .order("created_at", { ascending: false })
+
+  if (excludeId) query = query.neq("id", excludeId)
+
+  const { data, error } = await query.limit(20)
+  if (error) return null
+
+  const rows = data || []
+  if (rows.length === 0) return null
+
+  const typeLabel = leaveTypeDisplayName(leaveTypeKey)
+
+  const approvedRow = rows.find((row: any) => ["approved", "hr_approved"].includes(String(row.status || "")))
+  if (approvedRow) {
+    return {
+      error: `You already have an approved ${typeLabel} leave request this calendar year (${year}) (Ref: ${approvedRow.reference_number || approvedRow.id}). The same leave type cannot be approved twice in one calendar year. Please do not resubmit this request.`,
+    }
+  }
+
+  const openRow = rows.find((row: any) => !["rejected", "withdrawn"].includes(String(row.status || "")))
+  if (openRow) {
+    return {
+      error: `You already submitted a ${typeLabel} leave request this calendar year (Ref: ${openRow.reference_number || openRow.id}). Please wait for that request to be decided before submitting another one of the same type.`,
+    }
+  }
+
+  return null
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -81,6 +146,15 @@ export async function POST(request: NextRequest) {
       normalizedRole === "regional_manager" ||
       normalizedRole === "department_head" ||
       normalizedRole.includes("manager")
+
+    // Prevent the same staff member from being approved twice for the same
+    // leave type within one calendar year, and warn them off resubmitting.
+    if (normalizedRole !== "admin") {
+      const duplicateLeave = await findYearlyDuplicateLeaveRequest(admin, user.id, leaveTypeKey)
+      if (duplicateLeave) {
+        return NextResponse.json({ error: duplicateLeave.error, code: "LEAVE_YEARLY_DUPLICATE" }, { status: 409 })
+      }
+    }
 
     if (leaveTypeKey === "maternity" || leaveTypeKey === "paternity") {
       if (!document || document.size === 0) {
@@ -730,6 +804,11 @@ export async function PUT(request: NextRequest) {
         { error: "This leave request can no longer be edited because it is already being handled." },
         { status: 409 },
       )
+    }
+
+    const duplicateLeave = await findYearlyDuplicateLeaveRequest(supabase, user.id, leave_type, id)
+    if (duplicateLeave) {
+      return NextResponse.json({ error: duplicateLeave.error, code: "LEAVE_YEARLY_DUPLICATE" }, { status: 409 })
     }
 
     const { data: updated, error: updateError } = await supabase

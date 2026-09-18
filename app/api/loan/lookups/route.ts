@@ -1156,7 +1156,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Only admins can delete all HOD linkages" }, { status: 403 })
       }
 
-      const { error } = await admin.from("loan_hod_linkages").delete().neq("id", "")
+      const { error } = await admin.from("loan_hod_linkages").delete().not("id", "is", null)
       if (error) throw error
 
       return NextResponse.json({ success: true, message: "All HOD linkages have been deleted. Staff must now set their real HODs." })

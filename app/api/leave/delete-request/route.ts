@@ -1,5 +1,6 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { normalizeAppRole } from '@/lib/role-capabilities'
 
 function getAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
@@ -32,36 +33,23 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Get the current user to verify their identity
-    const authHeader = request.headers.get('Authorization') || ''
-    const token = authHeader.replace('Bearer ', '')
-
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Unauthorized - no token provided' },
-        { status: 401 }
-      )
-    }
-
-    const { data: { user }, error: authError } = await getAdmin().auth.getUser(token)
+    // Authenticate from the Supabase session cookie and authorize administrators only.
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized - invalid token' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Verify user is getAdmin()
     const { data: profile } = await getAdmin()
       .from('user_profiles')
       .select('role')
       .eq('id', user.id)
       .single()
 
-    if (!profile || !['admin', 'hr_executive', 'hr_leave_office'].includes(profile.role?.toLowerCase())) {
+    if (!profile || normalizeAppRole(profile.role) !== 'admin') {
       return NextResponse.json(
-        { error: 'Forbidden - only admins and HR staff can delete leave requests' },
+        { error: 'Forbidden - only administrators can delete leave requests' },
         { status: 403 }
       )
     }

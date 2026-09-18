@@ -830,15 +830,17 @@ export function LeaveManagementClient({
   const adminDelayedQueue = useMemo(() => pendingNotifications.filter((n) => Number(n.waiting_days || 0) >= inactivityDays), [pendingNotifications, inactivityDays])
 
   const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-  const isAdmin = normalizedRole === "admin"
+  const isAdmin = normalizedRole === "admin" || normalizedRole === "administrator"
+  const isItAdmin = normalizedRole === "it_admin"
+  const isAdministrator = isAdmin && !isItAdmin
   // All authenticated users can access their leave request hub. This does not
   // grant reviewer or administrative permissions.
   const canUseStaffLeaveHub = true
   const isManagerView = isAssignedHod || ["admin", "regional_manager", "regional_manager_officer", "department_head", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office", "hr", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isRegionalManager = normalizedRole === "regional_manager" || normalizedRole === "regional_manager_officer"
   const isAdminView = isAdmin
-  const canViewHrTemplates = isAdmin || ["hr_director", "hr_leave_office"].includes(normalizedRole)
-  const canEditHrTemplates = isAdmin || ["hr_director", "hr_leave_office"].includes(normalizedRole)
+  const canViewHrTemplates = isAdministrator
+  const canEditHrTemplates = isAdministrator
   const isHrLeaveOfficeRole = ["hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isLeaveOfficeRole = ["hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr"].includes(normalizedRole)
   const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)

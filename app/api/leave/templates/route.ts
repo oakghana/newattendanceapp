@@ -1,30 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 
-const TEMPLATE_VIEW_ROLES = [
-  "admin",
-  "hr_officer",
-  "hr_director",
-  "director_hr",
-  "manager_hr",
-  "hr_leave_office",
-]
+const TEMPLATE_VIEW_ROLES = ["admin"]
 
-const TEMPLATE_EDIT_ROLES = [
-  "admin",
-  "director_hr",
-  "manager_hr",
-  "hr_director",
-  "hr_leave_office",
-]
+const TEMPLATE_EDIT_ROLES = ["admin"]
 
 const TEMPLATE_SELECT_COLUMNS = "id, template_key, template_name, description, subject_template, body_template, cc_recipients, is_active, updated_at"
 
 function normalizeRole(role: string | null | undefined) {
-  return String(role || "")
+  const normalized = String(role || "")
     .toLowerCase()
     .trim()
     .replace(/[-\s]+/g, "_")
+  return normalized === "administrator" ? "admin" : normalized
 }
 
 async function resolveUserAndRole() {

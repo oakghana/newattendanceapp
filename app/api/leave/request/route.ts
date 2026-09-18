@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function tryDeleteAll(admin: any, table: string) {
-  const { error } = await admin.from(table).delete()
+  const { error } = await admin.from(table).delete().not("id", "is", null)
   if (error) {
     const message = String(error.message || "")
     if (/does not exist|schema cache|relation/i.test(message)) {

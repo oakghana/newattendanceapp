@@ -20,6 +20,7 @@ import { TrackedMemoEditor } from "@/components/memo/tracked-memo-editor"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
 import { GlobalWarningsToasts } from "@/components/leave/global-warnings-toasts"
+import { AssignmentRequiredModal } from "@/components/shared/assignment-required-modal"
 import { AccountsExecutiveFDDashboard } from "@/components/loan/accounts-executive-fd-dashboard"
 import { FdCompletedArchive } from "@/components/loan/fd-completed-archive"
 import { FDCalculationSubmission } from "@/components/loan/fd-calculation-submission"
@@ -68,7 +69,6 @@ import {
   Trash2,
   Upload,
   UserCheck,
-  UserCog,
   Users,
   Wallet,
   XCircle,
@@ -1039,6 +1039,12 @@ export default function LoanAppPage() {
   const [data, setData] = useState<WorkflowResponse | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<string>("")
+  const [assignmentModal, setAssignmentModal] = useState<{
+    open: boolean
+    title?: string
+    description?: string
+    contactRole?: string
+  }>({ open: false })
 
   const [expandedLoanIds, setExpandedLoanIds] = useState<Set<string>>(new Set())
   const toggleLoanExpanded = (loanId: string) => {
@@ -1341,7 +1347,7 @@ export default function LoanAppPage() {
   const userDeptIsAccounts = /account|finance/i.test(userDeptName)
   const canAccessLoanOfficeWorkspace =
     isAdmin ||
-    (["loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) ||
+    (["loan_office", "hr_loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) ||
     (normalizedRole === "manager_hr" && !userDeptIsAccounts)
   const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
@@ -2405,15 +2411,23 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     })
     const result = await res.json()
     if (!res.ok) {
-      if (result.code === "LOAN_HOD_ASSIGNMENT_REQUIRED") {
+  if (result.code === "LOAN_HOD_ASSIGNMENT_REQUIRED") {
+  setAssignmentModal({
+  open: true,
+  title: result.title,
+  description: result.error,
+  contactRole: result.contactRole,
+  })
+  } else if (res.status === 409 && /already have an approved|already submitted this loan type/i.test(String(result.error || ""))) {
         toast({
-          title: result.title || "Assignment Setup Required",
+          title: "Duplicate Loan Request Warning",
           description: (
             <div className="flex items-start gap-2.5">
-              <UserCog className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
               <span>{result.error}</span>
             </div>
           ),
+          variant: "destructive",
         })
       } else {
         toast({ title: "Could not save request", description: result.error || "Try again", variant: "destructive" })
@@ -3064,21 +3078,12 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
       String(row.status || "").trim().toLowerCase(),
     )
 
-  const deleteLoanRequestById = async (id: string, options?: { allowStaffOwner?: boolean; status?: string }) => {
-    const allowStaffOwner = Boolean(options?.allowStaffOwner)
-    if (!isAdmin && !allowStaffOwner) {
-      toast({ title: "Forbidden", description: "Only admin can delete selected loan requests.", variant: "destructive" })
+  const deleteLoanRequestById = async (id: string) => {
+    if (!isAdmin) {
+      toast({ title: "Forbidden", description: "Only administrators can delete loan requests.", variant: "destructive" })
       return
     }
-    if (!isAdmin && allowStaffOwner && options?.status && !canStaffDeleteLoanRequest({ status: options.status } as LoanRequest)) {
-      toast({
-        title: "Cannot delete",
-        description: "You can only delete a loan request before your HOD has approved it.",
-        variant: "destructive",
-      })
-      return
-    }
-    if (!window.confirm(isAdmin ? "Delete this loan request?" : "Delete this loan request? It will be removed only if your HOD has not approved it yet.")) {
+    if (!window.confirm("Delete this loan request?")) {
       return
     }
     const res = await fetch("/api/loan/request", {
@@ -3157,8 +3162,15 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
   }
 
   return (
-    <>
-      <GlobalWarningsToasts />
+  <>
+  <GlobalWarningsToasts />
+  <AssignmentRequiredModal
+  open={assignmentModal.open}
+  onOpenChange={(next) => setAssignmentModal((prev) => ({ ...prev, open: next }))}
+  title={assignmentModal.title}
+  description={assignmentModal.description}
+  contactRole={assignmentModal.contactRole}
+  />
       <div className="px-2">
         <LeaveResumptionBadge />
       </div>
@@ -3433,13 +3445,13 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                         <Button variant="outline" size="sm" onClick={() => beginEdit(row)}>
                           View / Edit
                         </Button>
-                        <Button
+                        {isAdmin && <Button
                           variant="destructive"
                           size="sm"
-                          onClick={() => void deleteLoanRequestById(row.id, { allowStaffOwner: true, status: row.status })}
+                          onClick={() => void deleteLoanRequestById(row.id)}
                         >
                           <Trash2 className="h-4 w-4 mr-1" /> Delete request
-                        </Button>
+                        </Button>}
                       </>
                     )}
                     {row.status === "approved_director" && (

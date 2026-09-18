@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     // Delete all records from leave tables
     for (const table of leaveTables) {
       try {
-        const { data, error } = await admin.from(table).delete().neq('id', '')
+        const { data, error } = await admin.from(table).delete().not('id', 'is', null)
 
         if (error) {
           console.warn(`[v0] Warning deleting from ${table}:`, error.message)
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     // Delete all records from loan tables
     for (const table of loanTables) {
       try {
-        const { data, error } = await admin.from(table).delete().neq('id', '')
+        const { data, error } = await admin.from(table).delete().not('id', 'is', null)
 
         if (error) {
           console.warn(`[v0] Warning deleting from ${table}:`, error.message)
