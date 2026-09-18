@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { SearchableSelect } from "@/components/ui/searchable-select"
-import { Calendar, Loader2, Info, UserCog } from "lucide-react"
+import { Calendar, Loader2, Info, UserCog, AlertTriangle } from "lucide-react"
 import { useEffect } from "react"
 import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays } from "@/lib/leave-policy"
 import { useToast } from "@/hooks/use-toast"
@@ -166,6 +166,17 @@ export function RequestLeaveButton() {
                 <span>{err.error}</span>
               </div>
             ),
+          })
+        } else if (err.code === "LEAVE_YEARLY_DUPLICATE") {
+          toast({
+            title: "Duplicate Leave Request Warning",
+            description: (
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <span>{err.error}</span>
+              </div>
+            ),
+            variant: "destructive",
           })
         } else {
           toast({

@@ -2415,6 +2415,17 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             </div>
           ),
         })
+      } else if (res.status === 409 && /already have an approved|already submitted this loan type/i.test(String(result.error || ""))) {
+        toast({
+          title: "Duplicate Loan Request Warning",
+          description: (
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <span>{result.error}</span>
+            </div>
+          ),
+          variant: "destructive",
+        })
       } else {
         toast({ title: "Could not save request", description: result.error || "Try again", variant: "destructive" })
       }
