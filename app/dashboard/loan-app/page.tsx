@@ -20,6 +20,7 @@ import { TrackedMemoEditor } from "@/components/memo/tracked-memo-editor"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
 import { GlobalWarningsToasts } from "@/components/leave/global-warnings-toasts"
+import { AssignmentRequiredModal } from "@/components/shared/assignment-required-modal"
 import { AccountsExecutiveFDDashboard } from "@/components/loan/accounts-executive-fd-dashboard"
 import { FdCompletedArchive } from "@/components/loan/fd-completed-archive"
 import { FDCalculationSubmission } from "@/components/loan/fd-calculation-submission"
@@ -68,7 +69,6 @@ import {
   Trash2,
   Upload,
   UserCheck,
-  UserCog,
   Users,
   Wallet,
   XCircle,
@@ -1039,6 +1039,12 @@ export default function LoanAppPage() {
   const [data, setData] = useState<WorkflowResponse | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<string>("")
+  const [assignmentModal, setAssignmentModal] = useState<{
+    open: boolean
+    title?: string
+    description?: string
+    contactRole?: string
+  }>({ open: false })
 
   const [expandedLoanIds, setExpandedLoanIds] = useState<Set<string>>(new Set())
   const toggleLoanExpanded = (loanId: string) => {
@@ -2405,17 +2411,14 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     })
     const result = await res.json()
     if (!res.ok) {
-      if (result.code === "LOAN_HOD_ASSIGNMENT_REQUIRED") {
-        toast({
-          title: result.title || "Assignment Setup Required",
-          description: (
-            <div className="flex items-start gap-2.5">
-              <UserCog className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-              <span>{result.error}</span>
-            </div>
-          ),
-        })
-      } else if (res.status === 409 && /already have an approved|already submitted this loan type/i.test(String(result.error || ""))) {
+  if (result.code === "LOAN_HOD_ASSIGNMENT_REQUIRED") {
+  setAssignmentModal({
+  open: true,
+  title: result.title,
+  description: result.error,
+  contactRole: result.contactRole,
+  })
+  } else if (res.status === 409 && /already have an approved|already submitted this loan type/i.test(String(result.error || ""))) {
         toast({
           title: "Duplicate Loan Request Warning",
           description: (
@@ -3159,8 +3162,15 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
   }
 
   return (
-    <>
-      <GlobalWarningsToasts />
+  <>
+  <GlobalWarningsToasts />
+  <AssignmentRequiredModal
+  open={assignmentModal.open}
+  onOpenChange={(next) => setAssignmentModal((prev) => ({ ...prev, open: next }))}
+  title={assignmentModal.title}
+  description={assignmentModal.description}
+  contactRole={assignmentModal.contactRole}
+  />
       <div className="px-2">
         <LeaveResumptionBadge />
       </div>
