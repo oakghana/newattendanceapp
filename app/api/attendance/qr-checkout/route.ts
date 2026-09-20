@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
+import { isOvernightShiftDept } from "@/lib/attendance-utils"
 
 export async function POST(request: Request) {
   try {
@@ -57,14 +58,43 @@ export async function POST(request: Request) {
     const todayDate = now.toISOString().split("T")[0]
 
     // Find today's attendance record without check-out
-    const { data: attendance, error: findError } = await supabase
+    const { data: todayAttendance, error: findError } = await supabase
       .from("attendance_records")
       .select("*")
       .eq("user_id", user.id)
       .gte("check_in_time", `${todayDate}T00:00:00Z`)
       .lt("check_in_time", `${todayDate}T23:59:59Z`)
       .is("check_out_time", null)
-      .single()
+      .maybeSingle()
+
+    let attendance = todayAttendance
+
+    // Security/Transport staff often work overnight shifts that cross midnight.
+    // If they checked in yesterday and haven't been auto-closed (they are exempt
+    // from the 11:59 PM auto-checkout), let them check out the next day too.
+    if (!attendance) {
+      const { data: userProfile } = await supabase
+        .from("user_profiles")
+        .select("departments(code, name)")
+        .eq("id", user.id)
+        .maybeSingle()
+
+      if (isOvernightShiftDept(userProfile?.departments)) {
+        const { data: openOvernightRecord } = await supabase
+          .from("attendance_records")
+          .select("*")
+          .eq("user_id", user.id)
+          .is("check_out_time", null)
+          .lt("check_in_time", `${todayDate}T00:00:00Z`)
+          .order("check_in_time", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (openOvernightRecord) {
+          attendance = openOvernightRecord
+        }
+      }
+    }
 
     if (findError || !attendance) {
       console.log("[v0] No active check-in found for checkout:", findError?.message)
