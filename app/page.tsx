@@ -16,22 +16,19 @@ export default function HomePage() {
       try {
         const supabase = createClient()
         
-        // Add a small delay to ensure cookies are properly set
-        await new Promise(resolve => setTimeout(resolve, 100))
-        
         const { data: { user }, error: authError } = await supabase.auth.getUser()
         
         if (!isMounted) return
 
         if (authError) {
           // Auth error means not authenticated
-          router.push('/auth/login')
+          router.replace('/auth/login')
         } else if (user) {
           // User is authenticated, redirect to attendance
           router.push('/dashboard/attendance')
         } else {
           // No user and no error means not authenticated
-          router.push('/auth/login')
+          router.replace('/auth/login')
         }
       } catch (error) {
         if (!isMounted) return
