@@ -1,7 +1,7 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 import { validateCheckoutLocation, type LocationData } from "@/lib/geolocation"
-import { requiresEarlyCheckoutReason, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckOutDeadline, isSecurityDept, isOperationalDept, isTransportDept, isExemptFromAttendanceReasons } from "@/lib/attendance-utils"
+import { requiresEarlyCheckoutReason, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckOutDeadline, isSecurityDept, isOperationalDept, isTransportDept, isExemptFromAttendanceReasons, isOvernightShiftDept } from "@/lib/attendance-utils"
 import { parseRuntimeFlags } from "@/lib/runtime-flags"
 import { checkLeaveOverdueBlock } from "@/lib/leave-resumption-service"
 import { validateAttendanceReason } from "@/lib/meaningful-text"
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     // OPTIMIZATION: Parallelize database queries
     const [
       { data: userProfile },
-      { data: attendanceRecord, error: findError },
+      { data: todayAttendanceRecord, error: findError },
     ] = await Promise.all([
       supabase
         .from("user_profiles")
@@ -68,6 +68,33 @@ export async function POST(request: NextRequest) {
         .lt("check_in_time", `${today}T23:59:59`)
         .maybeSingle(),
     ])
+
+    let attendanceRecord = todayAttendanceRecord
+
+    // Security/Transport staff often work overnight shifts that cross midnight.
+    // If they checked in yesterday and haven't been auto-closed (they are exempt
+    // from the 11:59 PM auto-checkout), let them check out the next day too.
+    if (!attendanceRecord && isOvernightShiftDept(userProfile?.departments)) {
+      const { data: openOvernightRecord } = await supabase
+        .from("attendance_records")
+        .select(`
+          *,
+          geofence_locations!check_in_location_id (
+            name,
+            address
+          )
+        `)
+        .eq("user_id", user.id)
+        .is("check_out_time", null)
+        .lt("check_in_time", `${today}T00:00:00`)
+        .order("check_in_time", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (openOvernightRecord) {
+        attendanceRecord = openOvernightRecord
+      }
+    }
 
     // Prefer per-day `leave_status` table for accurate leave checks for today
     const { data: onLeave } = await supabase
@@ -205,7 +232,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (findError || !attendanceRecord) {
-      return NextResponse.json({ error: "No check-in record found for today" }, { status: 400 })
+      return NextResponse.json({ error: "No open check-in record found. Please check in first." }, { status: 400 })
     }
 
     if (attendanceRecord.check_out_time) {
