@@ -112,6 +112,41 @@ interface HrMemoTemplate {
   category?: string | null
 }
 
+const PENDING_STATUSES = new Set([
+  "pending",
+  "pending_hod",
+  "pending_hr",
+  "pending_manager_review",
+  "pending_hod_review",
+  "manager_confirmed",
+  "hod_approved",
+  "hr_office_forwarded",
+  "pending_hr_leave_processing",
+  "pending_hr_records_reference",
+  "pending_regional_hr_office_review",
+  "pending_regional_hr_review",
+  "regional_hr_office_review",
+  "pending_regional_manager_approval",
+  "regional_hr_approved",
+])
+const APPROVED_STATUSES = new Set(["approved", "hr_approved"])
+const EDITABLE_STATUSES = new Set([
+  "pending",
+  "pending_manager_review",
+  "manager_changes_requested",
+  "manager_rejected",
+  "hod_changes_requested",
+  "hod_rejected",
+  "hr_rejected",
+])
+
+const formatDateSafe = (value?: string | null) => {
+  if (!value) return "-"
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return "-"
+  return format(parsed, "MMM dd, yyyy")
+}
+
 export function LeaveManagementClient({
   userId,
   userRole,
@@ -127,40 +162,6 @@ export function LeaveManagementClient({
   initialApprovedStaffRequests = [],
   initialSelectedTab = "approved",
 }: LeaveManagementClientProps) {
-    const formatDateSafe = (value?: string | null) => {
-      if (!value) return "-"
-      const parsed = new Date(value)
-      if (Number.isNaN(parsed.getTime())) return "-"
-      return format(parsed, "MMM dd, yyyy")
-    }
-
-    const pendingStatuses = new Set([
-      "pending",
-      "pending_hod",
-      "pending_hr",
-      "pending_manager_review",
-      "pending_hod_review",
-      "manager_confirmed",
-      "hod_approved",
-  "hr_office_forwarded",
-  "pending_hr_leave_processing",
-  "pending_hr_records_reference",
-  "pending_regional_hr_office_review",
-  "pending_regional_hr_review",
-      "regional_hr_office_review",
-      "pending_regional_manager_approval",
-      "regional_hr_approved",
-    ])
-    const approvedStatuses = new Set(["approved", "hr_approved"])
-    const editableStatuses = new Set([
-      "pending",
-      "pending_manager_review",
-      "manager_changes_requested",
-      "manager_rejected",
-      "hod_changes_requested",
-      "hod_rejected",
-      "hr_rejected",
-    ])
 
   const { toast } = useToast()
   const [staffRequests, setStaffRequests] = useState<LeaveRequest[]>(initialStaffRequests)
@@ -787,7 +788,7 @@ export function LeaveManagementClient({
     }
   }
 
-  const pendingRequests = useMemo(() => staffRequests.filter((r) => pendingStatuses.has(String(r.status || ""))), [staffRequests])
+  const pendingRequests = useMemo(() => staffRequests.filter((r) => PENDING_STATUSES.has(String(r.status || ""))), [staffRequests])
   const approvedRequests = useMemo(() => {
     // For HOD/RM/HR (incl. Regional HR Office): use staff's approved leaves for deferment/recall
     const roleNorm = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
@@ -808,7 +809,7 @@ export function LeaveManagementClient({
     }
 
     // For staff: use their own approved leaves
-    return staffRequests.filter((r) => approvedStatuses.has(String(r.status || "")))
+    return staffRequests.filter((r) => APPROVED_STATUSES.has(String(r.status || "")))
   }, [staffRequests, initialApprovedStaffRequests, fetchedApprovedStaffRequests, userRole])
   
   const pendingNotifications = useMemo(() => managerNotifications.filter((n) => {
@@ -2024,7 +2025,7 @@ export function LeaveManagementClient({
                   ) : (
                     <div className="grid gap-3">
                       {staffRequests.map((request) => (
-                        <LeaveRequestCard key={request.id} request={request} canEdit={editableStatuses.has(String(request.status || ""))} onEdit={() => openEditRequest(request)} toast={toast} />
+                        <LeaveRequestCard key={request.id} request={request} canEdit={EDITABLE_STATUSES.has(String(request.status || ""))} onEdit={() => openEditRequest(request)} toast={toast} />
                       ))}
                     </div>
                   )}
