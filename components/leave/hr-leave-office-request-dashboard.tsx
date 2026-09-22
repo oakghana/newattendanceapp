@@ -51,6 +51,10 @@ interface LeaveRequest {
   requested_days?: number | null
   reason?: string | null
   status: string
+  workflow_stage?: string | null
+  hr_approved_at?: string | null
+  memo_reference?: string | null
+  memo_reference_locked?: boolean | null
   hod_approved_at?: string | null
   created_at: string
   staff?: {
@@ -540,6 +544,7 @@ function LeaveRequestRow({ req, status, onRefresh }: { req: LeaveRequest; status
   const calculatedDays = daysBetween(req.preferred_start_date, req.preferred_end_date)
   const requestedDays = Number(req.requested_days) > 0 ? Number(req.requested_days) : calculatedDays
   const isHodPending = status === 'hod-pending'
+  const isEditLocked = Boolean(req.hr_approved_at || req.memo_reference_locked || req.memo_reference || ['hr_approved', 'hr_rejected', 'approved', 'rejected', 'cancelled'].includes(String(req.status).toLowerCase()))
   const [editing, setEditing] = useState(false)
   const [startDate, setStartDate] = useState(req.preferred_start_date?.slice(0, 10) || '')
   const [endDate, setEndDate] = useState(req.preferred_end_date?.slice(0, 10) || '')
@@ -600,7 +605,7 @@ function LeaveRequestRow({ req, status, onRefresh }: { req: LeaveRequest; status
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Badge className={`border text-xs font-medium ${statusBadge.bg}`}>{statusBadge.label}</Badge>
-            {!isHodPending && (
+            {!isEditLocked && (
               <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => setEditing(true)}>
                 <ChevronRight className="h-3.5 w-3.5" />
                 Edit

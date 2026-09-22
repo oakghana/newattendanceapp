@@ -54,12 +54,12 @@ export async function PATCH(request: NextRequest) {
     const requestId = String(body.leave_plan_request_id || "")
     if (!requestId) return NextResponse.json({ error: "leave_plan_request_id is required." }, { status: 400 })
     const { data: existing, error: fetchError } = await admin.from("leave_plan_requests")
-      .select("id, status, workflow_route")
+      .select("id, status, workflow_route, hr_approved_at, memo_reference, memo_reference_locked")
       .eq("id", requestId)
       .single()
     if (fetchError || !existing) return NextResponse.json({ error: "Leave request not found." }, { status: 404 })
-    if (["hr_approved", "hr_rejected", "approved", "rejected", "cancelled"].includes(String(existing.status))) {
-      return NextResponse.json({ error: "Approved or closed leave requests cannot be edited." }, { status: 409 })
+    if (["hr_approved", "hr_rejected", "approved", "rejected", "cancelled"].includes(String(existing.status)) || existing.hr_approved_at || existing.memo_reference_locked || String(existing.memo_reference || "").trim()) {
+      return NextResponse.json({ error: "This leave request can no longer be edited because HR Executive approval or the official reference has been recorded." }, { status: 409 })
     }
     if (!canNonRegionalPipelineAct((existing as any).workflow_route) && !canSelfLeavePipelineAct((existing as any).workflow_route)) {
       return NextResponse.json({ error: "This request is not handled by HR Leave Office." }, { status: 403 })
