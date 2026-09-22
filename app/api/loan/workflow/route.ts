@@ -353,18 +353,18 @@ export async function GET() {
       .limit(5000)
     linkedStaffIds = (linkageRows || []).map((row: any) => row.staff_user_id).filter(Boolean)
 
-    // Keep the profile supervisor relationship as a compatibility fallback for
-    // assignments created before loan_hod_linkages became the canonical table.
+    // Keep user_profiles.hod_id as a compatibility fallback for assignments
+    // recorded directly on the staff profile instead of loan_hod_linkages.
     // Explicit linkage remains the primary source and both scopes are merged.
-    const { data: supervisedStaff } = await admin
+    const { data: hodIdStaff } = await admin
       .from("user_profiles")
       .select("id")
-      .eq("supervisor_id", user.id)
+      .eq("hod_id", user.id)
       .eq("is_active", true)
       .limit(5000)
     linkedStaffIds = Array.from(new Set([
       ...linkedStaffIds,
-      ...(supervisedStaff || []).map((row: any) => row.id).filter(Boolean),
+      ...(hodIdStaff || []).map((row: any) => row.id).filter(Boolean),
     ]))
 
     const isLinkedHod = linkedStaffIds.length > 0
