@@ -657,8 +657,8 @@ export function TransportWorkspace({
                 </Link>
               </Button>
             )}
-  {(isActingHod || isBasicStaff || isTransportManager || canManage) && (
-  <Button variant="outline" className="bg-background/80" asChild>
+            {(isActingHod || isTransportManager || canManage) && (
+              <Button variant="outline" className="bg-background/80" asChild>
                 <Link href="/dashboard/transport/nonregional">
                   <Route data-icon="inline-start" /> Non-regional
                 </Link>

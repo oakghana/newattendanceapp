@@ -41,7 +41,6 @@ export default async function TransportPage() {
     preliminaryLocationName.includes("district")
   )
   const isBasicStaffRole = ["staff", "contract", "audit_staff", "intern", "nsp"].includes(normalizedRole)
-  const isNonRegionalStaff = isBasicStaffRole && !isRegionalOrDistrictLinked
   if (!profile || !hasTransportAccess || (isBasicStaffRole && isRegionalOrDistrictLinked)) redirect("/dashboard")
 
   const isManagingDirector = ["managing_director", "director"].includes(normalizedRole)
@@ -180,20 +179,6 @@ export default async function TransportPage() {
       assignedCount = rows_.filter((row) => row.status === "completed").length
     } catch (error) {
       console.error("[v0] Transport landing: non-regional driver metrics unavailable", error)
-    }
-  } else if (isNonRegionalStaff) {
-    try {
-      const { data: rows } = await supabase
-        .from("nonregional_transport_requisitions")
-        .select("id, status, hod_decision, md_decision, recommended_driver_id")
-        .eq("requester_id", user.id)
-      const rows_ = rows ?? []
-      totalCount = rows_.length
-      pendingCount = rows_.filter((row) => !["completed", "closed", "rejected"].includes(String(row.status || ""))).length
-      approvedCount = rows_.filter((row) => row.md_decision === "approved").length
-      assignedCount = rows_.filter((row) => Boolean(row.recommended_driver_id)).length
-    } catch (error) {
-      console.error("[v0] Transport landing: non-regional staff metrics unavailable", error)
     }
   } else {
     try {
