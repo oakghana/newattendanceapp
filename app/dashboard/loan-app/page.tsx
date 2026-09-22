@@ -2577,12 +2577,13 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
       body: JSON.stringify(payload),
     })
     const result = await res.json()
-    if (!res.ok) {
-      toast({ title: "Lookup update failed", description: result.error || "Try again", variant: "destructive" })
-      return
-    }
-    toast({ title: "Updated", description: successMessage })
-    await Promise.all([loadData(), loadLookups()])
+  if (!res.ok) {
+  toast({ title: "Lookup update failed", description: result.error || "Try again", variant: "destructive" })
+  return false
+  }
+  toast({ title: "Updated", description: successMessage })
+  await Promise.all([loadData(), loadLookups()])
+  return true
   }
 
   const requestLinkageApproval = async () => {
@@ -6852,22 +6853,53 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     />
                   </div>
                 </div>
-                <Button
-                  onClick={() => runLookupAction({
-                    action: "update_loan_type",
-                    loan_key: selectedLoanType,
-                    loan_label: setupLoanLabel,
-                    is_active: setupIsActive,
-                    fixed_amount: Number(setupFixedAmount || 0),
-                    max_amount: Number(setupMaxAmount || 0),
-                    min_qualification_note: setupQualification,
-                    loan_terms: setupLoanTerms,
-                    default_recovery_months: Number(setupDefaultRecoveryMonths || 0),
-                  }, "Loan type setup saved")}
-                  disabled={!selectedLoanType}
-                >
-                  Save Loan Type Setup
-                </Button>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    onClick={() => runLookupAction({
+                      action: "update_loan_type",
+                      loan_key: selectedLoanType,
+                      loan_label: setupLoanLabel,
+                      is_active: setupIsActive,
+                      fixed_amount: Number(setupFixedAmount || 0),
+                      max_amount: Number(setupMaxAmount || 0),
+                      min_qualification_note: setupQualification,
+                      loan_terms: setupLoanTerms,
+                      default_recovery_months: Number(setupDefaultRecoveryMonths || 0),
+                    }, "Loan type setup saved")}
+                    disabled={!selectedLoanType}
+                  >
+                    <Save data-icon="inline-start" />
+                    Save Loan Type Setup
+                  </Button>
+                  {normalizedRole === "admin" && (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={!selectedLoanType || lookupLoading}
+                      onClick={async () => {
+                        const selected = (lookupData?.loanTypes || []).find((type) => type.loan_key === selectedLoanType)
+                        const label = selected?.loan_label || selectedLoanType
+                        if (!window.confirm(`Delete the loan type “${label}”? This cannot be undone.`)) return
+                        const deleted = await runLookupAction(
+                          { action: "delete_loan_type", loan_key: selectedLoanType },
+                          "Loan type deleted",
+                        )
+                        if (!deleted) return
+                        setSelectedLoanType("")
+                        setSetupLoanLabel("")
+                        setSetupFixedAmount("")
+                        setSetupMaxAmount("")
+                        setSetupQualification("")
+                        setSetupLoanTerms("")
+                        setSetupDefaultRecoveryMonths("")
+                        setSetupIsActive(true)
+                      }}
+                    >
+                      <Trash2 data-icon="inline-start" />
+                      Delete Loan Type
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
 
