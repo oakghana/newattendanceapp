@@ -32,6 +32,15 @@ function normalizeDecision(action: string): LeavePlanReviewDecision | null {
   return null
 }
 
+function normalizeReviewerRole(role: string) {
+  if (role === "regional_manager") return "regional_manager"
+  if (role === "department_head" || role === "manager_hr") return "department_head"
+  if (["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "hr", "hr_office", "hr_leave_office", "hr_executive", "director_hr"].includes(role)) {
+    return "regional_hr_office"
+  }
+  return role
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -239,8 +248,8 @@ export async function POST(request: NextRequest) {
         const { error: assignmentError } = await admin.from("leave_plan_reviews").insert({
           leave_plan_request_id,
           reviewer_id: user.id,
-          reviewer_role: role,
-          decision: "pending",
+  reviewer_role: normalizeReviewerRole(role),
+  decision: "pending",
         })
         if (assignmentError) throw assignmentError
       }
