@@ -5308,17 +5308,17 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                 variant="outline"
                                 className="h-7 text-xs border-blue-300 text-blue-700 hover:bg-blue-50"
                                 onClick={() => {
-                                  setEditingId(req.id)
-                                  setStartDate(req.preferred_start_date || "")
-                                  setEndDate(req.preferred_end_date || "")
-                                  setLeaveType(req.leave_type_key || "annual")
-                                  setLeaveYearPeriod(req.leave_year_period || activeLeaveYearPeriod)
-                                  setReason(req.reason || "")
-                                  setMaternityDeliveryType(req.maternity_delivery_type || "normal")
-                                  setMaternityDeliveryDate(req.delivery_date || "")
-                                  setMaternityMedicalReport(null)
-                                  setMaternityMedicalReportUrl(req.medical_report_url || null)
-                                  setActiveTab("apply")
+                                  // HR Leave Office edits use the adjustment workflow, not the staff application form.
+                                  setOfficeAdjStart((current) => ({ ...current, [req.id]: req.preferred_start_date || "" }))
+                                  setOfficeAdjEnd((current) => ({ ...current, [req.id]: req.preferred_end_date || "" }))
+                                  setOfficeHolidayDays((current) => ({ ...current, [req.id]: String(req.public_holiday_days_deducted || 0) }))
+                                  setOfficePriorDays((current) => ({ ...current, [req.id]: String(req.prior_leave_days_deducted || 0) }))
+                                  setOfficeTravelDays((current) => ({ ...current, [req.id]: String(req.travelling_days_added || 0) }))
+                                  setOfficeOutstandingDays((current) => ({ ...current, [req.id]: String(req.outstanding_leave_days_added || 0) }))
+                                  setOfficeReason((current) => ({ ...current, [req.id]: req.adjustment_reason || req.reason || "" }))
+                                  setOfficeExpanded(req.id)
+                                  setHrOfficeTab("operations")
+                                  setActiveTab("hr-office")
                                 }}
                               >
                                 <Pencil className="w-3 h-3 mr-1" /> Edit
