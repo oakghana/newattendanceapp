@@ -2142,7 +2142,8 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
         locationName: r?.location_name || r?.user?.location_name,
       })
   const isRegionalActionableStatus = status === "pending_regional_hr_review"
-  if (!((HR_OFFICE_PENDING_STATUSES as string[]).includes(status) || (isRegionalHr && workflow.route === "regional" && isRegionalActionableStatus))) return false
+  const isForwardedToHrExecutive = status.toLowerCase() === "hr_office_forwarded"
+  if (!((HR_OFFICE_PENDING_STATUSES as string[]).includes(status) || isForwardedToHrExecutive || (isRegionalHr && workflow.route === "regional" && isRegionalActionableStatus))) return false
   // Regional HR owns only the Regional HR review stage. Once forwarded, the
   // request leaves this actionable queue and belongs to the Regional Manager.
   if (isRegionalHr && (workflow.route !== "regional" || !isRegionalActionableStatus)) return false
