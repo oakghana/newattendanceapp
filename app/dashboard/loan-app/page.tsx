@@ -1390,6 +1390,14 @@ export default function LoanAppPage() {
     const isAccountsExecutive = !isAdminUser && (normalizedRole === "accounts_executive" || normalizedRole === "account_executive" || normalizedRole === "accounts_exec")
     const isHrExecutiveOnly = !isAdminUser && p?.directorHr && !p?.hod && !p?.loanOffice && !p?.accounts && !p?.hrOffice && !p?.viewAllTabs
 
+    // IT Administrators may use the loan workspace only for their own loans and tracking.
+    if (isItAdmin) {
+      return [
+        { key: "staff", label: "My Loans" },
+        { key: "tracking", label: "Tracking" },
+      ]
+    }
+
     // Get loan type name for "My Loans" tab if a loan is selected
     let myLoansLabel = "My Loans"
     if (loanTypeKey && data?.loanTypes) {
@@ -3339,7 +3347,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
               {isSalaryAdvanceRequest && (
                 <div className="space-y-2">
-                  <Label>Repayment duration (12–24 months)</Label>
+                  <Label>Repayment duration (12��24 months)</Label>
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
                   {salaryAdvanceMonthOptions.map((months) => (
                     <label key={months} className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-900 hover:border-emerald-300">
