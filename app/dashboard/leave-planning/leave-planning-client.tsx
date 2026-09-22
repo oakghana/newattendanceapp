@@ -5302,6 +5302,28 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                 <Download className="w-3 h-3 mr-1" /> Memo
                               </Button>
                             )}
+                            {isHrOffice && !req?.hr_approved_at && !req?.memo_reference_locked && !req?.memo_reference && !["hr_approved", "hr_rejected", "approved", "rejected", "cancelled"].includes(String(req?.status || "").toLowerCase()) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs border-blue-300 text-blue-700 hover:bg-blue-50"
+                                onClick={() => {
+                                  setEditingId(req.id)
+                                  setStartDate(req.preferred_start_date || "")
+                                  setEndDate(req.preferred_end_date || "")
+                                  setLeaveType(req.leave_type_key || "annual")
+                                  setLeaveYearPeriod(req.leave_year_period || activeLeaveYearPeriod)
+                                  setReason(req.reason || "")
+                                  setMaternityDeliveryType(req.maternity_delivery_type || "normal")
+                                  setMaternityDeliveryDate(req.delivery_date || "")
+                                  setMaternityMedicalReport(null)
+                                  setMaternityMedicalReportUrl(req.medical_report_url || null)
+                                  setActiveTab("apply")
+                                }}
+                              >
+                                <Pencil className="w-3 h-3 mr-1" /> Edit
+                              </Button>
+                            )}
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-x-6 gap-y-1 mt-2">
