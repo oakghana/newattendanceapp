@@ -480,6 +480,60 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, linked: rows.length, alreadyLinked: linkedStaffIds.size, head: fallbackHead.id })
     }
 
+    if (action === "delete_loan_type") {
+      if (role !== "admin") {
+        return NextResponse.json({ error: "Only the application Administrator can delete loan types." }, { status: 403 })
+      }
+
+      const loanKey = String(body?.loan_key || "").trim()
+      if (!loanKey) {
+        return NextResponse.json({ error: "loan_key is required" }, { status: 400 })
+      }
+
+      const { data: loanType, error: loanTypeError } = await admin
+        .from("loan_types")
+        .select("id, loan_key, loan_label, category, fixed_amount, max_amount, is_active")
+        .eq("loan_key", loanKey)
+        .maybeSingle()
+
+      if (loanTypeError) throw loanTypeError
+      if (!loanType) {
+        return NextResponse.json({ error: "Loan type not found" }, { status: 404 })
+      }
+
+      const { count: requestCount, error: requestCountError } = await admin
+        .from("loan_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("loan_type_key", loanKey)
+
+      if (requestCountError) throw requestCountError
+      if ((requestCount || 0) > 0) {
+        return NextResponse.json(
+          { error: "This loan type cannot be deleted because loan requests already use it. Deactivate it instead." },
+          { status: 409 },
+        )
+      }
+
+      const { error: deleteError } = await admin
+        .from("loan_types")
+        .delete()
+        .eq("id", loanType.id)
+        .eq("loan_key", loanKey)
+
+      if (deleteError) throw deleteError
+
+      await admin.from("audit_logs").insert({
+        user_id: user.id,
+        action: "DELETE_LOAN_TYPE",
+        table_name: "loan_types",
+        record_id: loanType.id,
+        old_values: loanType,
+        new_values: null,
+      })
+
+      return NextResponse.json({ success: true, deleted: loanType })
+    }
+
     if (action === "update_loan_type") {
       const loanKey = String(body?.loan_key || "")
       const loanLabel = String(body?.loan_label || "").trim() || null
