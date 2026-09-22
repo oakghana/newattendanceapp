@@ -58,7 +58,7 @@ describe("Assigned HOD dual-role permissions", () => {
   it("treats linkage as HOD regardless of transport_manager role", () => {
     expect(isAssignedHod(true)).toBe(true)
     expect(isActingHod("transport_manager", true)).toBe(true)
-    expect(isActingHod("transport_manager", false)).toBe(false)
+    expect(isActingHod("transport_manager", false)).toBe(true)
     expect(isActingHod("department_head", false)).toBe(true)
   })
 

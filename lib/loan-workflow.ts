@@ -182,7 +182,7 @@ const NEVER_HOD_ROLES = new Set(["hr_leave_office"])
 export function canDoHodReview(role: string, isLinkedHod = false): boolean {
   const normalized = normalizeRole(role)
   if (NEVER_HOD_ROLES.has(normalized)) return false
-  return isAdminRole(normalized) || ["regional_manager", "department_head", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(normalized) || Boolean(isLinkedHod)
+  return isAdminRole(normalized) || ["regional_manager", "department_head", "transport_manager", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(normalized) || Boolean(isLinkedHod)
   }
 
 export function canDoLoanOffice(role: string, deptName?: string | null, deptCode?: string | null): boolean {
