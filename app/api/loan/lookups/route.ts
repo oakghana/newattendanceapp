@@ -121,6 +121,8 @@ async function fetchAllRows(queryFactory: (from: number, to: number) => any, chu
   return rows
 }
 
+export const dynamic = "force-dynamic"
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()

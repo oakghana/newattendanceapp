@@ -1279,7 +1279,7 @@ export default function LoanAppPage() {
   const audioContextRef = useRef<AudioContext | null>(null)
 
   const filteredLoanTypes = useMemo(() => {
-    const rawTypes = data?.loanTypes || []
+    const rawTypes = (data?.loanTypes || []).filter((type) => type.is_active !== false)
     const userTier = getUserLoanTier(data?.profile?.position, data?.profile?.role, data?.profile?.staffCategory)
 
   const normalizedTypes = rawTypes.map((type) => ({
@@ -2584,6 +2584,15 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
   return false
   }
   toast({ title: "Updated", description: successMessage })
+  if (payload.action === "delete_loan_type") {
+    const deletedKey = String(payload.loan_key || "")
+    setLookupData((current) => current
+      ? { ...current, loanTypes: current.loanTypes.filter((type) => type.loan_key !== deletedKey) }
+      : current)
+    setData((current) => current
+      ? { ...current, loanTypes: current.loanTypes.filter((type) => type.loan_key !== deletedKey) }
+      : current)
+  }
   await Promise.all([loadData(), loadLookups()])
   return true
   }
