@@ -445,10 +445,13 @@ function requiresProofAttachment(
   return (
     key.includes("funeral") ||
     key.includes("insurance") ||
+    key.includes("vehicle_insurance") ||
     label.includes("funeral") ||
     label.includes("insurance") ||
+    label.includes("vehicle") && label.includes("insurance") ||
     category.includes("funeral") ||
-    category.includes("insurance")
+    category.includes("insurance") ||
+    category.includes("vehicle_insurance")
   )
 }
 
@@ -2392,7 +2395,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     if (needsAttachment && !supportingDocumentUrl) {
       toast({
         title: "Attachment required",
-        description: "Funeral and insurance loans require proof attachment.",
+        description: "Vehicle insurance and funeral loans require a supporting attachment before submission.",
         variant: "destructive",
       })
       return
@@ -3388,7 +3391,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
               <div className="space-y-2">
                 <Label>
-                  Supporting Attachment {needsAttachment ? "(Required for funeral/insurance)" : "(Optional)"}
+                  Supporting Attachment {needsAttachment ? "(Required for vehicle insurance/funeral)" : "(Optional)"}
                 </Label>
                 <Input
                   type="file"

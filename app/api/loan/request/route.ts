@@ -26,7 +26,7 @@ function genRequestNumber() {
 
 function isInsuranceOrFuneralText(value: string | null | undefined): boolean {
   const text = String(value || "").toLowerCase()
-  return text.includes("funeral") || text.includes("insurance")
+  return text.includes("funeral") || text.includes("insurance") || text.includes("vehicle_insurance") || text.includes("vehicle insurance")
 }
 
 function requiresProofAttachment(loanType: { loan_key?: string | null; loan_label?: string | null; category?: string | null }): boolean {
@@ -347,7 +347,7 @@ export async function POST(request: NextRequest) {
     if (requiresProofAttachment(loanType as any) && !supporting_document_url) {
       return NextResponse.json(
         {
-          error: "Proof attachment is required for funeral and insurance loan requests.",
+          error: "A supporting attachment is required for vehicle insurance and funeral loan requests.",
         },
         { status: 400 },
       )
@@ -685,7 +685,7 @@ export async function PUT(request: NextRequest) {
     if (requiresProofAttachment(finalLoanTypeForAttachment) && !updatePayload.supporting_document_url) {
       return NextResponse.json(
         {
-          error: "Proof attachment is required for funeral and insurance loan requests.",
+          error: "A supporting attachment is required for vehicle insurance and funeral loan requests.",
         },
         { status: 400 },
       )
