@@ -121,6 +121,8 @@ async function fetchAllRows(queryFactory: (from: number, to: number) => any, chu
   return rows
 }
 
+export const dynamic = "force-dynamic"
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -478,6 +480,55 @@ export async function POST(request: NextRequest) {
       if (insertError) throw insertError
 
       return NextResponse.json({ success: true, linked: rows.length, alreadyLinked: linkedStaffIds.size, head: fallbackHead.id })
+    }
+
+    if (action === "create_loan_type") {
+      if (role !== "admin") {
+        return NextResponse.json({ error: "Only the application Administrator can add loan types." }, { status: 403 })
+      }
+
+      const loanKey = String(body?.loan_key || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")
+      const loanLabel = String(body?.loan_label || "").trim()
+      const fixedAmount = Number(body?.fixed_amount)
+      const maxAmount = Number(body?.max_amount)
+      if (!loanKey || !loanLabel || !Number.isFinite(fixedAmount) || !Number.isFinite(maxAmount)) {
+        return NextResponse.json({ error: "loan_key, loan_label, fixed_amount and max_amount are required" }, { status: 400 })
+      }
+
+      const { data: existing, error: existingError } = await admin
+        .from("loan_types")
+        .select("id")
+        .eq("loan_key", loanKey)
+        .maybeSingle()
+      if (existingError) throw existingError
+      if (existing) return NextResponse.json({ error: "A loan type with this key already exists" }, { status: 409 })
+
+      const parsedRecoveryMonths = Number(body?.default_recovery_months)
+      const payload = {
+        loan_key: loanKey,
+        loan_label: loanLabel,
+        category: String(body?.category || "other").trim() || "other",
+        fixed_amount: fixedAmount,
+        max_amount: maxAmount,
+        min_qualification_note: String(body?.min_qualification_note || "").trim() || null,
+        loan_terms: String(body?.loan_terms || "").trim() || null,
+        default_recovery_months: Number.isFinite(parsedRecoveryMonths) && parsedRecoveryMonths > 0 ? Math.trunc(parsedRecoveryMonths) : null,
+        is_active: body?.is_active !== false,
+        requires_committee: Boolean(body?.requires_committee),
+        requires_fd_check: body?.requires_fd_check !== false,
+      }
+      const { data: created, error: createError } = await admin.from("loan_types").insert(payload).select("*").single()
+      if (createError) throw createError
+
+      await admin.from("audit_logs").insert({
+        user_id: user.id,
+        action: "CREATE_LOAN_TYPE",
+        table_name: "loan_types",
+        record_id: created.id,
+        old_values: null,
+        new_values: created,
+      })
+      return NextResponse.json({ success: true, loanType: created })
     }
 
     if (action === "delete_loan_type") {

@@ -26,7 +26,7 @@ function genRequestNumber() {
 
 function isInsuranceOrFuneralText(value: string | null | undefined): boolean {
   const text = String(value || "").toLowerCase()
-  return text.includes("funeral") || text.includes("insurance")
+  return text.includes("funeral") || text.includes("insurance") || text.includes("vehicle_insurance") || text.includes("vehicle insurance")
 }
 
 function requiresProofAttachment(loanType: { loan_key?: string | null; loan_label?: string | null; category?: string | null }): boolean {
@@ -185,7 +185,7 @@ function clampSalaryAdvanceRecoveryMonths(loanTypeKey: string, months?: number |
   const normalizedKey = String(loanTypeKey || "").toLowerCase()
   if (normalizedKey !== "salary_advance") return months ?? null
   const normalizedMonths = months == null ? null : Number(months)
-  if (normalizedMonths == null || !Number.isFinite(normalizedMonths) || normalizedMonths < 12 || normalizedMonths > 24) return null
+  if (normalizedMonths == null || !Number.isFinite(normalizedMonths) || normalizedMonths < 1 || normalizedMonths > 3) return null
   return Math.trunc(normalizedMonths)
 }
 
@@ -282,8 +282,14 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ error: "Loan type not found or inactive" }, { status: 404 })
   }
 
-  if (loanType.loan_key === "salary_advance" && (initialDurationMonths < 12 || initialDurationMonths > 24)) {
-    return NextResponse.json({ error: "Salary advance repayment must be between 12 and 24 months." }, { status: 400 })
+  if (loanType.loan_key === "salary_advance") {
+    const staffCategory = String((profile as any).staff_category || "").toLowerCase()
+    const position = String((profile as any).position || "").toLowerCase()
+    const isSeniorStaff = /senior|manager|head|director|regional/.test(`${staffCategory} ${position}`)
+    const maxMonths = isSeniorStaff ? 2 : 3
+    if (initialDurationMonths < 1 || initialDurationMonths > maxMonths) {
+      return NextResponse.json({ error: `Salary advance period must be between 1 and ${maxMonths} months for your staff category.` }, { status: 400 })
+    }
   }
 
   if (role !== "admin") {
@@ -341,7 +347,7 @@ export async function POST(request: NextRequest) {
     if (requiresProofAttachment(loanType as any) && !supporting_document_url) {
       return NextResponse.json(
         {
-          error: "Proof attachment is required for funeral and insurance loan requests.",
+          error: "A supporting attachment is required for vehicle insurance and funeral loan requests.",
         },
         { status: 400 },
       )
@@ -646,9 +652,11 @@ export async function PUT(request: NextRequest) {
           loanType.loan_key,
           initialRecoveryMonths ?? (loanType as any).default_recovery_months,
         )
-        if (loanType.loan_key === "salary_advance" && chosenMonths === null) {
+        const isSeniorStaff = /senior|manager|head|director|regional/.test(String((existing as any).staff_rank || "").toLowerCase())
+        const salaryAdvanceMaxMonths = isSeniorStaff ? 2 : 3
+        if (loanType.loan_key === "salary_advance" && (chosenMonths === null || chosenMonths > salaryAdvanceMaxMonths)) {
           return NextResponse.json(
-{ error: "Salary advance requests require repayment between 12 and 24 months." },
+            { error: `Salary advance period must be between 1 and ${salaryAdvanceMaxMonths} months for this staff category.` },
             { status: 400 },
           )
         }
@@ -677,7 +685,7 @@ export async function PUT(request: NextRequest) {
     if (requiresProofAttachment(finalLoanTypeForAttachment) && !updatePayload.supporting_document_url) {
       return NextResponse.json(
         {
-          error: "Proof attachment is required for funeral and insurance loan requests.",
+          error: "A supporting attachment is required for vehicle insurance and funeral loan requests.",
         },
         { status: 400 },
       )

@@ -61,6 +61,7 @@ import {
   Loader2,
   MapPin,
   PenTool,
+  Plus,
   Radio,
   Receipt,
   Save,
@@ -444,10 +445,13 @@ function requiresProofAttachment(
   return (
     key.includes("funeral") ||
     key.includes("insurance") ||
+    key.includes("vehicle_insurance") ||
     label.includes("funeral") ||
     label.includes("insurance") ||
+    label.includes("vehicle") && label.includes("insurance") ||
     category.includes("funeral") ||
-    category.includes("insurance")
+    category.includes("insurance") ||
+    category.includes("vehicle_insurance")
   )
 }
 
@@ -1130,6 +1134,7 @@ export default function LoanAppPage() {
   const [leavePaymentMemos, setLeavePaymentMemos] = useState<any[]>([])
   const [loadingLeavePaymentMemos, setLoadingLeavePaymentMemos] = useState(false)
   const [selectedLoanType, setSelectedLoanType] = useState("")
+  const [setupLoanKey, setSetupLoanKey] = useState("")
   const [setupFixedAmount, setSetupFixedAmount] = useState("")
   const [setupMaxAmount, setSetupMaxAmount] = useState("")
     const [setupLoanTerms, setSetupLoanTerms] = useState("")
@@ -1277,7 +1282,7 @@ export default function LoanAppPage() {
   const audioContextRef = useRef<AudioContext | null>(null)
 
   const filteredLoanTypes = useMemo(() => {
-    const rawTypes = data?.loanTypes || []
+    const rawTypes = (data?.loanTypes || []).filter((type) => type.is_active !== false)
     const userTier = getUserLoanTier(data?.profile?.position, data?.profile?.role, data?.profile?.staffCategory)
 
   const normalizedTypes = rawTypes.map((type) => ({
@@ -1309,13 +1314,16 @@ export default function LoanAppPage() {
     const label = String(selectedType?.loan_label || "").toLowerCase()
     return key === "salary_advance" || label.includes("salary advance")
   }, [selectedType])
-  const salaryAdvanceMonthOptions = [12, 15, 18, 21, 24]
+  const isSeniorStaff = /senior|manager|head|director|regional/.test(String(data?.profile.staffCategory || data?.profile.position || "").toLowerCase())
+  const salaryAdvanceMonthOptions = isSeniorStaff ? [1, 2] : [1, 2, 3]
 
   useEffect(() => {
-    if (!isSalaryAdvanceRequest) {
-      setSalaryAdvanceMonths(null)
-    }
-  }, [isSalaryAdvanceRequest])
+  if (!isSalaryAdvanceRequest) {
+  setSalaryAdvanceMonths(null)
+  } else if (salaryAdvanceMonths == null) {
+  setSalaryAdvanceMonths(isSeniorStaff ? 1 : 1)
+  }
+  }, [isSalaryAdvanceRequest, isSeniorStaff, salaryAdvanceMonths])
 
   // Auto-populate Length of Service and reset car loan fields when committee modal opens
   useEffect(() => {
@@ -2387,16 +2395,17 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     if (needsAttachment && !supportingDocumentUrl) {
       toast({
         title: "Attachment required",
-        description: "Funeral and insurance loans require proof attachment.",
+        description: "Vehicle insurance and funeral loans require a supporting attachment before submission.",
         variant: "destructive",
       })
       return
     }
 
-  if (isSalaryAdvanceRequest && (!salaryAdvanceMonths || salaryAdvanceMonths < 12 || salaryAdvanceMonths > 24)) {
+  const salaryAdvanceMaxMonths = isSeniorStaff ? 2 : 3
+  if (isSalaryAdvanceRequest && (!salaryAdvanceMonths || salaryAdvanceMonths < 1 || salaryAdvanceMonths > salaryAdvanceMaxMonths)) {
   toast({
-  title: "Invalid repayment period",
-  description: "Salary advance repayment must be between 12 and 24 months.",
+  title: "Invalid salary advance period",
+  description: `Salary advance period must be between 1 and ${salaryAdvanceMaxMonths} month${salaryAdvanceMaxMonths > 1 ? "s" : ""} for your staff category.`,
         variant: "destructive",
       })
       return
@@ -2582,6 +2591,15 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
   return false
   }
   toast({ title: "Updated", description: successMessage })
+  if (payload.action === "delete_loan_type") {
+    const deletedKey = String(payload.loan_key || "")
+    setLookupData((current) => current
+      ? { ...current, loanTypes: current.loanTypes.filter((type) => type.loan_key !== deletedKey) }
+      : current)
+    setData((current) => current
+      ? { ...current, loanTypes: current.loanTypes.filter((type) => type.loan_key !== deletedKey) }
+      : current)
+  }
   await Promise.all([loadData(), loadLookups()])
   return true
   }
@@ -3348,7 +3366,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
               {isSalaryAdvanceRequest && (
                 <div className="space-y-2">
-                  <Label>Repayment duration (12��24 months)</Label>
+                  <Label>Salary Advance Period ({isSeniorStaff ? "1–2" : "1–3"} months)</Label>
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
                   {salaryAdvanceMonthOptions.map((months) => (
                     <label key={months} className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-900 hover:border-emerald-300">
@@ -3373,7 +3391,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
               <div className="space-y-2">
                 <Label>
-                  Supporting Attachment {needsAttachment ? "(Required for funeral/insurance)" : "(Optional)"}
+                  Supporting Attachment {needsAttachment ? "(Required for vehicle insurance/funeral)" : "(Optional)"}
                 </Label>
                 <Input
                   type="file"
@@ -6778,6 +6796,55 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 <CardDescription>Maintain fixed amount, cap, and qualification note for each loan type.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {normalizedRole === "admin" && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-emerald-950">Add New Loan Type</p>
+                        <p className="text-sm text-emerald-800">Only the application Administrator can create loan products.</p>
+                      </div>
+                      <Plus className="size-5 text-emerald-700" />
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="new-loan-key">Loan Key</Label>
+                        <Input
+                          id="new-loan-key"
+                          value={setupLoanKey}
+                          onChange={(e) => setSetupLoanKey(e.target.value)}
+                          placeholder="e.g. education_loan"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <Button
+                          type="button"
+                          className="w-full"
+                          disabled={lookupLoading || !setupLoanKey.trim() || !setupLoanLabel.trim()}
+                          onClick={async () => {
+                            const created = await runLookupAction({
+                              action: "create_loan_type",
+                              loan_key: setupLoanKey,
+                              loan_label: setupLoanLabel,
+                              is_active: setupIsActive,
+                              fixed_amount: Number(setupFixedAmount || 0),
+                              max_amount: Number(setupMaxAmount || 0),
+                              min_qualification_note: setupQualification,
+                              loan_terms: setupLoanTerms,
+                              default_recovery_months: Number(setupDefaultRecoveryMonths || 0),
+                            }, "Loan type created")
+                            if (!created) return
+                            setSetupLoanKey("")
+                            setSelectedLoanType("")
+                          }}
+                        >
+                          <Plus data-icon="inline-start" />
+                          Add Loan Type
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs text-emerald-800">Enter the new key above, then complete the label and amounts below before adding it.</p>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2 md:col-span-2">
                     <Label>Loan Type</Label>
