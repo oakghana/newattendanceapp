@@ -58,7 +58,7 @@ export async function PATCH(request: NextRequest) {
       .eq("id", requestId)
       .single()
     if (fetchError || !existing) return NextResponse.json({ error: "Leave request not found." }, { status: 404 })
-    if (["hr_approved", "hr_rejected", "approved", "rejected", "cancelled"].includes(String(existing.status)) || existing.hr_approved_at || existing.memo_reference_locked || String(existing.memo_reference || "").trim()) {
+    if (String(existing.status || "").toLowerCase() !== "hr_office_forwarded" || existing.hr_approved_at || existing.memo_reference_locked || String(existing.memo_reference || "").trim()) {
       return NextResponse.json({ error: "This leave request can no longer be edited because HR Executive approval or the official reference has been recorded." }, { status: 409 })
     }
     if (!canNonRegionalPipelineAct((existing as any).workflow_route) && !canSelfLeavePipelineAct((existing as any).workflow_route)) {

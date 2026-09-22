@@ -5302,7 +5302,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                 <Download className="w-3 h-3 mr-1" /> Memo
                               </Button>
                             )}
-                            {isHrOffice && !req?.hr_approved_at && !req?.memo_reference_locked && !req?.memo_reference && !["hr_approved", "hr_rejected", "approved", "rejected", "cancelled"].includes(String(req?.status || "").toLowerCase()) && (
+                            {isHrOffice && String(req?.status || "").toLowerCase() === "hr_office_forwarded" && !req?.hr_approved_at && !req?.memo_reference_locked && !req?.memo_reference && (
                               <Button
                                 size="sm"
                                 variant="outline"
