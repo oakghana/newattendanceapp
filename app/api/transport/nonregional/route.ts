@@ -84,13 +84,17 @@ export async function GET(request: Request) {
     .eq("id", user.id)
     .single()
   const role = normalizeAppRole(profile?.role)
-  const { data: assignedHodLink } = await supabase
+  // A requester can be linked to more than one HOD/manager, so gather every
+  // staff id linked to this viewer instead of only checking for a single
+  // linkage row — otherwise a second/third linked HOD would never see the
+  // requisition in their queue at all.
+  const { data: linkedStaffRows } = await supabase
     .from("loan_hod_linkages")
-    .select("id")
+    .select("staff_user_id")
     .eq("hod_user_id", user.id)
-    .limit(1)
-    .maybeSingle()
-  const isLinkedHod = Boolean(assignedHodLink)
+    .limit(5000)
+  const linkedStaffIds = Array.from(new Set((linkedStaffRows ?? []).map((row) => String(row.staff_user_id || "")).filter(Boolean)))
+  const isLinkedHod = linkedStaffIds.length > 0
   if (!profile || (!VIEW_ROLES.has(role) && !isLinkedHod)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   // Regional drivers only ever handle regional trips (transport_requests); keep them out of the non-regional queue.
   if (role === "driver" && isRegionalDriverRole(profile.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -124,7 +128,9 @@ export async function GET(request: Request) {
   } else if (isAdminRole(role) || role === "managing_director" || isTransportManagerRole(role) || role === "it-admin") {
     // full queue
   } else if (isDepartmentHeadRole(role) || isLinkedHod) {
-    query = query.or(`requester_id.eq.${user.id},hod_id.eq.${user.id}`)
+    const scopeClauses = [`requester_id.eq.${user.id}`, `hod_id.eq.${user.id}`]
+    if (linkedStaffIds.length > 0) scopeClauses.push(`requester_id.in.(${linkedStaffIds.join(",")})`)
+    query = query.or(scopeClauses.join(","))
   } else {
     query = query.eq("requester_id", user.id)
   }
@@ -390,7 +396,23 @@ export async function PATCH(request: Request) {
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
   const hodDecision = String(row.hod_decision ?? "pending")
   const mdReady = hodDecision === "approved"
-  const isAssignedHod = row.hod_id && String(row.hod_id) === user.id
+  // The requisition stores a single hod_id (whichever linked HOD was
+  // resolved at submission time for prefill), but a requester can be linked
+  // to more than one HOD/manager. Any of them must be able to authorize it,
+  // so check the full loan_hod_linkages relationship rather than only the
+  // stored column.
+  const isStoredHod = Boolean(row.hod_id) && String(row.hod_id) === user.id
+  let isAssignedHod = isStoredHod
+  if (!isAssignedHod) {
+    const { data: linkageMatch } = await supabase
+      .from("loan_hod_linkages")
+      .select("id")
+      .eq("hod_user_id", user.id)
+      .eq("staff_user_id", row.requester_id)
+      .limit(1)
+      .maybeSingle()
+    isAssignedHod = Boolean(linkageMatch)
+  }
 
   // Stage 1 — Head of Department authorization
   if (
@@ -569,7 +591,17 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "This action is not available for your role or the current stage." }, { status: 403 })
   }
 
-  let { error } = await supabase.from("nonregional_transport_requisitions").update(update).eq("id", id)
+  // A requester can be linked to more than one HOD, so more than one HOD can
+  // load this requisition while it is still "pending" at this stage. Gate the
+  // update on the status this reviewer actually observed so a concurrent
+  // second submission updates zero rows instead of double-endorsing (or
+  // silently overwriting the first reviewer's decision/signature).
+  let { error, data: updatedRows } = await supabase
+    .from("nonregional_transport_requisitions")
+    .update(update)
+    .eq("id", id)
+    .eq("status", row.status)
+    .select("id")
   if (error && /column .*does not exist|schema cache/i.test(error.message)) {
     const stripped = { ...update }
     for (const key of [
@@ -591,8 +623,21 @@ export async function PATCH(request: Request) {
     ]) {
       delete stripped[key]
     }
-    ;({ error } = await supabase.from("nonregional_transport_requisitions").update(stripped).eq("id", id))
+    const retryResult = await supabase
+      .from("nonregional_transport_requisitions")
+      .update(stripped)
+      .eq("id", id)
+      .eq("status", row.status)
+      .select("id")
+    error = retryResult.error
+    updatedRows = retryResult.data
   }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!updatedRows || updatedRows.length === 0) {
+    return NextResponse.json(
+      { error: "This requisition has already been actioned by another reviewer and no longer needs your action." },
+      { status: 409 },
+    )
+  }
   return NextResponse.json({ ok: true, status: update.status })
 }
