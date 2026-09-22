@@ -61,6 +61,7 @@ import {
   Loader2,
   MapPin,
   PenTool,
+  Plus,
   Radio,
   Receipt,
   Save,
@@ -1130,6 +1131,7 @@ export default function LoanAppPage() {
   const [leavePaymentMemos, setLeavePaymentMemos] = useState<any[]>([])
   const [loadingLeavePaymentMemos, setLoadingLeavePaymentMemos] = useState(false)
   const [selectedLoanType, setSelectedLoanType] = useState("")
+  const [setupLoanKey, setSetupLoanKey] = useState("")
   const [setupFixedAmount, setSetupFixedAmount] = useState("")
   const [setupMaxAmount, setSetupMaxAmount] = useState("")
     const [setupLoanTerms, setSetupLoanTerms] = useState("")
@@ -6778,6 +6780,55 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 <CardDescription>Maintain fixed amount, cap, and qualification note for each loan type.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {normalizedRole === "admin" && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-emerald-950">Add New Loan Type</p>
+                        <p className="text-sm text-emerald-800">Only the application Administrator can create loan products.</p>
+                      </div>
+                      <Plus className="size-5 text-emerald-700" />
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="new-loan-key">Loan Key</Label>
+                        <Input
+                          id="new-loan-key"
+                          value={setupLoanKey}
+                          onChange={(e) => setSetupLoanKey(e.target.value)}
+                          placeholder="e.g. education_loan"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <Button
+                          type="button"
+                          className="w-full"
+                          disabled={lookupLoading || !setupLoanKey.trim() || !setupLoanLabel.trim()}
+                          onClick={async () => {
+                            const created = await runLookupAction({
+                              action: "create_loan_type",
+                              loan_key: setupLoanKey,
+                              loan_label: setupLoanLabel,
+                              is_active: setupIsActive,
+                              fixed_amount: Number(setupFixedAmount || 0),
+                              max_amount: Number(setupMaxAmount || 0),
+                              min_qualification_note: setupQualification,
+                              loan_terms: setupLoanTerms,
+                              default_recovery_months: Number(setupDefaultRecoveryMonths || 0),
+                            }, "Loan type created")
+                            if (!created) return
+                            setSetupLoanKey("")
+                            setSelectedLoanType("")
+                          }}
+                        >
+                          <Plus data-icon="inline-start" />
+                          Add Loan Type
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs text-emerald-800">Enter the new key above, then complete the label and amounts below before adding it.</p>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2 md:col-span-2">
                     <Label>Loan Type</Label>
