@@ -20,7 +20,7 @@ async function resolveManagerReviewers(supabase: any, userId: string, department
       .from("user_profiles")
       .select("id, role")
       .in("id", linkedReviewerIds)
-      .in("role", ["regional_manager", "department_head"])
+      .in("role", ["regional_manager", "department_head", "transport_manager"])
       .eq("is_active", true)
 
     const reviewers = (linkedReviewers || []).map((r: any) => ({
@@ -33,7 +33,7 @@ async function resolveManagerReviewers(supabase: any, userId: string, department
   const { data: reviewers } = await supabase
     .from("user_profiles")
     .select("id, role, department_id")
-    .in("role", ["regional_manager", "department_head"])
+    .in("role", ["regional_manager", "department_head", "transport_manager"])
     .eq("is_active", true)
 
   return (reviewers || []).filter((r: any) => {

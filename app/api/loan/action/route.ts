@@ -222,7 +222,7 @@ export async function POST(request: NextRequest) {
     const role = normalizeRole((profile as any).role)
     const deptName = (profile as any)?.departments?.name || null
     const deptCode = (profile as any)?.departments?.code || null
-    const isDepartmentHead = ["department_head", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(role)
+    const isDepartmentHead = ["department_head", "transport_manager", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(role)
 
     const update: any = { updated_at: new Date().toISOString() }
     let toStatus = req.status
