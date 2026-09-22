@@ -64,7 +64,18 @@ export async function GET(_request: NextRequest) {
     const { data: linkages } = profileIds.length
       ? await admin.from('loan_hod_linkages').select('staff_user_id, hod_user_id').in('staff_user_id', profileIds)
       : { data: [] as any[] }
-    const allLinkages = [...(linkages || [])]
+    // Compatibility fallback: some staff have their department head recorded
+    // directly on user_profiles.hod_id (e.g. HR Executive department heads at
+    // non-regional/head-office locations) instead of an explicit
+    // loan_hod_linkages row. Synthesize equivalent linkage rows so those
+    // requests still surface in the HOD's pending queue.
+    const { data: hodIdProfiles } = profileIds.length
+      ? await admin.from('user_profiles').select('id, hod_id').in('id', profileIds).not('hod_id', 'is', null)
+      : { data: [] as any[] }
+    const hodIdLinkages = (hodIdProfiles || [])
+      .filter((p: any) => p.hod_id)
+      .map((p: any) => ({ staff_user_id: p.id, hod_user_id: p.hod_id }))
+    const allLinkages = [...(linkages || []), ...hodIdLinkages]
     const hodIds = [...new Set(allLinkages.map((link: any) => link.hod_user_id).filter(Boolean))]
     const { data: hodProfiles } = hodIds.length
       ? await admin.from('user_profiles').select('id, first_name, last_name, employee_id, position, role, email').in('id', hodIds)

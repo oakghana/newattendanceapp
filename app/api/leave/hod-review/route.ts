@@ -32,15 +32,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to fetch staff linkages" }, { status: 500 })
     }
 
-    if (!linkedStaff || linkedStaff.length === 0) {
+    // Compatibility fallback: some staff have their department head recorded
+    // directly on user_profiles.hod_id (e.g. HR Executive department heads at
+    // non-regional/head-office locations) instead of an explicit
+    // loan_hod_linkages row. Merge both scopes so those requests still surface.
+    const { data: hodIdStaff } = await admin
+      .from("user_profiles")
+      .select("id")
+      .eq("hod_id", user.id || "")
+      .eq("is_active", true)
+      .limit(5000)
+
+    const staffIds = Array.from(
+      new Set([
+        ...(linkedStaff || []).map((l: any) => l.staff_user_id).filter(Boolean),
+        ...(hodIdStaff || []).map((p: any) => p.id).filter(Boolean),
+      ]),
+    )
+
+    if (staffIds.length === 0) {
       return NextResponse.json({
         mode: "hod_review",
         requests: [],
         message: "No staff linked to your HOD profile"
       })
     }
-
-    const staffIds = linkedStaff.map((l: any) => l.staff_user_id).filter(Boolean)
 
     // Regional staff must never appear in the HOD queue, even if an older
     // request still has legacy workflow fields. Resolve the location/region
