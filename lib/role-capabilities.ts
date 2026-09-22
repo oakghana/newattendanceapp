@@ -58,7 +58,7 @@ export function isAssignedHod(isLinkedHod?: boolean | null): boolean {
 
 /** Role HOD/RM or an explicit HOD linkage assignment. */
 export function isActingHod(role?: string | null, isLinkedHod?: boolean | null): boolean {
-  return isDepartmentHeadRole(role) || isRegionalManagerRole(role) || isAssignedHod(isLinkedHod)
+  return isDepartmentHeadRole(role) || isRegionalManagerRole(role) || isTransportManagerRole(role) || isAssignedHod(isLinkedHod)
 }
 
 export type TransportDeptInfo = { code?: string | null; name?: string | null } | null | undefined
@@ -137,8 +137,17 @@ export function canCreateTransportRequest(role?: string | null, isLinkedHod?: bo
   // Every active non-regional staff member may submit a request. Approval, driver,
   // and fleet capabilities remain separate and are enforced by their own routes.
   const normalizedRole = normalizeAppRole(role)
-  if (["intern", "nsp"].includes(normalizedRole)) return false
-  return Boolean(normalizedRole) && normalizedRole !== "driver" || isRegionalHrRole(role) || isChiefDriverRole(role) || isDepartmentHeadRole(role) || isAssignedHod(isLinkedHod)
+  if (["intern", "nsp", "regional_manager", "transport_manager"].includes(normalizedRole)) {
+    return normalizedRole === "transport_manager" && isAssignedHod(isLinkedHod)
+  }
+  if (["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)) return false
+  return (
+    (Boolean(normalizedRole) && normalizedRole !== "driver") ||
+    isRegionalHrRole(role) ||
+    isChiefDriverRole(role) ||
+    isDepartmentHeadRole(role) ||
+    isAssignedHod(isLinkedHod)
+  )
 }
 
 export function isRegionalHrRole(role?: string | null): boolean {
@@ -176,6 +185,7 @@ export function canManageOwnSignature(role?: string | null): boolean {
     [
       "department_head",
       "hod",
+      "transport_manager",
       "regional_manager",
       "managing_director",
       "hr",

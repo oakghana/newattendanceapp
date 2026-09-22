@@ -599,17 +599,21 @@ export function StaffManagement() {
     setHodLinkHodIds(((member as any).hod_links || []).map((hod: any) => String(hod.id)))
     setHodLinkError(null)
     try {
-      // Only HR Executive, Accounts Executive, Regional Manager, and
-      // Department Head users can be selected as HODs.
-      const [resDH, resRM, resHRE, resAE] = await Promise.all([
+      // HOD linkage may target Department Heads, Manager HR, Regional
+      // Managers, Transport Managers, HR Executives, or Accounts Executives.
+      const [resDH, resMHR, resRM, resTM, resHRE, resAE] = await Promise.all([
         authenticatedFetch("/api/admin/staff?role=department_head&limit=200"),
+        authenticatedFetch("/api/admin/staff?role=manager_hr&limit=200"),
         authenticatedFetch("/api/admin/staff?role=regional_manager&limit=200"),
+        authenticatedFetch("/api/admin/staff?role=transport_manager&limit=200"),
         authenticatedFetch("/api/admin/staff?role=hr_executive&limit=200"),
         authenticatedFetch("/api/admin/staff?role=accounts_executive&limit=200"),
       ])
-      const [dh, rm, hre, ae]: StaffMember[][] = await Promise.all([
+      const [dh, mhr, rm, tm, hre, ae]: StaffMember[][] = await Promise.all([
         resDH.json().then((d: any) => d.data || []),
+        resMHR.json().then((d: any) => d.data || []),
         resRM.json().then((d: any) => d.data || []),
+        resTM.json().then((d: any) => d.data || []),
         resHRE.json().then((d: any) => d.data || []),
         resAE.json().then((d: any) => d.data || []),
       ])
@@ -680,7 +684,7 @@ export function StaffManagement() {
       }
 
       const seen = new Set<string>()
-      const unique = [...rm, ...dh, ...hre, ...ae]
+      const unique = [...mhr, ...rm, ...dh, ...tm, ...hre, ...ae]
         .filter((s) => {
           if (!s?.id || s.id === member.id || s.is_active === false || seen.has(s.id)) return false
           if (isItAdmin && !isNonRegionalStaff && isDepartmentHead(s)) return false
@@ -1612,7 +1616,7 @@ export function StaffManagement() {
               <p className="text-xs text-muted-foreground">
                 {hodCandidates.length > 0
                   ? `Found ${filterHodCandidates(hodCandidates, hodSearchQuery).length} of ${hodCandidates.length} HODs`
-                  : "No Regional Managers or Department Heads are available yet."}
+                  : "No Regional Managers, Transport Managers, or Department Heads are available yet."}
               </p>
             </div>
             <div className="space-y-2">
@@ -1620,7 +1624,7 @@ export function StaffManagement() {
               <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
                 {filterHodCandidates(hodCandidates, hodSearchQuery).length === 0 ? (
                   <p className="text-sm text-muted-foreground italic py-4 text-center">
-                    {hodSearchQuery ? "No matching candidates found" : "No Regional Managers or Department Heads are available yet."}
+                    {hodSearchQuery ? "No matching candidates found" : "No Regional Managers, Transport Managers, or Department Heads are available yet."}
                   </p>
                 ) : (
                   filterHodCandidates(hodCandidates, hodSearchQuery).map((hod) => (

@@ -404,36 +404,12 @@ export async function POST(request: NextRequest) {
         if (id && !assignedHodIds.includes(id)) assignedHodIds.push(id)
       }
 
-      if (assignedHodIds.length === 0) {
-        const { data: locationHods } = await admin
-          .from("user_profiles")
-          .select("id, role")
-          .eq("assigned_location_id", (profile as any).assigned_location_id)
-          .eq("role", "department_head")
-          .eq("is_active", true)
-          .limit(20)
-
-        for (const hod of locationHods || []) {
-          const id = (hod as any)?.id
-          if (id && !assignedHodIds.includes(id)) assignedHodIds.push(id)
-        }
-      }
     }
 
-    if (assignedHodIds.length === 0 && (profile as any).department_id) {
-      const { data: deptHods } = await admin
-        .from("user_profiles")
-        .select("id")
-        .eq("department_id", (profile as any).department_id)
-        .eq("role", "department_head")
-        .eq("is_active", true)
-        .limit(20)
-      for (const hod of deptHods || []) {
-        const id = (hod as any)?.id
-        if (id && !assignedHodIds.includes(id)) assignedHodIds.push(id)
-      }
-    }
-
+    // Loan requests must have an explicitly assigned reviewer. Do not silently
+    // substitute a department head or another location-based fallback: staff
+    // without a direct HOD or regional-manager linkage must be routed back for
+    // setup before they can submit a loan request.
     const assignedHodId = assignedHodIds[0] || null
 
     if (!assignedHodId) {

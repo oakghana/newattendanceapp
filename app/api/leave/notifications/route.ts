@@ -8,7 +8,7 @@ function normalizeRole(role: string | null | undefined) {
     .replace(/[\s-]+/g, "_")
 }
 
-const HOD_REVIEW_ROLES = new Set(["department_head", "regional_manager"])
+const HOD_REVIEW_ROLES = new Set(["department_head", "transport_manager", "regional_manager"])
 const HR_REVIEW_ROLES = new Set(["hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office", "hr_loan_office", "accounts_loan_office"])
 
 function canReviewLeave(role: string) {

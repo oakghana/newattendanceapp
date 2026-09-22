@@ -77,8 +77,10 @@ export async function GET() {
     // Step 2: Fetch HR-approved leaves past their effective end date for scoped staff only
     const { data: requests, error: fetchErr } = await admin
       .from('leave_plan_requests')
-      .select('id, user_id, leave_type_key, preferred_start_date, preferred_end_date, adjusted_end_date, status')
+      .select('id, user_id, leave_type_key, preferred_start_date, preferred_end_date, adjusted_end_date, status, memo_reference')
       .eq('status', 'hr_approved')
+      .not('memo_reference', 'is', null)
+      .neq('memo_reference', '')
       .in('user_id', deptUserIds)
       .order('preferred_end_date', { ascending: false })
 

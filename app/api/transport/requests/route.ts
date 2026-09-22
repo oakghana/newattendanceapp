@@ -589,16 +589,42 @@ workflow_stage: row.request_type === "regional_transport"
   else if (decision === "correct") update = { purpose: String(body.purpose ?? "").trim(), origin: String(body.origin ?? "").trim(), destination: String(body.destination ?? "").trim(), event_date: String(body.eventDate ?? "").trim(), passenger_count: Number(body.passengerCount), status: "endorsed", workflow_stage: "hr_records_review", updated_at: new Date().toISOString() }
   else return NextResponse.json({ error: "Unsupported decision." }, { status: 400 })
   if (decision === "correct" && (!update.purpose || !update.origin || !update.destination || !update.event_date || !Number.isInteger(update.passenger_count) || Number(update.passenger_count) < 1)) return NextResponse.json({ error: "Complete all correction fields." }, { status: 400 })
-  const { error } = await supabase.from("transport_requests").update(update).eq("id", requestId)
+  // A region/district/location can have more than one Regional Manager (or
+  // other stage owner) in scope, so more than one reviewer can load this
+  // request while it is still at the same workflow_stage. Gate the update on
+  // that stage so only the first submitted decision applies — a concurrent
+  // second submission updates zero rows instead of silently overwriting the
+  // first reviewer's endorsement/signature, which would otherwise let two
+  // RMs/HODs both "endorse" the same request.
+  let { error, data: updatedRows } = await supabase
+    .from("transport_requests")
+    .update(update)
+    .eq("id", requestId)
+    .eq("workflow_stage", row.workflow_stage)
+    .select("id")
   if (error && /column .*does not exist|schema cache/i.test(error.message)) {
     // Older databases may not have the regional_manager_* signature columns yet
     // (see migration 109_transport_regional_manager_signature.sql). Retry without
     // them — the endorsement stays preserved inside memo_amendments.
     const stripped = { ...update }
     for (const key of ["regional_manager_signer_id", "regional_manager_signed_at", "regional_manager_signature_data_url"]) delete stripped[key]
-    const { error: retryError } = await supabase.from("transport_requests").update(stripped).eq("id", requestId)
-    if (retryError) return NextResponse.json({ error: `Unable to process this request: ${retryError.message}` }, { status: 500 })
-  } else if (error) return NextResponse.json({ error: `Unable to process this request: ${error.message}` }, { status: 500 })
+    const retryResult = await supabase
+      .from("transport_requests")
+      .update(stripped)
+      .eq("id", requestId)
+      .eq("workflow_stage", row.workflow_stage)
+      .select("id")
+    if (retryResult.error) return NextResponse.json({ error: `Unable to process this request: ${retryResult.error.message}` }, { status: 500 })
+    updatedRows = retryResult.data
+  } else if (error) {
+    return NextResponse.json({ error: `Unable to process this request: ${error.message}` }, { status: 500 })
+  }
+  if (!updatedRows || updatedRows.length === 0) {
+    return NextResponse.json(
+      { error: "This request has already been actioned by another reviewer and no longer needs your action." },
+      { status: 409 },
+    )
+  }
   await supabase.from("transport_request_events").insert({ request_id: requestId, actor_id: user.id, action: `transport_${decision}`, from_stage: row.workflow_stage, to_stage: update.workflow_stage, comment: String(body.comment ?? `Transport request ${decision.replace(/_/g, " ")}.`) })
 
   // Non-fatal stage notifications (does not affect auth/login)

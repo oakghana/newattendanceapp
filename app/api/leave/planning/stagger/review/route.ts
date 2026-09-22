@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       .trim()
       .replace(/[-\s]+/g, "_")
 
-    if (!["regional_manager", "department_head"].includes(role)) {
+    if (!["regional_manager", "department_head", "transport_manager"].includes(role)) {
       return NextResponse.json({ error: "Only managers can review stagger requests." }, { status: 403 })
     }
 

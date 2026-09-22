@@ -208,9 +208,23 @@ async function resolveManagerReviewers(admin: any, userId: string, departmentId:
   const { data: linkedHodProfiles } = linkedHodIds.length
     ? await admin.from("user_profiles").select("id, role").in("id", linkedHodIds).eq("is_active", true)
     : { data: [] }
+  const HOD_ROLES = [
+    "department_head",
+    "hod",
+    "hr",
+    "hr_executive",
+    "hr_executive_officer",
+    "manager_hr",
+    "hr_manager",
+    "director_hr",
+    "hr_director",
+    "accounts_executive",
+    "transport_manager",
+  ]
+
   const eligibleLinkedHodIds = new Set(
     (linkedHodProfiles || [])
-      .filter((profile: any) => ["department_head", "hr_executive"].includes(normalizeRoleValue(profile.role)))
+      .filter((profile: any) => HOD_ROLES.includes(normalizeRoleValue(profile.role)))
       .map((profile: any) => String(profile.id)),
   )
 
@@ -220,27 +234,24 @@ async function resolveManagerReviewers(admin: any, userId: string, departmentId:
     }
   }
 
-  // HR Leave Office is an operations role, not an HOD role. HR Executive
-  // may act as HOD; the explicit role filter above prevents stale linkages
-  // from granting HOD access to HR Leave Office users.
-  const HOD_ROLES = ["department_head", "hr_executive"]
-
+  // HR Leave Office is intentionally not included. An explicit, active
+  // linkage is authoritative: it is the administrator's assignment of the
+  // reviewer, so do not discard it because the reviewer has a different
+  // department or assigned location.
   if (linkedReviewerIds.length > 0) {
     const { data: linkedReviewers } = await admin
       .from("user_profiles")
-      .select("id, role, department_id, assigned_location_id")
+      .select("id, role")
       .in("id", linkedReviewerIds)
       .in("role", HOD_ROLES)
       .eq("is_active", true)
 
-    const reviewers = (linkedReviewers || []).filter((r: any) =>
-      ["department_head", "hr_executive"].includes(normalizeRoleValue(r.role)) &&
-      String(r.assigned_location_id || "") === assignedLocationId &&
-      Boolean(r.department_id && departmentId && r.department_id === departmentId),
-    ).map((r: any) => ({
-      id: String(r.id),
-      role: String(r.role || ""),
-    }))
+    const reviewers = (linkedReviewers || [])
+      .filter((r: any) => eligibleLinkedHodIds.has(String(r.id)))
+      .map((r: any) => ({
+        id: String(r.id),
+        role: String(r.role || ""),
+      }))
 
     if (reviewers.length > 0) return reviewers
   }
@@ -252,7 +263,7 @@ async function resolveManagerReviewers(admin: any, userId: string, departmentId:
     .eq("is_active", true)
 
   return (reviewers || []).filter((r: any) => {
-    return ["department_head", "hr_executive"].includes(normalizeRoleValue(r.role)) && Boolean(r.department_id && departmentId && r.department_id === departmentId)
+    return HOD_ROLES.includes(normalizeRoleValue(r.role)) && Boolean(r.department_id && departmentId && r.department_id === departmentId)
   }).map((r: any) => ({ id: String(r.id), role: String(r.role || "") }))
 }
 

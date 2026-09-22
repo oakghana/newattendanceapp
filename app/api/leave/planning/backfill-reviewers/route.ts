@@ -13,7 +13,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 
-const HOD_ROLES = ["regional_manager", "department_head", "manager_hr", "director_hr"]
+const HOD_ROLES = [
+  "regional_manager",
+  "department_head",
+  "hod",
+  "hr",
+  "hr_executive",
+  "hr_executive_officer",
+  "manager_hr",
+  "hr_manager",
+  "director_hr",
+  "hr_director",
+  "accounts_executive",
+  "transport_manager",
+]
 const PENDING_STATUSES = ["pending_hod_review", "hod_pending", "submitted", "pending"]
 
 export async function POST(req: NextRequest) {

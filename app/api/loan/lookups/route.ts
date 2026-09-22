@@ -32,6 +32,7 @@ function canManageLookups(role: string, deptName?: string | null, deptCode?: str
     role === "accounts" ||
     role === "regional_manager" ||
     role === "department_head" ||
+    role === "transport_manager" ||
     canDoHrOffice(role, deptName, deptCode) ||
     canDoLoanOffice(role, deptName, deptCode)
   )
@@ -75,11 +76,11 @@ function validateStaffHodRule(
   // Any HOD-capable approver may be linked to any staff member regardless of
   // location. Location (regional staff) and department (non-regional staff)
   // only drive the recommended ordering in the UI, not eligibility.
-  const allowedHodRoles = ["department_head", "regional_manager", "hr_executive", "accounts_executive"]
+  const allowedHodRoles = ["department_head", "manager_hr", "transport_manager", "regional_manager", "hr_executive", "accounts_executive"]
   if (!allowedHodRoles.includes(hodRole)) {
     return {
       ok: false,
-      reason: "Only HR Executives, Accounts Executives, Regional Managers, or Department Heads can be assigned as an HOD.",
+      reason: "Only Manager HR, HR Executives, Accounts Executives, Regional Managers, Transport Managers, or Department Heads can be assigned as an HOD.",
     }
   }
 
@@ -184,8 +185,8 @@ export async function GET(request: NextRequest) {
           admin
             .from("user_profiles")
             .select("id, first_name, last_name, employee_id, position, role, department_id, assigned_location_id, geofence_locations!assigned_location_id(name)")
-            .in("role", ["department_head", "regional_manager"])
-            .eq("is_active", true)
+.in("role", ["department_head", "manager_hr", "transport_manager", "regional_manager"])
+  .eq("is_active", true)
             .order("first_name", { ascending: true })
             .order("id", { ascending: true })
             .range(from, to),

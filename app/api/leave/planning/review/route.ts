@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
       .trim()
       .replace(/[-\s]+/g, "_")
 
-    if (!["regional_manager", "department_head", "hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)) {
+    if (!["regional_manager", "department_head", "transport_manager", "hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)) {
       return NextResponse.json({ error: "Only regional managers and department heads can review this request." }, { status: 403 })
     }
 

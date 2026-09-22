@@ -343,7 +343,7 @@ export async function GET() {
     const managerDepartmentId = String((profile as any)?.department_id || "")
     const managerLocationId = String((profile as any)?.assigned_location_id || "")
     const isRegionalManager = role === "regional_manager"
-    const isDepartmentHead = ["department_head", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(role)
+    const isDepartmentHead = ["department_head", "transport_manager", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(role)
 
     let linkedStaffIds: string[] = []
     const { data: linkageRows } = await admin
@@ -352,6 +352,21 @@ export async function GET() {
       .eq("hod_user_id", user.id)
       .limit(5000)
     linkedStaffIds = (linkageRows || []).map((row: any) => row.staff_user_id).filter(Boolean)
+
+    // Keep user_profiles.hod_id as a compatibility fallback for assignments
+    // recorded directly on the staff profile instead of loan_hod_linkages.
+    // Explicit linkage remains the primary source and both scopes are merged.
+    const { data: hodIdStaff } = await admin
+      .from("user_profiles")
+      .select("id")
+      .eq("hod_id", user.id)
+      .eq("is_active", true)
+      .limit(5000)
+    linkedStaffIds = Array.from(new Set([
+      ...linkedStaffIds,
+      ...(hodIdStaff || []).map((row: any) => row.id).filter(Boolean),
+    ]))
+
     const isLinkedHod = linkedStaffIds.length > 0
     const reviewerScopedStaffIds = Array.from(new Set(linkedStaffIds))
 

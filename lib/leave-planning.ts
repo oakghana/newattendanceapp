@@ -85,12 +85,12 @@ export function isStaffRole(role: string | null | undefined): boolean {
 /** HR Executives can also act as HOD for their department staff */
 export function isHodRole(role: string | null | undefined): boolean {
   const normalized = (role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
-  return ["regional_manager", "department_head", "director_hr", "manager_hr"].includes(normalized)
+  return ["regional_manager", "department_head", "transport_manager", "director_hr", "manager_hr"].includes(normalized)
 }
 
 export function isManagerRole(role: string | null | undefined): boolean {
   const normalized = (role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
-  return ["regional_manager", "department_head"].includes(normalized)
+  return ["regional_manager", "department_head", "transport_manager"].includes(normalized)
 }
 
 /** Regional HR Officer role — view-only access to regional leave data */
