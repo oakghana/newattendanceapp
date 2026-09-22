@@ -1311,13 +1311,16 @@ export default function LoanAppPage() {
     const label = String(selectedType?.loan_label || "").toLowerCase()
     return key === "salary_advance" || label.includes("salary advance")
   }, [selectedType])
-  const salaryAdvanceMonthOptions = [12, 15, 18, 21, 24]
+  const isSeniorStaff = /senior|manager|head|director|regional/.test(String(data?.profile.staffCategory || data?.profile.position || "").toLowerCase())
+  const salaryAdvanceMonthOptions = isSeniorStaff ? [1, 2] : [1, 2, 3]
 
   useEffect(() => {
-    if (!isSalaryAdvanceRequest) {
-      setSalaryAdvanceMonths(null)
-    }
-  }, [isSalaryAdvanceRequest])
+  if (!isSalaryAdvanceRequest) {
+  setSalaryAdvanceMonths(null)
+  } else if (salaryAdvanceMonths == null) {
+  setSalaryAdvanceMonths(isSeniorStaff ? 1 : 1)
+  }
+  }, [isSalaryAdvanceRequest, isSeniorStaff, salaryAdvanceMonths])
 
   // Auto-populate Length of Service and reset car loan fields when committee modal opens
   useEffect(() => {
@@ -2395,10 +2398,11 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
       return
     }
 
-  if (isSalaryAdvanceRequest && (!salaryAdvanceMonths || salaryAdvanceMonths < 12 || salaryAdvanceMonths > 24)) {
+  const salaryAdvanceMaxMonths = isSeniorStaff ? 2 : 3
+  if (isSalaryAdvanceRequest && (!salaryAdvanceMonths || salaryAdvanceMonths < 1 || salaryAdvanceMonths > salaryAdvanceMaxMonths)) {
   toast({
-  title: "Invalid repayment period",
-  description: "Salary advance repayment must be between 12 and 24 months.",
+  title: "Invalid salary advance period",
+  description: `Salary advance period must be between 1 and ${salaryAdvanceMaxMonths} month${salaryAdvanceMaxMonths > 1 ? "s" : ""} for your staff category.`,
         variant: "destructive",
       })
       return
@@ -3359,7 +3363,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
               {isSalaryAdvanceRequest && (
                 <div className="space-y-2">
-                  <Label>Repayment duration (12��24 months)</Label>
+                  <Label>Salary Advance Period ({isSeniorStaff ? "1–2" : "1–3"} months)</Label>
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
                   {salaryAdvanceMonthOptions.map((months) => (
                     <label key={months} className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-900 hover:border-emerald-300">
