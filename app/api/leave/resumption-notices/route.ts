@@ -72,16 +72,21 @@ export async function GET() {
     const staffIds = (staff || []).map((item) => item.id)
     if (!staffIds.length) return NextResponse.json({ notices: [], role, authorized: true })
 
-    const leaves = await fetchByUserChunks(staffIds, (chunk) =>
+    const leaves = await fetchByUserChunks(staffIds, async (chunk) =>
       admin
         .from('leave_plan_requests')
-        .select('id, user_id, leave_type_key, preferred_end_date, adjusted_end_date, status')
-        .in('status', ['hr_approved', 'approved', 'completed', 'hod_approved', 'pending_hr_records_reference', 'pending_hr_leave_processing', 'hr_office_forwarded'])
+        .select('id, user_id, leave_type_key, preferred_end_date, adjusted_end_date, status, memo_reference')
+        // Resumption confirmation is available only after HR has approved the
+        // leave and HR Records has issued the official memo reference.
+        // HOD approval alone must never create a confirmation notice.
+        .eq('status', 'hr_approved')
+        .not('memo_reference', 'is', null)
+        .neq('memo_reference', '')
         .or('is_archived.is.null,is_archived.eq.false')
         .in('user_id', chunk),
     )
 
-    const confirmations = await fetchByUserChunks(staffIds, (chunk) =>
+    const confirmations = await fetchByUserChunks(staffIds, async (chunk) =>
       admin
         .from('leave_resumption_notifications')
         .select('id, leave_request_id, user_id, leave_end_date, first_check_in_date, first_hod_rm_check_in_date, confirmation_status, status')
