@@ -34,6 +34,71 @@ function buildLeaveMemoCc(value?: string | null) {
     .join("\n")
 }
 
+export async function PATCH(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const admin = await createAdminClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const { data: profile } = await admin.from("user_profiles").select("id, role, department_id, departments(name, code)").eq("id", user.id).single()
+    if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
+    const role = String((profile as any).role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+    const deptName = (profile as any)?.departments?.name || null
+    const deptCode = (profile as any)?.departments?.code || null
+    if (!(isHrLeaveOfficeRole(role) || isHrApproverRole(role, deptName, deptCode) || role === "admin")) {
+      return NextResponse.json({ error: "Only HR Leave Office staff can edit leave requests." }, { status: 403 })
+    }
+
+    const body = await request.json()
+    const requestId = String(body.leave_plan_request_id || "")
+    if (!requestId) return NextResponse.json({ error: "leave_plan_request_id is required." }, { status: 400 })
+    const { data: existing, error: fetchError } = await admin.from("leave_plan_requests")
+      .select("id, status, workflow_route, hr_approved_at, memo_reference, memo_reference_locked")
+      .eq("id", requestId)
+      .single()
+    if (fetchError || !existing) return NextResponse.json({ error: "Leave request not found." }, { status: 404 })
+    if (String(existing.status || "").toLowerCase() !== "hr_office_forwarded" || existing.hr_approved_at || existing.memo_reference_locked || String(existing.memo_reference || "").trim()) {
+      return NextResponse.json({ error: "This leave request can no longer be edited because HR Executive approval or the official reference has been recorded." }, { status: 409 })
+    }
+    if (!canNonRegionalPipelineAct((existing as any).workflow_route) && !canSelfLeavePipelineAct((existing as any).workflow_route)) {
+      return NextResponse.json({ error: "This request is not handled by HR Leave Office." }, { status: 403 })
+    }
+
+    const start = String(body.adjusted_start_date || body.preferred_start_date || "")
+    const end = String(body.adjusted_end_date || body.preferred_end_date || "")
+    const startDate = new Date(start)
+    const endDate = new Date(end)
+    if (!start || !end || Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate < startDate) {
+      return NextResponse.json({ error: "A valid start and end date are required." }, { status: 400 })
+    }
+    const days = Math.floor((endDate.getTime() - startDate.getTime()) / 86400000) + 1
+    const now = new Date().toISOString()
+    const { data: updated, error: updateError } = await admin.from("leave_plan_requests").update({
+      preferred_start_date: start,
+      preferred_end_date: end,
+      adjusted_start_date: start,
+      adjusted_end_date: end,
+      requested_days: days,
+      adjusted_days: days,
+      reason: body.reason == null ? undefined : String(body.reason).trim(),
+      adjustment_reason: body.adjustment_reason == null ? undefined : String(body.adjustment_reason).trim(),
+      status: "pending_hr_leave_processing",
+      workflow_stage: "hr_leave_office",
+      hr_approver_id: null,
+      hr_approver_name: null,
+      hr_approved_at: null,
+      hr_approval_note: null,
+      updated_at: now,
+    }).eq("id", requestId).select("id, status, workflow_stage, preferred_start_date, preferred_end_date, requested_days").single()
+    if (updateError) throw updateError
+    return NextResponse.json({ request: updated, message: "Leave request updated and returned to HR Leave Office processing." })
+  } catch (error: any) {
+    console.error("[hr-office] edit error:", error)
+    return NextResponse.json({ error: error?.message || "Failed to edit leave request." }, { status: 500 })
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()

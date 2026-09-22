@@ -2142,7 +2142,8 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
         locationName: r?.location_name || r?.user?.location_name,
       })
   const isRegionalActionableStatus = status === "pending_regional_hr_review"
-  if (!((HR_OFFICE_PENDING_STATUSES as string[]).includes(status) || (isRegionalHr && workflow.route === "regional" && isRegionalActionableStatus))) return false
+  const isForwardedToHrExecutive = status.toLowerCase() === "hr_office_forwarded"
+  if (!((HR_OFFICE_PENDING_STATUSES as string[]).includes(status) || isForwardedToHrExecutive || (isRegionalHr && workflow.route === "regional" && isRegionalActionableStatus))) return false
   // Regional HR owns only the Regional HR review stage. Once forwarded, the
   // request leaves this actionable queue and belongs to the Regional Manager.
   if (isRegionalHr && (workflow.route !== "regional" || !isRegionalActionableStatus)) return false
@@ -5300,6 +5301,28 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                 onClick={() => openMemo(req.id, req.memo_token)}
                                 className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50">
                                 <Download className="w-3 h-3 mr-1" /> Memo
+                              </Button>
+                            )}
+                            {isHrOffice && String(req?.status || "").toLowerCase() === "hr_office_forwarded" && !req?.hr_approved_at && !req?.memo_reference_locked && !req?.memo_reference && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs border-blue-300 text-blue-700 hover:bg-blue-50"
+                                onClick={() => {
+                                  // HR Leave Office edits use the adjustment workflow, not the staff application form.
+                                  setOfficeAdjStart((current) => ({ ...current, [req.id]: req.preferred_start_date || "" }))
+                                  setOfficeAdjEnd((current) => ({ ...current, [req.id]: req.preferred_end_date || "" }))
+                                  setOfficeHolidayDays((current) => ({ ...current, [req.id]: String(req.public_holiday_days_deducted || 0) }))
+                                  setOfficePriorDays((current) => ({ ...current, [req.id]: String(req.prior_leave_days_deducted || 0) }))
+                                  setOfficeTravelDays((current) => ({ ...current, [req.id]: String(req.travelling_days_added || 0) }))
+                                  setOfficeOutstandingDays((current) => ({ ...current, [req.id]: String(req.outstanding_leave_days_added || 0) }))
+                                  setOfficeReason((current) => ({ ...current, [req.id]: req.adjustment_reason || req.reason || "" }))
+                                  setOfficeExpanded(req.id)
+                                  setHrOfficeTab("operations")
+                                  setActiveTab("hr-office")
+                                }}
+                              >
+                                <Pencil className="w-3 h-3 mr-1" /> Edit
                               </Button>
                             )}
                           </div>

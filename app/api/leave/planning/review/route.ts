@@ -32,6 +32,15 @@ function normalizeDecision(action: string): LeavePlanReviewDecision | null {
   return null
 }
 
+function normalizeReviewerRole(role: string) {
+  if (role === "regional_manager") return "regional_manager"
+  if (role === "department_head" || role === "manager_hr") return "department_head"
+  if (["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "hr", "hr_office", "hr_leave_office", "hr_executive", "director_hr"].includes(role)) {
+    return "regional_hr_office"
+  }
+  return role
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -46,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, role, assigned_location_id, region_id, first_name, last_name, position, signature_data_url")
+      .select("id, role, assigned_location_id, region_id, department_id, first_name, last_name, position, signature_data_url")
       .eq("id", user.id)
       .single()
 
@@ -63,7 +72,7 @@ export async function POST(request: NextRequest) {
       .trim()
       .replace(/[-\s]+/g, "_")
 
-    if (!["regional_manager", "department_head", "transport_manager", "hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)) {
+    if (!["regional_manager", "department_head", "transport_manager", "hr", "hr_office", "hr_leave_office", "hr_executive", "manager_hr", "director_hr", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)) {
       return NextResponse.json({ error: "Only regional managers and department heads can review this request." }, { status: 403 })
     }
 
@@ -181,18 +190,19 @@ export async function POST(request: NextRequest) {
       const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
       const isRegionalManager = role === "regional_manager"
       const isDepartmentHeadReviewer = role === "department_head"
+      const isHrExecutiveReviewer = ["hr_executive", "manager_hr", "director_hr"].includes(role)
       // Older/forwarded requests can be visible in a manager's queue without
       // a matching leave_plan_reviews row yet (regional hand-off, or a
       // department head reached via loan_hod_linkages rather than a
       // pre-seeded review row). Validate the request scope below, then
       // create this manager's own assignment before applying the decision.
-      if (!isRegionalHr && !isRegionalManager && !isDepartmentHeadReviewer) {
+      if (!isRegionalHr && !isRegionalManager && !isDepartmentHeadReviewer && !isHrExecutiveReviewer) {
         return NextResponse.json({ error: "Review assignment not found for this manager." }, { status: 404 })
       }
 
       const { data: targetRequest, error: targetRequestError } = await admin
         .from("leave_plan_requests")
-        .select("id, user_id, leave_type_key, workflow_route, workflow_stage, status, regional_hr_office_user_id, user_profiles:user_id(assigned_location_id, region_id)")
+        .select("id, user_id, leave_type_key, workflow_route, workflow_stage, status, regional_hr_office_user_id, user_profiles:user_id(assigned_location_id, region_id, department_id)")
         .eq("id", leave_plan_request_id)
         .maybeSingle()
 
@@ -219,6 +229,11 @@ export async function POST(request: NextRequest) {
         if (!hodLinkage) {
           return NextResponse.json({ error: "This staff member is not linked to you as HOD." }, { status: 403 })
         }
+      } else if (isHrExecutiveReviewer) {
+        const targetProfile = Array.isArray(targetRequest.user_profiles) ? targetRequest.user_profiles[0] : targetRequest.user_profiles
+        if (!profile.department_id || !targetProfile?.department_id || profile.department_id !== targetProfile.department_id) {
+          return NextResponse.json({ error: "HR Executives can review only requests from their department." }, { status: 403 })
+        }
       } else {
         const targetProfile = Array.isArray(targetRequest.user_profiles) ? targetRequest.user_profiles[0] : targetRequest.user_profiles
         const sameScope = profile.assigned_location_id
@@ -233,8 +248,8 @@ export async function POST(request: NextRequest) {
         const { error: assignmentError } = await admin.from("leave_plan_reviews").insert({
           leave_plan_request_id,
           reviewer_id: user.id,
-          reviewer_role: role,
-          decision: "pending",
+  reviewer_role: normalizeReviewerRole(role),
+  decision: "pending",
         })
         if (assignmentError) throw assignmentError
       }

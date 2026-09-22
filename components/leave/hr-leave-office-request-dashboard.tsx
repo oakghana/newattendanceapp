@@ -51,6 +51,10 @@ interface LeaveRequest {
   requested_days?: number | null
   reason?: string | null
   status: string
+  workflow_stage?: string | null
+  hr_approved_at?: string | null
+  memo_reference?: string | null
+  memo_reference_locked?: boolean | null
   hod_approved_at?: string | null
   created_at: string
   staff?: {
@@ -540,6 +544,28 @@ function LeaveRequestRow({ req, status, onRefresh }: { req: LeaveRequest; status
   const calculatedDays = daysBetween(req.preferred_start_date, req.preferred_end_date)
   const requestedDays = Number(req.requested_days) > 0 ? Number(req.requested_days) : calculatedDays
   const isHodPending = status === 'hod-pending'
+  const isEditLocked = Boolean(req.hr_approved_at || req.memo_reference_locked || req.memo_reference || ['hr_approved', 'hr_rejected', 'approved', 'rejected', 'cancelled'].includes(String(req.status).toLowerCase()))
+  const [editing, setEditing] = useState(false)
+  const [startDate, setStartDate] = useState(req.preferred_start_date?.slice(0, 10) || '')
+  const [endDate, setEndDate] = useState(req.preferred_end_date?.slice(0, 10) || '')
+  const [reason, setReason] = useState(req.reason || '')
+  const [saving, setSaving] = useState(false)
+
+  const saveEdit = async () => {
+    setSaving(true)
+    try {
+      const response = await fetch('/api/leave/planning/hr-office', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leave_plan_request_id: req.id, preferred_start_date: startDate, preferred_end_date: endDate, reason }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Unable to update request')
+      setEditing(false)
+      onRefresh?.()
+    } catch (error: any) {
+      window.alert(error.message || 'Unable to update request')
+    } finally { setSaving(false) }
+  }
 
   const statusBadge = isHodPending
     ? { label: 'Awaiting HOD', bg: 'bg-amber-100 text-amber-700 border-amber-200' }
@@ -579,12 +605,28 @@ function LeaveRequestRow({ req, status, onRefresh }: { req: LeaveRequest; status
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Badge className={`border text-xs font-medium ${statusBadge.bg}`}>{statusBadge.label}</Badge>
-            {!isHodPending && (
-              <Button size="sm" variant="outline" className="text-xs gap-1" onClick={onRefresh}>
+            {!isEditLocked && (
+              <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => setEditing(true)}>
                 <ChevronRight className="h-3.5 w-3.5" />
-                View
+                Edit
               </Button>
             )}
+            <Dialog open={editing} onOpenChange={setEditing}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Edit leave request</DialogTitle>
+                  <DialogDescription>Make corrections before HR Executive approval. Saving returns the request to HR Leave Office processing so the next workflow officer sees the updated details.</DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-2"><Label htmlFor={`start-${req.id}`}>Start date</Label><Input id={`start-${req.id}`} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></div>
+                    <div className="grid gap-2"><Label htmlFor={`end-${req.id}`}>End date</Label><Input id={`end-${req.id}`} type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} /></div>
+                  </div>
+                  <div className="grid gap-2"><Label htmlFor={`reason-${req.id}`}>Reason / purpose</Label><Textarea id={`reason-${req.id}`} value={reason} onChange={(e) => setReason(e.target.value)} /></div>
+                </div>
+                <DialogFooter><Button variant="outline" onClick={() => setEditing(false)}>Cancel</Button><Button onClick={saveEdit} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</Button></DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
       </CardContent>

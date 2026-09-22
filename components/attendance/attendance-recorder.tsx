@@ -3312,7 +3312,7 @@ export function AttendanceRecorder({
                 Off-Premises Request
               </CardTitle>
               <CardDescription>
-                Please tell us why you are working off-premises.
+                Please tell us why you are working off-premises. If GPS or location accuracy is the issue, include your current GPS coordinates (latitude and longitude) in the reason so the location can be checked and corrected.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -3399,7 +3399,7 @@ export function AttendanceRecorder({
                     id="offpremises-checkout-reason"
                     value={offPremisesCheckoutReason}
                     onChange={(e) => setOffPremisesCheckoutReason(e.target.value)}
-                    placeholder="Describe your off-premises duty."
+                  placeholder="Describe your off-premises duty. If GPS is inaccurate, include your current coordinates, for example: Latitude 5.6037, Longitude -0.1870."
                     className="w-full min-h-[110px] p-3 text-sm border rounded-xl resize-none bg-muted/40 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition"
                     maxLength={600}
                     autoFocus
