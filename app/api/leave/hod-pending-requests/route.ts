@@ -39,15 +39,31 @@ export async function GET(_request: NextRequest) {
     const planRequests = (requests || []).filter((request: any) => request.workflow_route !== "regional")
 
     // Enrich with user details, staff location, and HOD linkage details.
+    // Query user_profiles + departments directly instead of the
+    // unified_user_management view: that view runs a correlated audit_logs
+    // subquery per row before the user_id filter is applied, which can time
+    // out and silently yield an empty map (staff name showing as "Unknown"
+    // and department as "N/A").
     const userIds = [...new Set(planRequests.map((r: any) => r.user_id).filter(Boolean))]
     const userMap: Record<string, any> = {}
     if (userIds.length > 0) {
-      const { data: users } = await supabase
-        .from('unified_user_management')
-        .select('user_id, full_name, department_name, position, employee_id')
-        .in('user_id', userIds)
+      const { data: users, error: usersError } = await admin
+        .from('user_profiles')
+        .select('id, first_name, last_name, position, employee_id, departments(name)')
+        .in('id', userIds)
+      if (usersError) {
+        console.error('[v0] Failed to load user profiles for HOD pending requests:', usersError.message)
+      }
       if (users) {
-        users.forEach((u: any) => { userMap[u.user_id] = u })
+        users.forEach((u: any) => {
+          userMap[u.id] = {
+            user_id: u.id,
+            full_name: `${u.first_name || ''} ${u.last_name || ''}`.trim(),
+            department_name: u.departments?.name || '',
+            position: u.position || '',
+            employee_id: u.employee_id || '',
+          }
+        })
       }
     }
 

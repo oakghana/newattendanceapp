@@ -59,18 +59,36 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error
 
-    // Enrich with user details from unified_user_management view
+    // Enrich with user details directly from user_profiles + departments.
+    // The unified_user_management view runs a correlated audit_logs subquery
+    // per row before the user_id filter is applied, which times out under
+    // load. Querying the base tables directly avoids that cost entirely.
     const userIds = [...new Set((planRequests || []).map((r: any) => r.user_id).filter(Boolean))]
-    
+
     const userMap: Record<string, any> = {}
     if (userIds.length > 0) {
-      const { data: users } = await supabase
-        .from("unified_user_management")
-        .select("user_id, full_name, department_name, position, role, employee_id, assigned_location_id")
-        .in("user_id", userIds)
-      
+      const { data: users, error: usersError } = await supabase
+        .from("user_profiles")
+        .select("id, first_name, last_name, position, role, employee_id, assigned_location_id, departments(name)")
+        .in("id", userIds)
+
+      if (usersError) {
+        console.error("[v0] Failed to load user profiles for leave requests:", usersError.message)
+      }
+
       if (users) {
-        users.forEach((u: any) => { userMap[u.user_id] = u })
+        users.forEach((u: any) => {
+          const fullName = `${u.first_name || ""} ${u.last_name || ""}`.trim()
+          userMap[u.id] = {
+            user_id: u.id,
+            full_name: fullName,
+            department_name: u.departments?.name || "",
+            position: u.position || "",
+            role: u.role,
+            employee_id: u.employee_id || "",
+            assigned_location_id: u.assigned_location_id,
+          }
+        })
       }
     }
 
