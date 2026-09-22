@@ -40,7 +40,7 @@ export function AssignmentRequiredModal({
       <DialogContent className="border-amber-200 bg-gradient-to-b from-amber-50 to-background sm:max-w-md">
         <DialogHeader className="items-center space-y-3 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-3xl">🙏🏾</div>
-          <DialogTitle className="text-lg font-semibold text-amber-900">{title || "Hold On Small! 🇬🇭"}</DialogTitle>
+          <DialogTitle className="text-lg font-semibold text-amber-900">{title || "Hold On Small!"}</DialogTitle>
           <DialogDescription className="text-sm leading-relaxed text-foreground/80">
             {description ||
               "Chale, we checked and your account isn't linked to a Department/HOD yet, so we can't send this request forward for approval right now."}
