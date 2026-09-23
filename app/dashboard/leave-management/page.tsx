@@ -43,6 +43,16 @@ export default async function LeaveManagementPage() {
   const isItAdmin = normalizedRole === "it_admin"
   const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole) || (normalizedRole.includes("regional") && normalizedRole.includes("hr"))
   const isRegionalManager = normalizedRole === "regional_manager" || normalizedRole === "regional_manager_officer"
+  // A linkage row is not permission by itself. Only explicit manager/HOD roles
+  // may review other staff leave; ordinary staff must never see HOD Review.
+  const canReviewLeaveAsHod = [
+    "department_head",
+    "regional_manager",
+    "regional_manager_officer",
+    "transport_manager",
+    "director_hr",
+    "manager_hr",
+  ].includes(normalizedRole)
 
   try {
     // Build parallel queries — include location lookup when user has an assigned location
@@ -84,11 +94,11 @@ export default async function LeaveManagementPage() {
     const [requestsRes, linkageRes, assignedHodRes, locationRes] = locationId
       ? results
       : [results[0], results[1], results[2], undefined]
-    isAssignedHod = Boolean((assignedHodRes?.data as any)?.id)
+    isAssignedHod = canReviewLeaveAsHod && Boolean((assignedHodRes?.data as any)?.id)
     userLocationName = (locationRes?.data as any)?.name || null
     const selfLeaveResolution = resolveSelfLeaveRoute({ role: profile.role, locationName: userLocationName })
 
-    if (!isRegionalHr && !isRegionalManager && !isItAdmin) {
+    if (canReviewLeaveAsHod && !isRegionalHr && !isRegionalManager && !isItAdmin) {
       // Legacy/non-regional workflow: HODs receive only requests explicitly
       // linked to them. Regional requests never enter this queue.
         const { data: hodLinks } = await admin
@@ -254,8 +264,8 @@ export default async function LeaveManagementPage() {
       rank: (request.user_profiles as any)?.position || "",
     }))
 
-    hasHodLinkage = Boolean((linkageRes?.data as any)?.id)
-    isAssignedHod = isAssignedHod || managerNotifications.length > 0
+  hasHodLinkage = canReviewLeaveAsHod && Boolean((linkageRes?.data as any)?.id)
+  isAssignedHod = canReviewLeaveAsHod && (isAssignedHod || managerNotifications.length > 0)
   } catch (err) {
     console.error("[v0] Error fetching essential data:", err)
     hasHodLinkage = false
