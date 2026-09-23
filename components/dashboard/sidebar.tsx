@@ -133,7 +133,7 @@ const navigationItems = [
     title: "Excuse Duty Review",
     href: "/dashboard/excuse-duty-review",
     icon: FileText,
-    roles: ["admin", "it-admin", "regional_manager", "regional_hr", "department_head", "director_hr", "manager_hr"],
+    roles: ["admin", "it-admin", "regional_manager", "regional_hr", "department_head", "transport_manager", "director_hr", "manager_hr"],
     category: "admin",
   },
 
@@ -183,7 +183,7 @@ const navigationItems = [
     title: "Reports & Trends",
     href: "/dashboard/reports",
     icon: BarChart3,
-    roles: ["admin", "it-admin", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr_leave_office", "department_head", "director_hr", "manager_hr"],
+    roles: ["admin", "it-admin", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr_leave_office", "department_head", "transport_manager", "director_hr", "manager_hr"],
     category: "admin",
   },
   {

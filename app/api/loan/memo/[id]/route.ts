@@ -16,6 +16,7 @@ import {
 import { verifyMemoToken } from "@/lib/secure-memo"
 import { getMemoLocationAddress } from "@/lib/location-mappings"
 import { ensureMemoSecurity } from "@/lib/memo-security"
+import { formatDateDDMMYYYY } from "@/lib/date-utils"
 
 export const runtime = "nodejs"
 
@@ -28,7 +29,7 @@ function fmtAmount(value?: number | null) {
 
 function fmtName(profile?: any) {
   const direct = String(profile?.full_name || profile?.display_name || profile?.name || "").trim()
-  if (direct) return direct
+  if (direct) return direct.toUpperCase()
 
   const first = String(profile?.first_name || profile?.firstname || "").trim()
   const middle = String(profile?.middle_name || profile?.other_name || "").trim()
@@ -66,10 +67,9 @@ function splitThroTelephoneFromNote(note?: string | null): { cleanedNote: string
 }
 
 function fmtDate(value?: string | null) {
-  if (!value) return new Date().toISOString().slice(0, 10)
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return String(value)
-  return date.toISOString().slice(0, 10)
+  if (!value) return formatDateDDMMYYYY(new Date())
+  const formatted = formatDateDDMMYYYY(value)
+  return formatted === "Invalid Date" ? String(value) : formatted
 }
 
 function fmtMemoMonth(value?: string | null) {

@@ -40,6 +40,57 @@ export async function GET() {
   return NextResponse.json({ drivers: data ?? [], canVerify: canEditDriverLicenses(profile.role) })
 }
 
+export async function POST(request: Request) {
+  const { supabase, user, profile } = await actor()
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!profile?.is_active || !canEditDriverLicenses(profile.role) || !hasNationwideFleetScope(profile.role)) {
+    return NextResponse.json({ error: "Only Transport Managers or administrators can import driver records." }, { status: 403 })
+  }
+
+  const body = await request.json().catch(() => null)
+  const rows = Array.isArray(body?.rows) ? body.rows : []
+  if (!rows.length || rows.length > 1000) return NextResponse.json({ error: "Upload between 1 and 1,000 driver rows." }, { status: 400 })
+
+  const { data: profiles, error: profilesError } = await supabase
+    .from("user_profiles")
+    .select("id, employee_id, first_name, last_name")
+    .in("role", ["driver", "regional_driver", "regional_drivers", "chief_driver", "regional_chief_driver"])
+    .eq("is_active", true)
+  if (profilesError) return NextResponse.json({ error: "Unable to resolve driver profiles." }, { status: 500 })
+
+  const profileById = new Map((profiles ?? []).map((row: any) => [String(row.id), row]))
+  const profileByEmployee = new Map((profiles ?? []).filter((row: any) => row.employee_id).map((row: any) => [String(row.employee_id).trim().toLowerCase(), row]))
+  let imported = 0
+  const errors: string[] = []
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index] ?? {}
+    const profile = profileById.get(String(row.profile_id ?? "").trim()) || profileByEmployee.get(String(row.employee_id ?? "").trim().toLowerCase())
+    if (!profile) { errors.push(`Row ${index + 2}: employee_id or profile_id does not match an active driver.`); continue }
+    const expiry = String(row.expiry_date ?? "").trim()
+    const licenseNumber = String(row.license_number ?? "").trim()
+    if (!expiry || !licenseNumber) { errors.push(`Row ${index + 2}: expiry_date and license_number are required.`); continue }
+    const payload = {
+      profile_id: profile.id,
+      full_name: String(row.full_name ?? [profile.first_name, profile.last_name].filter(Boolean).join(" ")).trim(),
+      license_number: licenseNumber,
+      license_type: String(row.license_type ?? "").trim() || null,
+      issue_date: String(row.issue_date ?? "").trim() || null,
+      expiry_date: expiry,
+      issuing_authority: String(row.issuing_authority ?? "").trim() || null,
+      obtained_at: String(row.obtained_at ?? "").trim() || null,
+      production_year: row.production_year ? Number(row.production_year) : null,
+      status: String(row.status ?? "active").trim() || "active",
+      verification_status: ["pending", "verified", "needs_correction"].includes(String(row.verification_status)) ? String(row.verification_status) : "pending",
+      notes: String(row.notes ?? "").trim() || null,
+      updated_at: new Date().toISOString(),
+    }
+    const { error } = await supabase.from("transport_drivers").upsert(payload, { onConflict: "profile_id" })
+    if (error) errors.push(`Row ${index + 2}: ${error.message}`); else imported += 1
+  }
+  return NextResponse.json({ ok: errors.length === 0, imported, errors })
+}
+
 export async function PATCH(request: Request) {
   const { supabase, user, profile } = await actor()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

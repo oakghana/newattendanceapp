@@ -740,6 +740,14 @@ export async function POST(request: NextRequest) {
       update.status = toStatus
       update.director_hr_id = user.id
 
+      // MD approval is the gate that makes a loan available to HR Records and the
+      // approved-memo view. HR Executive approval only prepares the request for MD.
+      if (!isHrExecutiveStage && role === "managing_director") {
+        update.md_approved_at = new Date().toISOString()
+        update.md_approved_by = user.id
+        update.md_approved_by_name = directorName
+      }
+
       // Always save HR Executive signature info to loan_requests
       update.director_signature_mode = savedSignature?.mode || "typed"
       update.director_signature_text = savedSignature?.text || directorName

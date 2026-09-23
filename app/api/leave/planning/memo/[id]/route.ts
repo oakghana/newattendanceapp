@@ -9,6 +9,7 @@ import { resolveEntitlementFromProfile } from "@/lib/annual-leave-entitlement"
 import { isHrRecordsRole } from "@/lib/hr-workflow"
 import { calculateAnnualLeaveMemoBreakdown, calculateAnnualLeaveMemoDates, extractAlreadyEnjoyedDays, getNextWorkingDay } from "@/lib/annual-leave-calculator"
 import { ensureMemoSecurity, type MemoType } from "@/lib/memo-security"
+import { formatDateDDMMYYYY } from "@/lib/date-utils"
 
 export const runtime = "nodejs"
 
@@ -23,7 +24,7 @@ function mapLeaveTypeToMemoType(leaveTypeKey: string): MemoType {
 
 function fmtName(profile?: any): string {
   const direct = String(profile?.full_name || profile?.display_name || "").trim()
-  if (direct) return direct
+  if (direct) return direct.toUpperCase()
   const first = String(profile?.first_name || "").trim()
   const middle = String(profile?.middle_name || profile?.other_name || "").trim()
   const last = String(profile?.last_name || profile?.surname || "").trim()
@@ -31,10 +32,9 @@ function fmtName(profile?: any): string {
 }
 
 function fmtDate(value?: string | null): string {
-  if (!value) return new Date().toISOString().slice(0, 10)
-  const date = new Date(value)
-  if (isNaN(date.getTime())) return String(value)
-  return date.toLocaleDateString("en-GH", { day: "2-digit", month: "long", year: "numeric" })
+  if (!value) return formatDateDDMMYYYY(new Date())
+  const formatted = formatDateDDMMYYYY(value)
+  return formatted === "Invalid Date" ? String(value) : formatted
 }
 
 function ordinalSuffix(n: number): string {
@@ -48,16 +48,12 @@ const DAY_NAMES   = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday"
 
 function fmtFormalDate(value?: string | null): string {
   if (!value) return ""
-  const date = new Date(value)
-  if (isNaN(date.getTime())) return fmtDate(value)
-  return `${ordinalSuffix(date.getDate())} ${MONTH_NAMES[date.getMonth()]}, ${date.getFullYear()}`
+  return fmtDate(value)
 }
 
 function fmtFormalDateWithWeekday(value?: string | null): string {
   if (!value) return ""
-  const date = new Date(value)
-  if (isNaN(date.getTime())) return fmtDate(value)
-  return `${DAY_NAMES[date.getDay()]}, ${ordinalSuffix(date.getDate())} ${MONTH_NAMES[date.getMonth()]}, ${date.getFullYear()}`
+  return fmtDate(value)
 }
 
 function normalizeRole(r: string | null | undefined): string {

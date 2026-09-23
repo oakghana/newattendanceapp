@@ -2,7 +2,8 @@
 
 export function formatDateDDMMYYYY(dateInput: string | Date): string {
   try {
-    const date = typeof dateInput === "string" ? new Date(dateInput) : dateInput
+    const raw = typeof dateInput === "string" ? dateInput : ""
+    const date = typeof dateInput === "string" ? new Date(`${raw.slice(0, 10)}T00:00:00`) : dateInput
     if (isNaN(date.getTime())) return "Invalid Date"
     
     const day = String(date.getDate()).padStart(2, "0")

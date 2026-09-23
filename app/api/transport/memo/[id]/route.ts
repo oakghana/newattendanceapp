@@ -6,13 +6,14 @@ import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server
 import { isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
 import { isRegionalManagerLocationMatch, loadLocationHierarchyMap } from "@/lib/regional-manager-scope"
+import { formatDateDDMMYYYY } from "@/lib/date-utils"
 
 export const runtime = "nodejs"
 
 function formatMemoDate(value: string | null) {
-  if (!value) return new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })
-  const date = new Date(`${value.slice(0, 10)}T00:00:00`)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })
+  if (!value) return formatDateDDMMYYYY(new Date())
+  const formatted = formatDateDDMMYYYY(value)
+  return formatted === "Invalid Date" ? value : formatted
 }
 
 function parseAmendments(value: string | null) {
