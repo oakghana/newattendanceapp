@@ -237,17 +237,18 @@ export function canApproveFdScore(role: string, _deptName?: string | null, _dept
   return isAdminRole(normalizedRole) || isAccountsExecutiveRole(normalizedRole)
 }
 
-export function canDoAccounts(role: string, deptName?: string | null, deptCode?: string | null): boolean {
+  export function canDoAccounts(role: string, _deptName?: string | null, _deptCode?: string | null): boolean {
   const normalizedRole = normalizeRole(role)
+  // Department membership alone must never grant Accounts Office permissions.
+  // Ordinary staff in Accounts may submit their own loans, but only explicitly
+  // assigned Accounts workflow roles can review or approve other staff requests.
   return (
-    isAdminRole(normalizedRole) ||
-    normalizedRole === "accounts" ||
-    normalizedRole === "accounts_executive" ||
-    normalizedRole === "accounts_loan_office" ||  // New department-specific role
-    normalizedRole.includes("account") ||
-    isAccountsDepartment(deptName, deptCode)
+  isAdminRole(normalizedRole) ||
+  normalizedRole === "accounts" ||
+  normalizedRole === "accounts_executive" ||
+  normalizedRole === "accounts_loan_office"
   )
-}
+  }
 
 export function canDoCommittee(role: string): boolean {
   return isAdminRole(role) || role === "loan_committee" || role === "committee_member" || role === "committee" || role === "director_hr" || role === "manager_hr"
