@@ -70,6 +70,7 @@ export function FDCalculationSubmission({
   const [accountsNotes, setAccountsNotes] = useState('')
   const [correctionReason, setCorrectionReason] = useState('')
   const [manualScoreOverride, setManualScoreOverride] = useState('')
+  const [overrideReason, setOverrideReason] = useState('')
   const [isSentForApproval, setIsSentForApproval] = useState(
     Boolean(loanRequest.fd_score != null && FD_EDITABLE_STATUSES.has(String(loanRequest.status || ''))),
   )
@@ -201,10 +202,19 @@ export function FDCalculationSubmission({
       toast({ title: 'Invalid override', description: 'FD score override must be between 0 and 100.', variant: 'destructive' })
       return
     }
+    if (overrideRaw !== '' && !isEditMode && !overrideReason.trim()) {
+      toast({
+        title: 'Override reason required',
+        description: 'Explain why the FD value is being manually adjusted before submitting.',
+        variant: 'destructive',
+      })
+      return
+    }
 
     const finalScore = overrideScore != null ? Math.round(overrideScore as number) : result.fd_score
     const finalGood = finalScore >= 39
     const adjusted = overrideScore != null && Math.round(overrideScore as number) !== result.fd_score
+    const effectiveOverrideReason = isEditMode ? correctionReason.trim() : overrideReason.trim()
 
     setSubmitting(true)
     try {
@@ -212,6 +222,7 @@ export function FDCalculationSubmission({
         accountsNotes.trim(),
         isEditMode ? `CORRECTION REASON: ${correctionReason.trim()}` : '',
         adjusted ? `SCORE OVERRIDE: auto-calc ${result.fd_score}% → adjusted ${finalScore}%` : '',
+        adjusted && !isEditMode ? `OVERRIDE REASON: ${effectiveOverrideReason}` : '',
       ]
         .filter(Boolean)
         .join('\n')
@@ -225,6 +236,7 @@ export function FDCalculationSubmission({
           fd_good: finalGood,
           accounts_notes: notesPayload,
           correction_reason: isEditMode ? correctionReason.trim() : undefined,
+          override_reason: adjusted && !isEditMode ? effectiveOverrideReason : undefined,
           is_correction: Boolean(isEditMode),
           submission_type: 'automated_calculation',
           fd_calculation_data: {
@@ -258,6 +270,7 @@ export function FDCalculationSubmission({
         setIsSentForApproval(true)
         setCorrectionReason('')
         setManualScoreOverride('')
+        setOverrideReason('')
         onSubmitComplete?.()
       } else {
         toast({ title: 'Submit Failed', description: data.error || 'Unknown error', variant: 'destructive' })
@@ -587,6 +600,45 @@ export function FDCalculationSubmission({
                     value={accountsNotes} onChange={e => setAccountsNotes(e.target.value)}
                     className="min-h-[64px] text-sm" />
                 </div>
+
+                {!isEditMode && (
+                  <div className="space-y-3 rounded-md border border-blue-200 bg-blue-50/60 p-3">
+                    <p className="text-xs text-blue-900 font-medium">
+                      Need to manually set the FD value instead of the auto-calculated score? Enter it below with a reason
+                      before forwarding to Accounts Executive.
+                    </p>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="fd-manual-override" className="text-xs">
+                        Manually entered FD value (%) (optional)
+                      </Label>
+                      <Input
+                        id="fd-manual-override"
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        placeholder={`Auto: ${result.fd_score}`}
+                        value={manualScoreOverride}
+                        onChange={(e) => setManualScoreOverride(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    {manualScoreOverride.trim() !== '' && (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="fd-override-reason" className="text-xs">
+                          Reason for manual value <span className="text-destructive">*</span>
+                        </Label>
+                        <Textarea
+                          id="fd-override-reason"
+                          placeholder="e.g. Payroll allowance not reflected in auto-calc; adjusted per latest payslip..."
+                          value={overrideReason}
+                          onChange={(e) => setOverrideReason(e.target.value)}
+                          className="min-h-[64px] text-sm"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {isEditMode && (
                   <div className="space-y-3 rounded-md border border-purple-200 bg-purple-50/60 p-3">
