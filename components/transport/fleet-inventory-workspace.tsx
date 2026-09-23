@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo, useState, type FormEvent } from "react"
-import { ArrowLeft, CalendarClock, CarFront, CircleAlert, Pencil, Plus, Search } from "lucide-react"
+import { useMemo, useRef, useState, type FormEvent } from "react"
+import { ArrowLeft, CalendarClock, CarFront, CircleAlert, Download, FileSpreadsheet, Pencil, Plus, Search, Upload } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -56,9 +56,37 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
   const [editing, setEditing] = useState<Vehicle | null>(null)
   const [saving, setSaving] = useState(false)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const importInput = useRef<HTMLInputElement>(null)
+  const [importing, setImporting] = useState(false)
   const visibleVehicles = useMemo(() => vehicles.filter((vehicle) => `${vehicle.registration_number} ${vehicle.chassis_number || ""} ${vehicle.vehicle_colour || ""} ${vehicle.make} ${vehicle.model} ${vehicle.vehicle_type} ${vehicle.assigned_location?.name || ""}`.toLowerCase().includes(query.toLowerCase())), [vehicles, query])
   const today = new Date().toISOString().slice(0, 10)
   const expiring = vehicles.filter((vehicle) => [vehicle.insurance_expiry_date, vehicle.roadworthy_expiry_date].some((date) => date && date <= new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10))).length
+
+  function downloadFleetTemplate() {
+    const csv = 'registration_number,vehicle_type,assigned_location_id,make,model,capacity,chassis_number,vehicle_colour,insurance_expiry_date,roadworthy_expiry_date,notes\nGR-0001,saloon,LOCATION_ID,Toyota,Corolla,5,CHASSIS-0001,White,2027-12-31,2027-12-31,"Replace this example with your vehicle details"\r\n'
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = "fleet-vehicles-template.csv"; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url)
+  }
+
+  function exportFleet() {
+    const headings = ["Registration number", "Vehicle type", "Location", "Make", "Model", "Capacity", "Chassis number", "Colour", "Insurance expiry", "Roadworthy expiry", "Status", "Notes"]
+    const values = vehicles.map((vehicle) => [vehicle.registration_number, vehicle.vehicle_type, vehicle.assigned_location?.name ?? vehicle.assigned_location_id, vehicle.make, vehicle.model, vehicle.capacity, vehicle.chassis_number, vehicle.vehicle_colour, vehicle.insurance_expiry_date, vehicle.roadworthy_expiry_date, vehicle.status, vehicle.notes])
+    const escape = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""').replaceAll("\r", " ").replaceAll("\n", " ")}"`
+    const rows = [["QCC ELECTRONIC TRANSPORT REGISTER"], ["Fleet Vehicle Export"], [`Generated: ${new Date().toLocaleString()}`], [], headings, ...values].map((row) => row.map(escape).join(","))
+    const csv = `\uFEFF${rows.join("\r\n")}\r\n`
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = `fleet-vehicles-${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url)
+  }
+
+  async function importFleet(file: File) {
+    setImporting(true)
+    try {
+      const lines = (await file.text()).split(/\r?\n/).filter(Boolean)
+      const headers = lines.shift()?.split(",").map((value) => value.trim().replace(/^"|"$/g, "")) ?? []
+      const rows = lines.map((line) => { const values = line.match(/(?:"(?:[^"]|"")*"|[^,])+/g)?.map((value) => value.trim().replace(/^"|"$/g, "").replaceAll('""', '"')) ?? []; return Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""])) })
+      const response = await fetch("/api/transport/vehicles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows }) })
+      const body = await response.json().catch(() => null); if (!response.ok) throw new Error(body?.error ?? "Import failed")
+      toast({ title: "Fleet import complete", description: `${body.imported} vehicle(s) imported${body.errors?.length ? `; ${body.errors.length} row(s) need attention.` : "."}` }); window.location.reload()
+    } catch (error) { toast({ title: "Fleet import failed", description: error instanceof Error ? error.message : "Please use the fleet template.", variant: "destructive" }) } finally { setImporting(false) }
+  }
 
   async function addVehicle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setSaving(true)
@@ -87,7 +115,7 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
   }
 
   return <div className="space-y-6">
-    <header className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between"><div><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><CarFront className="size-5" /></div><div><p className="text-sm font-medium text-primary">Transport operations</p><h1 className="text-3xl font-semibold tracking-tight">Fleet inventory</h1></div></div><p className="mt-3 text-sm leading-6 text-muted-foreground">Maintain vehicle availability, location, compliance dates, and current trip reservations.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" asChild><a href="/dashboard/transport"><ArrowLeft data-icon="inline-start" /> Back to transport</a></Button>{canEdit && <Button onClick={() => setAdding(true)}><Plus data-icon="inline-start" /> Register vehicle</Button>}</div></header>
+    <header className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between"><div><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><CarFront className="size-5" /></div><div><p className="text-sm font-medium text-primary">Transport operations</p><h1 className="text-3xl font-semibold tracking-tight">Fleet inventory</h1></div></div><p className="mt-3 text-sm leading-6 text-muted-foreground">Maintain vehicle availability, location, compliance dates, and current trip reservations.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" asChild><a href="/dashboard/transport"><ArrowLeft data-icon="inline-start" /> Back to transport</a></Button>{canEdit && <><input ref={importInput} type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importFleet(file); event.currentTarget.value = "" }} /><Button variant="outline" onClick={downloadFleetTemplate}><FileSpreadsheet data-icon="inline-start" /> Template</Button><Button variant="outline" disabled={importing} onClick={() => importInput.current?.click()}><Upload data-icon="inline-start" /> {importing ? "Importing..." : "Import CSV"}</Button><Button variant="outline" onClick={exportFleet}><Download data-icon="inline-start" /> Export CSV</Button><Button onClick={() => setAdding(true)}><Plus data-icon="inline-start" /> Register vehicle</Button></>}</div></header>
     <div className="grid gap-4 sm:grid-cols-3"><Card><CardContent className="p-5"><p className="text-sm text-muted-foreground">Vehicles in scope</p><p className="mt-1 text-3xl font-semibold">{vehicles.length}</p></CardContent></Card><Card><CardContent className="p-5"><p className="text-sm text-muted-foreground">Available now</p><p className="mt-1 text-3xl font-semibold text-emerald-700">{vehicles.filter((vehicle) => vehicle.status === "available").length}</p></CardContent></Card><Card><CardContent className="p-5"><p className="text-sm text-muted-foreground">Compliance due in 90 days</p><p className="mt-1 text-3xl font-semibold text-amber-700">{expiring}</p></CardContent></Card></div>
     <Card><CardHeader className="flex-row items-center justify-between gap-4"><CardTitle>Vehicle register</CardTitle><div className="relative w-full max-w-sm"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input className="pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search registration, type, or location" /></div></CardHeader><CardContent className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="p-3">Vehicle</th><th className="p-3">Location</th><th className="p-3">Capacity</th><th className="p-3">Compliance</th><th className="p-3">Status</th><th className="p-3">Actions</th></tr></thead><tbody>{visibleVehicles.map((vehicle) => { const isDue = [vehicle.insurance_expiry_date, vehicle.roadworthy_expiry_date].some((date) => date && date <= today); const location = vehicle.assigned_location?.name || locations.find((item) => item.id === vehicle.assigned_location_id)?.name || "Not recorded"; return <tr key={vehicle.id} className="border-b last:border-0"><td className="p-3"><p className="font-medium">{vehicle.registration_number}</p><p className="text-xs text-muted-foreground">{vehicle.make} {vehicle.model} · {vehicle.vehicle_type} · {vehicle.vehicle_colour || "Colour not recorded"}</p></td><td className="p-3">{location}</td><td className="p-3">{vehicle.capacity} seats</td><td className="p-3">{isDue ? <span className="inline-flex items-center gap-1 text-amber-700"><CircleAlert className="size-4" /> Review due</span> : <span className="text-muted-foreground">Insurance: {vehicle.insurance_expiry_date || "Not recorded"}</span>}</td><td className="p-3"><Badge variant={statusTone[vehicle.status]}>{vehicle.status}</Badge></td><td className="p-3">{canEdit ? <div className="flex items-center gap-2"><select value={vehicle.status} disabled={updatingId === vehicle.id} onChange={(event) => void changeStatus(vehicle, event.target.value as Vehicle["status"])} className="h-9 rounded-md border bg-background px-2"><option value="available">Available</option><option value="assigned">Assigned</option><option value="maintenance">Maintenance</option><option value="inactive">Inactive</option></select><Button type="button" variant="outline" size="sm" onClick={() => setEditing(vehicle)}><Pencil data-icon="inline-start" /> Edit</Button></div> : <span className="text-xs text-muted-foreground">Read only</span>}</td></tr> })}</tbody></table></CardContent></Card>
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><CalendarClock className="size-5" /> Current booking register</CardTitle></CardHeader><CardContent>{bookings.length ? <ul className="divide-y">{bookings.slice(0, 10).map((booking) => <li key={booking.id} className="flex items-center justify-between py-3 text-sm"><span>{vehicles.find((vehicle) => vehicle.id === booking.vehicle_id)?.registration_number ?? "Vehicle"}</span><span className="text-muted-foreground">{new Date(booking.starts_at).toLocaleString()} to {new Date(booking.ends_at).toLocaleString()}</span><Badge variant="secondary">{booking.status}</Badge></li>)}</ul> : <p className="py-4 text-sm text-muted-foreground">No active vehicle bookings have been recorded.</p>}</CardContent></Card>

@@ -46,6 +46,20 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   if (!profile?.is_active || !canEditFleetInventory(profile.role)) return NextResponse.json({ error: "Fleet edit access denied." }, { status: 403 })
   const body = await request.json()
+  if (Array.isArray(body.rows)) {
+    if (body.rows.length < 1 || body.rows.length > 1000) return NextResponse.json({ error: "Upload between 1 and 1,000 vehicle rows." }, { status: 400 })
+    const scopedLocationIds = await resolveFleetScope(supabase, profile)
+    let imported = 0; const errors: string[] = []
+    for (let index = 0; index < body.rows.length; index += 1) {
+      const row = body.rows[index] ?? {}; const registrationNumber = String(row.registration_number ?? "").trim().toUpperCase(); const assignedLocationId = String(row.assigned_location_id ?? "").trim(); const capacity = Number(row.capacity)
+      const vehicleType = String(row.vehicle_type ?? "saloon").trim().toLowerCase()
+      if (!registrationNumber || !String(row.make ?? "").trim() || !String(row.model ?? "").trim() || !assignedLocationId || !String(row.chassis_number ?? "").trim() || !String(row.vehicle_colour ?? "").trim() || !["saloon", "bus", "truck", "pickup", "van"].includes(vehicleType) || !Number.isInteger(capacity) || capacity < 1) { errors.push(`Row ${index + 2}: required vehicle details are missing or invalid.`); continue }
+      if (scopedLocationIds && !scopedLocationIds.includes(assignedLocationId)) { errors.push(`Row ${index + 2}: location is outside your assigned fleet scope.`); continue }
+      const { error } = await supabase.from("transport_vehicles").insert({ registration_number: registrationNumber, make: String(row.make).trim(), model: String(row.model).trim(), capacity, vehicle_type: vehicleType, assigned_region_id: profile.region_id ?? null, assigned_location_id: assignedLocationId, status: ["available", "assigned", "maintenance", "inactive"].includes(String(row.status)) ? String(row.status) : "available", chassis_number: String(row.chassis_number).trim().toUpperCase(), vehicle_colour: String(row.vehicle_colour).trim(), insurance_expiry_date: String(row.insurance_expiry_date ?? "") || null, roadworthy_expiry_date: String(row.roadworthy_expiry_date ?? "") || null, notes: String(row.notes ?? "").trim() || null, created_by: user.id })
+      if (error) errors.push(`Row ${index + 2}: ${error.code === "23505" ? "registration number already exists." : "could not be imported."}`); else imported += 1
+    }
+    return NextResponse.json({ ok: errors.length === 0, imported, errors })
+  }
   const registrationNumber = String(body.registration_number ?? "").trim().toUpperCase()
   const make = String(body.make ?? "").trim()
   const model = String(body.model ?? "").trim()
