@@ -253,15 +253,13 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        if (isDepartmentHead) {
-          const sameDept = reviewerDept && requesterDept && reviewerDept === requesterDept
-          const sameLocation = !reviewerLocation || (requesterLocation && reviewerLocation === requesterLocation)
-          if (!sameDept || !sameLocation) {
-            if (!isLinkedHodForRequest) {
-              return NextResponse.json({ error: "Department heads can review only requests within their department and assigned location." }, { status: 403 })
-            }
-          }
-        } else if (!["regional_manager"].includes(role) && !isLinkedHodForRequest) {
+  if (isDepartmentHead) {
+    const sameDept = reviewerDept && requesterDept && reviewerDept === requesterDept
+    const sameLocation = reviewerLocation && requesterLocation && reviewerLocation === requesterLocation
+    if (!sameDept || !sameLocation) {
+      return NextResponse.json({ error: "Department heads may endorse or approve only requests from their department at their assigned non-regional location." }, { status: 403 })
+    }
+  } else if (!["regional_manager"].includes(role) && !isLinkedHodForRequest) {
           return NextResponse.json({ error: "Only the assigned HOD can review this request." }, { status: 403 })
         }
       }
