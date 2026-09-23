@@ -113,7 +113,9 @@ function fmtAmt(n: number | null) {
 
 function fmtDate(d: string | null) {
   if (!d) return "—"
-  return new Date(d).toLocaleDateString("en-GH", { day: "2-digit", month: "short", year: "numeric" })
+  const date = new Date(`${d.slice(0, 10)}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return d
+  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}/${date.getFullYear()}`
 }
 
 function leaveDays(start: string, end: string) {
@@ -145,7 +147,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
   const [locationFilter, setLocationFilter] = useState("all")
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
-  const fullName = `${profile.first_name} ${profile.last_name}`.trim()
+  const fullName = `${profile.first_name} ${profile.last_name}`.trim().toUpperCase()
   const departmentName = Array.isArray(profile.departments) ? profile.departments[0]?.name : profile.departments?.name
   const initials = [profile.first_name[0], profile.last_name[0]].join("").toUpperCase()
 
@@ -474,7 +476,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
             ) : (
               <div className="divide-y divide-slate-100">
                 {filteredLoanMemos.map((memo) => {
-                  const staffName = memo.staff_full_name || `${memo.user_profiles?.first_name ?? ""} ${memo.user_profiles?.last_name ?? ""}`.trim()
+                  const staffName = (memo.staff_full_name || `${memo.user_profiles?.first_name ?? ""} ${memo.user_profiles?.last_name ?? ""}`.trim()).toUpperCase()
                   const initials2 = staffName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
                   const statusInfo = LOAN_STATUS_MAP[memo.status] || { label: memo.status, color: "bg-slate-100 text-slate-600 border-slate-200" }
                   const amount = memo.fixed_amount || memo.requested_amount
@@ -551,7 +553,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
             ) : (
               <div className="divide-y divide-slate-100">
                 {filteredLeaveMemos.map((memo) => {
-                  const name = `${memo.user_profiles?.first_name ?? ""} ${memo.user_profiles?.last_name ?? ""}`.trim()
+                  const name = `${memo.user_profiles?.first_name ?? ""} ${memo.user_profiles?.last_name ?? ""}`.trim().toUpperCase()
                   const initials2 = name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
                   const statusInfo = LEAVE_STATUS_MAP[memo.status] || { label: memo.status, color: "bg-slate-100 text-slate-600 border-slate-200" }
                   return (
@@ -635,7 +637,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                 </div>
                 <div className="divide-y divide-slate-100">
                   {approvedMemos.map((memo) => {
-                    const staffName = memo.staff_full_name || "Unknown Staff"
+                    const staffName = (memo.staff_full_name || "Unknown Staff").toUpperCase()
                     const staffId = memo.staff_number || "—"
                     const memoType = memo.type === "loan" ? "Loan" : "Leave"
                     const typeLabel = memo.loan_type_label || memo.leave_type || memoType
