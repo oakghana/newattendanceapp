@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, memo, useMemo } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -319,6 +319,7 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
   const [isClearingCache, setIsClearingCache] = useState(false)
   const [openAdminGroups, setOpenAdminGroups] = useState<string[]>([])
   const pathname = usePathname()
+  const router = useRouter()
   const [ghanaTime, setGhanaTime] = useState<string>("")
 
   useEffect(() => {
@@ -645,47 +646,35 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
                       isCollapsed ? "gap-0 px-0 py-2 justify-center" : "gap-2.5 px-3 py-2",
                         "border-transparent text-sidebar-foreground hover:bg-muted/60 hover:border-border hover:text-foreground",
                       )}
-                      onClick={() => {
-                        setIsMobileMenuOpen(false)
-                      }}
-                    >
-                      <Icon className="h-4.5 w-4.5 flex-shrink-0" />
-                      {!isCollapsed && <span className="flex-1">{item.title}</span>}
-                    </a>
-                  )
+                    onClick={() => {
+                      setIsMobileMenuOpen(false)
+                    }}
+                  >
+                    <Icon className="h-4.5 w-4.5 flex-shrink-0" />
+                    {!isCollapsed && <span className="flex-1">{item.title}</span>}
+                  </a>
+                )
                 }
-                
+
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     title={isCollapsed ? item.title : undefined}
                     className={cn(
-                    "group flex items-center rounded-lg text-sm font-medium transition-all duration-200 relative touch-manipulation min-h-[38px] border",
-                    isCollapsed ? "gap-0 px-0 py-2 justify-center" : "gap-2.5 px-3 py-2",
-                      isActive && isMdExec
-                        ? "bg-amber-500/15 border-amber-400/40 text-amber-700 dark:text-amber-400"
-                        : isActive && isSecExec
-                        ? "bg-teal-500/15 border-teal-400/40 text-teal-700 dark:text-teal-400"
-                        : isActive
-                        ? "bg-primary/12 border-primary/30 text-primary"
-                        : isMdExec
-                        ? "border-amber-200/50 text-amber-700 dark:text-amber-400 hover:bg-amber-50/60 dark:hover:bg-amber-900/20 hover:border-amber-300"
-                        : isSecExec
-                        ? "border-teal-200/50 text-teal-700 dark:text-teal-400 hover:bg-teal-50/60 dark:hover:bg-teal-900/20 hover:border-teal-300"
-                        : "border-transparent text-sidebar-foreground hover:bg-muted/60 hover:border-border hover:text-foreground",
+                      "group flex items-center rounded-lg text-sm font-medium transition-all duration-200 relative touch-manipulation min-h-[38px] border",
+                      isCollapsed ? "gap-0 px-0 py-2 justify-center" : "gap-2.5 px-3 py-2",
+                      isActive ? "bg-primary/12 border-primary/30 text-primary" : "border-transparent text-sidebar-foreground hover:bg-muted/60 hover:border-border hover:text-foreground",
                     )}
-                    onClick={() => {
+                    onClick={(event) => {
                       setIsMobileMenuOpen(false)
+                      if (item.href === "/dashboard/loan-app") {
+                        event.preventDefault()
+                        router.push("/dashboard/loan-app")
+                      }
                     }}
                   >
-                    <Icon
-                      className={cn(
-                        "h-4.5 w-4.5 flex-shrink-0",
-                        isMdExec && !isActive && "text-amber-600 dark:text-amber-400",
-                        isSecExec && !isActive && "text-teal-600 dark:text-teal-400",
-                      )}
-                    />
+                    <Icon className="h-4.5 w-4.5 flex-shrink-0" />
                     {!isCollapsed && (
                       <>
                         <span className="flex-1">{item.title}</span>
