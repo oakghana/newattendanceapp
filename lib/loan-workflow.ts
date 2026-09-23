@@ -172,12 +172,17 @@ export function isLoanOfficeDepartment(name?: string | null, code?: string | nul
 
 /**
  * Roles that must never be treated as an HOD/loan reviewer, no matter what
- * loan_hod_linkages rows exist for them. HR Leave Office administers leave
- * requests and is not a department head/regional manager — a staff member
- * being (mistakenly, or via a batch "link unassigned staff" fallback)
- * recorded as their hod_user_id must not grant them the HOD Review tab.
+ * loan_hod_linkages rows (or the legacy user_profiles.hod_id column) exist
+ * for them. HR Leave Office administers leave requests and is not a
+ * department head/regional manager. Plain "staff" — the default,
+ * non-privileged role every ordinary employee has — must never gain
+ * reviewer authority either, even if a stale/incorrect linkage row (e.g.
+ * a bad "link unassigned staff" fallback, or a leftover row from before a
+ * role was downgraded to staff) points at them as someone's hod_user_id.
+ * Reviewer authority must come from an actual manager/HR role, never from
+ * linkage data alone.
  */
-const NEVER_HOD_ROLES = new Set(["hr_leave_office"])
+const NEVER_HOD_ROLES = new Set(["hr_leave_office", "staff", ""])
 
 export function canDoHodReview(role: string, isLinkedHod = false): boolean {
   const normalized = normalizeRole(role)
