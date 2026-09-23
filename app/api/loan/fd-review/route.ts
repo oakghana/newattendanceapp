@@ -533,6 +533,7 @@ export async function POST(request: Request) {
       fd_document_url,
       fd_calculation_data,
       accounts_notes,
+      override_reason,
       submission_type // 'automated_calculation' or 'manual_upload'
     } = body
 
@@ -580,6 +581,17 @@ export async function POST(request: Request) {
       )
     }
 
+    // A manually entered FD value (score_override present) on the initial submission
+    // must always carry a reason, even if the client-side check is bypassed.
+    const isManualOverride = !isCorrection && fd_calculation_data?.score_override != null
+    const trimmedOverrideReason = String(override_reason || "").trim()
+    if (isManualOverride && !trimmedOverrideReason) {
+      return NextResponse.json(
+        { error: "A reason is required when manually entering the FD value instead of using the auto-calculated score." },
+        { status: 400 },
+      )
+    }
+
     // Build the notes string with calculation data if automated
     let finalNotes = fd_note || ""
     if (submission_type === "automated_calculation" && fd_calculation_data) {
@@ -609,7 +621,7 @@ Automated FD Calculation (HR Loan Office):
 - Net Monthly Salary: GH¢ ${fd_calculation_data.net_salary_monthly?.toFixed(2)}
 - ½ of Gross Monthly Salary: GH¢ ${fd_calculation_data.half_gross_monthly?.toFixed(2)}
 - Net to Gross Ratio: ${fd_calculation_data.net_to_gross_ratio?.toFixed(1)}%${outstandingSection}
-${accounts_notes ? `\nHR Loan Office Remarks: ${accounts_notes}` : ""}
+${accounts_notes ? `\nHR Loan Office Remarks: ${accounts_notes}` : ""}${isManualOverride ? `\n\nMANUAL FD VALUE ENTERED: auto-calc ${fd_calculation_data.auto_calculated_score}% → ${fd_score}%\nReason: ${trimmedOverrideReason}` : ""}
       `.trim()
       finalNotes = calcNotes
     }
@@ -663,7 +675,12 @@ ${accounts_notes ? `\nHR Loan Office Remarks: ${accounts_notes}` : ""}
       to_status: "pending_accounts_fd_review",
       note: isCorrection
         ? `FD score corrected to ${fd_score}% by Accounts Loan Office (pending AE). Reason: ${correctionReason || "n/a"}`
-        : `FD score ${fd_score} submitted by ${submission_type === "automated_calculation" ? "Accounts" : "Loan"} Office${submission_type === "automated_calculation" ? " (Automated Calculation)" : ""}`,
+        : isManualOverride
+          ? `FD value manually entered as ${fd_score}% by Accounts Office (auto-calc was ${fd_calculation_data.auto_calculated_score}%). Reason: ${trimmedOverrideReason}`
+          : `FD score ${fd_score} submitted by ${submission_type === "automated_calculation" ? "Accounts" : "Loan"} Office${submission_type === "automated_calculation" ? " (Automated Calculation)" : ""}`,
+      metadata: isManualOverride
+        ? { fd_manual_override: true, fd_auto_calculated_score: fd_calculation_data.auto_calculated_score, fd_manual_value: fd_score, fd_override_reason: trimmedOverrideReason }
+        : undefined,
     })
     if (timelineError) {
       console.error("[v0] Timeline log error:", timelineError)
