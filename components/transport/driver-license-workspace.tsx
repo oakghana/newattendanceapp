@@ -64,13 +64,36 @@ export function DriverLicenseWorkspace({ initialDrivers, canEdit, role = "manage
   }
 
   function exportDrivers() {
-    const columns = ["employee_id", "full_name", "license_number", "license_type", "issue_date", "expiry_date", "status", "notes"]
-const csv = [columns.join(","), ...drivers.filter((driver) => !driver.id.startsWith("missing-")).map((driver) => columns.map((column) => {
-  const value = (driver as any)[column] ?? ""
-  return `"${String(value).replaceAll('"', '""')}"`
-  }).join(","))].join("\n")
+    const rows = drivers.filter((driver) => !driver.id.startsWith("missing-"))
+    const headings = ["Driver name", "License number", "License type", "Issue date", "Expiry date", "Status", "Verification", "Notes"]
+    const values = rows.map((driver) => [
+      driver.full_name,
+      driver.license_number,
+      driver.license_type,
+      (driver as any).issue_date,
+      driver.expiry_date,
+      driver.status,
+      driver.verification_status,
+      driver.notes,
+    ])
+    const csvEscape = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""').replaceAll("\\r", " ").replaceAll("\\n", " ")}"`
+    const csvRows = [
+      ["QCC ELECTRONIC TRANSPORT REGISTER"],
+      ["Driver License Export"],
+      [`Generated: ${new Date().toLocaleString()}`],
+      [],
+      headings,
+      ...values,
+    ].map((row) => row.map(csvEscape).join(","))
+    const csv = `\uFEFF${csvRows.join("\r\n")}\r\n`
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }))
-    const link = document.createElement("a"); link.href = url; link.download = "transport-drivers.csv"; link.click(); URL.revokeObjectURL(url)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `transport-drivers-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
   }
 
   async function importDrivers(file: File) {
