@@ -32,9 +32,10 @@ export default async function ExcuseDutyReviewPage() {
   const isRegionalManager = isRegionalManagerRole(normalizedRole)
   const isRegionalHr = isRegionalHrRole(normalizedRole)
   const isDeptHead = isDepartmentHeadRole(normalizedRole)
+  const isTransportManager = normalizedRole === "transport_manager"
 
-  // Check if user has admin, regional_manager, regional_hr, or department_head role
-  if (!isAdmin && !isRegionalManager && !isRegionalHr && !isDeptHead) {
+  // Check if user has an authorised review role.
+  if (!isAdmin && !isRegionalManager && !isRegionalHr && !isDeptHead && !isTransportManager) {
     redirect("/dashboard")
   }
 
