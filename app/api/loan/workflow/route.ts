@@ -367,8 +367,15 @@ export async function GET() {
       ...(hodIdStaff || []).map((row: any) => row.id).filter(Boolean),
     ]))
 
-    const isLinkedHod = linkedStaffIds.length > 0
-    const reviewerScopedStaffIds = Array.from(new Set(linkedStaffIds))
+  const isLinkedHod = linkedStaffIds.length > 0
+  const departmentStaffIds = isDepartmentHead && managerDepartmentId
+    ? ((await admin.from("user_profiles").select("id").eq("department_id", managerDepartmentId).eq("is_active", true).limit(5000)).data || [])
+        .map((row: any) => String(row.id || "")).filter(Boolean)
+    : []
+  const reviewerScopedStaffIds = Array.from(new Set([
+    ...linkedStaffIds,
+    ...departmentStaffIds,
+  ]))
 
     const loanTypesWithTermsQuery = () =>
       admin
@@ -718,7 +725,7 @@ export async function GET() {
       ...(myRes.data || []),
     ]
     const uniqueUserIds = Array.from(new Set(allInboxRows.map((r: any) => r.user_id).filter(Boolean))) as string[]
-    let staffProfileMap: Map<string, any> = new Map()
+    const staffProfileMap: Map<string, any> = new Map()
     if (uniqueUserIds.length > 0) {
       const { data: staffProfiles } = await admin
         .from("user_profiles")
