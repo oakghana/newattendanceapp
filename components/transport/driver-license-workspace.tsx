@@ -64,11 +64,11 @@ export function DriverLicenseWorkspace({ initialDrivers, canEdit, role = "manage
   }
 
   function exportDrivers() {
-    const columns = ["employee_id", "profile_id", "full_name", "license_number", "license_type", "issue_date", "expiry_date", "issuing_authority", "obtained_at", "production_year", "verification_status", "status", "notes"]
-    const csv = [columns.join(","), ...drivers.filter((driver) => !driver.id.startsWith("missing-")).map((driver) => columns.map((column) => {
-      const value = column === "employee_id" ? "" : (driver as any)[column] ?? ""
-      return `"${String(value).replaceAll('"', '""')}"`
-    }).join(","))].join("\\n")
+    const columns = ["employee_id", "full_name", "license_number", "license_type", "issue_date", "expiry_date", "status", "notes"]
+const csv = [columns.join(","), ...drivers.filter((driver) => !driver.id.startsWith("missing-")).map((driver) => columns.map((column) => {
+  const value = (driver as any)[column] ?? ""
+  return `"${String(value).replaceAll('"', '""')}"`
+  }).join(","))].join("\n")
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }))
     const link = document.createElement("a"); link.href = url; link.download = "transport-drivers.csv"; link.click(); URL.revokeObjectURL(url)
   }
@@ -77,7 +77,7 @@ export function DriverLicenseWorkspace({ initialDrivers, canEdit, role = "manage
     setImporting(true)
     try {
       const text = await file.text()
-      const lines = text.split(/\\r?\\n/).filter(Boolean)
+      const lines = text.split(/\r?\n/).filter(Boolean)
       const headers = lines.shift()?.split(",").map((value) => value.trim().replace(/^"|"$/g, "")) ?? []
       const rows = lines.map((line) => {
         const values = line.match(/(?:"(?:[^"]|"")*"|[^,])+/g)?.map((value) => value.trim().replace(/^"|"$/g, "").replaceAll('""', '"')) ?? []
@@ -93,7 +93,7 @@ export function DriverLicenseWorkspace({ initialDrivers, canEdit, role = "manage
   }
 
   function downloadTemplate() {
-    const csv = "employee_id,profile_id,full_name,license_number,license_type,issue_date,expiry_date,issuing_authority,obtained_at,production_year,verification_status,status,notes\\nEMP001,,Example Driver,DL-0001,Class C,2026-01-01,2029-12-31,DVLA,Accra,2026,pending,active,"
+    const csv = 'employee_id,full_name,license_number,license_type,issue_date,expiry_date,status,notes\nEMP001,Example Driver,DL-0001,Class C,2026-01-01,2029-12-31,active,"Sample record - replace this row with your driver details"'
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = "transport-drivers-template.csv"; link.click(); URL.revokeObjectURL(url)
   }
 
