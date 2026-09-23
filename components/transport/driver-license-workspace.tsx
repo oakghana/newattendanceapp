@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
-import { ArrowLeft, CalendarClock, Car, CheckCircle2, Clock, FileText, Loader2, MapPin, Pencil, Play, Route, Search, ShieldCheck, TriangleAlert, Upload, Users } from "lucide-react"
+import { ArrowLeft, CalendarClock, Car, CheckCircle2, Clock, Download, FileText, FileSpreadsheet, Loader2, MapPin, Pencil, Play, Route, Search, ShieldCheck, TriangleAlert, Upload, Users } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -24,6 +24,8 @@ export function DriverLicenseWorkspace({ initialDrivers, canEdit, role = "manage
   const [uploading, setUploading] = useState(false)
   const [licenseMeta, setLicenseMeta] = useState({ license_type: "", issuing_authority: "", obtained_at: "", production_year: "", expiry_year: "" })
   const fileInput = useRef<HTMLInputElement>(null)
+  const importInput = useRef<HTMLInputElement>(null)
+  const [importing, setImporting] = useState(false)
   const [tasks, setTasks] = useState<any[]>(assignedTasks)
   const [tripBusy, setTripBusy] = useState<string | null>(null)
   const [remindedIds, setRemindedIds] = useState<Set<string>>(new Set())
@@ -59,6 +61,40 @@ export function DriverLicenseWorkspace({ initialDrivers, canEdit, role = "manage
     } catch (error) {
       toast({ title: "Update failed", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" })
     } finally { setTripBusy(null) }
+  }
+
+  function exportDrivers() {
+    const columns = ["employee_id", "profile_id", "full_name", "license_number", "license_type", "issue_date", "expiry_date", "issuing_authority", "obtained_at", "production_year", "verification_status", "status", "notes"]
+    const csv = [columns.join(","), ...drivers.filter((driver) => !driver.id.startsWith("missing-")).map((driver) => columns.map((column) => {
+      const value = column === "employee_id" ? "" : (driver as any)[column] ?? ""
+      return `"${String(value).replaceAll('"', '""')}"`
+    }).join(","))].join("\\n")
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }))
+    const link = document.createElement("a"); link.href = url; link.download = "transport-drivers.csv"; link.click(); URL.revokeObjectURL(url)
+  }
+
+  async function importDrivers(file: File) {
+    setImporting(true)
+    try {
+      const text = await file.text()
+      const lines = text.split(/\\r?\\n/).filter(Boolean)
+      const headers = lines.shift()?.split(",").map((value) => value.trim().replace(/^"|"$/g, "")) ?? []
+      const rows = lines.map((line) => {
+        const values = line.match(/(?:"(?:[^"]|"")*"|[^,])+/g)?.map((value) => value.trim().replace(/^"|"$/g, "").replaceAll('""', '"')) ?? []
+        return Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""]))
+      })
+      const response = await fetch("/api/transport/drivers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows }) })
+      const result = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(result?.error ?? "Import failed")
+      toast({ title: "Driver import complete", description: `${result.imported} driver record(s) imported${result.errors?.length ? `; ${result.errors.length} row(s) need attention.` : "."}` })
+      window.location.reload()
+    } catch (error) { toast({ title: "Driver import failed", description: error instanceof Error ? error.message : "Please check the CSV template.", variant: "destructive" }) }
+    finally { setImporting(false) }
+  }
+
+  function downloadTemplate() {
+    const csv = "employee_id,profile_id,full_name,license_number,license_type,issue_date,expiry_date,issuing_authority,obtained_at,production_year,verification_status,status,notes\\nEMP001,,Example Driver,DL-0001,Class C,2026-01-01,2029-12-31,DVLA,Accra,2026,pending,active,"
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = "transport-drivers-template.csv"; link.click(); URL.revokeObjectURL(url)
   }
 
   const visible = useMemo(() => drivers.filter((driver) => `${driver.full_name} ${driver.license_number} ${driver.license_type ?? ""}`.toLowerCase().includes(search.toLowerCase())), [drivers, search])
@@ -149,7 +185,7 @@ export function DriverLicenseWorkspace({ initialDrivers, canEdit, role = "manage
   return <div className="flex flex-col gap-6">
     <header className="flex flex-col gap-3 border-b pb-5"><div className="flex flex-wrap items-start justify-between gap-3"><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><ShieldCheck /></div><div><h1 className="text-3xl font-semibold tracking-tight">Driver licenses</h1><p className="text-muted-foreground leading-6">Review license evidence and keep regional transport assignments compliant.</p></div></div><Button variant="outline" asChild><a href="/dashboard/transport"><ArrowLeft data-icon="inline-start" /> Back to transport</a></Button></div><p className="text-sm text-muted-foreground">{canEdit ? "Your results are limited to the locations and region assigned to your role." : "Read-only view — limited to the locations and region assigned to your role."}</p></header>
     <div className="grid gap-3 sm:grid-cols-3"><Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Scoped drivers</p><p className="mt-1 text-2xl font-semibold">{drivers.length}</p></CardContent></Card><Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Awaiting verification</p><p className="mt-1 text-2xl font-semibold">{pending}</p></CardContent></Card><Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Expiring within 90 days</p><p className="mt-1 text-2xl font-semibold">{expiring}</p></CardContent></Card></div>
-    <Card><CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4"><CardTitle>Regional driver register</CardTitle><div className="flex flex-wrap items-center gap-2"><div className="relative w-full max-w-sm"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input className="pl-9" placeholder="Search driver or license" value={search} onChange={(event) => setSearch(event.target.value)} /></div>{canEdit && notSubmitted.length > 0 && <Button size="sm" variant="outline" disabled={reminding !== null} onClick={() => sendReminder("all")}>{reminding === "all" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <TriangleAlert className="mr-1 size-4 text-amber-600" />}Remind all ({notSubmitted.length})</Button>}</div></CardHeader><CardContent className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="p-3">Driver</th><th className="p-3">License</th><th className="p-3">Expiry</th><th className="p-3">Verification</th><th className="p-3 text-right">Action</th></tr></thead><tbody>{visible.map((driver) => {
+    <Card><CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4"><CardTitle>Regional driver register</CardTitle><div className="flex flex-wrap items-center gap-2"><div className="relative w-full max-w-sm"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input className="pl-9" placeholder="Search driver or license" value={search} onChange={(event) => setSearch(event.target.value)} /></div>{canEdit && <><input ref={importInput} type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importDrivers(file); event.currentTarget.value = "" }} /><Button size="sm" variant="outline" onClick={downloadTemplate}><FileSpreadsheet className="mr-1 size-4" />Template</Button><Button size="sm" variant="outline" disabled={importing} onClick={() => importInput.current?.click()}><Upload className="mr-1 size-4" />{importing ? "Importing…" : "Import CSV"}</Button><Button size="sm" variant="outline" onClick={exportDrivers}><Download className="mr-1 size-4" />Export CSV</Button></>}{canEdit && notSubmitted.length > 0 && <Button size="sm" variant="outline" disabled={reminding !== null} onClick={() => sendReminder("all")}>{reminding === "all" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <TriangleAlert className="mr-1 size-4 text-amber-600" />}Remind all ({notSubmitted.length})</Button>}</div></CardHeader><CardContent className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="p-3">Driver</th><th className="p-3">License</th><th className="p-3">Expiry</th><th className="p-3">Verification</th><th className="p-3 text-right">Action</th></tr></thead><tbody>{visible.map((driver) => {
       const isMissing = driver.verification_status === "not_submitted"
       return <tr key={driver.id} className={`border-b last:border-0 ${isMissing ? "bg-amber-50/50" : ""}`}>
         <td className="p-3 font-medium">{driver.full_name}</td>
