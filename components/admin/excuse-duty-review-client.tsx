@@ -76,6 +76,9 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedDoc, setSelectedDoc] = useState<ExcuseDocument | null>(null)
+  const [documentViewerOpen, setDocumentViewerOpen] = useState(false)
+  const [documentViewerUrl, setDocumentViewerUrl] = useState<string | null>(null)
+  const [documentViewerLoading, setDocumentViewerLoading] = useState(false)
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
   const [reviewStatus, setReviewStatus] = useState<"approved" | "rejected">("approved")
   const [reviewNotes, setReviewNotes] = useState("")
@@ -251,20 +254,19 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
   }
 
   const viewDocument = async (doc: ExcuseDocument) => {
-    // Open the tab before awaiting the detail request so the browser does not block it as a popup.
-    const documentWindow = window.open("about:blank", "_blank", "width=800,height=600,scrollbars=yes,resizable=yes")
+    setDocumentViewerLoading(true)
+    setDocumentViewerUrl(null)
+    setDocumentViewerOpen(true)
     try {
       const detailedDoc = await fetchExcuseDocumentDetail(doc)
       const fileUrl = detailedDoc.file_url || ""
       if (!fileUrl) throw new Error("Document file is not available.")
-      if (documentWindow) {
-        documentWindow.location.href = fileUrl
-      } else {
-        window.location.assign(fileUrl)
-      }
+      setDocumentViewerUrl(fileUrl)
     } catch (error) {
-      documentWindow?.close()
+      setDocumentViewerOpen(false)
       setError(error instanceof Error ? error.message : "Unable to load document.")
+    } finally {
+      setDocumentViewerLoading(false)
     }
   }
 
@@ -525,6 +527,28 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={documentViewerOpen} onOpenChange={setDocumentViewerOpen}>
+        <DialogContent className="max-w-5xl h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Excuse Duty Document</DialogTitle>
+            <DialogDescription>Review the submitted supporting document before making a decision.</DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 rounded-lg border bg-muted/30 overflow-hidden">
+            {documentViewerLoading ? (
+              <div className="h-full flex items-center justify-center text-muted-foreground">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading document...
+              </div>
+            ) : documentViewerUrl?.startsWith("data:image/") ? (
+              <div className="h-full overflow-auto flex items-center justify-center p-4">
+                <img src={documentViewerUrl} alt="Excuse duty supporting document" className="max-h-full max-w-full object-contain" />
+              </div>
+            ) : documentViewerUrl ? (
+              <iframe src={documentViewerUrl} title="Excuse duty supporting document" className="h-full w-full border-0" />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
         <DialogContent className="max-w-2xl">

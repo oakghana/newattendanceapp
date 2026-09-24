@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
         .eq("id", (detailDoc as any).user_id)
         .maybeSingle()
 
-      if (isDeptHead && profile.department_id !== (detailProfile as any)?.department_id) {
+      if ((isDeptHead || isTransportManager) && profile.department_id !== (detailProfile as any)?.department_id) {
         return NextResponse.json({ error: "Cannot review documents from other departments" }, { status: 403 })
       }
 
@@ -128,8 +128,8 @@ export async function GET(request: NextRequest) {
       query = query.lte("excuse_date", dateTo)
     }
 
-    // If the requester is a department head, restrict the query to user_ids in their department
-    if (isDeptHead && profile.department_id) {
+    // Department heads and Transport Managers only see staff in their own department.
+    if ((isDeptHead || isTransportManager) && profile.department_id) {
       const { data: deptUsers, error: scopeError } = await admin
         .from("user_profiles")
         .select("id")
