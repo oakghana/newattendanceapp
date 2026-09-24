@@ -729,7 +729,7 @@ export async function GET() {
     if (uniqueUserIds.length > 0) {
       const { data: staffProfiles } = await admin
         .from("user_profiles")
-        .select("id, first_name, last_name, employee_id, position, email, assigned_location_id, geofence_locations!assigned_location_id(name, address, districts(name))")
+        .select("id, first_name, last_name, employee_id, position, email, assigned_location_id, geofence_locations!assigned_location_id(name, address, districts(name, regions(name)))")
         .in("id", uniqueUserIds)
       for (const sp of staffProfiles || []) {
         staffProfileMap.set(sp.id, sp)
@@ -749,6 +749,7 @@ export async function GET() {
           staff_location_name: (sp as any)?.geofence_locations?.name || r.staff_location_name || null,
           staff_location_address: (sp as any)?.geofence_locations?.address || r.staff_location_address || null,
           staff_district_name: (sp as any)?.geofence_locations?.districts?.name || r.staff_district_name || null,
+          staff_region_name: (sp as any)?.geofence_locations?.districts?.regions?.name || r.staff_region_name || null,
         }
       })
 

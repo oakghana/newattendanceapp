@@ -118,6 +118,7 @@ type LoanRequest = {
   staff_location_name?: string | null
   staff_location_address?: string | null
   staff_district_name?: string | null
+  staff_region_name?: string | null
   loan_type_key: string
   loan_type_label: string
   loan_office_note?: string | null
@@ -3843,11 +3844,12 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {pagedHod.map((row) => (
-                      <TableRow key={row.id} className="align-top">
-                        <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
-                        <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
-                        <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
+  {pagedHod.map((row) => (
+  <TableRow key={row.id} className="align-top">
+  <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
+  <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
+  <TableCell className="whitespace-nowrap text-xs">{row.staff_region_name || row.staff_district_name || "—"}</TableCell>
+  <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
@@ -6069,8 +6071,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     <TableHeader>
                       <TableRow className="bg-purple-950/10">
                         <TableHead className="whitespace-nowrap">Request No.</TableHead>
-                        <TableHead className="whitespace-nowrap">Staff Name</TableHead>
-                        <TableHead className="whitespace-nowrap">Staff No.</TableHead>
+  <TableHead className="whitespace-nowrap">Staff Name</TableHead>
+  <TableHead className="whitespace-nowrap">Region</TableHead>
+  <TableHead className="whitespace-nowrap">Staff No.</TableHead>
                         <TableHead className="whitespace-nowrap">Rank</TableHead>
                         <TableHead className="whitespace-nowrap">Loan Type</TableHead>
                         <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
