@@ -19,7 +19,7 @@ export async function GET(request: Request) {
       .eq("id", user.id)
       .single()
 
-    if (!profile || !["admin", "department_head"].includes(profile.role)) {
+    if (!profile || !["admin", "department_head", "accounts_executive"].includes(profile.role)) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
 
@@ -55,7 +55,7 @@ export async function GET(request: Request) {
       .neq("role", "admin")
       .neq("role", "it-admin")
 
-    if (profile.role === "department_head") {
+    if (profile.role === "department_head" || profile.role === "accounts_executive") {
       query = query.eq("department_id", profile.department_id)
     } else if (departmentId && departmentId !== "all") {
       query = query.eq("department_id", departmentId)

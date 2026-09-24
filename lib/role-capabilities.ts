@@ -48,7 +48,7 @@ export function isNonRegionalDriverRole(role?: string | null): boolean {
 
 export function isDepartmentHeadRole(role?: string | null): boolean {
   const normalizedRole = normalizeAppRole(role)
-  return normalizedRole === "department_head" || HR_EXECUTIVE_ROLES.includes(normalizedRole as (typeof HR_EXECUTIVE_ROLES)[number])
+  return normalizedRole === "department_head" || normalizedRole === "accounts_executive" || HR_EXECUTIVE_ROLES.includes(normalizedRole as (typeof HR_EXECUTIVE_ROLES)[number])
 }
 
 /** True when loan_hod_linkages lists this user as hod_user_id, regardless of role. */

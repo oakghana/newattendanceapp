@@ -47,6 +47,7 @@ export default async function LeaveManagementPage() {
   // may review other staff leave; ordinary staff must never see HOD Review.
   const canReviewLeaveAsHod = [
     "department_head",
+    "accounts_executive",
     "regional_manager",
     "regional_manager_officer",
     "transport_manager",
@@ -264,8 +265,10 @@ export default async function LeaveManagementPage() {
       rank: (request.user_profiles as any)?.position || "",
     }))
 
-  hasHodLinkage = canReviewLeaveAsHod && Boolean((linkageRes?.data as any)?.id)
-  isAssignedHod = canReviewLeaveAsHod && (isAssignedHod || managerNotifications.length > 0)
+// Accounts Executive is an explicit HOD role. Do not make the tab depend
+    // on a staff-side linkage row or on whether the queue currently has items.
+    hasHodLinkage = canReviewLeaveAsHod && Boolean((assignedHodRes?.data as any)?.id)
+    isAssignedHod = canReviewLeaveAsHod || (isAssignedHod && managerNotifications.length > 0)
   } catch (err) {
     console.error("[v0] Error fetching essential data:", err)
     hasHodLinkage = false

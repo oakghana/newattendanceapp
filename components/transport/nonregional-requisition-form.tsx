@@ -41,6 +41,7 @@ export function NonRegionalRequisitionForm() {
   const [requesterSignatureDataUrl, setRequesterSignatureDataUrl] = useState("")
   const [cleanHodSignatureDataUrl, setCleanHodSignatureDataUrl] = useState("")
   const [hodLinked, setHodLinked] = useState(false)
+  const [linkedAuthorizers, setLinkedAuthorizers] = useState<Array<{ name: string; position: string | null; hasSignature: boolean }>>([])
   const [peopleCount, setPeopleCount] = useState(1)
 
   useEffect(() => {
@@ -65,11 +66,12 @@ export function NonRegionalRequisitionForm() {
     setAuthorizing(true)
     try {
       // Always load the signed-in user only — never inherit HOD signature for staff requesters.
-      const response = await fetch("/api/user/signature-auto-populate?scope=self")
+      const response = await fetch("/api/user/signature-auto-populate?scope=transport")
       const body = await response.json()
       if (!response.ok) throw new Error(body?.error ?? "Unable to load your profile.")
 
       const signature = (body.signature ?? {}) as SignatureProfile
+      setLinkedAuthorizers(Array.isArray(body.linkedAuthorizers) ? body.linkedAuthorizers : [])
       // HR Executives are departmental heads for their own non-regional trips.
       // Their requisitions go straight to MD approval, never to HR Executive approval.
       const selfAuth = SELF_AUTHORIZING_ROLES.has(String(body.role || ""))
@@ -85,10 +87,13 @@ export function NonRegionalRequisitionForm() {
       setRequesterSignatureDataUrl(signature.signature_data_url ?? "")
 
       if (!selfAuth) {
-        // Staff / non-HOD: leave HOD authorization blank until the real HOD approves.
-        setHodAuthorization("")
-        setHodSignatureDataUrl("")
-        setAuthorized(true)
+        const linkedSignature = body.hasSignature && body.hodId ? signature : null
+        const authorizationText = linkedSignature?.signer_name
+          ? `${linkedSignature.signer_name}${linkedSignature.signer_position ? ` — ${linkedSignature.signer_position}` : ""}`
+          : ""
+        setHodAuthorization(authorizationText.toUpperCase())
+        setHodSignatureDataUrl(linkedSignature?.signature_data_url ?? "")
+        setAuthorized(Boolean(body.hodId))
         return
       }
 
@@ -257,11 +262,16 @@ export function NonRegionalRequisitionForm() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-medium">Departmental authorization</p>
-                <p className="text-sm text-muted-foreground">
-                  {canSelfAuthorize
-                    ? "Your name, position, department, and saved signature are picked up automatically. This request goes directly to the Managing Director for approval."
-                    : "Authorization stays blank until your Head of Department reviews and signs. The request then goes to the Managing Director, then Transport Manager."}
-                </p>
+  <p className="text-sm text-muted-foreground">
+  {canSelfAuthorize
+  ? "Your name, position, department, and saved signature are picked up automatically. This request goes directly to the Managing Director for approval."
+  : "One linked authorizer with a saved signature is selected automatically. The request then goes to the Managing Director, then Transport Manager."}
+  </p>
+  {!canSelfAuthorize && linkedAuthorizers.length > 0 ? (
+  <p className="mt-2 text-xs text-muted-foreground">
+  Linked authorizers: {linkedAuthorizers.map((authorizer) => `${authorizer.name}${authorizer.position ? ` (${authorizer.position})` : ""}`).join(", ")}
+  </p>
+  ) : null}
               </div>
               {canSelfAuthorize ? (
                 <Button type="button" variant="outline" onClick={populateAuthorization} disabled={authorizing}>

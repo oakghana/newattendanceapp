@@ -407,7 +407,7 @@ export function LeaveManagementClient({
   const exportAnnualLeaveToExcel = async () => {
     try {
       const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
-      const isAuthorized = ["department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "admin", "hr_leave_office"].includes(normalizedRole)
+      const isAuthorized = ["department_head", "accounts_executive", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "admin", "hr_leave_office"].includes(normalizedRole)
 
       if (!isAuthorized) {
         toast({ title: "Access Denied", description: "Only HOD/RM and HR can export annual leave.", variant: "destructive" })
@@ -689,7 +689,7 @@ export function LeaveManagementClient({
 
   const handleApprove = async (notificationId: string) => {
     const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const canManageLeave = isAssignedHod || ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalized)
+    const canManageLeave = isAssignedHod || ["admin", "department_head", "accounts_executive", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
       return
@@ -734,7 +734,7 @@ export function LeaveManagementClient({
 
   const handleDismiss = async (notificationId: string, reason: string) => {
     const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const canManageLeave = isAssignedHod || ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalized)
+    const canManageLeave = isAssignedHod || ["admin", "department_head", "accounts_executive", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
       return
@@ -837,7 +837,7 @@ export function LeaveManagementClient({
   // All authenticated users can access their leave request hub. This does not
   // grant reviewer or administrative permissions.
   const canUseStaffLeaveHub = true
-  const isManagerView = isAssignedHod || ["admin", "regional_manager", "regional_manager_officer", "department_head", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office", "hr", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
+  const isManagerView = isAssignedHod || ["admin", "regional_manager", "regional_manager_officer", "department_head", "accounts_executive", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office", "hr", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isRegionalManager = normalizedRole === "regional_manager" || normalizedRole === "regional_manager_officer"
   const isAdminView = isAdmin
   const canViewHrTemplates = isAdministrator
@@ -1787,7 +1787,7 @@ export function LeaveManagementClient({
       )}
 
       {/* Export Annual Leave Card - HOD/RM/HR Only */}
-      {["department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr", "admin"].includes(String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")) && (
+      {["department_head", "accounts_executive", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr", "admin"].includes(String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")) && (
         <Card className="border border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50/50">
           <CardHeader className="pb-4">
             <CardTitle className="text-lg font-bold text-purple-900 flex items-center gap-2">
@@ -1911,7 +1911,7 @@ export function LeaveManagementClient({
                   Payment Status
                 </Button>
               )}
-              {(isRegionalHr || isRegionalManager) && (
+              {isManagerView && (
                 <Button
                   onClick={() => setSelectedTab("pending-approvals")}
                   className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
@@ -1922,7 +1922,7 @@ export function LeaveManagementClient({
                   variant={selectedTab === "pending-approvals" ? "default" : "outline"}
                 >
                   <ClipboardList className="h-4 w-4" />
-                  {isRegionalManager ? "Regional Manager Review" : "Regional Non-Annual Queue"} ({pendingNotifications.length})
+                  {isRegionalManager ? "Regional Manager Review" : "HOD Review"} ({pendingNotifications.length})
                 </Button>
               )}
               {isManagerView && (

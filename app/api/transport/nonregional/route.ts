@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import {
   isAdminRole,
   isChiefDriverRole,
@@ -17,6 +17,7 @@ const VIEW_ROLES = new Set([
   "hr",
   "hr_records",
   "department_head",
+  "accounts_executive",
   "hr_executive",
   "hr_executive_officer",
   "manager_hr",
@@ -38,6 +39,7 @@ const SUBMIT_ROLES = new Set([
   "hr",
   "hr_records",
   "department_head",
+  "accounts_executive",
   "hr_executive",
   "hr_executive_officer",
   "manager_hr",
@@ -209,11 +211,13 @@ export async function POST(request: Request) {
   }
 
   const submitterRole = normalizeAppRole(profile?.role)
-  const [{ data: assignedHodLink }, { data: requesterHodLink }] = await Promise.all([
-    supabase.from("loan_hod_linkages").select("id").eq("hod_user_id", user.id).limit(1).maybeSingle(),
-    supabase.from("loan_hod_linkages").select("hod_user_id").eq("staff_user_id", user.id).limit(1).maybeSingle(),
+  const adminSupabase = await createAdminClient()
+  const [{ data: assignedHodLink }, { data: requesterHodLinks }] = await Promise.all([
+    adminSupabase.from("loan_hod_linkages").select("id").eq("hod_user_id", user.id).limit(1).maybeSingle(),
+    adminSupabase.from("loan_hod_linkages").select("hod_user_id").eq("staff_user_id", user.id).limit(5000),
   ])
   const isLinkedHod = Boolean(assignedHodLink)
+  const linkedHodIds = Array.from(new Set((requesterHodLinks ?? []).map((row) => row.hod_user_id).filter(Boolean))) as string[]
   if (!SUBMIT_ROLES.has(submitterRole) && !isAdminRole(profile.role) && !isLinkedHod) {
     return NextResponse.json({ error: "You are not allowed to submit non-regional transport requisitions." }, { status: 403 })
   }
@@ -241,18 +245,26 @@ export async function POST(request: Request) {
   // their own departmental requisitions directly to the Managing Director.
   const selfAuth = (canSelfAuthorize(submitterRole) || isLinkedHod) && !isAdminRole(submitterRole)
   const signedAt = new Date().toISOString()
-  const hodId = requesterHodLink?.hod_user_id ? String(requesterHodLink.hod_user_id) : profile.hod_id ? String(profile.hod_id) : null
+  const legacyHodId = profile.hod_id ? String(profile.hod_id) : null
+  const candidateHodIds = Array.from(new Set([...(legacyHodId ? [legacyHodId] : []), ...linkedHodIds]))
+  const { data: hodProfiles } = candidateHodIds.length
+    ? await adminSupabase.from("user_profiles").select("id, first_name, last_name, position, signature_data_url").in("id", candidateHodIds)
+    : { data: [] }
+  const { data: registeredHodSignatures } = candidateHodIds.length
+    ? await adminSupabase.from("approval_signature_registry").select("user_id, signature_data_url").in("user_id", candidateHodIds).eq("is_active", true).order("updated_at", { ascending: false })
+    : { data: [] }
+  const hodWithSignature = (hodProfiles ?? []).map((hod) => ({
+    hod,
+    signature: String(hod.signature_data_url || registeredHodSignatures?.find((item) => item.user_id === hod.id)?.signature_data_url || "").trim() || null,
+  }))
+  const selectedHod = hodWithSignature.find((item) => item.signature)?.hod ?? hodWithSignature[0]?.hod
+  const selectedSignature = hodWithSignature.find((item) => item.hod.id === selectedHod?.id)?.signature ?? null
+  const hodId = selectedHod?.id ? String(selectedHod.id) : null
   let hodPrefillAuthorization: string | null = null
-  let hodSignatureDataUrl: string | null = null
-  if (hodId) {
-    const { data: hodProfile } = await supabase
-      .from("user_profiles")
-      .select("first_name, last_name, position, signature_data_url")
-      .eq("id", hodId)
-      .maybeSingle()
-    const hodName = [hodProfile?.first_name, hodProfile?.last_name].filter(Boolean).join(" ").trim()
-    hodPrefillAuthorization = hodName ? `${hodName}${hodProfile?.position ? ` — ${hodProfile.position}` : ""}`.toUpperCase() : null
-    hodSignatureDataUrl = String(hodProfile?.signature_data_url || "").trim() || null
+  let hodSignatureDataUrl: string | null = selectedSignature
+  if (selectedHod) {
+    const hodName = [selectedHod.first_name, selectedHod.last_name].filter(Boolean).join(" ").trim()
+    hodPrefillAuthorization = hodName ? `${hodName}${selectedHod.position ? ` — ${selectedHod.position}` : ""}`.toUpperCase() : null
   }
 
   // Non-HOD staff route to their linked HOD. Pre-fill the linked HOD's identity

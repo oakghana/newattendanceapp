@@ -111,7 +111,7 @@ const navigationItems = [
     title: "Off-Premises Approvals",
     href: "/offpremises-approvals",
     icon: MapPin,
-    roles: ["admin", "regional_manager", "regional_hr", "department_head"],
+    roles: ["admin", "regional_manager", "regional_hr", "department_head", "accounts_executive"],
     category: "main",
   },
 
@@ -133,7 +133,7 @@ const navigationItems = [
     title: "Excuse Duty Review",
     href: "/dashboard/excuse-duty-review",
     icon: FileText,
-    roles: ["admin", "it-admin", "regional_manager", "regional_hr", "department_head", "transport_manager", "director_hr", "manager_hr"],
+    roles: ["admin", "it-admin", "regional_manager", "regional_hr", "department_head", "accounts_executive", "transport_manager", "director_hr", "manager_hr"],
     category: "admin",
   },
 
@@ -183,7 +183,7 @@ const navigationItems = [
     title: "Reports & Trends",
     href: "/dashboard/reports",
     icon: BarChart3,
-    roles: ["admin", "it-admin", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr_leave_office", "department_head", "transport_manager", "director_hr", "manager_hr"],
+    roles: ["admin", "it-admin", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr_leave_office", "department_head", "accounts_executive", "transport_manager", "director_hr", "manager_hr"],
     category: "admin",
   },
   {
@@ -197,7 +197,7 @@ const navigationItems = [
     title: "Transport Management",
     href: "/dashboard/transport",
     icon: Bus,
-    roles: ["admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "regional_chief_driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "department_head", "hr_executive", "hr_executive_officer", "director_hr", "manager_hr", "staff", "contract", "audit_staff"],
+    roles: ["admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "regional_chief_driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "department_head", "accounts_executive", "hr_executive", "hr_executive_officer", "director_hr", "manager_hr", "staff", "contract", "audit_staff"],
     category: "admin",
     subItems: [
       { title: "Requests", href: "/dashboard/transport" },
@@ -219,14 +219,14 @@ const navigationItems = [
     title: "Warnings Archive",
     href: "/dashboard/warnings-archive",
     icon: Archive,
-    roles: ["admin", "it-admin", "regional_manager", "department_head", "director_hr", "manager_hr"],
+    roles: ["admin", "it-admin", "regional_manager", "department_head", "accounts_executive", "director_hr", "manager_hr"],
     category: "admin",
   },
   {
     title: "Department Summaries",
     href: "/dashboard/department-summaries",
     icon: TrendingUp,
-    roles: ["admin", "it-admin", "regional_manager", "department_head", "director_hr", "manager_hr"],
+    roles: ["admin", "it-admin", "regional_manager", "department_head", "accounts_executive", "director_hr", "manager_hr"],
     category: "admin",
   },
   {

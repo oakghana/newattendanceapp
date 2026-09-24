@@ -343,7 +343,7 @@ export async function GET() {
     const managerDepartmentId = String((profile as any)?.department_id || "")
     const managerLocationId = String((profile as any)?.assigned_location_id || "")
     const isRegionalManager = role === "regional_manager"
-    const isDepartmentHead = ["department_head", "transport_manager", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(role)
+    const isDepartmentHead = ["department_head", "accounts_executive", "transport_manager", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(role)
 
     let linkedStaffIds: string[] = []
     const { data: linkageRows } = await admin
