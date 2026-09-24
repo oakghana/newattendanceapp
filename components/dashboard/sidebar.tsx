@@ -493,14 +493,18 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
       assignedLocationName.includes("district")
     )
   )
+  const isHeadOfficeStaff = isExplicitNonRegionalLocation || assignedLocationName.includes("head office")
   const isBasicNonRegionalRole = ["staff", "contract", "audit_staff"].includes(normalizedProfileRole)
-  const canSeeTransportMenu = !isBasicNonRegionalRole || isExplicitNonRegionalLocation || !isRegionalOrDistrictLinked
+  const canSeeTransportMenu =
+    (isHeadOfficeStaff && !isAttendanceOnly) ||
+    (!isBasicNonRegionalRole || isExplicitNonRegionalLocation || !isRegionalOrDistrictLinked)
   const isChiefDriver = ["chief_driver", "regional_chief_driver"].includes(normalizedProfileRole) || effectiveRole === "chief_driver"
 
   const filteredNavItems = allNavigationItems.filter((item) => {
   if (isChiefDriver && ROLE_RESTRICTED_MAIN_HREFS.has(item.href)) return false
     if (item.href === "/dashboard/transport") {
       if (!canSeeTransportMenu) return false
+      if (isHeadOfficeStaff && !isAttendanceOnly) return true
       if (isBasicNonRegionalRole && !isRegionalOrDistrictLinked) return true
     }
     if (isAttendanceOnly) return item.href === "/dashboard/attendance"
