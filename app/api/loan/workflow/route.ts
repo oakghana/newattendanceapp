@@ -396,10 +396,11 @@ export async function GET() {
   const locationStaffIds = locationStaffRows
     .filter((row: any) => !/regional\s+office|regional\s+location/i.test(String(row?.geofence_locations?.name || "")))
     .map((row: any) => String(row.id || "")).filter(Boolean)
+  // Department Heads must be scoped strictly to their own department and
+  // assigned location. Location-only staff are not valid HOD queue members.
   const reviewerScopedStaffIds = Array.from(new Set([
-    ...linkedStaffIds,
-    ...departmentStaffIds,
-    ...locationStaffIds,
+  ...linkedStaffIds,
+  ...departmentStaffIds,
   ]))
 
     const loanTypesWithTermsQuery = () =>
@@ -578,6 +579,9 @@ export async function GET() {
           .order("created_at", { ascending: false })
       }
 
+      // Do not trust hod_reviewer_id by itself: legacy/broad assignments can
+      // point a request at the wrong HOD. Department Heads are always scoped
+      // by the requesting staff member's department and location.
       const [directRes, linkedRes] = await Promise.all([
         admin.from("loan_requests").select("*").eq("status", "pending_hod").eq("hod_reviewer_id", user.id),
         fetchLoanRequestsForStaffIds(admin, reviewerScopedStaffIds, (q) => q.eq("status", "pending_hod")),
@@ -585,13 +589,16 @@ export async function GET() {
       const error = directRes.error || linkedRes.error
       const seen = new Set<string>()
       const data: any[] = []
+      const endorsableStaffIds = new Set([...linkedStaffIds, ...departmentStaffIds])
       for (const row of [...(directRes.data || []), ...linkedRes.data]) {
+        // Direct reviewer assignment is retained for correctly assigned staff,
+        // but it cannot bypass the Department Head's department/location scope.
+        if (isDepartmentHead && !endorsableStaffIds.has(String(row.user_id || ""))) continue
         if (!seen.has(row.id)) {
           seen.add(row.id)
           data.push(row)
         }
       }
-      const endorsableStaffIds = new Set([...linkedStaffIds, ...departmentStaffIds])
       for (const row of data) {
         row.can_endorse = !isDepartmentHead || endorsableStaffIds.has(String(row.user_id || ""))
       }
@@ -692,10 +699,36 @@ export async function GET() {
           ? await fetchLoanRequestsForStaffIds(admin, linkedStaffIds, (q) => q.eq("status", "pending_hod"))
           : { data: [], error: null }
 
-        const error = reviewerRes.error || linkedRes.error
-        const seen = new Set<string>()
-        const data: any[] = []
-        for (const row of [...(reviewerRes.data || []), ...(linkedRes.data || [])]) {
+  // Department Heads must not see cross-department pending-HOD requests in
+  // My Tasks either. This keeps My Tasks consistent with the HOD Review tab
+  // and prevents a stale hod_reviewer_id from bypassing department ownership.
+  let reviewerRows = reviewerRes.data || []
+  if (isDepartmentHead && reviewerRows.length > 0) {
+    const requesterIds = Array.from(new Set(
+      reviewerRows
+        .filter((row: any) => String(row.status || "") === "pending_hod")
+        .map((row: any) => String(row.user_id || ""))
+        .filter(Boolean),
+    ))
+    const { data: requesterProfiles } = requesterIds.length > 0
+      ? await admin.from("user_profiles").select("id, department_id, assigned_location_id").in("id", requesterIds)
+      : { data: [] as any[] }
+    const requesterMap = new Map((requesterProfiles || []).map((row: any) => [String(row.id), row]))
+    reviewerRows = reviewerRows.filter((row: any) => {
+      if (String(row.status || "") !== "pending_hod") return true
+      const requester = requesterMap.get(String(row.user_id || ""))
+      return Boolean(
+        requester &&
+        String(requester.department_id || "") === managerDepartmentId &&
+        String(requester.assigned_location_id || "") === managerLocationId,
+      )
+    })
+  }
+
+  const error = reviewerRes.error || linkedRes.error
+  const seen = new Set<string>()
+  const data: any[] = []
+  for (const row of [...reviewerRows, ...(linkedRes.data || [])]) {
           if (!seen.has(row.id)) {
             seen.add(row.id)
             data.push(row)
