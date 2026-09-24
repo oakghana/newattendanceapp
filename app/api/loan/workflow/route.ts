@@ -368,13 +368,20 @@ export async function GET() {
     ]))
 
   const isLinkedHod = linkedStaffIds.length > 0
-  const departmentStaffIds = isDepartmentHead && managerDepartmentId
-    ? ((await admin.from("user_profiles").select("id").eq("department_id", managerDepartmentId).eq("is_active", true).limit(5000)).data || [])
-        .map((row: any) => String(row.id || "")).filter(Boolean)
+  const departmentStaffRows = isDepartmentHead && managerDepartmentId && managerLocationId
+    ? ((await admin.from("user_profiles").select("id, assigned_location_id, department_id, geofence_locations!assigned_location_id(name)").eq("department_id", managerDepartmentId).eq("assigned_location_id", managerLocationId).eq("is_active", true).limit(5000)).data || [])
     : []
+  const departmentStaffIds = departmentStaffRows.map((row: any) => String(row.id || "")).filter(Boolean)
+  const locationStaffRows = isDepartmentHead && managerLocationId
+    ? ((await admin.from("user_profiles").select("id, assigned_location_id, geofence_locations!assigned_location_id(name)").eq("assigned_location_id", managerLocationId).eq("is_active", true).limit(5000)).data || [])
+    : []
+  const locationStaffIds = locationStaffRows
+    .filter((row: any) => !/regional\s+office|regional\s+location/i.test(String(row?.geofence_locations?.name || "")))
+    .map((row: any) => String(row.id || "")).filter(Boolean)
   const reviewerScopedStaffIds = Array.from(new Set([
     ...linkedStaffIds,
     ...departmentStaffIds,
+    ...locationStaffIds,
   ]))
 
     const loanTypesWithTermsQuery = () =>
@@ -565,6 +572,10 @@ export async function GET() {
           seen.add(row.id)
           data.push(row)
         }
+      }
+      const endorsableStaffIds = new Set([...linkedStaffIds, ...departmentStaffIds])
+      for (const row of data) {
+        row.can_endorse = !isDepartmentHead || endorsableStaffIds.has(String(row.user_id || ""))
       }
       data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       return { data, error }

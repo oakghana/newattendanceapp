@@ -141,6 +141,7 @@ type LoanRequest = {
   fd_note?: string | null
   fd_checked_at?: string | null
   hod_reviewer_id?: string | null
+  can_endorse?: boolean
   accounts_reviewer_id?: string | null
   accounts_reviewer_name?: string | null
   director_hr_id?: string | null
@@ -6093,8 +6094,8 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       {pagedMyTasks.map((row) => (
                         <TableRow 
                           key={`my-task-${row.id}`}
-                          onDoubleClick={() => row.status === "pending_hod" && openActionModal(row, "hod")}
-                          title={row.status === "pending_hod" ? "Double-click or use buttons to Review / Endorse" : ""}
+                          onDoubleClick={() => row.status === "pending_hod" && row.can_endorse !== false && openActionModal(row, "hod")}
+                          title={row.status === "pending_hod" ? (row.can_endorse === false ? "Read-only: outside your department endorsement scope" : "Double-click or use buttons to Review / Endorse") : ""}
                           className={row.status === "pending_hod" ? "cursor-pointer hover:bg-emerald-50 transition-colors" : ""}
                         >
                           <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
@@ -6105,7 +6106,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                           <TableCell className="whitespace-nowrap">
-                            {row.status === "pending_hod" ? (
+                            {row.status === "pending_hod" && row.can_endorse !== false ? (
                               <div className="flex gap-1">
                                 <Button 
                                   size="sm" 
@@ -6123,6 +6124,8 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                                   Endorse
                                 </Button>
                               </div>
+                            ) : row.status === "pending_hod" && row.can_endorse === false ? (
+                              <span className="text-xs text-muted-foreground">Read only</span>
                             ) : (
                               <span className="text-xs text-muted-foreground">—</span>
                             )}
@@ -6182,7 +6185,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Memo</Button>
                     </div>
                   )}
-                  {row.status === "pending_hod" && (
+                  {row.status === "pending_hod" && row.can_endorse !== false && (
                     <div className="pt-2 flex gap-2">
                       <Button 
                         size="sm" 
