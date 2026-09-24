@@ -204,6 +204,12 @@ export function isolateSignatureInk(source: Uint8ClampedArray, width: number, he
  * background so it can sit cleanly under a hologram watermark without the dark
  * scan border showing through.
  */
+export async function processSignatureDataUrl(dataUrl: string): Promise<string> {
+  const response = await fetch(dataUrl)
+  const blob = await response.blob()
+  return processSignatureImage(new File([blob], "signature-scan", { type: blob.type || "image/png" }))
+}
+
 export function processSignatureImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()

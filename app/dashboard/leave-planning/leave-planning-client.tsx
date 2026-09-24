@@ -2746,7 +2746,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       <div className="rounded-2xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 text-white p-6 shadow-lg">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Leave Management</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Leave Administration</h1>
             <p className="text-green-200 text-sm mt-1">{activeLeaveYearPeriod} Leave Year · Quality Control Company Limited</p>
           </div>
           <Button

@@ -51,10 +51,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     let idleCheckTimer: ReturnType<typeof setInterval> | null = null
 
     const signOutForInactivity = async () => {
-      if (signedOut || document.hidden) return
+      if (signedOut || document.hidden || Date.now() - lastActivityAt < IDLE_TIMEOUT_MS) return
       signedOut = true
-      await supabase.auth.signOut()
-      router.replace("/auth/login?reason=idle")
+      try {
+        await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" })
+      } finally {
+        await supabase.auth.signOut()
+        router.replace("/auth/login?reason=idle")
+      }
     }
 
     const markActive = () => {

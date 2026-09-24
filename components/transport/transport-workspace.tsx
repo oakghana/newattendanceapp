@@ -58,6 +58,7 @@ type TransportWorkspaceProps = {
   scopeLabel?: string
   driverKind?: "regional" | "nonregional"
   isLinkedHod?: boolean
+  isNonRegionalLocation?: boolean
   isChiefDriver?: boolean
 }
 
@@ -104,6 +105,7 @@ function ModuleCard({
   icon: Icon,
   cta,
   badge,
+  onClick,
 }: {
   title: string
   description: string
@@ -111,6 +113,7 @@ function ModuleCard({
   icon: typeof Bus
   cta: string
   badge?: string
+  onClick?: () => void
 }) {
   return (
     <Card className="group relative flex min-h-56 flex-col overflow-hidden border-border/70 bg-card shadow-sm transition-all hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg">
@@ -129,7 +132,7 @@ function ModuleCard({
       </CardHeader>
       <CardContent className="mt-auto px-5 pb-5 pt-2">
         <Button size="sm" className="w-full sm:w-auto" asChild>
-          <Link href={href}>
+          <Link href={href} onClick={onClick ? (event) => { event.preventDefault(); onClick() } : undefined}>
             {cta}
             <ArrowRight data-icon="inline-end" />
           </Link>
@@ -154,6 +157,7 @@ export function TransportWorkspace({
   scopeLabel = "",
   driverKind,
   isLinkedHod = false,
+  isNonRegionalLocation = false,
   isChiefDriver: isChiefDriverProp = false,
 }: TransportWorkspaceProps) {
   const normalizedRole = role.toLowerCase().trim().replace(/[\s-]+/g, "_")
@@ -169,11 +173,14 @@ export function TransportWorkspace({
   const isTransportManager = normalizedRole === "transport_manager"
   const isChiefDriver = isChiefDriverProp || isChiefDriverRole(normalizedRole)
   const isRegionalManager = isRegionalManagerRole(normalizedRole)
-  const isBasicStaff = ["staff", "contract", "audit_staff", "intern", "nsp"].includes(normalizedRole)
+  const isBasicStaff = ["staff", "contract", "audit_staff"].includes(normalizedRole)
+  const isNonRegionalWorkspaceRole = isNonRegionalLocation && !isRegionalHr && !isRegionalManager && !isRegionalDriver && !isChiefDriver
+  const isNonRegionalStaff = isBasicStaff || isNonRegionalWorkspaceRole
   const canCreateRequest = isChiefDriver || isRegionalHr || isActingHod || isBasicStaff
   const canViewDriverLicense = isChiefDriver || isRegionalHr || isRegionalManager || isDriver || isTransportManager || canManage
   const canManageFleet = isManagingDirector || isChiefDriver || isRegionalHr || isRegionalManager || isTransportManager || canManage
   const [requestOpen, setRequestOpen] = useState(false)
+  const [hodRequiredOpen, setHodRequiredOpen] = useState(false)
   const router = useRouter()
   const regionalRouteRequired = isRegionalHr && !isActingHod
 
@@ -242,7 +249,7 @@ export function TransportWorkspace({
     toast({
       title: "Transport request submitted",
       description: isActingHod
-        ? "Your non-regional requisition is awaiting Managing Director approval."
+        ? "Your Head Office request is awaiting Managing Director approval."
         : regionalRouteRequired && form.get("regionalRoute") === "local_regional"
           ? "Your local regional request was sent to the Regional Manager for endorsement, then the Regional Chief Driver for dispatch."
           : "Your Head Office transport request was sent to the Regional Manager for endorsement, then the Managing Director for approval.",
@@ -260,7 +267,7 @@ export function TransportWorkspace({
     const officeLabel = isManagingDirector ? "Office of the Managing Director" : "HR Executive Office"
     const deskTitle = isManagingDirector ? "Transport approval desk" : "Memo signing desk"
     const deskDescription = isManagingDirector
-      ? "Regional and non-regional transport requests are separated below. Preview the correct request before approving it."
+      ? "Regional and Head Office requests are shown separately. Preview the correct request before approving it."
       : "Regional transport requests approved by the Managing Director are ready for your rejoinder memo and signature."
     const actionLabel = isManagingDirector ? "Open approval desk" : "Open signing desk"
     const pendingLabel = isManagingDirector ? "Awaiting your approval" : "Awaiting your signature"
@@ -283,7 +290,7 @@ export function TransportWorkspace({
               {isHrExecutive && (
                 <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700" asChild>
                 <Link href="/dashboard/transport/nonregional/new">
-                  <Route data-icon="inline-start" /> New non-regional trip
+                  <Route data-icon="inline-start" /> New Head Office request
                 </Link>
                 </Button>
               )}
@@ -330,7 +337,7 @@ export function TransportWorkspace({
                   </div>
                   <div>
                     <p className="text-2xl font-semibold tracking-tight">{nonRegionalPendingCount}</p>
-                    <p className="text-xs text-muted-foreground">Non-regional requests</p>
+                    <p className="text-xs text-muted-foreground">Head Office requests</p>
                   </div>
                 </div>
               </>
@@ -355,7 +362,7 @@ export function TransportWorkspace({
               <CardTitle>{isManagingDirector ? "Approval queue" : "Signing queue"}</CardTitle>
               <CardDescription>
                 {isManagingDirector
-                  ? "Regional and non-regional requests are clearly labeled before you approve."
+                  ? "Regional and Head Office requests are clearly labelled before approval."
                   : "Preview every approved transport request and memo before signing."}
               </CardDescription>
             </div>
@@ -391,7 +398,7 @@ export function TransportWorkspace({
                           </span>
                         )}
                         <Badge variant={row.request_type === "nonregional" ? "outline" : "secondary"}>
-                          {row.request_type === "nonregional" ? "Non-regional" : "Regional"}
+                          {row.request_type === "nonregional" ? "Head Office" : "Regional"}
                         </Badge>
                         {row.reference_number && <Badge variant="secondary">{row.reference_number}</Badge>}
                       </div>
@@ -414,7 +421,7 @@ export function TransportWorkspace({
               <div className="flex items-start gap-3">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white"><Route className="size-5" /></div>
                 <div>
-                  <p className="font-semibold">Request non-regional transport</p>
+                  <p className="font-semibold">Request Head Office transport</p>
                   <p className="mt-1 text-sm text-muted-foreground">Your departmental request goes directly to the Managing Director, then Transport Manager for vehicle and driver allocation. It does not enter the HR Executive signing queue.</p>
                 </div>
               </div>
@@ -441,7 +448,7 @@ export function TransportWorkspace({
             : "Transport Operations"
 
   const operationalSubtitle = isDepartmentHead
-    ? "Raise non-regional requisitions, track MD approval, and see which driver has been assigned to each trip."
+    ? "Raise Head Office requests, track MD approval, and see the assigned driver."
     : isRegionalManager
       ? "Review and download only transport requests within your assigned region."
       : isChiefDriver
@@ -451,7 +458,7 @@ export function TransportWorkspace({
         : isRegionalDriver
           ? "Your assigned regional trips only — routes, meeting times, and departure details for your region."
           : isNonRegionalDriver
-            ? "Your assigned non-regional trips only — head office, stores, and archives runs."
+            ? "Your assigned Head Office trips — including Stores and Archives."
   : isChiefDriver
   ? "Your regional dispatch desk for local transport assignments, driver compliance, and trips awaiting dispatch."
   : isTransportManager
@@ -462,25 +469,32 @@ export function TransportWorkspace({
     ? `Scope: ${scopeLabel}`
     : isTransportManager || canManage
       ? "Scope: Nationwide"
-      : isDepartmentHead
-        ? "Scope: Your non-regional requests"
+      : isDepartmentHead || isNonRegionalStaff
+        ? "Scope: Your Head Office requests"
         : "Scope: Assigned region"
 
   const operationalMetrics = isManagingDirector
     ? [
-        { label: "Needs your approval", value: pendingCount, note: "Regional and HOD-cleared non-regional requests", icon: Clock3, tone: "amber" as const },
+        { label: "Needs your approval", value: pendingCount, note: "Regional and Head Office requests", icon: Clock3, tone: "amber" as const },
         { label: "Regional approvals", value: regionalPendingCount, note: "Regional requests awaiting MD decision", icon: Bus, tone: "primary" as const },
-        { label: "Non-regional approvals", value: nonRegionalPendingCount, note: "HOD-cleared trips awaiting MD decision", icon: Route, tone: "primary" as const },
+        { label: "Head Office approvals", value: nonRegionalPendingCount, note: "Awaiting MD decision", icon: Route, tone: "primary" as const },
         { label: "Fleet nationwide", value: "Open", note: "View and manage the national vehicle register", icon: Truck, tone: "emerald" as const },
       ]
     : isDepartmentHead
     ? [
-        { label: "My requests", value: totalCount, note: "Non-regional requisitions you raised", icon: Users, tone: "primary" as const },
+        { label: "My requests", value: totalCount, note: "Requests you raised", icon: Users, tone: "primary" as const },
         { label: "Awaiting MD", value: pendingCount, note: "Pending Managing Director decision", icon: Clock3, tone: "amber" as const },
         { label: "Approved", value: approvedCount, note: "Cleared for transport fulfilment", icon: CheckCircle2, tone: "emerald" as const },
         { label: "Driver assigned", value: assignedCount, note: "Trips with vehicle and driver set", icon: Navigation, tone: "slate" as const },
       ]
-    : isRegionalManager || isRegionalHr || isChiefDriver
+    : isNonRegionalStaff
+      ? [
+          { label: "My requests", value: totalCount, note: "Head Office requests you submitted", icon: Inbox, tone: "primary" as const },
+          { label: "Awaiting endorsement", value: pendingCount, note: "With your linked HOD", icon: Clock3, tone: "amber" as const },
+          { label: "Approved", value: approvedCount, note: "Cleared by the Managing Director", icon: CheckCircle2, tone: "emerald" as const },
+          { label: "Transport assigned", value: assignedCount, note: "Vehicle and driver allocated", icon: Route, tone: "slate" as const },
+        ]
+      : isRegionalManager || isRegionalHr || isChiefDriver
       ? [
           { label: isChiefDriver ? "Ready to dispatch" : "Regional queue", value: pendingCount, note: isChiefDriver ? "Regional Manager-approved local trips" : "Items needing attention in your region", icon: Clock3, tone: "amber" as const },
           { label: "Region register", value: totalCount, note: "Requests limited to your regional office", icon: Bus, tone: "primary" as const },
@@ -489,10 +503,10 @@ export function TransportWorkspace({
         ]
       : isTransportManager
         ? [
-            { label: "All requests", value: totalCount, note: "Approved and not-yet-approved nationwide", icon: Truck, tone: "primary" as const },
-            { label: "Needs action", value: pendingCount, note: "Assignment or fulfilment backlog", icon: Clock3, tone: "amber" as const },
-            { label: "Approved stream", value: approvedCount, note: "Ready or completed fulfilment", icon: CheckCircle2, tone: "emerald" as const },
-            { label: "Control level", value: "National", note: "Full transport operations desk", icon: ShieldCheck, tone: "slate" as const },
+            { label: "All requests", value: totalCount, note: "Nationwide requests", icon: Truck, tone: "primary" as const },
+            { label: "Needs action", value: pendingCount, note: "Awaiting action", icon: Clock3, tone: "amber" as const },
+            { label: "Approved stream", value: approvedCount, note: "Ready for fulfilment", icon: CheckCircle2, tone: "emerald" as const },
+            { label: "Control level", value: "National", note: "Transport desk", icon: ShieldCheck, tone: "slate" as const },
           ]
         : isRegionalDriver
           ? [
@@ -503,7 +517,7 @@ export function TransportWorkspace({
             ]
           : isNonRegionalDriver
             ? [
-                { label: "My trips", value: totalCount, note: "Non-regional trips assigned to you", icon: Route, tone: "primary" as const },
+                { label: "My trips", value: totalCount, note: "Head Office trips assigned", icon: Route, tone: "primary" as const },
                 { label: "Upcoming", value: pendingCount, note: "Approved or assigned, not started", icon: Clock3, tone: "amber" as const },
                 { label: "In progress", value: approvedCount, note: "Currently on the road", icon: Navigation, tone: "primary" as const },
                 { label: "Completed", value: assignedCount, note: "Trips you have finished", icon: CheckCircle2, tone: "emerald" as const },
@@ -516,11 +530,31 @@ export function TransportWorkspace({
           ]
 
   const modules = [
-    ...(isActingHod
+    ...(isNonRegionalStaff
       ? [
           {
-            title: "Non-regional requisitions",
-            description: "Submit Head Office / Stores / Archives trips and track driver assignment live.",
+            title: "Head Office requests",
+            description: "Submit a Head Office transport request to your linked HOD for endorsement, then follow MD approval and vehicle assignment.",
+            icon: Route,
+            href: "/dashboard/transport/nonregional/new",
+            cta: "Request transport",
+            badge: "Head Office",
+            onClick: !isLinkedHod ? () => setHodRequiredOpen(true) : undefined,
+          },
+          {
+            title: "My requests",
+            description: "Track HOD endorsement, Managing Director approval, and Transport Management assignment updates.",
+            icon: Inbox,
+            href: "/dashboard/transport/nonregional",
+            cta: "Track my requests",
+            badge: "Live status",
+          },
+        ]
+      : isActingHod
+      ? [
+          {
+            title: "Head Office requests",
+            description: "Submit Head Office trips and track driver assignment.",
             icon: Route,
             href: "/dashboard/transport/nonregional",
             cta: "Open my trips",
@@ -541,8 +575,8 @@ export function TransportWorkspace({
         : isNonRegionalDriver
           ? [
               {
-                title: "My non-regional trips",
-                description: "Track your assigned non-regional trips and update start / completion status.",
+                title: "My Head Office trips",
+                description: "Track your assigned Head Office trips.",
                 icon: Route,
                 href: "/dashboard/transport/nonregional",
                 cta: "Open my trips",
@@ -553,7 +587,7 @@ export function TransportWorkspace({
           {
             title: isTransportManager ? "Nationwide request board" : isChiefDriver ? "Local dispatch register" : "Regional request register",
             description: isTransportManager
-              ? "See every approved and pending transport request across regions and non-regional desks."
+              ? "See all regional and Head Office requests."
               : isChiefDriver
                 ? "Submit local trips for Regional Manager approval and dispatch approved work to regional vehicles and drivers."
               : "View only your regional transport requests. Download approved regional memos from the register.",
@@ -567,7 +601,7 @@ export function TransportWorkspace({
       ? [
           {
             title: "Executive approval desk",
-            description: `Handle ${regionalPendingCount} regional and ${nonRegionalPendingCount} HOD-cleared non-regional requests awaiting your decision.`,
+            description: `Handle ${regionalPendingCount} regional and ${nonRegionalPendingCount} HOD-cleared Head Office requests awaiting your decision.`,
             icon: ShieldCheck,
             href: "/dashboard/transport/requests",
             cta: "Open approval tabs",
@@ -575,13 +609,13 @@ export function TransportWorkspace({
           },
         ]
       : []),
-    ...(isDriver
+    ...(isDriver || isNonRegionalStaff
       ? []
       : [
           {
-            title: isActingHod ? "New non-regional trip" : "Approval & fulfilment queues",
+            title: isActingHod ? "New Head Office request" : "Regional requests",
             description: isActingHod
-              ? "Create a digital requisition with HOD authorization for Managing Director review."
+              ? "Create a transport requisition with HOD authorization for Managing Director review."
               : "Review work routed to Regional HR, Regional Managers, HR Records, MD, and Transport.",
             icon: Inbox,
             href: isActingHod ? "/dashboard/transport/nonregional/new" : "/dashboard/transport/requests",
@@ -616,11 +650,11 @@ export function TransportWorkspace({
     ...((isTransportManager || canManage || isHrExecutive) && !isDepartmentHead
       ? [
           {
-            title: "Non-regional fulfilment",
-            description: "Assign location drivers to MD-approved Head Office, Awutu, and Nsawam trips.",
+            title: "Head Office requests",
+            description: "Assign drivers to MD-approved Head Office trips.",
             icon: Navigation,
             href: "/dashboard/transport/nonregional",
-            cta: "Open non-regional",
+            cta: "Open Head Office",
             badge: "Fulfilment",
           },
         ]
@@ -660,15 +694,11 @@ export function TransportWorkspace({
             {(isActingHod || isTransportManager || canManage) && (
               <Button variant="outline" className="bg-background/80" asChild>
                 <Link href="/dashboard/transport/nonregional">
-                  <Route data-icon="inline-start" /> Non-regional
+                  <Route data-icon="inline-start" /> Head Office
                 </Link>
               </Button>
             )}
-            {canCreateRequest && (
-              <Button onClick={() => setRequestOpen(true)}>
-                <Plus data-icon="inline-start" /> {isActingHod ? "New non-regional trip" : "New regional request"}
-              </Button>
-            )}
+
           </div>
         </div>
       </header>
@@ -686,7 +716,7 @@ export function TransportWorkspace({
             <Badge variant="secondary">{regionalPendingCount}</Badge>
           </Link>
           <Link href="/dashboard/transport/nonregional" className="flex items-center justify-between rounded-xl border bg-background px-4 py-3 text-sm font-medium shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/5">
-            <span>Non-regional approvals</span>
+            <span>Head Office approvals</span>
             <Badge variant="secondary">{nonRegionalPendingCount}</Badge>
           </Link>
           <Link href="/dashboard/transport/fleet" className="flex items-center justify-between rounded-xl border bg-background px-4 py-3 text-sm font-medium shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/5">
@@ -703,7 +733,7 @@ export function TransportWorkspace({
             <Badge variant="secondary">{pendingCount}</Badge>
           </Link>
           <Link href="/dashboard/transport/nonregional/new" className="flex items-center justify-between rounded-xl border bg-background px-4 py-3 text-sm font-medium shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/5">
-            <span>New non-regional requisition</span>
+            <span>New Head Office request</span>
             <Plus className="size-4 text-muted-foreground" />
           </Link>
         </nav>
@@ -746,7 +776,7 @@ export function TransportWorkspace({
               <div>
                 <p className="font-medium">Driver assignment tracker</p>
                 <p className="text-sm text-muted-foreground">
-                  After MD approval, Transport Manager assigns a location driver. Open Non-regional to see driver name, vehicle, and meet time on each trip card.
+                  After MD approval, Transport Manager assigns a location driver. Open Head Office to see the driver, vehicle and meeting time.
                 </p>
               </div>
             </div>
@@ -757,13 +787,30 @@ export function TransportWorkspace({
         </Card>
       )}
 
-      <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
+      <Dialog open={hodRequiredOpen} onOpenChange={setHodRequiredOpen}>
+    <DialogContent className="sm:max-w-md">
+      <DialogHeader>
+        <DialogTitle>Department Head linkage required</DialogTitle>
+        <DialogDescription>
+          You cannot submit a Head Office transport request yet because no Department Head is linked to your profile for endorsement.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 p-4 text-sm leading-6 text-foreground">
+        Please contact your Department Head or HR Records team and ask them to link you to the appropriate Department Head. Once the linkage is completed, you will be able to submit and track your transport request here.
+      </div>
+      <DialogFooter>
+        <Button type="button" onClick={() => setHodRequiredOpen(false)}>Understood</Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+
+  <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{isDepartmentHead ? "New non-regional transport request" : "New regional transport request"}</DialogTitle>
+            <DialogTitle>{isDepartmentHead ? "New Head Office transport request" : "New regional transport request"}</DialogTitle>
             <DialogDescription>
               {isDepartmentHead
-                ? "Complete the digital requisition. Your Department Head authorization is required before Managing Director review."
+                ? "Complete the transport requisition. Your Department Head authorization is required before Managing Director review."
                 : "Complete the digital requisition. Regional HR Office or Chief Driver submits to the Regional Manager for endorsement, then the Managing Director for approval."}
             </DialogDescription>
           </DialogHeader>

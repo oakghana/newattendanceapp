@@ -37,9 +37,10 @@ export async function GET(request: NextRequest) {
     const isRegionalManager = isRegionalManagerRole(normalizedRole)
     const isRegionalHr = isRegionalHrRole(normalizedRole)
     const isDeptHead = isDepartmentHeadRole(normalizedRole)
+    const isTransportManager = normalizedRole === "transport_manager"
 
-    // Check if user has admin, regional_manager, regional_hr, or department_head role
-    if (!isAdmin && !isRegionalManager && !isRegionalHr && !isDeptHead) {
+    // Transport Managers may view the operational excuse-duty queue alongside HOD reviewers.
+    if (!isAdmin && !isRegionalManager && !isRegionalHr && !isDeptHead && !isTransportManager) {
       console.log("[v0] HOD Excuse duty API - Insufficient permissions")
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
     let query = admin
       .from("excuse_documents")
       .select(
-        "id,document_name,document_type,excuse_date,status,user_id,reviewed_by,reviewed_at,created_at"
+        "id,document_name,document_type,file_url,mime_type,excuse_reason,excuse_date,status,user_id,reviewed_by,reviewed_at,review_notes,created_at,attendance_record_id"
       )
 
     // Get URL parameters for filtering and pagination
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
         .eq("id", (detailDoc as any).user_id)
         .maybeSingle()
 
-      if (isDeptHead && profile.department_id !== (detailProfile as any)?.department_id) {
+      if ((isDeptHead || isTransportManager) && profile.department_id !== (detailProfile as any)?.department_id) {
         return NextResponse.json({ error: "Cannot review documents from other departments" }, { status: 403 })
       }
 
@@ -127,8 +128,8 @@ export async function GET(request: NextRequest) {
       query = query.lte("excuse_date", dateTo)
     }
 
-    // If the requester is a department head, restrict the query to user_ids in their department
-    if (isDeptHead && profile.department_id) {
+    // Department heads and Transport Managers only see staff in their own department.
+    if ((isDeptHead || isTransportManager) && profile.department_id) {
       const { data: deptUsers, error: scopeError } = await admin
         .from("user_profiles")
         .select("id")
@@ -287,8 +288,9 @@ export async function PUT(request: NextRequest) {
     const isRegionalManager = isRegionalManagerRole(normalizedRole)
     const isRegionalHr = isRegionalHrRole(normalizedRole)
     const isDeptHead = isDepartmentHeadRole(normalizedRole)
+    const isTransportManager = normalizedRole === "transport_manager"
 
-    if (!isAdmin && !isRegionalManager && !isRegionalHr && !isDeptHead) {
+    if (!isAdmin && !isRegionalManager && !isRegionalHr && !isDeptHead && !isTransportManager) {
       console.log("[v0] HOD Excuse duty API - Insufficient permissions")
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
@@ -300,7 +302,8 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Invalid request data" }, { status: 400 })
     }
 
-    const { data: excuseDoc, error: fetchError } = await supabase
+    const admin = await createAdminClient()
+    const { data: excuseDoc, error: fetchError } = await admin
       .from("excuse_documents")
       .select("*")
       .eq("id", documentId)
@@ -337,7 +340,7 @@ export async function PUT(request: NextRequest) {
 
     const finalStatus = status === "approved" ? "hr_review" : "rejected"
 
-    const { data: updatedDoc, error: updateError } = await supabase
+    const { data: updatedDoc, error: updateError } = await admin
       .from("excuse_documents")
       .update({
         hod_status: status,

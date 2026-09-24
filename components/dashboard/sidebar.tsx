@@ -197,13 +197,14 @@ const navigationItems = [
     title: "Transport Management",
     href: "/dashboard/transport",
     icon: Bus,
-    roles: ["admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "regional_chief_driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "department_head", "hr_executive", "hr_executive_officer", "director_hr", "manager_hr", "staff", "contract", "audit_staff", "intern", "nsp"],
+    roles: ["admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "regional_chief_driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director", "department_head", "hr_executive", "hr_executive_officer", "director_hr", "manager_hr", "staff", "contract", "audit_staff"],
     category: "admin",
     subItems: [
       { title: "Requests", href: "/dashboard/transport" },
       { title: "My Approvals", href: "/dashboard/transport/requests" },
       { title: "Driver Licenses", href: "/dashboard/transport/drivers" },
-      { title: "Non-regional requisitions", href: "/dashboard/transport/nonregional" },
+      { title: "Head Office requests", href: "/dashboard/transport/nonregional/new" },
+  { title: "My requests", href: "/dashboard/transport/nonregional" },
     ],
   },
 
@@ -476,21 +477,33 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
   const normalizedProfileRole = normalizeAppRole(profile?.role)
   const assignedLocationName = String(profile?.assigned_location?.name || "").toLowerCase()
   const assignedLocationType = String(profile?.assigned_location?.location_type || "").toLowerCase()
+  const isExplicitNonRegionalLocation = [
+    "head office",
+    "swanzy arcade",
+    "archive center",
+    "archivial center",
+    "awutu stores",
+    "cocoa clinic",
+  ].some((location) => assignedLocationName.includes(location))
   const isRegionalOrDistrictLinked = Boolean(
-    profile?.region_id ||
-    assignedLocationType.includes("regional") ||
-    assignedLocationType.includes("district") ||
-    assignedLocationName.includes("regional") ||
-    assignedLocationName.includes("district")
+    !isExplicitNonRegionalLocation && (
+      assignedLocationType.includes("regional") ||
+      assignedLocationType.includes("district") ||
+      assignedLocationName.includes("regional") ||
+      assignedLocationName.includes("district")
+    )
   )
-  const isBasicNonRegionalRole = ["staff", "contract", "audit_staff", "intern", "nsp"].includes(normalizedProfileRole)
-  const canSeeTransportMenu = !isBasicNonRegionalRole || !isRegionalOrDistrictLinked
+  const isBasicNonRegionalRole = ["staff", "contract", "audit_staff"].includes(normalizedProfileRole)
+  const canSeeTransportMenu = !isBasicNonRegionalRole || isExplicitNonRegionalLocation || !isRegionalOrDistrictLinked
   const isChiefDriver = ["chief_driver", "regional_chief_driver"].includes(normalizedProfileRole) || effectiveRole === "chief_driver"
 
   const filteredNavItems = allNavigationItems.filter((item) => {
   if (isChiefDriver && ROLE_RESTRICTED_MAIN_HREFS.has(item.href)) return false
-  if (item.href === "/dashboard/transport" && !canSeeTransportMenu) return false
-  if (isAttendanceOnly) return item.href === "/dashboard/attendance"
+    if (item.href === "/dashboard/transport") {
+      if (!canSeeTransportMenu) return false
+      if (isBasicNonRegionalRole && !isRegionalOrDistrictLinked) return true
+    }
+    if (isAttendanceOnly) return item.href === "/dashboard/attendance"
     if (isAssignedHod && item.roles.some((role) => normalizeAppRole(role) === "department_head")) return true
     // Disbursement confirmation belongs only to Accounts/Loan Office workflows.
     // Explicitly deny it for HR Records and HR Leave Office even if a legacy
@@ -832,7 +845,10 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
                         >
                           {item.subItems.filter((subItem) => {
   if (item.href !== "/dashboard/transport") return true
-  return subItem.href === "/dashboard/transport" || !["staff", "contract", "audit_staff", "intern", "nsp"].includes(effectiveRole)
+  if (["staff", "contract", "audit_staff"].includes(effectiveRole)) {
+    return subItem.title === "Head Office requests" || subItem.title === "My requests"
+  }
+  return true
 }).map((subItem) => (
                             <DropdownMenuItem asChild key={subItem.href}>
                               <Link

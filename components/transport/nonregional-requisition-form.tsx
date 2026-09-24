@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
+import { processSignatureDataUrl } from "@/lib/process-signature-image"
 
 const locations = ["QCC Head Office", "HEAD OFFICE SWANZY ARCADE", "Awutu Stores", "Nsawam Archives"]
 
@@ -38,8 +39,27 @@ export function NonRegionalRequisitionForm() {
   const [hodAuthorization, setHodAuthorization] = useState("")
   const [hodSignatureDataUrl, setHodSignatureDataUrl] = useState("")
   const [requesterSignatureDataUrl, setRequesterSignatureDataUrl] = useState("")
+  const [cleanHodSignatureDataUrl, setCleanHodSignatureDataUrl] = useState("")
   const [hodLinked, setHodLinked] = useState(false)
   const [peopleCount, setPeopleCount] = useState(1)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!hodSignatureDataUrl) {
+      setCleanHodSignatureDataUrl("")
+      return
+    }
+    processSignatureDataUrl(hodSignatureDataUrl)
+      .then((processed) => {
+        if (!cancelled) setCleanHodSignatureDataUrl(processed)
+      })
+      .catch(() => {
+        if (!cancelled) setCleanHodSignatureDataUrl("")
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [hodSignatureDataUrl])
 
   async function populateAuthorization() {
     setAuthorizing(true)
@@ -268,9 +288,11 @@ export function NonRegionalRequisitionForm() {
                 <span>Name and signature</span>
                 <input type="hidden" name="hodSignatureDataUrl" value={hodSignatureDataUrl} />
                 <div className="flex min-h-28 items-center rounded-md border bg-background p-3">
-                  {hodSignatureDataUrl ? (
-                    <img src={hodSignatureDataUrl} alt="Head of Department signature" className="max-h-20 max-w-full object-contain" />
-                  ) : (
+  {cleanHodSignatureDataUrl ? (
+  <img src={cleanHodSignatureDataUrl} alt="Head of Department signature" className="max-h-20 max-w-full object-contain" />
+  ) : hodSignatureDataUrl ? (
+  <span className="text-muted-foreground">Preparing verified signature…</span>
+  ) : (
                     <span className="text-muted-foreground">
                       {canSelfAuthorize ? "Saved signature will appear here" : "Left blank for HOD signature"}
                     </span>

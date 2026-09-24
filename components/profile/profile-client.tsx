@@ -18,7 +18,7 @@ import { RequestLeaveButton } from "@/components/leave/request-leave-button"
 import { PersonalAttendanceHistory } from "@/components/attendance/personal-attendance-history"
 import { SecureInput } from "@/components/ui/secure-input"
 import { SignaturePad } from "@/components/leave/signature-pad"
-import { processSignatureImage } from "@/lib/process-signature-image"
+import { processSignatureDataUrl, processSignatureImage } from "@/lib/process-signature-image"
 import { useToast } from "@/hooks/use-toast"
 import { getPasswordEnforcementMessage, validatePassword } from "@/lib/security"
 import { displayRole } from "@/lib/role-mapping"
@@ -61,6 +61,14 @@ interface UserProfile {
   }
 }
 
+interface LinkedReviewer {
+  id: string
+  first_name?: string | null
+  last_name?: string | null
+  position?: string | null
+  role?: string | null
+}
+
 interface AttendanceSummary {
   totalDays: number
   totalHours: number
@@ -74,6 +82,7 @@ interface AttendanceSummary {
 interface ProfileClientProps {
   initialUser: any
   initialProfile: UserProfile | null
+  initialLinkedReviewers?: LinkedReviewer[]
 }
 
 async function hydrateProfileReferences(supabase: ReturnType<typeof createClient>, profile: any) {
@@ -112,7 +121,7 @@ async function hydrateProfileReferences(supabase: ReturnType<typeof createClient
   return hydratedProfile
 }
 
-export function ProfileClient({ initialUser, initialProfile }: ProfileClientProps) {
+export function ProfileClient({ initialUser, initialProfile, initialLinkedReviewers = [] }: ProfileClientProps) {
   const { toast: appToast } = useToast()
   const [profile, setProfile] = useState<UserProfile | null>(initialProfile)
   const [loading, setLoading] = useState(true)
@@ -121,6 +130,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
   const [success, setSuccess] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary | null>(null)
+  const [linkedReviewers, setLinkedReviewers] = useState<LinkedReviewer[]>(initialLinkedReviewers)
 
   const [editForm, setEditForm] = useState({
     first_name: "",
@@ -135,9 +145,28 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
   const [showPasswordChange, setShowPasswordChange] = useState(false)
   const [signatureMode, setSignatureMode] = useState<"draw" | "upload" | null>(null)
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
+  const [cleanSignatureDataUrl, setCleanSignatureDataUrl] = useState<string | null>(null)
   const [isSavingSignature, setIsSavingSignature] = useState(false)
   const [activeTab, setActiveTab] = useState("profile")
   const searchParams = useSearchParams()
+
+  useEffect(() => {
+    let cancelled = false
+    if (!signatureDataUrl) {
+      setCleanSignatureDataUrl(null)
+      return
+    }
+    processSignatureDataUrl(signatureDataUrl)
+      .then((processed) => {
+        if (!cancelled) setCleanSignatureDataUrl(processed)
+      })
+      .catch(() => {
+        if (!cancelled) setCleanSignatureDataUrl(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [signatureDataUrl])
 
   // if redirected with forceChange flag, open password form automatically
   // or if requesting signature tab, open it
@@ -835,11 +864,15 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                 <div className="space-y-4">
                   <div className="p-4 bg-white border-2 border-green-200 rounded-lg">
                     <p className="text-sm text-gray-600 mb-2">Your saved signature:</p>
-                    <img 
-                      src={signatureDataUrl} 
-                      alt="Your saved signature" 
-                      className="mx-auto max-h-32 max-w-full object-contain"
-                    />
+  {cleanSignatureDataUrl ? (
+  <img
+  src={cleanSignatureDataUrl}
+  alt="Your saved signature"
+  className="mx-auto max-h-32 max-w-full object-contain"
+  />
+  ) : (
+  <p className="text-sm text-gray-600">Preparing isolated signature…</p>
+  )}
                   </div>
                   <div className="flex gap-2">
                     <Button
@@ -1291,8 +1324,16 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                         : "Not assigned"}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm">Length of Service:</span>
+  <div className="flex justify-between gap-4">
+  <span className="text-sm">Linked HODs / RMs:</span>
+  <span className="text-right text-sm font-medium">
+  {linkedReviewers.length > 0
+    ? linkedReviewers.map((reviewer) => `${reviewer.first_name || ""} ${reviewer.last_name || ""}`.trim()).join(", ")
+    : "No linked HOD or RM"}
+  </span>
+  </div>
+  <div className="flex justify-between">
+  <span className="text-sm">Length of Service:</span>
                     <span className="text-sm font-medium">
                       {(profile as any).years_of_service != null
                         ? `${(profile as any).years_of_service}y`

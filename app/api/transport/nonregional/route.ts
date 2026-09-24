@@ -15,6 +15,7 @@ const locations = new Set<string>(NON_REGIONAL_TRANSPORT_LOCATIONS)
 const VIEW_ROLES = new Set([
   "staff",
   "hr",
+  "hr_records",
   "department_head",
   "hr_executive",
   "hr_executive_officer",
@@ -35,6 +36,7 @@ const VIEW_ROLES = new Set([
 const SUBMIT_ROLES = new Set([
   "staff",
   "hr",
+  "hr_records",
   "department_head",
   "hr_executive",
   "hr_executive_officer",

@@ -1542,7 +1542,7 @@ export function LeaveManagementClient({
                       <Calendar className="h-7 w-7 text-cyan-200" />
                     </div>
                     <div>
-                      <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Leave Management</h1>
+                      <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Leave Administration</h1>
                       <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-200 md:text-base">
                         Review leave activity, track submissions, and move quickly between personal requests and approvals.
                       </p>

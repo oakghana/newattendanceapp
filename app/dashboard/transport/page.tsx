@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { TransportWorkspace } from "@/components/transport/transport-workspace"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { canCreateTransportRequest, canManageTransport, isChiefDriverRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 
 const TRANSPORT_ROLES = new Set([
@@ -23,10 +23,17 @@ export default async function TransportPage() {
     )
     .eq("id", user.id)
     .maybeSingle()
-  const { data: assignedHodLink } = await supabase
+  const adminSupabase = await createAdminClient()
+  const { data: assignedHodLink } = await adminSupabase
     .from("loan_hod_linkages")
     .select("id")
     .eq("hod_user_id", user.id)
+    .limit(1)
+    .maybeSingle()
+  const { data: linkedHodForStaff } = await adminSupabase
+    .from("loan_hod_linkages")
+    .select("id")
+    .eq("staff_user_id", user.id)
     .limit(1)
     .maybeSingle()
   const normalizedRole = normalizeAppRole(profile?.role)
@@ -35,12 +42,21 @@ export default async function TransportPage() {
   const hasTransportAccess = TRANSPORT_ROLES.has(normalizedRole) || canManageTransport(profile?.role) || canCreateTransportRequest(profile?.role) || ["managing_director", "hr_executive", "hr_executive_officer", "department_head", "transport_manager"].includes(normalizedRole)
   const preliminaryLocation = profile?.geofence_locations as { name?: string | null } | null
   const preliminaryLocationName = String(preliminaryLocation?.name || "").toLowerCase()
+  const isExplicitNonRegionalLocation = [
+    "head office",
+    "swanzy arcade",
+    "archive center",
+    "archivial center",
+    "awutu stores",
+    "cocoa clinic",
+  ].some((location) => preliminaryLocationName.includes(location))
   const isRegionalOrDistrictLinked = Boolean(
-    profile?.region_id ||
-    preliminaryLocationName.includes("regional") ||
-    preliminaryLocationName.includes("district")
+    !isExplicitNonRegionalLocation && (
+      preliminaryLocationName.includes("regional") ||
+      preliminaryLocationName.includes("district")
+    )
   )
-  const isBasicStaffRole = ["staff", "contract", "audit_staff", "intern", "nsp"].includes(normalizedRole)
+  const isBasicStaffRole = ["staff", "contract", "audit_staff"].includes(normalizedRole)
   if (!profile || !hasTransportAccess || (isBasicStaffRole && isRegionalOrDistrictLinked)) redirect("/dashboard")
 
   const isManagingDirector = ["managing_director", "director"].includes(normalizedRole)
@@ -48,6 +64,7 @@ export default async function TransportPage() {
   const isDepartmentHead = normalizedRole === "department_head"
   const isTransportManager = normalizedRole === "transport_manager"
   const isAssignedHod = Boolean(assignedHodLink)
+  const isStaffLinkedToHod = Boolean(linkedHodForStaff)
   const isChiefDriver = isChiefDriverRole(profile.role)
   const isRegionalHr = isRegionalHrRole(profile.role)
   const isRegionalManager = isRegionalManagerRole(profile.role)
@@ -236,8 +253,9 @@ export default async function TransportPage() {
       nonRegionalPendingCount={nonRegionalPendingCount}
       scopeLabel={scopeLabel}
       driverKind={isRegionalDriver ? "regional" : isNonRegionalDriver ? "nonregional" : undefined}
-      isLinkedHod={isAssignedHod}
-      isChiefDriver={isChiefDriver}
+  isLinkedHod={isAssignedHod || isStaffLinkedToHod}
+  isNonRegionalLocation={isExplicitNonRegionalLocation}
+  isChiefDriver={isChiefDriver}
     />
   )
 }

@@ -16,6 +16,55 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { isCompletedTransportRequest } from "@/lib/transport-workflow"
+import { getSignatureHologramText } from "@/lib/signature-hologram"
+
+function HodSignature({ request, compact = false }: { request: any; compact?: boolean }) {
+  const signatureUrl = String(request.hod_signature_data_url ?? "").trim()
+  const [cleanSignatureUrl, setCleanSignatureUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!signatureUrl || request.hod_decision !== "approved") return
+    let cancelled = false
+    fetch(signatureUrl)
+      .then((response) => response.blob())
+      .then((blob) => new File([blob], "hod-signature", { type: blob.type || "image/png" }))
+      .then((file) => import("@/lib/process-signature-image").then(({ processSignatureImage }) => processSignatureImage(file)))
+      .then((processed) => {
+        if (!cancelled) setCleanSignatureUrl(processed)
+      })
+      .catch(() => {
+        if (!cancelled) setCleanSignatureUrl(signatureUrl)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [signatureUrl, request.hod_decision])
+
+  if (!signatureUrl || request.hod_decision !== "approved") return null
+
+  return (
+    <div className={`relative overflow-hidden rounded-xl border border-emerald-500/35 bg-white ${compact ? "p-3" : "p-4"}`}>
+      <div className="absolute inset-0 flex items-center justify-center opacity-[0.12]" aria-hidden="true">
+        <span className="rotate-[-18deg] whitespace-nowrap font-mono text-2xl font-black tracking-[0.28em] text-emerald-700">
+          {getSignatureHologramText("transport")}
+        </span>
+      </div>
+      <div className="relative flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center justify-center rounded-lg border border-emerald-600/20 bg-white px-3 py-2">
+          {cleanSignatureUrl ? (
+            <img src={cleanSignatureUrl} alt="HOD scanned signature" className={`${compact ? "h-14" : "h-20"} max-w-full object-contain mix-blend-multiply`} />
+          ) : (
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Preparing verified signature…</span>
+          )}
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="font-mono text-[10px] font-black tracking-[0.18em] text-emerald-700">{getSignatureHologramText("transport")}</p>
+          <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Verified HOD signature</p>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
   const [requests, setRequests] = useState<any[]>([])
@@ -361,8 +410,9 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
                         <p><strong>Required:</strong> {request.required_at}</p>
                         <p><strong>Return:</strong> {request.return_at || "Not provided"}</p>
                         <p className="sm:col-span-2"><strong>Purpose:</strong> {request.purpose}</p>
-                        <p><strong>HOD authorization:</strong> {request.hod_authorization || "Pending — blank until HOD signs"}</p>
-                        <p><strong>HOD decision:</strong> {request.hod_decision || "Pending"}</p>
+  <p><strong>HOD authorization:</strong> {request.hod_authorization || "Pending — blank until HOD signs"}</p>
+  {request.hod_decision === "approved" && <HodSignature request={request} compact />}
+  <p><strong>HOD decision:</strong> {request.hod_decision || "Pending"}</p>
                         <p><strong>MD decision:</strong> {request.md_decision || "Pending"}</p>
                       </div>
                     </DialogContent>
@@ -615,7 +665,12 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
                   <div><p className="font-semibold">Purpose of journey</p><p className="whitespace-pre-wrap">{previewRequest.purpose || "Not provided"}</p></div>
                 </section>
                 <section className="grid gap-4 border-t py-6 text-sm sm:grid-cols-2">
-                  <div><p className="font-semibold">HOD authorization</p><p className="mt-1">{previewRequest.hod_authorization || "Pending"}</p><p className="mt-1 text-muted-foreground">Decision: {previewRequest.hod_decision || "pending"}</p></div>
+                  <div>
+                    <p className="font-semibold">HOD authorization</p>
+                    <p className="mt-1">{previewRequest.hod_authorization || "Pending"}</p>
+                    <p className="mt-1 text-muted-foreground">Decision: {previewRequest.hod_decision || "pending"}</p>
+                    {previewRequest.hod_decision === "approved" && <div className="mt-3"><HodSignature request={previewRequest} /></div>}
+                  </div>
                   <div><p className="font-semibold">Managing Director decision</p><p className="mt-1 capitalize">{previewRequest.md_decision || "pending"}</p><p className="mt-1 text-muted-foreground">Status: {workflowLabel(previewRequest)}</p></div>
                 </section>
                 {previewRequest.md_decision === "approved" && (

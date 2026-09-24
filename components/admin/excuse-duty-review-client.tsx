@@ -76,6 +76,9 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedDoc, setSelectedDoc] = useState<ExcuseDocument | null>(null)
+  const [documentViewerOpen, setDocumentViewerOpen] = useState(false)
+  const [documentViewerUrl, setDocumentViewerUrl] = useState<string | null>(null)
+  const [documentViewerLoading, setDocumentViewerLoading] = useState(false)
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
   const [reviewStatus, setReviewStatus] = useState<"approved" | "rejected">("approved")
   const [reviewNotes, setReviewNotes] = useState("")
@@ -156,7 +159,10 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
   const fetchExcuseDocumentDetail = async (doc: ExcuseDocument) => {
     if (doc.file_url && doc.excuse_reason) return doc
     const response = await fetch(`/api/admin/excuse-duty?id=${encodeURIComponent(doc.id)}`, { cache: "no-store" })
-    if (!response.ok) throw new Error("Unable to load document details.")
+    if (!response.ok) {
+      if (doc.file_url) return doc
+      throw new Error("Unable to load document details.")
+    }
     const data = await response.json()
     return (data.excuseDocument || doc) as ExcuseDocument
   }
@@ -251,18 +257,20 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
   }
 
   const viewDocument = async (doc: ExcuseDocument) => {
-    const detailedDoc = await fetchExcuseDocumentDetail(doc)
-    const fileUrl = detailedDoc.file_url || ""
-    if (!fileUrl) {
-      setError("Document file is not available.")
-      return
-    }
-    if (fileUrl.startsWith("data:")) {
-      // For data URLs, open directly
-      window.open(fileUrl, "_blank", "width=800,height=600,scrollbars=yes,resizable=yes")
-    } else {
-      // For regular URLs, open directly
-      window.open(fileUrl, "_blank", "width=800,height=600,scrollbars=yes,resizable=yes")
+    setDocumentViewerLoading(true)
+    setDocumentViewerUrl(null)
+    setDocumentViewerOpen(true)
+    try {
+      const detailedDoc = await fetchExcuseDocumentDetail(doc)
+      const fileUrl = detailedDoc.file_url || ""
+      setError(null)
+      if (!fileUrl) throw new Error("Document file is not available.")
+      setDocumentViewerUrl(fileUrl)
+    } catch (error) {
+      setDocumentViewerOpen(false)
+      setError(error instanceof Error ? error.message : "Unable to load document.")
+    } finally {
+      setDocumentViewerLoading(false)
     }
   }
 
@@ -523,6 +531,28 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={documentViewerOpen} onOpenChange={setDocumentViewerOpen}>
+        <DialogContent className="max-w-5xl h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Excuse Duty Document</DialogTitle>
+            <DialogDescription>Review the submitted supporting document before making a decision.</DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 rounded-lg border bg-muted/30 overflow-hidden">
+            {documentViewerLoading ? (
+              <div className="h-full flex items-center justify-center text-muted-foreground">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading document...
+              </div>
+            ) : documentViewerUrl?.startsWith("data:image/") ? (
+              <div className="h-full overflow-auto flex items-center justify-center p-4">
+                <img src={documentViewerUrl} alt="Excuse duty supporting document" className="max-h-full max-w-full object-contain" />
+              </div>
+            ) : documentViewerUrl ? (
+              <iframe src={documentViewerUrl} title="Excuse duty supporting document" className="h-full w-full border-0" />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
         <DialogContent className="max-w-2xl">
