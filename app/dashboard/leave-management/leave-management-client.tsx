@@ -1911,7 +1911,7 @@ export function LeaveManagementClient({
                   Payment Status
                 </Button>
               )}
-              {(isRegionalHr || isRegionalManager) && (
+              {isManagerView && (
                 <Button
                   onClick={() => setSelectedTab("pending-approvals")}
                   className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
@@ -1922,7 +1922,7 @@ export function LeaveManagementClient({
                   variant={selectedTab === "pending-approvals" ? "default" : "outline"}
                 >
                   <ClipboardList className="h-4 w-4" />
-                  {isRegionalManager ? "Regional Manager Review" : "Regional Non-Annual Queue"} ({pendingNotifications.length})
+                  {isRegionalManager ? "Regional Manager Review" : "HOD Review"} ({pendingNotifications.length})
                 </Button>
               )}
               {isManagerView && (

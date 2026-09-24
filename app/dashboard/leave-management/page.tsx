@@ -47,6 +47,7 @@ export default async function LeaveManagementPage() {
   // may review other staff leave; ordinary staff must never see HOD Review.
   const canReviewLeaveAsHod = [
     "department_head",
+    "accounts_executive",
     "regional_manager",
     "regional_manager_officer",
     "transport_manager",

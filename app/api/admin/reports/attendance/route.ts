@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     }
 
     const normalizedRole = normalizeAppRole(profile.role)
-    if (!['admin', 'regional_manager', 'department_head', 'transport_manager', 'managing_director', 'regional_hr', 'director_hr', 'manager_hr', 'staff'].includes(normalizedRole)) {
+    if (!['admin', 'regional_manager', 'department_head', 'accounts_executive', 'transport_manager', 'managing_director', 'regional_hr', 'director_hr', 'manager_hr', 'staff'].includes(normalizedRole)) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
     console.log("[v0] Reports API - User role:", normalizedRole)
