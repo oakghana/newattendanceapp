@@ -84,7 +84,7 @@ async function checkForActiveLoanOfSameType(
 .select("id, status, request_number, loan_type_label, loan_type_key")
   .eq("user_id", userId)
   .eq("loan_type_key", loanType)
-    .in("status", ["awaiting_hr_terms", "awaiting_committee", "staff_receiving_funds", "partially_recovered", "approved_director", "hod_approved", "sent_to_accounts"])
+    .in("status", ["pending_hod", "awaiting_hr_terms", "awaiting_committee", "staff_receiving_funds", "partially_recovered", "approved_director", "hod_approved", "sent_to_accounts"])
     .order("created_at", { ascending: false })
 
   if (excludeId) query = query.neq("id", excludeId)
@@ -486,8 +486,14 @@ export async function POST(request: NextRequest) {
       insertError = retry.error as any
     }
 
-    if (insertError) {
-      if (isSchemaIssue(insertError)) {
+  if (insertError) {
+  if (String((insertError as any)?.code || "") === "23505" || String((insertError as any)?.message || "").toLowerCase().includes("loan_requests_one_active_type_per_year_idx")) {
+  return NextResponse.json(
+  { error: "You already have a non-rejected request for this loan type in the current calendar year." },
+  { status: 409 },
+  )
+  }
+  if (isSchemaIssue(insertError)) {
         return NextResponse.json(
           {
             error: "Loan request schema mismatch",
