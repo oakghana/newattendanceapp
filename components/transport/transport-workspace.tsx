@@ -820,17 +820,17 @@ export function TransportWorkspace({
   </Dialog>
 
   <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] max-w-5xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{isDepartmentHead ? "New Head Office transport request" : "New regional transport request"}</DialogTitle>
             <DialogDescription>
               {isDepartmentHead
                 ? "Complete the transport requisition. Your Department Head authorization is required before Managing Director review."
-                : "Complete the digital requisition. Regional HR Office or Chief Driver submits to the Regional Manager for endorsement, then the Managing Director for approval."}
+                : "Complete the digital regional requisition. It will be submitted to the Regional Manager, then the Managing Director, and finally the HR Executive for rejoinder."}
             </DialogDescription>
           </DialogHeader>
           <form className="flex flex-col gap-4" onSubmit={handleRequestSubmit}>
-            <div className={`grid gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-4 ${isDepartmentHead ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+            <div className={`grid gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-4 ${isDepartmentHead ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Requester</p>
                 <p className="mt-1 font-medium">{requesterName || "Authenticated user"}</p>
