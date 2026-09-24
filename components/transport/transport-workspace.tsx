@@ -855,10 +855,10 @@ export function TransportWorkspace({
                     id="regional-route"
                     name="regionalRoute"
                     required
-                    defaultValue={isRegionalHr ? "local_regional" : "head_office"}
+                    defaultValue="local_regional"
                     className="h-10 rounded-md border border-input bg-background px-3 text-sm"
                   >
-                    {isRegionalHr && <option value="local_regional">Within-region transport — Regional Manager then Regional Chief Driver</option>}
+                    <option value="local_regional">Within-region transport — Regional Manager then Regional Chief Driver</option>
                     <option value="head_office">Head Office transport support — Regional Manager then Managing Director</option>
                   </select>
                   <p className="text-xs text-muted-foreground">
