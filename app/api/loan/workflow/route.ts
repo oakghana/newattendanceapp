@@ -583,21 +583,22 @@ export async function GET() {
       // point a request at the wrong HOD. Department Heads are always scoped
       // by the requesting staff member's department and location.
       const [directRes, linkedRes] = await Promise.all([
-        isDepartmentHead
-          ? Promise.resolve({ data: [], error: null })
-          : admin.from("loan_requests").select("*").eq("status", "pending_hod").eq("hod_reviewer_id", user.id),
+        admin.from("loan_requests").select("*").eq("status", "pending_hod").eq("hod_reviewer_id", user.id),
         fetchLoanRequestsForStaffIds(admin, reviewerScopedStaffIds, (q) => q.eq("status", "pending_hod")),
       ])
       const error = directRes.error || linkedRes.error
       const seen = new Set<string>()
       const data: any[] = []
+      const endorsableStaffIds = new Set([...linkedStaffIds, ...departmentStaffIds])
       for (const row of [...(directRes.data || []), ...linkedRes.data]) {
+        // Direct reviewer assignment is retained for correctly assigned staff,
+        // but it cannot bypass the Department Head's department/location scope.
+        if (isDepartmentHead && !endorsableStaffIds.has(String(row.user_id || ""))) continue
         if (!seen.has(row.id)) {
           seen.add(row.id)
           data.push(row)
         }
       }
-      const endorsableStaffIds = new Set([...linkedStaffIds, ...departmentStaffIds])
       for (const row of data) {
         row.can_endorse = !isDepartmentHead || endorsableStaffIds.has(String(row.user_id || ""))
       }
