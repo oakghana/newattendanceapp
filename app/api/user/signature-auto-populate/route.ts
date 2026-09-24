@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
       )
 
     let hodId: string | null = null
+    const linkedAuthorizers: Array<{ id: string; name: string; position: string | null; hasSignature: boolean }> = []
     {
       const { data: linkage, error: linkageError } = await admin
         .from("user_profiles")
@@ -53,24 +54,39 @@ export async function GET(request: NextRequest) {
         .eq("id", user.id)
         .maybeSingle()
       hodId = linkageError?.code === "42703" ? null : linkage?.hod_id ?? null
-      if (linkageError && linkageError.code !== "42703") {
-        throw new Error(`Failed to load Head of Department linkage: ${linkageError.message}`)
-      }
+      if (linkageError && linkageError.code !== "42703") throw new Error(`Failed to load Head of Department linkage: ${linkageError.message}`)
     }
 
-    // Fall back to the canonical loan_hod_linkages table used across Loan and
-    // Transport workflows when the legacy user_profiles.hod_id column is empty.
-    if (!hodId) {
-      const { data: canonicalLinkage, error: canonicalLinkageError } = await admin
-        .from("loan_hod_linkages")
-        .select("hod_user_id")
-        .eq("staff_user_id", user.id)
-        .limit(1)
-        .maybeSingle()
-      if (canonicalLinkageError && canonicalLinkageError.code !== "42P01") {
-        throw new Error(`Failed to load Head of Department linkage: ${canonicalLinkageError.message}`)
+    const { data: canonicalLinks, error: canonicalLinkageError } = await admin
+      .from("loan_hod_linkages")
+      .select("hod_user_id")
+      .eq("staff_user_id", user.id)
+      .limit(5000)
+    if (canonicalLinkageError && canonicalLinkageError.code !== "42P01") {
+      throw new Error(`Failed to load Head of Department linkage: ${canonicalLinkageError.message}`)
+    }
+    const linkedHodIds = Array.from(new Set([
+      ...(hodId ? [hodId] : []),
+      ...(canonicalLinks ?? []).map((row) => row.hod_user_id).filter(Boolean),
+    ])) as string[]
+
+    if (scope === "transport" && linkedHodIds.length > 0) {
+      const { data: hodProfiles } = await admin
+        .from("user_profiles")
+        .select("id, signature_data_url, first_name, last_name, position")
+        .in("id", linkedHodIds)
+      const { data: registered } = await admin
+        .from("approval_signature_registry")
+        .select("user_id, signature_data_url")
+        .in("user_id", linkedHodIds)
+        .eq("is_active", true)
+        .order("updated_at", { ascending: false })
+      for (const hod of hodProfiles ?? []) {
+        const registrySignature = registered?.find((item) => item.user_id === hod.id)?.signature_data_url
+        const name = `${hod.first_name ?? ""} ${hod.last_name ?? ""}`.trim()
+        linkedAuthorizers.push({ id: hod.id, name, position: hod.position ?? null, hasSignature: Boolean(hod.signature_data_url || registrySignature) })
       }
-      hodId = canonicalLinkage?.hod_user_id ?? null
+      hodId = linkedAuthorizers.find((hod) => hod.hasSignature)?.id ?? linkedAuthorizers[0]?.id ?? null
     }
 
     // scope=self never inherits the HOD signature (non-regional staff leave authorization blank).
@@ -117,6 +133,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: true,
         hasSignature: false,
+        linkedAuthorizers,
         role: normalizedRole,
         isDepartmentHead,
         canSelfAuthorize,
@@ -141,6 +158,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       hasSignature: true,
+      linkedAuthorizers,
       role: normalizedRole,
       isDepartmentHead,
       canSelfAuthorize,
