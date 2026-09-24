@@ -396,10 +396,11 @@ export async function GET() {
   const locationStaffIds = locationStaffRows
     .filter((row: any) => !/regional\s+office|regional\s+location/i.test(String(row?.geofence_locations?.name || "")))
     .map((row: any) => String(row.id || "")).filter(Boolean)
+  // Department Heads must be scoped strictly to their own department and
+  // assigned location. Location-only staff are not valid HOD queue members.
   const reviewerScopedStaffIds = Array.from(new Set([
-    ...linkedStaffIds,
-    ...departmentStaffIds,
-    ...locationStaffIds,
+  ...linkedStaffIds,
+  ...departmentStaffIds,
   ]))
 
     const loanTypesWithTermsQuery = () =>
@@ -578,8 +579,13 @@ export async function GET() {
           .order("created_at", { ascending: false })
       }
 
+      // Do not trust hod_reviewer_id by itself: legacy/broad assignments can
+      // point a request at the wrong HOD. Department Heads are always scoped
+      // by the requesting staff member's department and location.
       const [directRes, linkedRes] = await Promise.all([
-        admin.from("loan_requests").select("*").eq("status", "pending_hod").eq("hod_reviewer_id", user.id),
+        isDepartmentHead
+          ? Promise.resolve({ data: [], error: null })
+          : admin.from("loan_requests").select("*").eq("status", "pending_hod").eq("hod_reviewer_id", user.id),
         fetchLoanRequestsForStaffIds(admin, reviewerScopedStaffIds, (q) => q.eq("status", "pending_hod")),
       ])
       const error = directRes.error || linkedRes.error
