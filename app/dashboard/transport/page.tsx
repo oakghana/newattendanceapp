@@ -42,11 +42,10 @@ export default async function TransportPage() {
   const preliminaryLocation = profile?.geofence_locations as { name?: string | null } | null
   const preliminaryLocationName = String(preliminaryLocation?.name || "").toLowerCase()
   const isRegionalOrDistrictLinked = Boolean(
-    profile?.region_id ||
     preliminaryLocationName.includes("regional") ||
     preliminaryLocationName.includes("district")
   )
-  const isBasicStaffRole = ["staff", "contract", "audit_staff", "intern", "nsp"].includes(normalizedRole)
+  const isBasicStaffRole = ["staff", "contract", "audit_staff"].includes(normalizedRole)
   if (!profile || !hasTransportAccess || (isBasicStaffRole && isRegionalOrDistrictLinked)) redirect("/dashboard")
 
   const isManagingDirector = ["managing_director", "director"].includes(normalizedRole)

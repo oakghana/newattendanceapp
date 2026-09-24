@@ -478,7 +478,6 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
   const assignedLocationName = String(profile?.assigned_location?.name || "").toLowerCase()
   const assignedLocationType = String(profile?.assigned_location?.location_type || "").toLowerCase()
   const isRegionalOrDistrictLinked = Boolean(
-    profile?.region_id ||
     assignedLocationType.includes("regional") ||
     assignedLocationType.includes("district") ||
     assignedLocationName.includes("regional") ||
