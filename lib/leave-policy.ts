@@ -13,25 +13,24 @@ export interface LeavePolicyPayload {
 }
 
 export const DEFAULT_LEAVE_TYPES: LeaveTypePolicy[] = [
-  { leaveTypeKey: "annual", leaveTypeLabel: "Annual Leave", entitlementDays: 30, leaveYearPeriod: "2026/2027", isEnabled: true },
-  { leaveTypeKey: "sick", leaveTypeLabel: "Sick Leave", entitlementDays: 30, leaveYearPeriod: "2026/2027", isEnabled: true },
+  { leaveTypeKey: "annual", leaveTypeLabel: "Annual Leave", entitlementDays: 30, leaveYearPeriod: "2026", isEnabled: true },
+  { leaveTypeKey: "sick", leaveTypeLabel: "Sick Leave", entitlementDays: 30, leaveYearPeriod: "2026", isEnabled: true },
   // Maternity is governed by delivery type: 12 weeks regular or 14 weeks for CS/twins.
-  { leaveTypeKey: "maternity", leaveTypeLabel: "Maternity Leave", entitlementDays: 84, leaveYearPeriod: "2026/2027", isEnabled: true },
-  { leaveTypeKey: "paternity", leaveTypeLabel: "Paternity Leave", entitlementDays: 5, leaveYearPeriod: "2026/2027", isEnabled: true },
-  { leaveTypeKey: "study_with_pay", leaveTypeLabel: "Study Leave (With Pay)", entitlementDays: 30, leaveYearPeriod: "2026/2027", isEnabled: true },
-  { leaveTypeKey: "study_without_pay", leaveTypeLabel: "Study Leave (Without Pay)", entitlementDays: 180, leaveYearPeriod: "2026/2027", isEnabled: true },
-  { leaveTypeKey: "casual", leaveTypeLabel: "Casual Leave", entitlementDays: 10, leaveYearPeriod: "2026/2027", isEnabled: true },
-  { leaveTypeKey: "part_leave", leaveTypeLabel: "Part Leave", entitlementDays: 15, leaveYearPeriod: "2026/2027", isEnabled: true },
-  { leaveTypeKey: "compassionate", leaveTypeLabel: "Compassionate Leave", entitlementDays: 7, leaveYearPeriod: "2026/2027", isEnabled: true },
-  { leaveTypeKey: "special_unpaid", leaveTypeLabel: "Special / Leave Without Pay", entitlementDays: 30, leaveYearPeriod: "2026/2027", isEnabled: true },
+  { leaveTypeKey: "maternity", leaveTypeLabel: "Maternity Leave", entitlementDays: 84, leaveYearPeriod: "2026", isEnabled: true },
+  { leaveTypeKey: "paternity", leaveTypeLabel: "Paternity Leave", entitlementDays: 5, leaveYearPeriod: "2026", isEnabled: true },
+  { leaveTypeKey: "study_with_pay", leaveTypeLabel: "Study Leave (With Pay)", entitlementDays: 30, leaveYearPeriod: "2026", isEnabled: true },
+  { leaveTypeKey: "study_without_pay", leaveTypeLabel: "Study Leave (Without Pay)", entitlementDays: 180, leaveYearPeriod: "2026", isEnabled: true },
+  { leaveTypeKey: "casual", leaveTypeLabel: "Casual Leave", entitlementDays: 10, leaveYearPeriod: "2026", isEnabled: true },
+  { leaveTypeKey: "part_leave", leaveTypeLabel: "Part Leave", entitlementDays: 15, leaveYearPeriod: "2026", isEnabled: true },
+  { leaveTypeKey: "compassionate", leaveTypeLabel: "Compassionate Leave", entitlementDays: 7, leaveYearPeriod: "2026", isEnabled: true },
+  { leaveTypeKey: "special_unpaid", leaveTypeLabel: "Special / Leave Without Pay", entitlementDays: 30, leaveYearPeriod: "2026", isEnabled: true },
 ]
 
 export function getLeaveYearPeriods(baseYear = 2026, years = 10) {
   const periods: { value: string; label: string; active: boolean }[] = []
   for (let i = 0; i < years; i++) {
     const start = baseYear + i
-    const end = start + 1
-    const label = `${start}/${end}`
+    const label = String(start)
     periods.push({ value: label, label, active: i === 0 })
   }
   return periods

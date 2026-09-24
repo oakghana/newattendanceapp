@@ -151,7 +151,7 @@ export async function getAnnualLeaveReminders(userId: string, admin: any) {
   return {
     reminders: [{
       type: 'annual_leave_deadline',
-      message: `📅 You have ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left to submit your Annual Leave Plan for the ${new Date().getFullYear()}/${new Date().getFullYear() + 1} year. Submissions close on 1st October.`,
+      message: `📅 You have ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left to submit your Annual Leave Plan for the ${new Date().getFullYear()} Leave Year. Submissions close on 1st October.`,
       severity: daysLeft <= 3 ? 'high' : daysLeft <= 7 ? 'medium' : 'low',
       action_url: '/dashboard/leave-management?tab=leave-planning',
       action_label: 'Submit Now',

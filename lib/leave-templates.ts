@@ -21,7 +21,7 @@ Approved Days: {{approved_days}} day(s)
     cc: "",
     placeholder_help: {
       leave_type: "e.g., Annual Leave, Sick Leave",
-      leave_year_period: "e.g., 2026/2027",
+      leave_year_period: "e.g., 2026",
       submitted_date: "Staff request submission date",
       leave_start_date: "Format: DD/MM/YYYY",
       leave_end_date: "Format: DD/MM/YYYY",
@@ -202,7 +202,7 @@ export const placeholderDescriptions: Record<string, string> = {
   "{{staff_name}}": "Full name of the staff member",
   "{{staff_number}}": "Staff ID number",
   "{{leave_type}}": "Type of leave (Annual, Sick, Personal, etc.)",
-  "{{leave_year_period}}": "Financial year (e.g., 2026/2027)",
+  "{{leave_year_period}}": "Financial year (e.g., 2026)",
   "{{leave_start_date}}": "Leave commencement date (DD/MM/YYYY)",
   "{{leave_end_date}}": "Leave end date (DD/MM/YYYY)",
   "{{approved_days}}": "Number of days approved by HR",

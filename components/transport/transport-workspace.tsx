@@ -172,17 +172,18 @@ export function TransportWorkspace({
   const isActingHod = isDepartmentHead || isLinkedHod
   const isTransportManager = normalizedRole === "transport_manager"
   const isChiefDriver = isChiefDriverProp || isChiefDriverRole(normalizedRole)
-  const isRegionalManager = isRegionalManagerRole(normalizedRole)
+  const isRegionalManager = isRegionalManagerRole(normalizedRole) || normalizedRole === "regional_manager" || normalizedRole === "regional manager"
+  const isRegionalOnlyWorkspace = isRegionalManager || isRegionalHr || isRegionalDriver || isChiefDriver
   const isBasicStaff = ["staff", "contract", "audit_staff"].includes(normalizedRole)
-  const isNonRegionalWorkspaceRole = isNonRegionalLocation && !isRegionalHr && !isRegionalManager && !isRegionalDriver && !isChiefDriver
-  const isNonRegionalStaff = isBasicStaff || isNonRegionalWorkspaceRole
+  const isNonRegionalWorkspaceRole = isNonRegionalLocation && !isRegionalOnlyWorkspace
+  const isNonRegionalStaff = !isRegionalOnlyWorkspace && (isBasicStaff || isNonRegionalWorkspaceRole)
   const canCreateRequest = isChiefDriver || isRegionalHr || isActingHod || isBasicStaff
   const canViewDriverLicense = isChiefDriver || isRegionalHr || isRegionalManager || isDriver || isTransportManager || canManage
   const canManageFleet = isManagingDirector || isChiefDriver || isRegionalHr || isRegionalManager || isTransportManager || canManage
   const [requestOpen, setRequestOpen] = useState(false)
   const [hodRequiredOpen, setHodRequiredOpen] = useState(false)
   const router = useRouter()
-  const regionalRouteRequired = isRegionalHr && !isActingHod
+  const regionalRouteRequired = isRegionalOnlyWorkspace
 
 
   async function handleRequestSubmit(event: FormEvent<HTMLFormElement>) {
@@ -207,7 +208,7 @@ export function TransportWorkspace({
       const uploaded = await uploadResponse.json()
       documents.push({ name: file.name, url: uploaded.url, type: file.type, size: file.size })
     }
-    const isNonRegionalRequester = isActingHod || isBasicStaff
+    const isNonRegionalRequester = !isRegionalOnlyWorkspace && (isActingHod || isBasicStaff)
     const submittedLocation = String(requesterLocation || "").trim()
     const approvedLocation = NON_REGIONAL_TRANSPORT_LOCATIONS.includes(submittedLocation as (typeof NON_REGIONAL_TRANSPORT_LOCATIONS)[number])
       ? submittedLocation
@@ -248,13 +249,15 @@ export function TransportWorkspace({
     setRequestOpen(false)
     toast({
       title: "Transport request submitted",
-      description: isActingHod
-        ? "Your Head Office request is awaiting Managing Director approval."
-        : regionalRouteRequired && form.get("regionalRoute") === "local_regional"
-          ? "Your local regional request was sent to the Regional Manager for endorsement, then the Regional Chief Driver for dispatch."
-          : "Your Head Office transport request was sent to the Regional Manager for endorsement, then the Managing Director for approval.",
-    })
-    router.push(isActingHod ? "/dashboard/transport/nonregional" : "/dashboard/transport/requests")
+  description: isRegionalOnlyWorkspace
+  ? "Your regional transport request was sent through the Regional Manager, Managing Director, and HR Executive rejoinder workflow."
+  : isActingHod
+  ? "Your Head Office request is awaiting Managing Director approval."
+  : regionalRouteRequired && form.get("regionalRoute") === "local_regional"
+  ? "Your local regional request was sent to the Regional Manager for endorsement, then the Regional Chief Driver for dispatch."
+  : "Your Head Office transport request was sent to the Regional Manager for endorsement, then the Managing Director for approval.",
+  })
+  router.push(isRegionalOnlyWorkspace ? "/dashboard/transport/requests" : isActingHod ? "/dashboard/transport/nonregional" : "/dashboard/transport/requests")
     router.refresh()
   }
 
@@ -550,18 +553,30 @@ export function TransportWorkspace({
             badge: "Live status",
           },
         ]
-      : isActingHod
-      ? [
-          {
-            title: "Head Office requests",
-            description: "Submit Head Office trips and track driver assignment.",
-            icon: Route,
-            href: "/dashboard/transport/nonregional",
-            cta: "Open my trips",
-            badge: "HOD",
-          },
-        ]
-      : isRegionalDriver
+  : isRegionalOnlyWorkspace
+  ? [
+  {
+  title: "Regional transport request",
+  description: "Create a complete regional transport request for Regional Manager endorsement, Managing Director approval, and HR Executive rejoinder.",
+  icon: Bus,
+  href: "/dashboard/transport/requests",
+  cta: "Create regional request",
+  badge: "Regional",
+  onClick: () => setRequestOpen(true),
+  },
+  ]
+  : isActingHod
+  ? [
+  {
+  title: "Head Office requests",
+  description: "Submit Head Office trips and track driver assignment.",
+  icon: Route,
+  href: "/dashboard/transport/nonregional",
+  cta: "Open my trips",
+  badge: "HOD",
+  },
+  ]
+  : isRegionalDriver
         ? [
             {
               title: "My regional trips",
@@ -609,7 +624,7 @@ export function TransportWorkspace({
           },
         ]
       : []),
-    ...(isDriver || isNonRegionalStaff
+    ...(isDriver || isNonRegionalStaff || isRegionalOnlyWorkspace
       ? []
       : [
           {
@@ -647,7 +662,7 @@ export function TransportWorkspace({
           },
         ]
       : []),
-    ...((isTransportManager || canManage || isHrExecutive) && !isDepartmentHead
+    ...((isTransportManager || canManage || isHrExecutive) && !isDepartmentHead && !isRegionalOnlyWorkspace && !isRegionalManager
       ? [
           {
             title: "Head Office requests",
@@ -691,7 +706,7 @@ export function TransportWorkspace({
                 </Link>
               </Button>
             )}
-            {(isActingHod || isTransportManager || canManage) && (
+            {(isActingHod || isTransportManager || canManage) && !isRegionalOnlyWorkspace && (
               <Button variant="outline" className="bg-background/80" asChild>
                 <Link href="/dashboard/transport/nonregional">
                   <Route data-icon="inline-start" /> Head Office
@@ -805,17 +820,19 @@ export function TransportWorkspace({
   </Dialog>
 
   <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-[min(1100px,calc(100vw-1rem))] overflow-x-hidden overflow-y-auto p-4 sm:w-[calc(100vw-2rem)] sm:max-w-[min(1100px,calc(100vw-2rem))] sm:p-6">
           <DialogHeader>
             <DialogTitle>{isDepartmentHead ? "New Head Office transport request" : "New regional transport request"}</DialogTitle>
             <DialogDescription>
               {isDepartmentHead
                 ? "Complete the transport requisition. Your Department Head authorization is required before Managing Director review."
-                : "Complete the digital requisition. Regional HR Office or Chief Driver submits to the Regional Manager for endorsement, then the Managing Director for approval."}
+                : isRegionalHr
+                ? "Complete the regional requisition and select whether the request is for transport within your region or support from Head Office."
+                : "Complete the digital regional requisition. The selected route determines the next approval desk after Regional Manager endorsement."}
             </DialogDescription>
           </DialogHeader>
-          <form className="flex flex-col gap-4" onSubmit={handleRequestSubmit}>
-            <div className={`grid gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-4 ${isDepartmentHead ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+          <form className="flex min-w-0 flex-col gap-4" onSubmit={handleRequestSubmit}>
+            <div className={`grid gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-4 ${isDepartmentHead ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Requester</p>
                 <p className="mt-1 font-medium">{requesterName || "Authenticated user"}</p>
@@ -831,17 +848,24 @@ export function TransportWorkspace({
                 </div>
               )}
             </div>
-            {regionalRouteRequired && (
-              <div className="grid gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] p-4">
-                <Label htmlFor="regional-route">Request route</Label>
-                <select id="regional-route" name="regionalRoute" required defaultValue="">
-                  <option value="" disabled>Select the approval route</option>
-                  <option value="local_regional">Local regional request — Regional Manager then Regional Chief Driver</option>
-                  <option value="head_office">Head Office transport request — Regional Manager, Managing Director, then HR Executive</option>
-                </select>
-                <p className="text-xs text-muted-foreground">Choose where the request must be fulfilled and approved.</p>
-              </div>
-            )}
+              {regionalRouteRequired && (
+                <div className="grid gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] p-4">
+                  <Label htmlFor="regional-route">Request type</Label>
+                  <select
+                    id="regional-route"
+                    name="regionalRoute"
+                    required
+                    defaultValue="local_regional"
+                    className="h-10 min-w-0 w-full max-w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="local_regional">Within-region transport — Regional Manager then Regional Chief Driver</option>
+                    <option value="head_office">Head Office transport support — Regional Manager then Managing Director</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    Within-region requests go to the Regional Chief Driver after Regional Manager endorsement. Head Office support requests go to the Managing Director after endorsement.
+                  </p>
+                </div>
+              )}
             <div className="grid gap-2">
               <Label htmlFor="transport-purpose">Purpose</Label>
               <Input id="transport-purpose" name="purpose" required placeholder="Staff bus, official travel, funeral, or programme" />
@@ -885,7 +909,7 @@ export function TransportWorkspace({
                 <Label htmlFor="transport-documents">Supporting documents</Label>
                 <div className="flex items-center gap-2 rounded-md border border-dashed p-3">
                   <Paperclip className="size-4 text-muted-foreground" />
-                  <Input id="transport-documents" name="supportingDocuments" type="file" multiple accept="application/pdf,image/jpeg,image/png" className="cursor-pointer border-0 p-0 shadow-none" />
+                  <Input id="transport-documents" name="supportingDocuments" type="file" multiple accept="application/pdf,image/jpeg,image/png" className="min-w-0 max-w-full cursor-pointer border-0 p-0 shadow-none" />
                 </div>
                 <p className="text-xs text-muted-foreground">Attach approval letters, programme schedules, quotations, or other evidence. PDF, JPG, and PNG up to 5 MB each.</p>
               </div>

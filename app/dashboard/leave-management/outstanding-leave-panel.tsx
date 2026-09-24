@@ -55,7 +55,7 @@ export function OutstandingLeavePanel() {
   const [outstandingLeave, setOutstandingLeave] = useState<OutstandingLeave[]>([])
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
-  const [yearFilter, setYearFilter] = useState("2025/2026")
+  const [yearFilter, setYearFilter] = useState("2026")
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("view")
 
@@ -64,7 +64,7 @@ export function OutstandingLeavePanel() {
   const [staffSearch, setStaffSearch] = useState("")
   const [selectedStaff, setSelectedStaff] = useState<StaffOption | null>(null)
   const [formData, setFormData] = useState({
-    leave_year_period: "2025/2026",
+    leave_year_period: "2026",
     opening_balance: 0,
     entitlement_days: 21,
     used_this_period: 0,
@@ -105,7 +105,7 @@ export function OutstandingLeavePanel() {
 
   // Year-end carryover state
   const [carryoverFromYear, setCarryoverFromYear] = useState<string>("2024/2025")
-  const [carryoverToYear, setCarryoverToYear] = useState<string>("2025/2026")
+  const [carryoverToYear, setCarryoverToYear] = useState<string>("2026")
   const [carryoverRegion, setCarryoverRegion] = useState<string>("all")
   const [runningCarryover, setRunningCarryover] = useState(false)
   const [carryoverResults, setCarryoverResults] = useState<any>(null)
@@ -303,7 +303,7 @@ export function OutstandingLeavePanel() {
         setSelectedStaff(null)
         setStaffSearch("")
         setFormData({
-          leave_year_period: "2025/2026",
+          leave_year_period: "2026",
           opening_balance: 0,
           entitlement_days: 21,
           used_this_period: 0,

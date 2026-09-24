@@ -89,7 +89,7 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
   const [loading, setLoading] = useState(false)
   const [leaveTypeOptions, setLeaveTypeOptions] = useState(DEFAULT_LEAVE_TYPES)
   const [leaveSearchQuery, setLeaveSearchQuery] = useState("")
-  const [activePeriod, setActivePeriod] = useState("2026/2027")
+  const [activePeriod, setActivePeriod] = useState("2026")
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [calculatedEnd, setCalculatedEnd] = useState<{ endDate: string; daysCount: number; businessDays: number; estimatedReturn: string } | null>(null)
   const [calculating, setCalculating] = useState(false)
@@ -110,7 +110,7 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
         const response = await fetch("/api/leave/policy", { cache: "no-store" })
         const result = await response.json()
         if (!response.ok) return
-        setActivePeriod(result.activePeriod || "2026/2027")
+        setActivePeriod(result.activePeriod || "2026")
         const opts = (result.leaveTypes || []).map((t: any) => ({
           value: t.leaveTypeKey,
           label: t.leaveTypeLabel,
@@ -303,7 +303,7 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
               <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold">Annual Leave Policy</p>
-                <p className="text-xs mt-1">Entitled: 30 days per leave year (2026/2027). Submission deadline: First week of October. Minimum notice period: 2 weeks in advance.</p>
+                <p className="text-xs mt-1">Entitled: 30 days per leave year (2026). Submission deadline: First week of October. Minimum notice period: 2 weeks in advance.</p>
               </div>
             </div>
           )}

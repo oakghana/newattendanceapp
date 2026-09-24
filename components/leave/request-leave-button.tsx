@@ -42,7 +42,7 @@ export function RequestLeaveButton() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [formData, setFormData] = useState({ start_date: "", end_date: "", leave_type: "annual", reason: "", maternity_delivery_type: "normal", delivery_date: "", requested_days: "" })
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
-  const [activePeriod, setActivePeriod] = useState("2026/2027")
+  const [activePeriod, setActivePeriod] = useState("2026")
   const [annualEntitlement, setAnnualEntitlement] = useState<AnnualEntitlementInfo | null>(null)
   const [assignmentModal, setAssignmentModal] = useState<{
     open: boolean
@@ -74,7 +74,7 @@ export function RequestLeaveButton() {
         const result = await response.json()
         if (!response.ok) return
 
-        setActivePeriod(result.activePeriod || "2026/2027")
+        setActivePeriod(result.activePeriod || "2026")
         const options = (result.leaveTypes || []) as LeaveTypeOption[]
         const hasPartLeave = options.some((opt) => opt.leaveTypeKey === "part_leave")
         const normalizedOptions = hasPartLeave
@@ -85,7 +85,7 @@ export function RequestLeaveButton() {
                 leaveTypeKey: "part_leave",
                 leaveTypeLabel: "Part Leave",
                 entitlementDays: 15,
-                leaveYearPeriod: result.activePeriod || "2026/2027",
+                leaveYearPeriod: result.activePeriod || "2026",
               },
             ]
         setLeaveTypes(normalizedOptions)

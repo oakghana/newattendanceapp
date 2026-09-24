@@ -132,9 +132,10 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .single()
   const isRegionalHr = isRegionalHrRole(profile?.role)
+  const isRegionalManager = isRegionalManagerRole(profile?.role)
   const isChiefDriver = isChiefDriverRole(profile?.role)
-  // Regional HR Office and Chief Driver raise regional requests; Regional Manager endorses, then MD approves.
-  if (!profile?.is_active || (!isRegionalHr && !isChiefDriver)) {
+  // Regional HR Office and Regional Managers can raise regional requests; the request follows the Regional Manager, MD, and HR Executive workflow.
+  if (!profile?.is_active || (!isRegionalHr && !isRegionalManager && !isChiefDriver)) {
     return NextResponse.json(
       { error: "Only active Regional HR Office users or Chief Drivers can create regional transport requests." },
       { status: 403 },
@@ -152,7 +153,7 @@ export async function POST(request: Request) {
   const passengerCount = Number(body.passengerCount)
   const supportingDocuments = Array.isArray(body.supportingDocuments) ? body.supportingDocuments.slice(0, 10).map((document: unknown) => { const item = document as Record<string, unknown>; return { name: String(item.name ?? "supporting-document"), url: String(item.url ?? ""), type: String(item.type ?? "application/octet-stream"), size: Number(item.size ?? 0) } }).filter((document: { url: string }) => document.url) : []
   const regionalRoute = String(body.regionalRoute ?? "").trim()
-  if (isRegionalHr && !["local_regional", "head_office"].includes(regionalRoute)) return NextResponse.json({ error: "Select Local regional request or Head Office transport request." }, { status: 400 })
+  if ((isRegionalHr || isRegionalManager) && !["local_regional", "head_office"].includes(regionalRoute)) return NextResponse.json({ error: "Select a regional transport approval route." }, { status: 400 })
   if (!purpose || !origin || !destination || !eventDate || !Number.isInteger(passengerCount) || passengerCount < 1) return NextResponse.json({ error: "Complete all required request details." }, { status: 400 })
   const { data: signer } = await supabase.from("user_profiles").select("signature_data_url").eq("id", user.id).single()
   const signedAt = new Date().toISOString()
@@ -174,7 +175,7 @@ export async function POST(request: Request) {
   }
   if (isChiefDriver) {
     insertPayload.chief_driver_id = user.id
-  } else {
+  } else if (isRegionalHr) {
     insertPayload.regional_hr_signer_id = user.id
     insertPayload.regional_hr_signed_at = signedAt
     insertPayload.regional_hr_signature_data_url = signer?.signature_data_url ?? null
@@ -596,12 +597,14 @@ workflow_stage: row.request_type === "regional_transport"
   // second submission updates zero rows instead of silently overwriting the
   // first reviewer's endorsement/signature, which would otherwise let two
   // RMs/HODs both "endorse" the same request.
-  let { error, data: updatedRows } = await supabase
+  const initialUpdateResult = await supabase
     .from("transport_requests")
     .update(update)
     .eq("id", requestId)
     .eq("workflow_stage", row.workflow_stage)
     .select("id")
+  const { error } = initialUpdateResult
+  let updatedRows = initialUpdateResult.data
   if (error && /column .*does not exist|schema cache/i.test(error.message)) {
     // Older databases may not have the regional_manager_* signature columns yet
     // (see migration 109_transport_regional_manager_signature.sql). Retry without

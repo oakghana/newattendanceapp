@@ -24,7 +24,7 @@ function isSchemaMissing(error: any) {
 
 function fallbackPolicy() {
   return {
-    activePeriod: "2026/2027",
+    activePeriod: "2026",
     periods: getLeaveYearPeriods(2026, 10),
     leaveTypes: DEFAULT_LEAVE_TYPES,
     readOnly: true,
@@ -71,24 +71,25 @@ export async function GET() {
     }
 
     const periods = getLeaveYearPeriods(2026, 10)
-    const activePeriodFromDb = rows.find((r: any) => r.is_active_period)?.leave_year_period || "2026/2027"
-    const periodMap = new Map(periods.map((p) => [p.value, { ...p, active: p.value === activePeriodFromDb }]))
+  const activePeriodFromDb = rows.find((r: any) => r.is_active_period)?.leave_year_period || "2026"
+  const activePeriod = String(activePeriodFromDb).split("/")[0] || String(activePeriodFromDb)
+  const periodMap = new Map(periods.map((p) => [p.value, { ...p, active: p.value === activePeriod }]))
+  
+  const leaveTypes = rows
+  .filter((r: any) => r.leave_year_period === activePeriodFromDb)
+  .map((r: any) => ({
+  leaveTypeKey: r.leave_type_key,
+  leaveTypeLabel: r.leave_type_label,
+  entitlementDays: r.entitlement_days,
+  leaveYearPeriod: activePeriod,
+  is_enabled: r.is_enabled,
+  is_active: r.is_enabled,
+  }))
 
-    const leaveTypes = rows
-      .filter((r: any) => r.leave_year_period === activePeriodFromDb)
-      .map((r: any) => ({
-        leaveTypeKey: r.leave_type_key,
-        leaveTypeLabel: r.leave_type_label,
-        entitlementDays: r.entitlement_days,
-        leaveYearPeriod: r.leave_year_period,
-        is_enabled: r.is_enabled,
-        is_active: r.is_enabled,
-      }))
-
-    return NextResponse.json({
-      activePeriod: activePeriodFromDb,
-      periods: Array.from(periodMap.values()),
-      leaveTypes: ensurePartLeaveOption(leaveTypes, activePeriodFromDb),
+  return NextResponse.json({
+  activePeriod,
+  periods: Array.from(periodMap.values()),
+  leaveTypes: ensurePartLeaveOption(leaveTypes, activePeriod),
       readOnly: false,
     })
   } catch (error) {
@@ -176,10 +177,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "leaveYearPeriod is required." }, { status: 400 })
       }
 
-      // Business rule requested by user: only 2026/2027 is currently active.
-      if (leaveYearPeriod !== "2026/2027") {
-        return NextResponse.json(
-          { error: "Only 2026/2027 can be active for now. Future periods are record-only." },
+  // Business rule requested by user: only 2026 is currently active.
+  if (leaveYearPeriod !== "2026") {
+  return NextResponse.json(
+  { error: "Only 2026 can be active for now. Future periods are record-only." },
           { status: 400 },
         )
       }
