@@ -600,19 +600,23 @@ export function StaffManagement() {
     setHodLinkError(null)
     try {
       // HOD linkage may target Department Heads, Manager HR, Regional
-      // Managers, Transport Managers, HR Executives, or Accounts Executives.
-      const [resDH, resMHR, resRM, resTM, resHRE, resAE] = await Promise.all([
+      // Managers, Directors, Transport Managers, HR Executives, or Accounts Executives.
+      const [resDH, resMHR, resRM, resMD, resDHR, resTM, resHRE, resAE] = await Promise.all([
         authenticatedFetch("/api/admin/staff?role=department_head&limit=200"),
         authenticatedFetch("/api/admin/staff?role=manager_hr&limit=200"),
         authenticatedFetch("/api/admin/staff?role=regional_manager&limit=200"),
+        authenticatedFetch("/api/admin/staff?role=managing_director&limit=200"),
+        authenticatedFetch("/api/admin/staff?role=director_hr&limit=200"),
         authenticatedFetch("/api/admin/staff?role=transport_manager&limit=200"),
         authenticatedFetch("/api/admin/staff?role=hr_executive&limit=200"),
         authenticatedFetch("/api/admin/staff?role=accounts_executive&limit=200"),
       ])
-      const [dh, mhr, rm, tm, hre, ae]: StaffMember[][] = await Promise.all([
+      const [dh, mhr, rm, md, dhr, tm, hre, ae]: StaffMember[][] = await Promise.all([
         resDH.json().then((d: any) => d.data || []),
         resMHR.json().then((d: any) => d.data || []),
         resRM.json().then((d: any) => d.data || []),
+        resMD.json().then((d: any) => d.data || []),
+        resDHR.json().then((d: any) => d.data || []),
         resTM.json().then((d: any) => d.data || []),
         resHRE.json().then((d: any) => d.data || []),
         resAE.json().then((d: any) => d.data || []),
@@ -684,7 +688,7 @@ export function StaffManagement() {
       }
 
       const seen = new Set<string>()
-      const unique = [...mhr, ...rm, ...dh, ...tm, ...hre, ...ae]
+      const unique = [...mhr, ...rm, ...md, ...dhr, ...dh, ...tm, ...hre, ...ae]
         .filter((s) => {
           if (!s?.id || s.id === member.id || s.is_active === false || seen.has(s.id)) return false
           if (isItAdmin && !isNonRegionalStaff && isDepartmentHead(s)) return false
