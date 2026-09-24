@@ -132,6 +132,10 @@ type LoanRequest = {
   recovery_start_date: string | null
   disbursement_date: string | null
   recovery_months: number | null
+  basic_salary?: number | null
+  salary_advance_multiplier?: number | null
+  salary_advance_amount?: number | null
+  deduction_period_months?: number | null
   director_letter: string | null
   director_letter_original?: string | null
   director_signature_text: string | null
@@ -806,7 +810,11 @@ function buildDirectorAutoMemoDraft(
   currentHodProfile?: any,
   signer?: MemoSigner,
 ) {
-  const amount = row.fixed_amount || row.requested_amount || 0
+  const isSalaryAdvance = row.loan_type_key === "salary_advance" || String(row.loan_type_label || "").toLowerCase().includes("salary advance")
+  const calculatedSalaryAdvanceAmount = isSalaryAdvance && row.salary_advance_amount != null
+    ? Number(row.salary_advance_amount)
+    : null
+  const amount = calculatedSalaryAdvanceAmount ?? row.fixed_amount ?? row.requested_amount ?? 0
   const amtNum = Number(amount)
   const amtFormatted = amtNum.toLocaleString("en-GH", { minimumFractionDigits: 2 })
   const amtWords = amountToWords(amtNum)
@@ -823,7 +831,10 @@ function buildDirectorAutoMemoDraft(
   const recoveryMonth = fmtMemoMonth(row.recovery_start_date)
   const disbursementMonth = fmtMemoMonth(row.disbursement_date)
   const submittedDate = (row.submitted_at || row.created_at || today).toString().slice(0, 10)
-  const months = row.recovery_months || "—"
+  const months = row.deduction_period_months || row.recovery_months || "—"
+  const salaryAdvanceLine = isSalaryAdvance && row.basic_salary && row.salary_advance_multiplier
+    ? `Basic Salary: GHc ${fmtAmount(row.basic_salary)} × ${row.salary_advance_multiplier} month(s) = GHc ${fmtAmount(amount)}`
+    : null
   const signerName = String(signer?.name || "HR EXECUTIVE").trim().toUpperCase()
   const signerPosition = String(signer?.position || "HR EXECUTIVE").trim().toUpperCase()
 
@@ -845,8 +856,9 @@ function buildDirectorAutoMemoDraft(
     "",
     `RE: APPLICATION FOR ${loanLabel.toUpperCase()}`,
     "",
-    `We refer to your loan application dated ${submittedDate} on the above subject and wish to inform you that, Management has given approval for you to be granted a ${loanLabel} of ${amtWords} Ghana Cedis (GHc${amtFormatted}).`,
-    "",
+  `We refer to your loan application dated ${submittedDate} on the above subject and wish to inform you that, Management has given approval for you to be granted a ${loanLabel} of ${amtWords} Ghana Cedis (GHc${amtFormatted}).`,
+  ...(salaryAdvanceLine ? [salaryAdvanceLine] : []),
+  "",
     `The loan would be recovered in ${months} Equal Monthly Instalment from your salary effective, ${recoveryMonth}.`,
     "",
     `By a copy of this letter, the ${memoRecipient} has been advised to release the said amount to you effective, ${disbursementMonth}.`,

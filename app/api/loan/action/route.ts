@@ -136,11 +136,14 @@ function buildAutoMemo(req: any) {
     `Subject: Loan Approval Notice - ${req.loan_type_label}`,
     "",
     "Your loan request has been approved.",
-    `Approved Amount: GHc ${Number(req.fixed_amount || req.requested_amount || 0).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-    `Disbursement Date: ${req.disbursement_date || "TBD"}`,
+  `Approved Amount: GHc ${Number(req.salary_advance_amount || req.fixed_amount || req.requested_amount || 0).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+  ...(req.loan_type_key === "salary_advance" && req.basic_salary && req.salary_advance_multiplier
+    ? [`Basic Salary: GHc ${Number(req.basic_salary).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} × ${req.salary_advance_multiplier} month(s)`]
+    : []),
+  `Disbursement Date: ${req.disbursement_date || "TBD"}`,
     `Recovery Start Date: ${req.recovery_start_date || "TBD"}`,
-    `Recovery Months: ${req.recovery_months || "TBD"}`,
-    "",
+  `Deduction Period: ${req.deduction_period_months || req.recovery_months || "TBD"} month(s)`,
+  "",
     "Please contact HR/Accounts for processing and disbursement instructions.",
   ].join("\n")
 }
@@ -152,8 +155,11 @@ function buildHrTermsMemo(req: any, disbursementDate: string, recoveryStartDate:
     "",
     `Disbursement Date: ${disbursementDate}`,
     `Recovery Start Date: ${recoveryStartDate}`,
-    `Recovery Duration: ${recoveryMonths} month(s)`,
-    `${note ? `HR Note: ${note}` : ""}`,
+  `Recovery Duration: ${req.deduction_period_months || recoveryMonths} month(s)`,
+  ...(req.loan_type_key === "salary_advance" && req.salary_advance_amount
+    ? [`Approved Salary Advance: GHc ${Number(req.salary_advance_amount).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`]
+    : []),
+  `${note ? `HR Note: ${note}` : ""}`,
     "",
     "Your request has been forwarded to Director HR for final approval.",
   ].join("\n")
@@ -523,6 +529,8 @@ export async function POST(request: NextRequest) {
       const recoveryStartDate = String(body.recovery_start_date || "")
       const recoveryMonths = Number(body.recovery_months)
       const normalizedRecoveryMonths = Number.isFinite(recoveryMonths) && recoveryMonths > 0 ? Math.trunc(recoveryMonths) : null
+      const deductionPeriodMonths = Number(body.deduction_period_months)
+      const normalizedDeductionPeriodMonths = Number.isFinite(deductionPeriodMonths) && deductionPeriodMonths > 0 ? Math.trunc(deductionPeriodMonths) : null
 
       if (!disbursementDate || !recoveryStartDate || normalizedRecoveryMonths === null) {
         return NextResponse.json({ error: "disbursement_date, recovery_start_date, and valid recovery_months are required" }, { status: 400 })
@@ -555,6 +563,7 @@ export async function POST(request: NextRequest) {
       }
       update.disbursement_date = disbursementDate
       update.recovery_start_date = recoveryStartDate
+      if (normalizedDeductionPeriodMonths !== null) update.deduction_period_months = normalizedDeductionPeriodMonths
       update.hr_forwarded_at = new Date().toISOString()
       if (body.memo_cc) update.memo_cc = body.memo_cc
       const hrDirectorLetter = String(body.director_letter || "").trim()
