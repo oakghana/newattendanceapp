@@ -37,7 +37,7 @@ export function StaffBalanceLedger({ staffId }: { staffId: string }) {
   const [transactions, setTransactions] = useState<BalanceTransaction[]>([])
   const [balances, setBalances] = useState<BalanceSummary[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedLeaveYear, setSelectedLeaveYear] = useState('2025/2026')
+  const [selectedLeaveYear, setSelectedLeaveYear] = useState('2026')
   const { toast } = useToast()
 
   useEffect(() => {

@@ -94,7 +94,7 @@ export default function HRLeaveAdminClient({ profile }: { profile?: { id: string
   const [outstandingLeave, setOutstandingLeave] = useState<OutstandingLeave[]>([])
   const [outstandingPage, setOutstandingPage] = useState(1)
   const [outstandingSearch, setOutstandingSearch] = useState('')
-  const [outstandingYearFilter, setOutstandingYearFilter] = useState('2025/2026')
+  const [outstandingYearFilter, setOutstandingYearFilter] = useState('2026')
   const [loadingOutstanding, setLoadingOutstanding] = useState(false)
 
   // Load all data on mount
