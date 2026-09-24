@@ -581,7 +581,7 @@ export function TransportWorkspace({
           {
             title: isActingHod ? "New Head Office request" : "Regional requests",
             description: isActingHod
-              ? "Create a digital requisition with HOD authorization for Managing Director review."
+              ? "Create a transport requisition with HOD authorization for Managing Director review."
               : "Review work routed to Regional HR, Regional Managers, HR Records, MD, and Transport.",
             icon: Inbox,
             href: isActingHod ? "/dashboard/transport/nonregional/new" : "/dashboard/transport/requests",
@@ -763,7 +763,7 @@ export function TransportWorkspace({
             <DialogTitle>{isDepartmentHead ? "New Head Office transport request" : "New regional transport request"}</DialogTitle>
             <DialogDescription>
               {isDepartmentHead
-                ? "Complete the digital requisition. Your Department Head authorization is required before Managing Director review."
+                ? "Complete the transport requisition. Your Department Head authorization is required before Managing Director review."
                 : "Complete the digital requisition. Regional HR Office or Chief Driver submits to the Regional Manager for endorsement, then the Managing Director for approval."}
             </DialogDescription>
           </DialogHeader>
