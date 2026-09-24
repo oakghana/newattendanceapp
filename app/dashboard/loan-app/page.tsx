@@ -1179,6 +1179,7 @@ export default function LoanAppPage() {
   const [loanOfficeStatus, setLoanOfficeStatus] = useState("all")
   const [loanOfficeSort, setLoanOfficeSort] = useState<"newest" | "oldest">("newest")
   const [loanOfficePage, setLoanOfficePage] = useState(1)
+  const [loanOfficePageSize, setLoanOfficePageSize] = useState(10)
   const [loanOfficeTypeTab, setLoanOfficeTypeTab] = useState("all")
   const [loanOfficeStageTab, setLoanOfficeStageTab] = useState("pending")
   const [loanOfficeViewMode, setLoanOfficeViewMode] = useState<"table" | "card">("table")
@@ -1829,12 +1830,12 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
   const pagedHod = useMemo(() => filteredHod.slice((hodPage - 1) * pageSize, hodPage * pageSize), [filteredHod, hodPage])
   const pagedLoanOffice = useMemo(
-    () => filteredLoanOffice.slice((loanOfficePage - 1) * pageSize, loanOfficePage * pageSize),
-    [filteredLoanOffice, loanOfficePage],
+  () => filteredLoanOffice.slice((loanOfficePage - 1) * loanOfficePageSize, loanOfficePage * loanOfficePageSize),
+  [filteredLoanOffice, loanOfficePage, loanOfficePageSize],
   )
   const pagedLoanOfficeStage = useMemo(
-    () => filteredLoanOfficeStageRows.slice((loanOfficePage - 1) * pageSize, loanOfficePage * pageSize),
-    [filteredLoanOfficeStageRows, loanOfficePage],
+  () => filteredLoanOfficeStageRows.slice((loanOfficePage - 1) * loanOfficePageSize, loanOfficePage * loanOfficePageSize),
+  [filteredLoanOfficeStageRows, loanOfficePage, loanOfficePageSize],
   )
   const pagedAccounts = useMemo(
     () => filteredAccounts.slice((accountsPage - 1) * pageSize, accountsPage * pageSize),
@@ -1863,15 +1864,15 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
   const totalMyTaskPages = Math.max(1, Math.ceil(filteredMyTasks.length / pageSize))
   const totalAllLoanPages = Math.max(1, Math.ceil(filteredAllLoans.length / pageSize))
   const totalHodPages = Math.max(1, Math.ceil(filteredHod.length / pageSize))
-  const totalLoanOfficePages = Math.max(1, Math.ceil(filteredLoanOffice.length / pageSize))
-  const totalLoanOfficeStagePages = Math.max(1, Math.ceil(filteredLoanOfficeStageRows.length / pageSize))
+  const totalLoanOfficePages = Math.max(1, Math.ceil(filteredLoanOffice.length / loanOfficePageSize))
+  const totalLoanOfficeStagePages = Math.max(1, Math.ceil(filteredLoanOfficeStageRows.length / loanOfficePageSize))
   const totalAccountsPages = Math.max(1, Math.ceil(filteredAccounts.length / pageSize))
   const totalCommitteePages = Math.max(1, Math.ceil(filteredCommittee.length / pageSize))
   const totalHrPages = Math.max(1, Math.ceil(filteredHr.length / pageSize))
   const totalDirectorPages = Math.max(1, Math.ceil(filteredDirector.length / pageSize))
 
   useEffect(() => setHodPage(1), [hodSearch, hodStatus, hodSort])
-  useEffect(() => setLoanOfficePage(1), [loanOfficeSearch, loanOfficeStatus, loanOfficeSort])
+  useEffect(() => setLoanOfficePage(1), [loanOfficeSearch, loanOfficeStatus, loanOfficeSort, loanOfficeTypeTab, loanOfficeStageTab, loanOfficeLocation, loanOfficeDept, loanOfficePageSize])
 
   // Fetch payment records for approval
   useEffect(() => {
@@ -4031,7 +4032,16 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   <SelectItem value="oldest">Oldest first</SelectItem>
                 </SelectContent>
               </Select>
-              <span className="ml-auto text-xs text-slate-400">{filteredLoanOfficeStageRows.length} result{filteredLoanOfficeStageRows.length !== 1 ? "s" : ""}</span>
+              <div className="ml-auto flex items-center gap-2">
+                <label htmlFor="loan-office-page-size" className="text-xs text-slate-500">Records per page</label>
+                <Select value={String(loanOfficePageSize)} onValueChange={(value) => setLoanOfficePageSize(Number(value))}>
+                  <SelectTrigger id="loan-office-page-size" className="h-8 w-20 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[10, 25, 50, 100].map((size) => <SelectItem key={size} value={String(size)}>{size}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <span className="text-xs text-slate-400">{filteredLoanOfficeStageRows.length} result{filteredLoanOfficeStageRows.length !== 1 ? "s" : ""}</span>
+              </div>
             </div>
 
             {/* archive banner */}
