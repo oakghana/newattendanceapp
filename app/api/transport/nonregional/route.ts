@@ -243,7 +243,9 @@ export async function POST(request: Request) {
 
   // A linked HOD must approve first. Department Heads and HR Executives submit
   // their own departmental requisitions directly to the Managing Director.
-  const selfAuth = (canSelfAuthorize(submitterRole) || isLinkedHod) && !isAdminRole(submitterRole)
+  // Being someone else's HOD does not make the requester self-authorizing.
+  // A requester with an assigned HOD must always enter the HOD approval queue.
+  const selfAuth = canSelfAuthorize(submitterRole) && !isAdminRole(submitterRole) && !profile.hod_id && linkedHodIds.length === 0
   const signedAt = new Date().toISOString()
   const legacyHodId = profile.hod_id ? String(profile.hod_id) : null
   const candidateHodIds = Array.from(new Set([...(legacyHodId ? [legacyHodId] : []), ...linkedHodIds]))
