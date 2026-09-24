@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
     let query = admin
       .from("excuse_documents")
       .select(
-        "id,document_name,document_type,excuse_date,status,user_id,reviewed_by,reviewed_at,created_at"
+        "id,document_name,document_type,file_url,mime_type,excuse_reason,excuse_date,status,user_id,reviewed_by,reviewed_at,review_notes,created_at,attendance_record_id"
       )
 
     // Get URL parameters for filtering and pagination
