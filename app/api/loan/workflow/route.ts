@@ -746,10 +746,18 @@ export async function GET() {
           staff_number: sp?.employee_id || r.staff_number || null,
           staff_rank: sp?.position || r.staff_rank || null,
           staff_location_id: sp?.assigned_location_id || r.staff_location_id || null,
-          staff_location_name: (sp as any)?.geofence_locations?.name || r.staff_location_name || null,
+          staff_location_name:
+            (sp as any)?.geofence_locations?.name ||
+            (sp as any)?.geofence_locations?.[0]?.name ||
+            r.staff_location_name ||
+            null,
           staff_location_address: (sp as any)?.geofence_locations?.address || r.staff_location_address || null,
           staff_district_name: (sp as any)?.geofence_locations?.districts?.name || r.staff_district_name || null,
-          staff_region_name: (sp as any)?.geofence_locations?.districts?.regions?.name || r.staff_region_name || null,
+          staff_region_name:
+            (sp as any)?.geofence_locations?.districts?.regions?.name ||
+            (sp as any)?.geofence_locations?.districts?.regions?.[0]?.name ||
+            r.staff_region_name ||
+            null,
         }
       })
 

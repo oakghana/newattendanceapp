@@ -119,6 +119,7 @@ type LoanRequest = {
   staff_location_address?: string | null
   staff_district_name?: string | null
   staff_region_name?: string | null
+  staff_region_name?: string | null
   loan_type_key: string
   loan_type_label: string
   loan_office_note?: string | null
@@ -3848,7 +3849,8 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
   <TableRow key={row.id} className="align-top">
   <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
   <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
-  <TableCell className="whitespace-nowrap text-xs">{row.staff_region_name || row.staff_district_name || "—"}</TableCell>
+  <TableCell className="whitespace-nowrap text-xs">{row.staff_location_name || row.staff_district_name || "—"}</TableCell>
+  <TableCell className="whitespace-nowrap text-xs">{row.staff_region_name || "—"}</TableCell>
   <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
