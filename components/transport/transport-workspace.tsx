@@ -820,7 +820,7 @@ export function TransportWorkspace({
   </Dialog>
 
   <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
-        <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] max-w-5xl overflow-y-auto">
+        <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-[min(1100px,calc(100vw-1rem))] overflow-x-hidden overflow-y-auto p-4 sm:w-[calc(100vw-2rem)] sm:max-w-[min(1100px,calc(100vw-2rem))] sm:p-6">
           <DialogHeader>
             <DialogTitle>{isDepartmentHead ? "New Head Office transport request" : "New regional transport request"}</DialogTitle>
             <DialogDescription>
@@ -831,7 +831,7 @@ export function TransportWorkspace({
                 : "Complete the digital regional requisition. The selected route determines the next approval desk after Regional Manager endorsement."}
             </DialogDescription>
           </DialogHeader>
-          <form className="flex flex-col gap-4" onSubmit={handleRequestSubmit}>
+          <form className="flex min-w-0 flex-col gap-4" onSubmit={handleRequestSubmit}>
             <div className={`grid gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-4 ${isDepartmentHead ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Requester</p>
@@ -856,7 +856,7 @@ export function TransportWorkspace({
                     name="regionalRoute"
                     required
                     defaultValue="local_regional"
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    className="h-10 min-w-0 w-full max-w-full rounded-md border border-input bg-background px-3 text-sm"
                   >
                     <option value="local_regional">Within-region transport — Regional Manager then Regional Chief Driver</option>
                     <option value="head_office">Head Office transport support — Regional Manager then Managing Director</option>
@@ -909,7 +909,7 @@ export function TransportWorkspace({
                 <Label htmlFor="transport-documents">Supporting documents</Label>
                 <div className="flex items-center gap-2 rounded-md border border-dashed p-3">
                   <Paperclip className="size-4 text-muted-foreground" />
-                  <Input id="transport-documents" name="supportingDocuments" type="file" multiple accept="application/pdf,image/jpeg,image/png" className="cursor-pointer border-0 p-0 shadow-none" />
+                  <Input id="transport-documents" name="supportingDocuments" type="file" multiple accept="application/pdf,image/jpeg,image/png" className="min-w-0 max-w-full cursor-pointer border-0 p-0 shadow-none" />
                 </div>
                 <p className="text-xs text-muted-foreground">Attach approval letters, programme schedules, quotations, or other evidence. PDF, JPG, and PNG up to 5 MB each.</p>
               </div>
