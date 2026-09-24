@@ -665,7 +665,15 @@ export function TransportWorkspace({
               </Button>
             )}
             {canCreateRequest && (
-              <Button onClick={() => setRequestOpen(true)}>
+              <Button
+                onClick={() => {
+                  if (isDepartmentHead) {
+                    router.push("/dashboard/transport/nonregional/new")
+                    return
+                  }
+                  setRequestOpen(true)
+                }}
+              >
                 <Plus data-icon="inline-start" /> {isActingHod ? "New Head Office request" : "New regional request"}
               </Button>
             )}
