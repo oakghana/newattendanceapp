@@ -179,7 +179,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const normalizedTargetRole = String(targetProfile.role || "").trim().toLowerCase().replace(/[-\s]+/g, "_")
     const protectedItAdminTarget = ["admin", "administrator", "it_admin", "itadmin"].includes(normalizedTargetRole)
-    const normalizedRequesterRole = String(profile.role || "").trim().toLowerCase().replace(/[-\s]+/g, "_")
 
     if (normalizedRequesterRole === "it_admin" && protectedItAdminTarget) {
       console.error("[v0] Staff API PUT - IT-Admin tried to modify protected account")
