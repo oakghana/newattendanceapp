@@ -172,7 +172,7 @@ export function TransportWorkspace({
   const isActingHod = isDepartmentHead || isLinkedHod
   const isTransportManager = normalizedRole === "transport_manager"
   const isChiefDriver = isChiefDriverProp || isChiefDriverRole(normalizedRole)
-  const isRegionalManager = isRegionalManagerRole(normalizedRole)
+  const isRegionalManager = isRegionalManagerRole(normalizedRole) || normalizedRole === "regional_manager" || normalizedRole === "regional manager"
   const isRegionalOnlyWorkspace = isRegionalManager || isRegionalHr || isRegionalDriver || isChiefDriver
   const isBasicStaff = ["staff", "contract", "audit_staff"].includes(normalizedRole)
   const isNonRegionalWorkspaceRole = isNonRegionalLocation && !isRegionalOnlyWorkspace
@@ -610,7 +610,7 @@ export function TransportWorkspace({
           },
         ]
       : []),
-    ...(isDriver || isNonRegionalStaff
+    ...(isDriver || isNonRegionalStaff || isRegionalOnlyWorkspace
       ? []
       : [
           {
@@ -692,7 +692,7 @@ export function TransportWorkspace({
                 </Link>
               </Button>
             )}
-            {(isActingHod || isTransportManager || canManage) && (
+            {(isActingHod || isTransportManager || canManage) && !isRegionalOnlyWorkspace && (
               <Button variant="outline" className="bg-background/80" asChild>
                 <Link href="/dashboard/transport/nonregional">
                   <Route data-icon="inline-start" /> Head Office
