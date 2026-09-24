@@ -18,7 +18,7 @@ import { RequestLeaveButton } from "@/components/leave/request-leave-button"
 import { PersonalAttendanceHistory } from "@/components/attendance/personal-attendance-history"
 import { SecureInput } from "@/components/ui/secure-input"
 import { SignaturePad } from "@/components/leave/signature-pad"
-import { processSignatureImage } from "@/lib/process-signature-image"
+import { processSignatureDataUrl, processSignatureImage } from "@/lib/process-signature-image"
 import { useToast } from "@/hooks/use-toast"
 import { getPasswordEnforcementMessage, validatePassword } from "@/lib/security"
 import { displayRole } from "@/lib/role-mapping"
@@ -135,9 +135,28 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
   const [showPasswordChange, setShowPasswordChange] = useState(false)
   const [signatureMode, setSignatureMode] = useState<"draw" | "upload" | null>(null)
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
+  const [cleanSignatureDataUrl, setCleanSignatureDataUrl] = useState<string | null>(null)
   const [isSavingSignature, setIsSavingSignature] = useState(false)
   const [activeTab, setActiveTab] = useState("profile")
   const searchParams = useSearchParams()
+
+  useEffect(() => {
+    let cancelled = false
+    if (!signatureDataUrl) {
+      setCleanSignatureDataUrl(null)
+      return
+    }
+    processSignatureDataUrl(signatureDataUrl)
+      .then((processed) => {
+        if (!cancelled) setCleanSignatureDataUrl(processed)
+      })
+      .catch(() => {
+        if (!cancelled) setCleanSignatureDataUrl(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [signatureDataUrl])
 
   // if redirected with forceChange flag, open password form automatically
   // or if requesting signature tab, open it
@@ -835,11 +854,15 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                 <div className="space-y-4">
                   <div className="p-4 bg-white border-2 border-green-200 rounded-lg">
                     <p className="text-sm text-gray-600 mb-2">Your saved signature:</p>
-                    <img 
-                      src={signatureDataUrl} 
-                      alt="Your saved signature" 
-                      className="mx-auto max-h-32 max-w-full object-contain"
-                    />
+  {cleanSignatureDataUrl ? (
+  <img
+  src={cleanSignatureDataUrl}
+  alt="Your saved signature"
+  className="mx-auto max-h-32 max-w-full object-contain"
+  />
+  ) : (
+  <p className="text-sm text-gray-600">Preparing isolated signature…</p>
+  )}
                   </div>
                   <div className="flex gap-2">
                     <Button
