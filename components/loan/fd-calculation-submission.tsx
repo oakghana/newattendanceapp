@@ -27,8 +27,14 @@ interface LoanRequest {
   staff_full_name: string
   requested_amount: number
   repayment_duration_months: number
+  recovery_months?: number | null
+  loan_type_key?: string
   loan_type_label?: string
   monthly_deduction?: number
+  basic_salary?: number | null
+  salary_advance_multiplier?: number | null
+  salary_advance_amount?: number | null
+  deduction_period_months?: number | null
   status?: string
   fd_calculated?: boolean
   fd_score?: number
@@ -75,7 +81,13 @@ export function FDCalculationSubmission({
     Boolean(loanRequest.fd_score != null && FD_EDITABLE_STATUSES.has(String(loanRequest.status || ''))),
   )
 
+  const isSalaryAdvance = String(loanRequest.loan_type_key || loanRequest.loan_type_label || '').toLowerCase().includes('salary')
   const [salaryPerAnnum, setSalaryPerAnnum] = useState('')
+  const [basicSalary, setBasicSalary] = useState(loanRequest.basic_salary != null ? String(loanRequest.basic_salary) : '')
+  const salaryAdvanceMultiplier = Number(loanRequest.salary_advance_multiplier || loanRequest.recovery_months || 0)
+  const salaryAdvanceAmount = isSalaryAdvance && Number(basicSalary) > 0 && salaryAdvanceMultiplier > 0
+    ? Number(basicSalary) * salaryAdvanceMultiplier
+    : 0
   const [consolidatedMonthly, setConsolidatedMonthly] = useState('')
   const [otherAllowances, setOtherAllowances] = useState('')
   const [grossDeduction, setGrossDeduction] = useState(
@@ -241,6 +253,9 @@ export function FDCalculationSubmission({
           submission_type: 'automated_calculation',
           fd_calculation_data: {
             salary_per_annum: result.salary_per_annum,
+            basic_salary: isSalaryAdvance ? Number(basicSalary) : undefined,
+            salary_advance_multiplier: isSalaryAdvance ? salaryAdvanceMultiplier : undefined,
+            salary_advance_amount: isSalaryAdvance ? salaryAdvanceAmount : undefined,
             consolidated_salary_per_month: result.consolidated_salary_per_month,
             recovery_period_months: result.recovery_period_months,
             other_allowances: result.other_allowances_per_month,
@@ -363,6 +378,13 @@ export function FDCalculationSubmission({
                 FD% = Net ÷ Gross
               </p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+                {isSalaryAdvance && (
+                  <div className="space-y-1.5 rounded-md border border-emerald-200 bg-emerald-50 p-3 sm:col-span-2 md:col-span-3">
+                    <Label htmlFor="salary-advance-basic" className="text-xs">Verified Basic Salary / Month (GH¢) *</Label>
+                    <Input id="salary-advance-basic" type="number" min={0} step="0.01" placeholder="Enter basic salary only" value={basicSalary} onChange={e => setBasicSalary(e.target.value)} />
+                    <p className="text-[10px] text-emerald-800">Salary advance multiplier: {salaryAdvanceMultiplier || 'not set'} month(s). Calculated approved amount: {salaryAdvanceAmount > 0 ? GHC(salaryAdvanceAmount) : '—'}.</p>
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <Label htmlFor="fd-salary" className="text-xs">
                     Salary Per Annum (GH&cent;) <span className="text-destructive">*</span>

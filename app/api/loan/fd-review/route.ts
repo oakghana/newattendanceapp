@@ -141,8 +141,12 @@ export async function GET(request: Request) {
         loan_office_note,
         requires_fd_check,
         requested_amount,
-        monthly_deduction,
-        repayment_duration_months,
+  monthly_deduction,
+  basic_salary,
+  salary_advance_multiplier,
+  salary_advance_amount,
+  deduction_period_months,
+  repayment_duration_months,
         created_at,
         submitted_at,
         loan_office_forwarded_at,
@@ -644,6 +648,14 @@ ${accounts_notes ? `\nHR Loan Office Remarks: ${accounts_notes}` : ""}${isManual
       .update({
         fd_score,
         fd_good: fd_good !== undefined ? Boolean(fd_good) : Number(fd_score) >= 39,
+        ...(fd_calculation_data?.basic_salary > 0 && fd_calculation_data?.salary_advance_multiplier > 0
+          ? {
+              basic_salary: Number(fd_calculation_data.basic_salary),
+              salary_advance_multiplier: Math.trunc(Number(fd_calculation_data.salary_advance_multiplier)),
+              salary_advance_amount: Number(fd_calculation_data.salary_advance_amount),
+              requested_amount: Number(fd_calculation_data.salary_advance_amount),
+            }
+          : {}),
         fd_note: finalNotes,
         fd_document_url,
         fd_checked_at: new Date().toISOString(),
