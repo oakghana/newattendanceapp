@@ -648,7 +648,7 @@ export function TransportWorkspace({
           },
         ]
       : []),
-    ...((isTransportManager || canManage || isHrExecutive) && !isDepartmentHead && !isRegionalOnlyWorkspace
+    ...((isTransportManager || canManage || isHrExecutive) && !isDepartmentHead && !isRegionalOnlyWorkspace && !isRegionalManager
       ? [
           {
             title: "Head Office requests",
