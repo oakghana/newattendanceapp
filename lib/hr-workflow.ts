@@ -529,6 +529,6 @@ export function getAssignmentGuidance(locationName: string | null | undefined, k
   return {
     contactRole,
     title: "Hold On Small!",
-    description: `Chale, we checked and your account isn't linked to a ${assignmentKind} yet 🙏🏾, so this ${noun} request can't be sent forward for approval right now. Kindly ask the IT Department to link your profile first, or call the ${contactRole} for assistance 📞 — then come back and try again. Medaase for your patience! 😊`,
+    description: `Chale, we checked and your account isn't linked to a ${assignmentKind} yet, so this ${noun} request can't be sent forward for approval right now. Kindly ask the IT Department to link your profile first, or call the ${contactRole} for assistance — then come back and try again. Medaase for your patience!`,
   }
 }
