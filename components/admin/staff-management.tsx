@@ -163,6 +163,8 @@ export function StaffManagement() {
   const normalizedCurrentUserRole = String(currentUserRole).trim().toLowerCase().replace(/[-\s]+/g, "_")
   const isAdministrator = ["admin", "administrator"].includes(normalizedCurrentUserRole)
   const isItAdmin = ["it_admin", "itadmin"].includes(normalizedCurrentUserRole)
+  const currentUserLocationName = locations.find((location) => location.id === currentUserLocationId)?.name
+  const isRegionalItAdmin = isItAdmin && !isNonRegionalLocation(currentUserLocationName)
   const canManageStaffLinks = isAdministrator || isItAdmin
 
   // Calculate years of service based on date of appointment
@@ -1019,8 +1021,10 @@ export function StaffManagement() {
                               <Input value={roleSearch} onChange={(event) => setRoleSearch(event.target.value)} placeholder="Search roles..." className="h-8" />
                             </div>
                             {ROLE_OPTIONS.filter(([value, label]) => {
-                              const allowedForItAdmin = ["staff", "nsp", "contract", "department_head", "regional_manager", "driver", "chief_driver"].includes(value)
-                              const allowed = isItAdmin ? allowedForItAdmin : isAdministrator || !["accounts", "accounts_executive", "admin", "director_hr", "driver", "chief_driver", "hr_executive", "hr_leave_office", "hr_loan_office", "hr_records", "loan_office", "manager_hr", "managing_director", "regional_hr", "regional_manager", "secretary", "transport_manager"].includes(value) || (value === "it-admin" && canManageStaffLinks)
+  const allowedForItAdmin = ["staff", "nsp", "contract", "department_head", "regional_manager", "driver", "chief_driver"].includes(value)
+  const allowed = isItAdmin
+  ? allowedForItAdmin && !(isRegionalItAdmin && value === "department_head")
+  : isAdministrator || !["accounts", "accounts_executive", "admin", "director_hr", "driver", "chief_driver", "hr_executive", "hr_leave_office", "hr_loan_office", "hr_records", "loan_office", "manager_hr", "managing_director", "regional_hr", "regional_manager", "secretary", "transport_manager"].includes(value) || (value === "it-admin" && canManageStaffLinks)
                               return allowed && `${label} ${value}`.toLowerCase().includes(roleSearch.toLowerCase())
                             }).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
                           </SelectContent>
@@ -1263,8 +1267,8 @@ export function StaffManagement() {
                             <SelectItem value="staff">Staff</SelectItem>
                             <SelectItem value="nsp">NSP</SelectItem>
                             <SelectItem value="contract">Contract</SelectItem>
-                                <SelectItem value="department_head">Department Head</SelectItem>
-                                <SelectItem value="regional_manager">Regional Manager</SelectItem>
+  {!isRegionalItAdmin && <SelectItem value="department_head">Department Head</SelectItem>}
+  <SelectItem value="regional_manager">Regional Manager</SelectItem>
                             <SelectItem value="driver">Driver</SelectItem>
                             <SelectItem value="chief_driver">Chief Driver</SelectItem>
                               </>
