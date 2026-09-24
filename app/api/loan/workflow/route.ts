@@ -341,8 +341,9 @@ export async function GET() {
     const deptName = (profile as any)?.departments?.name || null
     const deptCode = (profile as any)?.departments?.code || null
     const managerDepartmentId = String((profile as any)?.department_id || "")
-    const managerLocationId = String((profile as any)?.assigned_location_id || "")
-    const isRegionalManager = role === "regional_manager"
+  const managerLocationId = String((profile as any)?.assigned_location_id || "")
+  const managerRegionId = String((profile as any)?.region_id || "")
+  const isRegionalManager = role === "regional_manager"
     const isDepartmentHead = ["department_head", "accounts_executive", "transport_manager", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(role)
 
     let linkedStaffIds: string[] = []
@@ -586,15 +587,29 @@ export async function GET() {
         admin.from("loan_requests").select("*").eq("status", "pending_hod").eq("hod_reviewer_id", user.id),
         fetchLoanRequestsForStaffIds(admin, reviewerScopedStaffIds, (q) => q.eq("status", "pending_hod")),
       ])
-      const error = directRes.error || linkedRes.error
-      const seen = new Set<string>()
-      const data: any[] = []
-      const endorsableStaffIds = new Set([...linkedStaffIds, ...departmentStaffIds])
-      for (const row of [...(directRes.data || []), ...linkedRes.data]) {
-        // Direct reviewer assignment is retained for correctly assigned staff,
-        // but it cannot bypass the Department Head's department/location scope.
-        if (isDepartmentHead && !endorsableStaffIds.has(String(row.user_id || ""))) continue
-        if (!seen.has(row.id)) {
+  const error = directRes.error || linkedRes.error
+  const seen = new Set<string>()
+  const data: any[] = []
+  const endorsableStaffIds = new Set([...linkedStaffIds, ...departmentStaffIds])
+  const pendingRows = [...(directRes.data || []), ...linkedRes.data]
+  const pendingRequesterIds = isRegionalManager
+    ? Array.from(new Set(pendingRows.map((row: any) => String(row.user_id || "")).filter(Boolean)))
+    : []
+  const { data: pendingRequesterProfiles } = pendingRequesterIds.length > 0
+    ? await admin.from("user_profiles").select("id, region_id, assigned_location_id").in("id", pendingRequesterIds)
+    : { data: [] as any[] }
+  const pendingRequesterMap = new Map((pendingRequesterProfiles || []).map((row: any) => [String(row.id), row]))
+  for (const row of pendingRows) {
+    // Direct reviewer assignment is retained only when it matches the same
+    // scope enforced by the action endpoint.
+    if (isDepartmentHead && !endorsableStaffIds.has(String(row.user_id || ""))) continue
+    if (isRegionalManager) {
+      const requester = pendingRequesterMap.get(String(row.user_id || ""))
+      const sameRegion = Boolean(managerRegionId && requester?.region_id && String(managerRegionId) === String(requester.region_id))
+      const sameLocation = Boolean(managerLocationId && requester?.assigned_location_id && String(managerLocationId) === String(requester.assigned_location_id))
+      if (!sameRegion && !sameLocation) continue
+    }
+    if (!seen.has(row.id)) {
           seen.add(row.id)
           data.push(row)
         }
@@ -703,7 +718,7 @@ export async function GET() {
   // My Tasks either. This keeps My Tasks consistent with the HOD Review tab
   // and prevents a stale hod_reviewer_id from bypassing department ownership.
   let reviewerRows = reviewerRes.data || []
-  if (isDepartmentHead && reviewerRows.length > 0) {
+  if ((isDepartmentHead || isRegionalManager) && reviewerRows.length > 0) {
     const requesterIds = Array.from(new Set(
       reviewerRows
         .filter((row: any) => String(row.status || "") === "pending_hod")
@@ -711,14 +726,20 @@ export async function GET() {
         .filter(Boolean),
     ))
     const { data: requesterProfiles } = requesterIds.length > 0
-      ? await admin.from("user_profiles").select("id, department_id, assigned_location_id").in("id", requesterIds)
+      ? await admin.from("user_profiles").select("id, department_id, assigned_location_id, region_id").in("id", requesterIds)
       : { data: [] as any[] }
     const requesterMap = new Map((requesterProfiles || []).map((row: any) => [String(row.id), row]))
     reviewerRows = reviewerRows.filter((row: any) => {
       if (String(row.status || "") !== "pending_hod") return true
       const requester = requesterMap.get(String(row.user_id || ""))
+      if (!requester) return false
+      if (isRegionalManager) {
+        return Boolean(
+          (managerRegionId && requester.region_id && String(managerRegionId) === String(requester.region_id)) ||
+          (managerLocationId && requester.assigned_location_id && String(managerLocationId) === String(requester.assigned_location_id)),
+        )
+      }
       return Boolean(
-        requester &&
         String(requester.department_id || "") === managerDepartmentId &&
         String(requester.assigned_location_id || "") === managerLocationId,
       )
