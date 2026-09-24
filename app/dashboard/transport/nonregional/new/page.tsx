@@ -15,6 +15,6 @@ export default async function NewNonRegionalRequisitionPage() {
     .limit(1)
     .maybeSingle()
   const isAssignedHod = Boolean(assignedHodLink)
-  if (!isAssignedHod && !["staff", "contract", "audit_staff", "intern", "nsp", "department_head", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "admin", "it-admin"].includes(normalizeAppRole(profile?.role))) redirect("/dashboard/transport/nonregional")
+  if (!isAssignedHod && !["staff", "contract", "audit_staff", "department_head", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "admin", "it-admin"].includes(normalizeAppRole(profile?.role))) redirect("/dashboard/transport/nonregional")
   return <main className="mx-auto w-full max-w-4xl"><NonRegionalRequisitionForm /></main>
 }

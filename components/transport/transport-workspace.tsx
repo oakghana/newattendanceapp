@@ -169,7 +169,7 @@ export function TransportWorkspace({
   const isTransportManager = normalizedRole === "transport_manager"
   const isChiefDriver = isChiefDriverProp || isChiefDriverRole(normalizedRole)
   const isRegionalManager = isRegionalManagerRole(normalizedRole)
-  const isBasicStaff = ["staff", "contract", "audit_staff", "intern", "nsp"].includes(normalizedRole)
+  const isBasicStaff = ["staff", "contract", "audit_staff"].includes(normalizedRole)
   const isNonRegionalStaff = isBasicStaff
   const canCreateRequest = isChiefDriver || isRegionalHr || isActingHod || isBasicStaff
   const canViewDriverLicense = isChiefDriver || isRegionalHr || isRegionalManager || isDriver || isTransportManager || canManage
