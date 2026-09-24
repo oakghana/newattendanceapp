@@ -699,10 +699,36 @@ export async function GET() {
           ? await fetchLoanRequestsForStaffIds(admin, linkedStaffIds, (q) => q.eq("status", "pending_hod"))
           : { data: [], error: null }
 
-        const error = reviewerRes.error || linkedRes.error
-        const seen = new Set<string>()
-        const data: any[] = []
-        for (const row of [...(reviewerRes.data || []), ...(linkedRes.data || [])]) {
+  // Department Heads must not see cross-department pending-HOD requests in
+  // My Tasks either. This keeps My Tasks consistent with the HOD Review tab
+  // and prevents a stale hod_reviewer_id from bypassing department ownership.
+  let reviewerRows = reviewerRes.data || []
+  if (isDepartmentHead && reviewerRows.length > 0) {
+    const requesterIds = Array.from(new Set(
+      reviewerRows
+        .filter((row: any) => String(row.status || "") === "pending_hod")
+        .map((row: any) => String(row.user_id || ""))
+        .filter(Boolean),
+    ))
+    const { data: requesterProfiles } = requesterIds.length > 0
+      ? await admin.from("user_profiles").select("id, department_id, assigned_location_id").in("id", requesterIds)
+      : { data: [] as any[] }
+    const requesterMap = new Map((requesterProfiles || []).map((row: any) => [String(row.id), row]))
+    reviewerRows = reviewerRows.filter((row: any) => {
+      if (String(row.status || "") !== "pending_hod") return true
+      const requester = requesterMap.get(String(row.user_id || ""))
+      return Boolean(
+        requester &&
+        String(requester.department_id || "") === managerDepartmentId &&
+        String(requester.assigned_location_id || "") === managerLocationId,
+      )
+    })
+  }
+
+  const error = reviewerRes.error || linkedRes.error
+  const seen = new Set<string>()
+  const data: any[] = []
+  for (const row of [...reviewerRows, ...(linkedRes.data || [])]) {
           if (!seen.has(row.id)) {
             seen.add(row.id)
             data.push(row)
