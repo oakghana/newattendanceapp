@@ -84,10 +84,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Use adminSupabase to bypass RLS and read the user's role
+    // Use adminSupabase to bypass RLS and read the user's role. Role values have
+    // historically been stored with either hyphens or underscores, so normalize
+    // before checking authorization (especially for regional IT Admin profiles).
     const { data: profile } = await adminSupabase.from("user_profiles").select("role").eq("id", user.id).single()
+    const normalizedRequesterRole = String(profile?.role || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, "_")
 
-    if (!profile || !["admin", "it-admin", "department_head", "regional_manager", "manager_hr", "director_hr", "hr_leave_office"].includes(profile.role)) {
+    if (!profile || !["admin", "it_admin", "department_head", "regional_manager", "manager_hr", "director_hr", "hr_leave_office"].includes(normalizedRequesterRole)) {
       console.log("[v0] Insufficient permissions for user:", profile?.role)
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
