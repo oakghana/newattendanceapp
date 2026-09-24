@@ -579,7 +579,7 @@ export function TransportWorkspace({
       ? []
       : [
           {
-            title: isActingHod ? "New Head Office request" : "Approval & fulfilment queues",
+            title: isActingHod ? "New Head Office request" : "Regional requests",
             description: isActingHod
               ? "Create a digital requisition with HOD authorization for Managing Director review."
               : "Review work routed to Regional HR, Regional Managers, HR Records, MD, and Transport.",
@@ -616,7 +616,7 @@ export function TransportWorkspace({
     ...((isTransportManager || canManage || isHrExecutive) && !isDepartmentHead
       ? [
           {
-            title: "Head Office fulfilment",
+            title: "Head Office requests",
             description: "Assign drivers to MD-approved Head Office trips.",
             icon: Navigation,
             href: "/dashboard/transport/nonregional",
