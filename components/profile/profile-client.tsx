@@ -82,6 +82,7 @@ interface AttendanceSummary {
 interface ProfileClientProps {
   initialUser: any
   initialProfile: UserProfile | null
+  initialLinkedReviewers?: LinkedReviewer[]
 }
 
 async function hydrateProfileReferences(supabase: ReturnType<typeof createClient>, profile: any) {
@@ -120,7 +121,7 @@ async function hydrateProfileReferences(supabase: ReturnType<typeof createClient
   return hydratedProfile
 }
 
-export function ProfileClient({ initialUser, initialProfile }: ProfileClientProps) {
+export function ProfileClient({ initialUser, initialProfile, initialLinkedReviewers = [] }: ProfileClientProps) {
   const { toast: appToast } = useToast()
   const [profile, setProfile] = useState<UserProfile | null>(initialProfile)
   const [loading, setLoading] = useState(true)
@@ -129,7 +130,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
   const [success, setSuccess] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary | null>(null)
-  const [linkedReviewers, setLinkedReviewers] = useState<LinkedReviewer[]>([])
+  const [linkedReviewers, setLinkedReviewers] = useState<LinkedReviewer[]>(initialLinkedReviewers)
 
   const [editForm, setEditForm] = useState({
     first_name: "",
@@ -148,32 +149,6 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
   const [isSavingSignature, setIsSavingSignature] = useState(false)
   const [activeTab, setActiveTab] = useState("profile")
   const searchParams = useSearchParams()
-
-  useEffect(() => {
-    let cancelled = false
-    async function loadLinkedReviewers() {
-      const supabase = createClient()
-      const { data: linkageRows } = await supabase
-        .from("loan_hod_linkages")
-        .select("hod_user_id")
-        .eq("staff_user_id", initialUser?.id)
-      if (cancelled) return
-      const reviewerIds = Array.from(
-        new Set((linkageRows ?? []).map((row: { hod_user_id?: string | null }) => row.hod_user_id).filter(Boolean)),
-      ) as string[]
-      if (reviewerIds.length === 0) {
-        setLinkedReviewers([])
-        return
-      }
-      const { data: reviewers } = await supabase
-        .from("user_profiles")
-        .select("id, first_name, last_name, position, role")
-        .in("id", reviewerIds)
-      if (!cancelled) setLinkedReviewers((reviewers ?? []) as LinkedReviewer[])
-    }
-    if (initialUser?.id) loadLinkedReviewers()
-    return () => { cancelled = true }
-  }, [initialUser?.id])
 
   useEffect(() => {
     let cancelled = false

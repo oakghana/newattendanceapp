@@ -1,5 +1,5 @@
 import { ProfileClient } from "@/components/profile/profile-client"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 
 export default async function ProfilePage() {
@@ -12,6 +12,16 @@ export default async function ProfilePage() {
   if (!user) {
     redirect("/auth/login")
   }
+
+  const adminSupabase = await createAdminClient()
+  const { data: linkageRows } = await adminSupabase
+    .from("loan_hod_linkages")
+    .select("hod_user_id")
+    .eq("staff_user_id", user.id)
+  const reviewerIds = Array.from(new Set((linkageRows ?? []).map((row) => row.hod_user_id).filter(Boolean))) as string[]
+  const { data: linkedReviewers } = reviewerIds.length
+    ? await adminSupabase.from("user_profiles").select("id, first_name, last_name, position, role").in("id", reviewerIds)
+    : { data: [] }
 
   // Keep the first read to the base row. Optional relationship joins can fail when
   // legacy databases have different foreign-key names and should not blank the page.
@@ -98,5 +108,11 @@ export default async function ProfilePage() {
     }
   }
 
-  return <ProfileClient initialUser={user} initialProfile={finalProfile} />
+  return (
+    <ProfileClient
+      initialUser={user}
+      initialProfile={finalProfile}
+      initialLinkedReviewers={(linkedReviewers ?? []) as any[]}
+    />
+  )
 }
