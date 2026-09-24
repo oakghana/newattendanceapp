@@ -6,7 +6,7 @@ import { TransportRequestRegister } from "@/components/transport/transport-reque
 import { createClient } from "@/lib/supabase/server"
 import { canCreateTransportRequest, canManageTransport, isChiefDriverRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 
-const roles = new Set(["admin", "administrator", "it_admin", "driver", "chief_driver", "regional_chief_driver", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "hr", "managing_director", "director_hr", "manager_hr", "hr_executive", "hr_executive_officer"])
+const roles = new Set(["admin", "administrator", "it_admin", "driver", "chief_driver", "regional_chief_driver", "staff", "contract", "audit_staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "hr", "hr_officer", "hr_leave_office", "managing_director", "director_hr", "manager_hr", "hr_executive", "hr_executive_officer", "secretary", "committee", "loan_committee"])
 const normalize = (value: string) => value.toLowerCase().trim().replace(/[\s-]+/g, "_")
 
 export default async function TransportRequestsPage() {
