@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     }
 
     const normalizedRole = normalizeAppRole(profile.role)
-    if (!['admin', 'regional_manager', 'department_head', 'managing_director', 'regional_hr', 'director_hr', 'manager_hr', 'staff'].includes(normalizedRole)) {
+    if (!['admin', 'regional_manager', 'department_head', 'transport_manager', 'managing_director', 'regional_hr', 'director_hr', 'manager_hr', 'staff'].includes(normalizedRole)) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
     console.log("[v0] Reports API - User role:", normalizedRole)
@@ -176,6 +176,8 @@ export async function GET(request: NextRequest) {
   // Admin and authorized report roles honour the explicit location filter.
   query = query.eq("check_in_location_id", safeLocationId)
   }
+
+    // Transport Managers can view operational attendance across departments; other role scopes remain unchanged.
 
     // If a status filter is selected, scope records by status
     if (safeStatus) {

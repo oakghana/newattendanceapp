@@ -37,9 +37,10 @@ export async function GET(request: NextRequest) {
     const isRegionalManager = isRegionalManagerRole(normalizedRole)
     const isRegionalHr = isRegionalHrRole(normalizedRole)
     const isDeptHead = isDepartmentHeadRole(normalizedRole)
+    const isTransportManager = normalizedRole === "transport_manager"
 
-    // Check if user has admin, regional_manager, regional_hr, or department_head role
-    if (!isAdmin && !isRegionalManager && !isRegionalHr && !isDeptHead) {
+    // Transport Managers may view the operational excuse-duty queue alongside HOD reviewers.
+    if (!isAdmin && !isRegionalManager && !isRegionalHr && !isDeptHead && !isTransportManager) {
       console.log("[v0] HOD Excuse duty API - Insufficient permissions")
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
@@ -287,8 +288,9 @@ export async function PUT(request: NextRequest) {
     const isRegionalManager = isRegionalManagerRole(normalizedRole)
     const isRegionalHr = isRegionalHrRole(normalizedRole)
     const isDeptHead = isDepartmentHeadRole(normalizedRole)
+    const isTransportManager = normalizedRole === "transport_manager"
 
-    if (!isAdmin && !isRegionalManager && !isRegionalHr && !isDeptHead) {
+    if (!isAdmin && !isRegionalManager && !isRegionalHr && !isDeptHead && !isTransportManager) {
       console.log("[v0] HOD Excuse duty API - Insufficient permissions")
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }

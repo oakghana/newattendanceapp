@@ -251,18 +251,20 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
   }
 
   const viewDocument = async (doc: ExcuseDocument) => {
-    const detailedDoc = await fetchExcuseDocumentDetail(doc)
-    const fileUrl = detailedDoc.file_url || ""
-    if (!fileUrl) {
-      setError("Document file is not available.")
-      return
-    }
-    if (fileUrl.startsWith("data:")) {
-      // For data URLs, open directly
-      window.open(fileUrl, "_blank", "width=800,height=600,scrollbars=yes,resizable=yes")
-    } else {
-      // For regular URLs, open directly
-      window.open(fileUrl, "_blank", "width=800,height=600,scrollbars=yes,resizable=yes")
+    // Open the tab before awaiting the detail request so the browser does not block it as a popup.
+    const documentWindow = window.open("about:blank", "_blank", "width=800,height=600,scrollbars=yes,resizable=yes")
+    try {
+      const detailedDoc = await fetchExcuseDocumentDetail(doc)
+      const fileUrl = detailedDoc.file_url || ""
+      if (!fileUrl) throw new Error("Document file is not available.")
+      if (documentWindow) {
+        documentWindow.location.href = fileUrl
+      } else {
+        window.location.assign(fileUrl)
+      }
+    } catch (error) {
+      documentWindow?.close()
+      setError(error instanceof Error ? error.message : "Unable to load document.")
     }
   }
 
