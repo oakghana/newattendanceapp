@@ -23,7 +23,17 @@ export default async function NewNonRegionalRequisitionPage() {
   const isAssignedHod = Boolean(assignedHodLink)
   const isLinkedToHod = Boolean(linkedHodForStaff)
   const normalizedRole = normalizeAppRole(profile?.role)
+  const normalizedLocationName = String((profile as { geofence_locations?: { name?: string | null } | null } | null)?.geofence_locations?.name || "").toLowerCase()
+  const isExplicitNonRegionalLocation = [
+    "head office",
+    "swanzy arcade",
+    "archive center",
+    "archivial center",
+    "awutu stores",
+    "cocoa clinic",
+  ].some((location) => normalizedLocationName.includes(location))
   const isNonRegionalStaff = ["staff", "contract", "audit_staff"].includes(normalizedRole)
+  if (isNonRegionalStaff && !isExplicitNonRegionalLocation) redirect("/dashboard/transport")
   if (isNonRegionalStaff && !isLinkedToHod) redirect("/dashboard/transport")
   if (!isAssignedHod && !["staff", "contract", "audit_staff", "department_head", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "admin", "it-admin"].includes(normalizedRole)) redirect("/dashboard/transport/nonregional")
   return <main className="mx-auto w-full max-w-4xl"><NonRegionalRequisitionForm /></main>

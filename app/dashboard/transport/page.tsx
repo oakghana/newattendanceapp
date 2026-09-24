@@ -41,9 +41,19 @@ export default async function TransportPage() {
   const hasTransportAccess = TRANSPORT_ROLES.has(normalizedRole) || canManageTransport(profile?.role) || canCreateTransportRequest(profile?.role) || ["managing_director", "hr_executive", "hr_executive_officer", "department_head", "transport_manager"].includes(normalizedRole)
   const preliminaryLocation = profile?.geofence_locations as { name?: string | null } | null
   const preliminaryLocationName = String(preliminaryLocation?.name || "").toLowerCase()
+  const isExplicitNonRegionalLocation = [
+    "head office",
+    "swanzy arcade",
+    "archive center",
+    "archivial center",
+    "awutu stores",
+    "cocoa clinic",
+  ].some((location) => preliminaryLocationName.includes(location))
   const isRegionalOrDistrictLinked = Boolean(
-    preliminaryLocationName.includes("regional") ||
-    preliminaryLocationName.includes("district")
+    !isExplicitNonRegionalLocation && (
+      preliminaryLocationName.includes("regional") ||
+      preliminaryLocationName.includes("district")
+    )
   )
   const isBasicStaffRole = ["staff", "contract", "audit_staff"].includes(normalizedRole)
   if (!profile || !hasTransportAccess || (isBasicStaffRole && isRegionalOrDistrictLinked)) redirect("/dashboard")

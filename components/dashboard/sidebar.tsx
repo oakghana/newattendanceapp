@@ -477,14 +477,24 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
   const normalizedProfileRole = normalizeAppRole(profile?.role)
   const assignedLocationName = String(profile?.assigned_location?.name || "").toLowerCase()
   const assignedLocationType = String(profile?.assigned_location?.location_type || "").toLowerCase()
+  const isExplicitNonRegionalLocation = [
+    "head office",
+    "swanzy arcade",
+    "archive center",
+    "archivial center",
+    "awutu stores",
+    "cocoa clinic",
+  ].some((location) => assignedLocationName.includes(location))
   const isRegionalOrDistrictLinked = Boolean(
-    assignedLocationType.includes("regional") ||
-    assignedLocationType.includes("district") ||
-    assignedLocationName.includes("regional") ||
-    assignedLocationName.includes("district")
+    !isExplicitNonRegionalLocation && (
+      assignedLocationType.includes("regional") ||
+      assignedLocationType.includes("district") ||
+      assignedLocationName.includes("regional") ||
+      assignedLocationName.includes("district")
+    )
   )
   const isBasicNonRegionalRole = ["staff", "contract", "audit_staff"].includes(normalizedProfileRole)
-  const canSeeTransportMenu = !isBasicNonRegionalRole || !isRegionalOrDistrictLinked
+  const canSeeTransportMenu = !isBasicNonRegionalRole || isExplicitNonRegionalLocation || !isRegionalOrDistrictLinked
   const isChiefDriver = ["chief_driver", "regional_chief_driver"].includes(normalizedProfileRole) || effectiveRole === "chief_driver"
 
   const filteredNavItems = allNavigationItems.filter((item) => {
