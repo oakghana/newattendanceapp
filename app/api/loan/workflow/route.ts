@@ -362,11 +362,29 @@ export async function GET() {
       .eq("hod_id", user.id)
       .eq("is_active", true)
       .limit(5000)
-    linkedStaffIds = Array.from(new Set([
-      ...linkedStaffIds,
-      ...(hodIdStaff || []).map((row: any) => row.id).filter(Boolean),
-    ]))
+  linkedStaffIds = Array.from(new Set([
+  ...linkedStaffIds,
+  ...(hodIdStaff || []).map((row: any) => row.id).filter(Boolean),
+  ]))
 
+  // A Department Head must never receive another department's request merely
+  // because an old or broad linkage points to that reviewer. Explicit HOD
+  // linkages are still valid for Regional Managers, but non-regional HOD
+  // queues are constrained by the staff member's department and location.
+  if (isDepartmentHead && linkedStaffIds.length > 0) {
+    const { data: linkedStaffProfiles } = await admin
+      .from("user_profiles")
+      .select("id, department_id, assigned_location_id")
+      .in("id", linkedStaffIds)
+      .eq("is_active", true)
+    linkedStaffIds = (linkedStaffProfiles || [])
+      .filter((staff: any) =>
+        String(staff.department_id || "") === managerDepartmentId &&
+        String(staff.assigned_location_id || "") === managerLocationId,
+      )
+      .map((staff: any) => String(staff.id))
+  }
+  
   const isLinkedHod = linkedStaffIds.length > 0
   const departmentStaffRows = isDepartmentHead && managerDepartmentId && managerLocationId
     ? ((await admin.from("user_profiles").select("id, assigned_location_id, department_id, geofence_locations!assigned_location_id(name)").eq("department_id", managerDepartmentId).eq("assigned_location_id", managerLocationId).eq("is_active", true).limit(5000)).data || [])

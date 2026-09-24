@@ -206,7 +206,7 @@ async function resolveManagerReviewers(admin: any, userId: string, departmentId:
     .map((row: any) => String(row?.hod_user_id || ""))
     .filter(Boolean)
   const { data: linkedHodProfiles } = linkedHodIds.length
-    ? await admin.from("user_profiles").select("id, role").in("id", linkedHodIds).eq("is_active", true)
+    ? await admin.from("user_profiles").select("id, role, department_id, assigned_location_id").in("id", linkedHodIds).eq("is_active", true)
     : { data: [] }
   const HOD_ROLES = [
     "department_head",
@@ -224,8 +224,18 @@ async function resolveManagerReviewers(admin: any, userId: string, departmentId:
 
   const eligibleLinkedHodIds = new Set(
     (linkedHodProfiles || [])
-      .filter((profile: any) => HOD_ROLES.includes(normalizeRoleValue(profile.role)))
-      .map((profile: any) => String(profile.id)),
+.filter((profile: any) => {
+    const reviewerRole = normalizeRoleValue(profile.role)
+    if (!HOD_ROLES.includes(reviewerRole)) return false
+    if (reviewerRole === "regional_manager") return true
+    return Boolean(
+      profile.department_id &&
+      departmentId &&
+      String(profile.department_id) === String(departmentId) &&
+      String(profile.assigned_location_id || "") === assignedLocationId,
+    )
+  })
+  .map((profile: any) => String(profile.id)),
   )
 
   for (const reviewerId of linkedHodIds) {
