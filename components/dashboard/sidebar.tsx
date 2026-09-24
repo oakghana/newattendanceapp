@@ -203,7 +203,8 @@ const navigationItems = [
       { title: "Requests", href: "/dashboard/transport" },
       { title: "My Approvals", href: "/dashboard/transport/requests" },
       { title: "Driver Licenses", href: "/dashboard/transport/drivers" },
-      { title: "Non-regional requisitions", href: "/dashboard/transport/nonregional" },
+      { title: "Head Office requests", href: "/dashboard/transport/nonregional/new" },
+  { title: "My requests", href: "/dashboard/transport/nonregional" },
     ],
   },
 
@@ -832,7 +833,10 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
                         >
                           {item.subItems.filter((subItem) => {
   if (item.href !== "/dashboard/transport") return true
-  return subItem.href === "/dashboard/transport" || !["staff", "contract", "audit_staff", "intern", "nsp"].includes(effectiveRole)
+  if (["staff", "contract", "audit_staff", "intern", "nsp"].includes(effectiveRole)) {
+    return subItem.title === "Head Office requests" || subItem.title === "My requests"
+  }
+  return true
 }).map((subItem) => (
                             <DropdownMenuItem asChild key={subItem.href}>
                               <Link

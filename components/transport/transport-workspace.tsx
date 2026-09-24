@@ -170,6 +170,7 @@ export function TransportWorkspace({
   const isChiefDriver = isChiefDriverProp || isChiefDriverRole(normalizedRole)
   const isRegionalManager = isRegionalManagerRole(normalizedRole)
   const isBasicStaff = ["staff", "contract", "audit_staff", "intern", "nsp"].includes(normalizedRole)
+  const isNonRegionalStaff = isBasicStaff
   const canCreateRequest = isChiefDriver || isRegionalHr || isActingHod || isBasicStaff
   const canViewDriverLicense = isChiefDriver || isRegionalHr || isRegionalManager || isDriver || isTransportManager || canManage
   const canManageFleet = isManagingDirector || isChiefDriver || isRegionalHr || isRegionalManager || isTransportManager || canManage
@@ -462,7 +463,7 @@ export function TransportWorkspace({
     ? `Scope: ${scopeLabel}`
     : isTransportManager || canManage
       ? "Scope: Nationwide"
-      : isDepartmentHead
+      : isDepartmentHead || isNonRegionalStaff
         ? "Scope: Your Head Office requests"
         : "Scope: Assigned region"
 
@@ -480,7 +481,14 @@ export function TransportWorkspace({
         { label: "Approved", value: approvedCount, note: "Cleared for transport fulfilment", icon: CheckCircle2, tone: "emerald" as const },
         { label: "Driver assigned", value: assignedCount, note: "Trips with vehicle and driver set", icon: Navigation, tone: "slate" as const },
       ]
-    : isRegionalManager || isRegionalHr || isChiefDriver
+    : isNonRegionalStaff
+      ? [
+          { label: "My requests", value: totalCount, note: "Head Office requests you submitted", icon: Inbox, tone: "primary" as const },
+          { label: "Awaiting endorsement", value: pendingCount, note: "With your linked HOD", icon: Clock3, tone: "amber" as const },
+          { label: "Approved", value: approvedCount, note: "Cleared by the Managing Director", icon: CheckCircle2, tone: "emerald" as const },
+          { label: "Transport assigned", value: assignedCount, note: "Vehicle and driver allocated", icon: Route, tone: "slate" as const },
+        ]
+      : isRegionalManager || isRegionalHr || isChiefDriver
       ? [
           { label: isChiefDriver ? "Ready to dispatch" : "Regional queue", value: pendingCount, note: isChiefDriver ? "Regional Manager-approved local trips" : "Items needing attention in your region", icon: Clock3, tone: "amber" as const },
           { label: "Region register", value: totalCount, note: "Requests limited to your regional office", icon: Bus, tone: "primary" as const },
@@ -516,7 +524,26 @@ export function TransportWorkspace({
           ]
 
   const modules = [
-    ...(isActingHod
+    ...(isNonRegionalStaff
+      ? [
+          {
+            title: "Head Office requests",
+            description: "Submit a Head Office transport request to your linked HOD for endorsement, then follow MD approval and vehicle assignment.",
+            icon: Route,
+            href: "/dashboard/transport/nonregional/new",
+            cta: "Request transport",
+            badge: "Head Office",
+          },
+          {
+            title: "My requests",
+            description: "Track HOD endorsement, Managing Director approval, and Transport Management assignment updates.",
+            icon: Inbox,
+            href: "/dashboard/transport/nonregional",
+            cta: "Track my requests",
+            badge: "Live status",
+          },
+        ]
+      : isActingHod
       ? [
           {
             title: "Head Office requests",
@@ -575,7 +602,7 @@ export function TransportWorkspace({
           },
         ]
       : []),
-    ...(isDriver
+    ...(isDriver || isNonRegionalStaff
       ? []
       : [
           {
@@ -667,14 +694,14 @@ export function TransportWorkspace({
             {canCreateRequest && (
               <Button
                 onClick={() => {
-                  if (isDepartmentHead) {
+                  if (isDepartmentHead || isNonRegionalStaff) {
                     router.push("/dashboard/transport/nonregional/new")
                     return
                   }
                   setRequestOpen(true)
                 }}
               >
-                <Plus data-icon="inline-start" /> {isActingHod ? "New Head Office request" : "New regional request"}
+                <Plus data-icon="inline-start" /> {isActingHod || isNonRegionalStaff ? "New Head Office request" : "New regional request"}
               </Button>
             )}
           </div>
