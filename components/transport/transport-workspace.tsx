@@ -58,6 +58,7 @@ type TransportWorkspaceProps = {
   scopeLabel?: string
   driverKind?: "regional" | "nonregional"
   isLinkedHod?: boolean
+  isNonRegionalLocation?: boolean
   isChiefDriver?: boolean
 }
 
@@ -156,6 +157,7 @@ export function TransportWorkspace({
   scopeLabel = "",
   driverKind,
   isLinkedHod = false,
+  isNonRegionalLocation = false,
   isChiefDriver: isChiefDriverProp = false,
 }: TransportWorkspaceProps) {
   const normalizedRole = role.toLowerCase().trim().replace(/[\s-]+/g, "_")
@@ -172,7 +174,8 @@ export function TransportWorkspace({
   const isChiefDriver = isChiefDriverProp || isChiefDriverRole(normalizedRole)
   const isRegionalManager = isRegionalManagerRole(normalizedRole)
   const isBasicStaff = ["staff", "contract", "audit_staff"].includes(normalizedRole)
-  const isNonRegionalStaff = isBasicStaff
+  const isNonRegionalWorkspaceRole = isNonRegionalLocation && !isRegionalHr && !isRegionalManager && !isRegionalDriver && !isChiefDriver
+  const isNonRegionalStaff = isBasicStaff || isNonRegionalWorkspaceRole
   const canCreateRequest = isChiefDriver || isRegionalHr || isActingHod || isBasicStaff
   const canViewDriverLicense = isChiefDriver || isRegionalHr || isRegionalManager || isDriver || isTransportManager || canManage
   const canManageFleet = isManagingDirector || isChiefDriver || isRegionalHr || isRegionalManager || isTransportManager || canManage

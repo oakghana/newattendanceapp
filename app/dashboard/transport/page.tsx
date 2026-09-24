@@ -252,8 +252,9 @@ export default async function TransportPage() {
       nonRegionalPendingCount={nonRegionalPendingCount}
       scopeLabel={scopeLabel}
       driverKind={isRegionalDriver ? "regional" : isNonRegionalDriver ? "nonregional" : undefined}
-      isLinkedHod={isAssignedHod || (isBasicStaffRole && isStaffLinkedToHod)}
-      isChiefDriver={isChiefDriver}
+  isLinkedHod={isAssignedHod || (isBasicStaffRole && isStaffLinkedToHod)}
+  isNonRegionalLocation={isExplicitNonRegionalLocation}
+  isChiefDriver={isChiefDriver}
     />
   )
 }
