@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { TransportWorkspace } from "@/components/transport/transport-workspace"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { canCreateTransportRequest, canManageTransport, isChiefDriverRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 
 const TRANSPORT_ROLES = new Set([
@@ -23,13 +23,14 @@ export default async function TransportPage() {
     )
     .eq("id", user.id)
     .maybeSingle()
-  const { data: assignedHodLink } = await supabase
+  const adminSupabase = await createAdminClient()
+  const { data: assignedHodLink } = await adminSupabase
     .from("loan_hod_linkages")
     .select("id")
     .eq("hod_user_id", user.id)
     .limit(1)
     .maybeSingle()
-  const { data: linkedHodForStaff } = await supabase
+  const { data: linkedHodForStaff } = await adminSupabase
     .from("loan_hod_linkages")
     .select("id")
     .eq("staff_user_id", user.id)
