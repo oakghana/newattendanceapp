@@ -142,7 +142,7 @@ export async function GET(request: NextRequest) {
 
     const { data: profile } = await admin
       .from("user_profiles")
-      .select("id, role, staff_category, department_id, assigned_location_id, departments(name, code)")
+      .select("id, role, staff_category, department_id, assigned_location_id, departments(name, code), geofence_locations!assigned_location_id(name, location_type, parent_location_id, district_id)")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -723,11 +723,33 @@ export async function POST(request: NextRequest) {
         .eq("id", staffUserId)
         .single()
 
-      if (staffError || !staffProfile) {
-        return NextResponse.json({ error: "Staff profile not found" }, { status: 404 })
-      }
+  if (staffError || !staffProfile) {
+  return NextResponse.json({ error: "Staff profile not found" }, { status: 404 })
+  }
 
-      const { data: hodRows, error: hodRowsError } = await admin
+  // Regional IT Admins may not assign Department Heads to regional or district staff.
+  const requesterLocation = Array.isArray((profile as any)?.geofence_locations)
+    ? (profile as any).geofence_locations[0]
+    : (profile as any)?.geofence_locations
+  const requesterIsRegionalItAdmin = role === "it_admin" && !isNonRegionalLocation(requesterLocation?.name)
+  const targetIsRegionalStaff = !isNonRegionalStaff(staffProfile)
+  if (requesterIsRegionalItAdmin && targetIsRegionalStaff) {
+    const requestedHodRows = await admin
+      .from("user_profiles")
+      .select("id, role")
+      .in("id", hodUserIds)
+    const includesDepartmentHead = (requestedHodRows.data || []).some(
+      (hod: any) => normalizeRole(String(hod.role || "")) === "department_head",
+    )
+    if (includesDepartmentHead) {
+      return NextResponse.json(
+        { error: "Regional IT Admins cannot assign Department Heads to regional or district staff." },
+        { status: 403 },
+      )
+    }
+  }
+  
+  const { data: hodRows, error: hodRowsError } = await admin
         .from("user_profiles")
         .select("id, role, department_id, assigned_location_id, position, geofence_locations!assigned_location_id(name, location_type, parent_location_id)")
         .in("id", hodUserIds)

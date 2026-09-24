@@ -691,6 +691,8 @@ export function StaffManagement() {
       const unique = [...mhr, ...rm, ...md, ...dhr, ...dh, ...tm, ...hre, ...ae]
         .filter((s) => {
           if (!s?.id || s.id === member.id || s.is_active === false || seen.has(s.id)) return false
+          // Regional IT Admins must not assign Department Heads to regional or district staff.
+          if (isItAdmin && !isNonRegionalStaff && isDepartmentHead(s)) return false
           seen.add(s.id)
           return true
         })
