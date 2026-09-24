@@ -439,7 +439,10 @@ export async function GET(
   const isRegionalLeave = leaveWorkflowRoute === "regional" || leaveWorkflowRoute === "regional_hr"
 
   // The official HR Records reference is required before any memo can be rendered.
-  
+  if (!String((leaveRequest as any).memo_reference || "").trim() || !(leaveRequest as any).memo_reference_locked) {
+    return NextResponse.json({ error: "This leave memo cannot be downloaded until HR Records enters and locks the official reference." }, { status: 409 })
+  }
+
   // Load the latest carryover balance because older requests may not have the
     // HR-entered outstanding days copied onto leave_plan_requests yet.
     const { data: outstandingBalance } = await admin
@@ -873,7 +876,7 @@ export async function GET(
     doc.text(`Date:  ${fmtFormalDate(approvalDate)}`, pageWidth - marginRight, y, { align: "right" })
     y += 10
 
-    // ── Recipient block (modern styling) ──────────────────────────────────────────────
+    // ── Recipient block (modern styling) ──────────���───────────────────────────────────
     const applicantFullName = fmtName(ap).toUpperCase() || "REQUESTING STAFF"
     const staffNo           = String(ap?.employee_id || ap?.staff_number || "")
     const applicantPosition = String(ap?.position || "STAFF").toUpperCase()
@@ -1032,7 +1035,7 @@ export async function GET(
       // For non-table types (casual, part_leave, paternity, etc.), resume duty is already in paragraphs
     }
 
-    // ── Closing line ─────────────────────────────────────────────────
+    // ── Closing line ────────────────────────────────────────────��────
     if (closingLine) {
       doc.setFont("times", "normal")
       doc.setFontSize(9.5)
