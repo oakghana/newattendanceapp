@@ -489,8 +489,11 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
 
   const filteredNavItems = allNavigationItems.filter((item) => {
   if (isChiefDriver && ROLE_RESTRICTED_MAIN_HREFS.has(item.href)) return false
-  if (item.href === "/dashboard/transport" && !canSeeTransportMenu) return false
-  if (isAttendanceOnly) return item.href === "/dashboard/attendance"
+    if (item.href === "/dashboard/transport") {
+      if (!canSeeTransportMenu) return false
+      if (isBasicNonRegionalRole && !isRegionalOrDistrictLinked) return true
+    }
+    if (isAttendanceOnly) return item.href === "/dashboard/attendance"
     if (isAssignedHod && item.roles.some((role) => normalizeAppRole(role) === "department_head")) return true
     // Disbursement confirmation belongs only to Accounts/Loan Office workflows.
     // Explicitly deny it for HR Records and HR Leave Office even if a legacy
