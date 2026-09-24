@@ -20,12 +20,12 @@ export default async function ReportsPage() {
     .single()
 
   const normalizedRole = normalizeAppRole(profile?.role)
-  if (!profile || !["admin", "regional_manager", "department_head", "transport_manager", "managing_director", "regional_hr", "director_hr", "manager_hr"].includes(normalizedRole)) {
+  if (!profile || !["admin", "regional_manager", "department_head", "accounts_executive", "transport_manager", "managing_director", "regional_hr", "director_hr", "manager_hr"].includes(normalizedRole)) {
     redirect("/dashboard")
   }
 
   const isHrRole = normalizedRole === "regional_hr" || normalizedRole === "director_hr" || normalizedRole === "manager_hr"
-  const scopeRole = normalizedRole as "admin" | "regional_manager" | "regional_hr" | "department_head" | "transport_manager"
+  const scopeRole = (normalizedRole === "accounts_executive" ? "department_head" : normalizedRole) as "admin" | "regional_manager" | "regional_hr" | "department_head" | "transport_manager"
   const scopeDepartmentId = profile.department_id ?? null
   const scopeLocationId = profile.assigned_location_id ?? null
 

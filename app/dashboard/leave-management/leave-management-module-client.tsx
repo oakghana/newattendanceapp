@@ -17,7 +17,7 @@ import { HrExecutiveLeaveModule } from "./hr-executive-leave-module"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 import { LoanOfficeLeaveModule } from "./loan-office-leave-module"
 
-const HR_ANALYTICS_ROLES = ["hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr", "department_head", "regional_manager"]
+const HR_ANALYTICS_ROLES = ["hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr", "department_head", "accounts_executive", "regional_manager"]
 
 function normalizeRole(role: string | null | undefined) {
   return String(role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
