@@ -153,15 +153,23 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
     let cancelled = false
     async function loadLinkedReviewers() {
       const supabase = createClient()
-      const { data } = await supabase
+      const { data: linkageRows } = await supabase
         .from("loan_hod_linkages")
-        .select("hod_user_id, hod:user_profiles!hod_user_id(id, first_name, last_name, position, role)")
+        .select("hod_user_id")
         .eq("staff_user_id", initialUser?.id)
       if (cancelled) return
-      const reviewers = (data ?? [])
-        .map((row: { hod?: LinkedReviewer | null }) => row.hod ?? null)
-        .filter((reviewer: LinkedReviewer | null): reviewer is LinkedReviewer => Boolean(reviewer?.id))
-      setLinkedReviewers(reviewers)
+      const reviewerIds = Array.from(
+        new Set((linkageRows ?? []).map((row: { hod_user_id?: string | null }) => row.hod_user_id).filter(Boolean)),
+      ) as string[]
+      if (reviewerIds.length === 0) {
+        setLinkedReviewers([])
+        return
+      }
+      const { data: reviewers } = await supabase
+        .from("user_profiles")
+        .select("id, first_name, last_name, position, role")
+        .in("id", reviewerIds)
+      if (!cancelled) setLinkedReviewers((reviewers ?? []) as LinkedReviewer[])
     }
     if (initialUser?.id) loadLinkedReviewers()
     return () => { cancelled = true }
