@@ -104,6 +104,7 @@ function ModuleCard({
   icon: Icon,
   cta,
   badge,
+  onClick,
 }: {
   title: string
   description: string
@@ -111,6 +112,7 @@ function ModuleCard({
   icon: typeof Bus
   cta: string
   badge?: string
+  onClick?: () => void
 }) {
   return (
     <Card className="group relative flex min-h-56 flex-col overflow-hidden border-border/70 bg-card shadow-sm transition-all hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg">
@@ -129,7 +131,7 @@ function ModuleCard({
       </CardHeader>
       <CardContent className="mt-auto px-5 pb-5 pt-2">
         <Button size="sm" className="w-full sm:w-auto" asChild>
-          <Link href={href}>
+          <Link href={href} onClick={onClick ? (event) => { event.preventDefault(); onClick() } : undefined}>
             {cta}
             <ArrowRight data-icon="inline-end" />
           </Link>
@@ -175,6 +177,7 @@ export function TransportWorkspace({
   const canViewDriverLicense = isChiefDriver || isRegionalHr || isRegionalManager || isDriver || isTransportManager || canManage
   const canManageFleet = isManagingDirector || isChiefDriver || isRegionalHr || isRegionalManager || isTransportManager || canManage
   const [requestOpen, setRequestOpen] = useState(false)
+  const [hodRequiredOpen, setHodRequiredOpen] = useState(false)
   const router = useRouter()
   const regionalRouteRequired = isRegionalHr && !isActingHod
 
@@ -533,6 +536,7 @@ export function TransportWorkspace({
             href: "/dashboard/transport/nonregional/new",
             cta: "Request transport",
             badge: "Head Office",
+            onClick: !isLinkedHod ? () => setHodRequiredOpen(true) : undefined,
           },
           {
             title: "My requests",
@@ -792,7 +796,24 @@ export function TransportWorkspace({
         </Card>
       )}
 
-      <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
+      <Dialog open={hodRequiredOpen} onOpenChange={setHodRequiredOpen}>
+    <DialogContent className="sm:max-w-md">
+      <DialogHeader>
+        <DialogTitle>Department Head linkage required</DialogTitle>
+        <DialogDescription>
+          You cannot submit a Head Office transport request yet because no Department Head is linked to your profile for endorsement.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 p-4 text-sm leading-6 text-foreground">
+        Please contact your Department Head or HR Records team and ask them to link you to the appropriate Department Head. Once the linkage is completed, you will be able to submit and track your transport request here.
+      </div>
+      <DialogFooter>
+        <Button type="button" onClick={() => setHodRequiredOpen(false)}>Understood</Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+
+  <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{isDepartmentHead ? "New Head Office transport request" : "New regional transport request"}</DialogTitle>

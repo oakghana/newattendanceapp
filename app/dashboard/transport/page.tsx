@@ -29,6 +29,12 @@ export default async function TransportPage() {
     .eq("hod_user_id", user.id)
     .limit(1)
     .maybeSingle()
+  const { data: linkedHodForStaff } = await supabase
+    .from("loan_hod_linkages")
+    .select("id")
+    .eq("staff_user_id", user.id)
+    .limit(1)
+    .maybeSingle()
   const normalizedRole = normalizeAppRole(profile?.role)
   const departmentName = (profile as { departments?: { name?: string | null } | null } | null)?.departments?.name ?? ""
   const locationName = (profile as { geofence_locations?: { name?: string | null } | null } | null)?.geofence_locations?.name ?? ""
@@ -48,6 +54,7 @@ export default async function TransportPage() {
   const isDepartmentHead = normalizedRole === "department_head"
   const isTransportManager = normalizedRole === "transport_manager"
   const isAssignedHod = Boolean(assignedHodLink)
+  const isStaffLinkedToHod = Boolean(linkedHodForStaff)
   const isChiefDriver = isChiefDriverRole(profile.role)
   const isRegionalHr = isRegionalHrRole(profile.role)
   const isRegionalManager = isRegionalManagerRole(profile.role)
@@ -236,7 +243,7 @@ export default async function TransportPage() {
       nonRegionalPendingCount={nonRegionalPendingCount}
       scopeLabel={scopeLabel}
       driverKind={isRegionalDriver ? "regional" : isNonRegionalDriver ? "nonregional" : undefined}
-      isLinkedHod={isAssignedHod}
+      isLinkedHod={isAssignedHod || (isBasicStaffRole && isStaffLinkedToHod)}
       isChiefDriver={isChiefDriver}
     />
   )
