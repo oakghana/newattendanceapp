@@ -61,6 +61,14 @@ interface UserProfile {
   }
 }
 
+interface LinkedReviewer {
+  id: string
+  first_name?: string | null
+  last_name?: string | null
+  position?: string | null
+  role?: string | null
+}
+
 interface AttendanceSummary {
   totalDays: number
   totalHours: number
@@ -121,6 +129,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
   const [success, setSuccess] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary | null>(null)
+  const [linkedReviewers, setLinkedReviewers] = useState<LinkedReviewer[]>([])
 
   const [editForm, setEditForm] = useState({
     first_name: "",
@@ -139,6 +148,24 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
   const [isSavingSignature, setIsSavingSignature] = useState(false)
   const [activeTab, setActiveTab] = useState("profile")
   const searchParams = useSearchParams()
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadLinkedReviewers() {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from("loan_hod_linkages")
+        .select("hod_user_id, hod:user_profiles!hod_user_id(id, first_name, last_name, position, role)")
+        .eq("staff_user_id", initialUser?.id)
+      if (cancelled) return
+      const reviewers = (data ?? [])
+        .map((row: { hod?: LinkedReviewer | null }) => row.hod ?? null)
+        .filter((reviewer: LinkedReviewer | null): reviewer is LinkedReviewer => Boolean(reviewer?.id))
+      setLinkedReviewers(reviewers)
+    }
+    if (initialUser?.id) loadLinkedReviewers()
+    return () => { cancelled = true }
+  }, [initialUser?.id])
 
   useEffect(() => {
     let cancelled = false
@@ -1314,8 +1341,16 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                         : "Not assigned"}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm">Length of Service:</span>
+  <div className="flex justify-between gap-4">
+  <span className="text-sm">Linked HODs / RMs:</span>
+  <span className="text-right text-sm font-medium">
+  {linkedReviewers.length > 0
+    ? linkedReviewers.map((reviewer) => `${reviewer.first_name || ""} ${reviewer.last_name || ""}`.trim()).join(", ")
+    : "No linked HOD or RM"}
+  </span>
+  </div>
+  <div className="flex justify-between">
+  <span className="text-sm">Length of Service:</span>
                     <span className="text-sm font-medium">
                       {(profile as any).years_of_service != null
                         ? `${(profile as any).years_of_service}y`

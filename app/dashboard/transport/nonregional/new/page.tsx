@@ -7,7 +7,11 @@ export default async function NewNonRegionalRequisitionPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
-  const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("role, assigned_location_id, geofence_locations!user_profiles_assigned_location_id_fkey(name)")
+    .eq("id", user.id)
+    .single()
   const { data: assignedHodLink } = await supabase
     .from("loan_hod_linkages")
     .select("id")
@@ -35,6 +39,6 @@ export default async function NewNonRegionalRequisitionPage() {
   const isNonRegionalStaff = ["staff", "contract", "audit_staff"].includes(normalizedRole)
   if (isNonRegionalStaff && !isExplicitNonRegionalLocation) redirect("/dashboard/transport")
   if (isNonRegionalStaff && !isLinkedToHod) redirect("/dashboard/transport")
-  if (!isAssignedHod && !["staff", "contract", "audit_staff", "department_head", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "admin", "it-admin"].includes(normalizedRole)) redirect("/dashboard/transport/nonregional")
+  if (!isAssignedHod && !isLinkedToHod && !["staff", "contract", "audit_staff", "hr_records", "department_head", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "admin", "it-admin"].includes(normalizedRole)) redirect("/dashboard/transport/nonregional")
   return <main className="mx-auto w-full max-w-4xl"><NonRegionalRequisitionForm /></main>
 }
