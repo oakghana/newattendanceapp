@@ -101,6 +101,9 @@ export async function GET(request: NextRequest) {
     if (!APPROVED_STATUSES.includes(String(req.status || '').toLowerCase())) {
       return NextResponse.json({ error: 'Leave request is not approved' }, { status: 403 })
     }
+    if (!String((req as any).memo_reference || '').trim() || !(req as any).memo_reference_locked) {
+      return NextResponse.json({ error: 'This leave memo cannot be downloaded until HR Records enters and locks the official reference.' }, { status: 409 })
+    }
 
     // ── Staff profile ────────────────────────────────────────────────────────
     const { data: staff } = await admin

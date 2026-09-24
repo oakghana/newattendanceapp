@@ -194,7 +194,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, role, department_id, assigned_location_id, departments(name, code)")
+      .select("id, role, department_id, assigned_location_id, region_id, departments(name, code)")
       .eq("id", user.id)
       .single()
 
@@ -215,8 +215,8 @@ export async function POST(request: NextRequest) {
 
     const { data: requesterProfile } = await admin
       .from("user_profiles")
-      .select("id, department_id, assigned_location_id")
-      .eq("id", req.user_id)
+.select("id, department_id, assigned_location_id, region_id")
+        .eq("id", req.user_id)
       .maybeSingle()
 
     const role = normalizeRole((profile as any).role)
@@ -244,12 +244,16 @@ export async function POST(request: NextRequest) {
       if (role !== "admin") {
         const reviewerDept = String((profile as any)?.department_id || "")
         const reviewerLocation = String((profile as any)?.assigned_location_id || "")
+        const reviewerRegion = String((profile as any)?.region_id || "")
         const requesterDept = String((requesterProfile as any)?.department_id || req.department_id || "")
         const requesterLocation = String((requesterProfile as any)?.assigned_location_id || req.staff_location_id || "")
+        const requesterRegion = String((requesterProfile as any)?.region_id || req.region_id || "")
 
         if (role === "regional_manager") {
-          if (!reviewerLocation || !requesterLocation || reviewerLocation !== requesterLocation) {
-            return NextResponse.json({ error: "Regional managers can review only staff requests within their assigned region/location." }, { status: 403 })
+          const sameRegion = reviewerRegion && requesterRegion && reviewerRegion === requesterRegion
+          const sameLocation = reviewerLocation && requesterLocation && reviewerLocation === requesterLocation
+          if (!sameRegion && !sameLocation) {
+            return NextResponse.json({ error: "Regional managers can endorse staff loans within their assigned region or location, regardless of department." }, { status: 403 })
           }
         }
 

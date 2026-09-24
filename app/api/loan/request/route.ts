@@ -402,20 +402,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (assignedHodIds.length === 0 && (profile as any).assigned_location_id) {
-      const { findRegionalManagersForLocation } = await import("@/lib/regional-manager-scope")
-      const regionalManagers = await findRegionalManagersForLocation(admin, (profile as any).assigned_location_id, { limit: 20 })
-      for (const manager of regionalManagers) {
-        const id = manager?.id
-        if (id && !assignedHodIds.includes(id)) assignedHodIds.push(id)
-      }
-
-    }
-
-    // Loan requests must have an explicitly assigned reviewer. Do not silently
-    // substitute a department head or another location-based fallback: staff
-    // without a direct HOD or regional-manager linkage must be routed back for
-    // setup before they can submit a loan request.
+    // Loan requests require an explicitly linked HOD or Regional Manager.
+    // Do not infer a reviewer from the staff member's location: that would let
+    // an unlinked staff member submit merely because an RM exists there.
     const assignedHodId = assignedHodIds[0] || null
 
     if (!assignedHodId) {
