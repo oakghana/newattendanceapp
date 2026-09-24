@@ -826,7 +826,9 @@ export function TransportWorkspace({
             <DialogDescription>
               {isDepartmentHead
                 ? "Complete the transport requisition. Your Department Head authorization is required before Managing Director review."
-                : "Complete the digital regional requisition. It will be submitted to the Regional Manager, then the Managing Director, and finally the HR Executive for rejoinder."}
+                : isRegionalHr
+                ? "Complete the regional requisition and select whether the request is for transport within your region or support from Head Office."
+                : "Complete the digital regional requisition. The selected route determines the next approval desk after Regional Manager endorsement."}
             </DialogDescription>
           </DialogHeader>
           <form className="flex flex-col gap-4" onSubmit={handleRequestSubmit}>
@@ -846,17 +848,24 @@ export function TransportWorkspace({
                 </div>
               )}
             </div>
-            {regionalRouteRequired && (
-              <div className="grid gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] p-4">
-                <Label htmlFor="regional-route">Request route</Label>
-  <select id="regional-route" name="regionalRoute" required defaultValue={isRegionalOnlyWorkspace ? "head_office" : ""}>
-  {!isRegionalOnlyWorkspace && <option value="" disabled>Select the approval route</option>}
-  {!isRegionalOnlyWorkspace && <option value="local_regional">Local regional request — Regional Manager then Regional Chief Driver</option>}
-  <option value="head_office">Regional transport request — Regional Manager, Managing Director, then HR Executive</option>
-  </select>
-  <p className="text-xs text-muted-foreground">Regional requests are routed to the Regional Manager, then the Managing Director, and finally the HR Executive for rejoinder.</p>
-              </div>
-            )}
+              {regionalRouteRequired && (
+                <div className="grid gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] p-4">
+                  <Label htmlFor="regional-route">Request type</Label>
+                  <select
+                    id="regional-route"
+                    name="regionalRoute"
+                    required
+                    defaultValue={isRegionalHr ? "local_regional" : "head_office"}
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    {isRegionalHr && <option value="local_regional">Within-region transport — Regional Manager then Regional Chief Driver</option>}
+                    <option value="head_office">Head Office transport support — Regional Manager then Managing Director</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    Within-region requests go to the Regional Chief Driver after Regional Manager endorsement. Head Office support requests go to the Managing Director after endorsement.
+                  </p>
+                </div>
+              )}
             <div className="grid gap-2">
               <Label htmlFor="transport-purpose">Purpose</Label>
               <Input id="transport-purpose" name="purpose" required placeholder="Staff bus, official travel, funeral, or programme" />
