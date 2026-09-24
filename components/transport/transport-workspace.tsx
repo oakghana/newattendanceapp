@@ -173,9 +173,10 @@ export function TransportWorkspace({
   const isTransportManager = normalizedRole === "transport_manager"
   const isChiefDriver = isChiefDriverProp || isChiefDriverRole(normalizedRole)
   const isRegionalManager = isRegionalManagerRole(normalizedRole)
+  const isRegionalOnlyWorkspace = isRegionalManager || isRegionalHr || isRegionalDriver || isChiefDriver
   const isBasicStaff = ["staff", "contract", "audit_staff"].includes(normalizedRole)
-  const isNonRegionalWorkspaceRole = isNonRegionalLocation && !isRegionalHr && !isRegionalManager && !isRegionalDriver && !isChiefDriver
-  const isNonRegionalStaff = isBasicStaff || isNonRegionalWorkspaceRole
+  const isNonRegionalWorkspaceRole = isNonRegionalLocation && !isRegionalOnlyWorkspace
+  const isNonRegionalStaff = !isRegionalOnlyWorkspace && (isBasicStaff || isNonRegionalWorkspaceRole)
   const canCreateRequest = isChiefDriver || isRegionalHr || isActingHod || isBasicStaff
   const canViewDriverLicense = isChiefDriver || isRegionalHr || isRegionalManager || isDriver || isTransportManager || canManage
   const canManageFleet = isManagingDirector || isChiefDriver || isRegionalHr || isRegionalManager || isTransportManager || canManage
@@ -647,7 +648,7 @@ export function TransportWorkspace({
           },
         ]
       : []),
-    ...((isTransportManager || canManage || isHrExecutive) && !isDepartmentHead
+    ...((isTransportManager || canManage || isHrExecutive) && !isDepartmentHead && !isRegionalOnlyWorkspace
       ? [
           {
             title: "Head Office requests",
