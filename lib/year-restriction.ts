@@ -20,7 +20,7 @@ export async function checkYearRestriction(userId: string, requestedYear: string
       .from("leave_plan_requests")
       .select("id, status, leave_year_period")
       .eq("user_id", userId)
-      .in("leave_year_period", [`${currentYear}/${currentYear + 1}`])
+      .in("leave_year_period", [`${currentYear}`])
       .in("status", ["pending_hod", "pending_hr", "hod_approved", "pending_hod_review", "manager_confirmed"])
     
     if (error) {

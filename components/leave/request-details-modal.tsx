@@ -108,7 +108,7 @@ function buildRefNo(req: LeaveRequest): string {
 }
 
 function buildYearLabel(req: LeaveRequest): string {
-  if (req.leave_year_period) return req.leave_year_period.replace('/', '–')
+  if (req.leave_year_period) return req.leave_year_period.split('/')[0] || req.leave_year_period
   const start = req.adjusted_start_date || req.start_date || req.preferred_start_date
   return start ? new Date(start).getFullYear().toString() : new Date().getFullYear().toString()
 }
