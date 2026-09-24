@@ -30,7 +30,7 @@ export async function GET(request: Request) {
       .eq("id", user.id)
       .single()
 
-    if (!profile || (profile.role !== "admin" && profile.role !== "department_head")) {
+    if (!profile || (profile.role !== "admin" && profile.role !== "department_head" && profile.role !== "accounts_executive")) {
       return NextResponse.json({ error: "Unauthorized - Admin or Department Head only" }, { status: 403 })
     }
 

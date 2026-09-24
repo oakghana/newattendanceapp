@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
       .eq("id", user.id)
       .single()
 
-    if (!profile || !["admin", "regional_manager", "department_head", "transport_manager", "managing_director", "regional_hr", "director_hr", "manager_hr", "staff"].includes(normalizeAppRole(profile.role))) {
+    if (!profile || !["admin", "regional_manager", "department_head", "accounts_executive", "transport_manager", "managing_director", "regional_hr", "director_hr", "manager_hr", "staff"].includes(normalizeAppRole(profile.role))) {
       console.error("[v0] Reports API - Insufficient permissions:", profile?.role)
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
@@ -159,7 +159,7 @@ export async function GET(request: NextRequest) {
           ? [safeLocationId]
           : regionalScopedLocationIds
       query = query.in("check_in_location_id", scopedQueryLocationIds)
-  } else if (safeRegionId && ["admin", "department_head", "transport_manager", "managing_director", "director_hr", "manager_hr"].includes(normalizedRole)) {
+  } else if (safeRegionId && ["admin", "department_head", "accounts_executive", "transport_manager", "managing_director", "director_hr", "manager_hr"].includes(normalizedRole)) {
   const { data: mappedDistricts } = await adminClientForScope
     .from("region_location_mappings")
     .select("district_location_id")
@@ -186,7 +186,7 @@ export async function GET(request: NextRequest) {
 
     // Department scoping via user_profiles sub-query
     // Use adminClient for department scoping lookups to bypass RLS
-    if (normalizedRole === "department_head" || normalizedRole === "transport_manager") {
+    if ((normalizedRole === "department_head" || normalizedRole === "accounts_executive") || normalizedRole === "transport_manager") {
       const { data: deptUsers } = await adminClientForScope
         .from("user_profiles")
         .select("id")
@@ -506,7 +506,7 @@ export async function GET(request: NextRequest) {
       }
       // Mirror department scoping
       const deptIdForCount =
-        normalizedRole === "department_head" ? profile.department_id : safeDepartmentId
+        (normalizedRole === "department_head" || normalizedRole === "accounts_executive") ? profile.department_id : safeDepartmentId
       if (deptIdForCount && normalizedRole !== "staff") {
         const { data: deptUsersCount } = await adminClientForScope
           .from("user_profiles")
