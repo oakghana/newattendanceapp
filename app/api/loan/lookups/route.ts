@@ -77,7 +77,7 @@ function validateStaffHodRule(
   // Any HOD-capable approver may be linked to any staff member regardless of
   // location. Location (regional staff) and department (non-regional staff)
   // only drive the recommended ordering in the UI, not eligibility.
-  const allowedHodRoles = ["department_head", "manager_hr", "transport_manager", "regional_manager", "hr_executive", "accounts_executive"]
+  const allowedHodRoles = ["department_head", "manager_hr", "transport_manager", "regional_manager", "managing_director", "director_hr", "hr_executive", "accounts_executive"]
   if (!allowedHodRoles.includes(hodRole)) {
     return {
       ok: false,
