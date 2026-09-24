@@ -302,7 +302,8 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Invalid request data" }, { status: 400 })
     }
 
-    const { data: excuseDoc, error: fetchError } = await supabase
+    const admin = await createAdminClient()
+    const { data: excuseDoc, error: fetchError } = await admin
       .from("excuse_documents")
       .select("*")
       .eq("id", documentId)
@@ -339,7 +340,7 @@ export async function PUT(request: NextRequest) {
 
     const finalStatus = status === "approved" ? "hr_review" : "rejected"
 
-    const { data: updatedDoc, error: updateError } = await supabase
+    const { data: updatedDoc, error: updateError } = await admin
       .from("excuse_documents")
       .update({
         hod_status: status,

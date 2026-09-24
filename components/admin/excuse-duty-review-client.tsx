@@ -159,7 +159,10 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
   const fetchExcuseDocumentDetail = async (doc: ExcuseDocument) => {
     if (doc.file_url && doc.excuse_reason) return doc
     const response = await fetch(`/api/admin/excuse-duty?id=${encodeURIComponent(doc.id)}`, { cache: "no-store" })
-    if (!response.ok) throw new Error("Unable to load document details.")
+    if (!response.ok) {
+      if (doc.file_url) return doc
+      throw new Error("Unable to load document details.")
+    }
     const data = await response.json()
     return (data.excuseDocument || doc) as ExcuseDocument
   }
@@ -260,6 +263,7 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
     try {
       const detailedDoc = await fetchExcuseDocumentDetail(doc)
       const fileUrl = detailedDoc.file_url || ""
+      setError(null)
       if (!fileUrl) throw new Error("Document file is not available.")
       setDocumentViewerUrl(fileUrl)
     } catch (error) {
