@@ -4,10 +4,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { TransportRequestRegister } from "@/components/transport/transport-request-register"
 import { createClient } from "@/lib/supabase/server"
-import { canCreateTransportRequest, canManageTransport, isChiefDriverRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
-
-const roles = new Set(["admin", "administrator", "it_admin", "driver", "chief_driver", "regional_chief_driver", "staff", "contract", "audit_staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "hr", "hr_officer", "hr_leave_office", "managing_director", "director_hr", "manager_hr", "hr_executive", "hr_executive_officer", "secretary", "committee", "loan_committee"])
-const normalize = (value: string) => value.toLowerCase().trim().replace(/[\s-]+/g, "_")
+import { canManageTransport, isChiefDriverRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 
 export default async function TransportRequestsPage() {
   const supabase = await createClient()
@@ -18,8 +15,10 @@ export default async function TransportRequestsPage() {
     .select("role, region_id, assigned_location_id, regions(name), geofence_locations!user_profiles_assigned_location_id_fkey(name, district_id, districts(region_id))")
     .eq("id", user.id)
     .single()
-  if (!profile || !profile.role || (!roles.has(normalize(profile.role)) && !isRegionalManagerRole(profile.role) && !canManageTransport(profile.role) && !canCreateTransportRequest(profile.role))) redirect("/dashboard")
+  if (!profile || !profile.role) redirect("/dashboard")
   const normalizedRole = normalizeAppRole(profile.role)
+  const canViewRegionalRegister = normalizedRole === "admin" || isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role) || canManageTransport(profile.role) || normalizedRole === "managing_director" || ["hr_records", "hr_records_officer", "hr_records_manager", "hr_executive", "hr_executive_officer"].includes(normalizedRole)
+  if (!canViewRegionalRegister) redirect("/dashboard")
   const isRegionalDriver = isRegionalDriverRole(profile.role)
   // Non-regional drivers only ever see their nonregional trips; regional drivers stay here (scoped to their own assigned trips below).
   if (normalizedRole === "driver" && !isRegionalDriver) redirect("/dashboard/transport/nonregional")
@@ -48,8 +47,14 @@ export default async function TransportRequestsPage() {
     else if (!locationId && !districtId && regionId) requestsQuery = requestsQuery.eq("assigned_region_id", regionId)
     requestsQuery = requestsQuery.in("workflow_stage", ["regional_manager_endorsement", "hr_records_review", "hr_executive_signing", "approved", "referenced", "completed", "closed"])
   }
-  // Regional drivers must only see regional trips assigned to them, never non-regional or other regions' requests.
-  if (isRegionalDriver) requestsQuery = requestsQuery.eq("assigned_driver_id", user.id)
+  // Regional Chief Drivers can review requests for their assigned region/location.
+  // Head Office Chief Drivers retain nationwide visibility for transport operations.
+  if (isRegionalDriver) {
+    if (locationId) requestsQuery = requestsQuery.or(`origin_location_id.eq.${locationId},origin_location_id.is.null`)
+    if (!locationId && districtId) requestsQuery = requestsQuery.eq("linked_district_id", districtId)
+    else if (!locationId && !districtId && regionId) requestsQuery = requestsQuery.eq("assigned_region_id", regionId)
+    requestsQuery = requestsQuery.eq("request_type", "regional_transport")
+  }
   let { data: requests, error: requestsError } = await requestsQuery
   const { data: ownRequests, error: ownRequestsError } = await supabase
     .from("transport_requests")
@@ -57,7 +62,7 @@ export default async function TransportRequestsPage() {
     .eq("requester_id", user.id)
     .order("created_at", { ascending: false })
     .limit(200)
-  if (!ownRequestsError && ownRequests) {
+  if (canViewRegionalRegister && !ownRequestsError && ownRequests) {
     const scopedRequests = requests ?? []
     requests = [...scopedRequests, ...ownRequests.filter((request) => !scopedRequests.some((scopedRequest) => scopedRequest.id === request.id))]
       .sort((left, right) => new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime())
@@ -72,7 +77,12 @@ export default async function TransportRequestsPage() {
       else if (!locationId && !districtId && regionId) fallbackQuery = fallbackQuery.eq("assigned_region_id", regionId)
       fallbackQuery = fallbackQuery.in("workflow_stage", ["regional_manager_endorsement", "hr_records_review", "hr_executive_signing", "approved", "referenced", "completed", "closed"])
     }
-    if (isRegionalDriver) fallbackQuery = fallbackQuery.eq("assigned_driver_id", user.id)
+    if (isRegionalDriver) {
+      if (locationId) fallbackQuery = fallbackQuery.or(`origin_location_id.eq.${locationId},origin_location_id.is.null`)
+      if (!locationId && districtId) fallbackQuery = fallbackQuery.eq("linked_district_id", districtId)
+      else if (!locationId && !districtId && regionId) fallbackQuery = fallbackQuery.eq("assigned_region_id", regionId)
+      fallbackQuery = fallbackQuery.eq("request_type", "regional_transport")
+    }
     const fallback = await fallbackQuery
     const fallbackRequests = fallback.data?.map((request) => ({ ...request, assigned_region: [], regional_manager_signer_id: null, regional_manager_signed_at: null, hr_executive_signer_id: null, hr_executive_signed_at: null, hr_executive_signature_data_url: null })) ?? []
     const fallbackOwnRequests = ownRequests ?? []

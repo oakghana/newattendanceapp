@@ -27,6 +27,7 @@ import Link from "next/link"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
 import { isChiefDriverRole, isRegionalManagerRole, NON_REGIONAL_TRANSPORT_LOCATIONS } from "@/lib/role-capabilities"
 import { Badge } from "@/components/ui/badge"
@@ -226,8 +227,10 @@ export function TransportWorkspace({
               destination: form.get("destination"),
               requiredAt: form.get("eventDate"),
               returnAt: form.get("returnDate"),
-              personsRequiringTransport: form.get("passengerCount"),
-              purpose: form.get("purpose"),
+  personsCount: form.get("passengerCount"),
+  personNames: form.get("personNames"),
+  personsRequiringTransport: form.get("personNames"),
+  purpose: form.get("purpose"),
               hodAuthorization: requesterName,
             }
           : {
@@ -898,9 +901,19 @@ export function TransportWorkspace({
                 <Input id="transport-return" name="returnDate" type="datetime-local" />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="transport-passengers">Passengers</Label>
-                <Input id="transport-passengers" name="passengerCount" required min="1" type="number" />
+                <Label htmlFor="transport-passengers">Number of passengers</Label>
+                <Input id="transport-passengers" name="passengerCount" required min="1" step="1" type="number" defaultValue="1" />
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="transport-passenger-names">Names of people requiring transport</Label>
+              <Textarea
+                id="transport-passenger-names"
+                name="personNames"
+                required
+                placeholder="Enter names separated by commas or new lines"
+              />
+              <p className="text-xs text-muted-foreground">Enter at least one name. The number of names must not exceed the passenger count.</p>
             </div>
             <div className="grid gap-2 rounded-lg border border-dashed p-4">
               <p className="text-sm font-semibold">Transport use only</p>

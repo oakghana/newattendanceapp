@@ -87,7 +87,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     // Use adminSupabase to bypass RLS and read the user's role. Role values have
     // historically been stored with either hyphens or underscores, so normalize
     // before checking authorization (especially for regional IT Admin profiles).
-    const { data: profile } = await adminSupabase.from("user_profiles").select("role").eq("id", user.id).single()
+    const { data: profile } = await adminSupabase.from("user_profiles").select("role, assigned_location_id").eq("id", user.id).single()
     const normalizedRequesterRole = String(profile?.role || "")
       .trim()
       .toLowerCase()
@@ -112,6 +112,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       assigned_location_id,
       email,
       date_of_appointment,
+      date_of_assumption,
       years_of_service,
       contact_number,
     } = body
@@ -153,6 +154,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const mergedPosition = position !== undefined ? position : targetProfile.position
     const mergedStaffCategory = staff_category !== undefined ? staff_category : targetProfile.staff_category
     const mergedDateOfAppointment = date_of_appointment !== undefined ? date_of_appointment : targetProfile.date_of_appointment
+    const mergedDateOfAssumption = date_of_assumption !== undefined ? date_of_assumption : targetProfile.date_of_assumption
     const mergedYearsOfService = years_of_service !== undefined ? years_of_service : targetProfile.years_of_service
     const mergedContactNumber = contact_number !== undefined ? contact_number : targetProfile.contact_number
     const mergedAssignedLocationId =
@@ -179,6 +181,38 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const normalizedTargetRole = String(targetProfile.role || "").trim().toLowerCase().replace(/[-\s]+/g, "_")
     const protectedItAdminTarget = ["admin", "administrator", "it_admin", "itadmin"].includes(normalizedTargetRole)
+    const { data: requesterLocation } = profile?.assigned_location_id
+      ? await adminSupabase.from("geofence_locations").select("name, location_type").eq("id", profile.assigned_location_id).maybeSingle()
+      : { data: null }
+    const requesterLocationText = `${requesterLocation?.name || ""} ${requesterLocation?.location_type || ""}`.toLowerCase()
+    const isRegionalItAdmin = normalizedRequesterRole === "it_admin" && Boolean(profile?.assigned_location_id) && !/(head office|swanzy|archive|awutu|cocoa clinic)/.test(requesterLocationText)
+    const isRegionalManagerTarget = ["regional_manager", "regional_manager_office"].includes(normalizedTargetRole)
+    const isSelfUpdate = user.id === id
+
+    if (isRegionalItAdmin && !isSelfUpdate && !isRegionalManagerTarget) {
+      return NextResponse.json({ error: "Regional IT Admins may only update Regional Manager appointment, assumption, and category data." }, { status: 403 })
+    }
+
+    if (isRegionalItAdmin) {
+      const permittedFields = isSelfUpdate
+        ? ["date_of_appointment", "date_of_assumption"]
+        : ["date_of_appointment", "date_of_assumption", "staff_category"]
+      const fieldMap: Record<string, string> = {
+        first_name: "first_name", last_name: "last_name", employee_id: "employee_id", department_id: "department_id",
+        position: "position", role: "role", is_active: "is_active", assigned_location_id: "assigned_location_id",
+        email: "email", staff_category: "staff_category", date_of_appointment: "date_of_appointment",
+        date_of_assumption: "date_of_assumption", years_of_service: "years_of_service", contact_number: "contact_number",
+      }
+      const changedFields = Object.keys(fieldMap).filter((field) => {
+        if (!Object.prototype.hasOwnProperty.call(body, field)) return false
+        const incoming = body[field]
+        const existing = targetProfile[field]
+        return String(incoming ?? "") !== String(existing ?? "")
+      })
+      if (changedFields.some((field) => !permittedFields.includes(field))) {
+        return NextResponse.json({ error: isSelfUpdate ? "Regional IT Admins may edit only their own appointment and assumption dates." : "Regional IT Admins may edit only Regional Manager appointment, assumption, and category data." }, { status: 403 })
+      }
+    }
 
     if (normalizedRequesterRole === "it_admin" && protectedItAdminTarget) {
       console.error("[v0] Staff API PUT - IT-Admin tried to modify protected account")
@@ -266,6 +300,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       is_active: mergedIsActive,
       assigned_location_id: locationId,
       date_of_appointment: mergedDateOfAppointment || null,
+      date_of_assumption: mergedDateOfAssumption || null,
       years_of_service: mergedYearsOfService !== undefined && mergedYearsOfService !== "" && mergedYearsOfService !== null ? parseInt(String(mergedYearsOfService), 10) : null,
       contact_number: mergedContactNumber || null,
       updated_at: new Date().toISOString(),
