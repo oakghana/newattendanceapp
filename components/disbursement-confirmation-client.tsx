@@ -32,7 +32,7 @@ interface DisbursementConfirmationClientProps {
 export function DisbursementConfirmationClient({ loans: initialLoans, userProfile }: DisbursementConfirmationClientProps) {
   const [loans, setLoans] = useState(initialLoans)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<"pending" | "staging" | "confirmed">("pending")
+  const [activeTab, setActiveTab] = useState<"pending" | "repayment" | "confirmed">("pending")
   const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(1)
   const { toast } = useToast()
@@ -100,10 +100,10 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
   const pendingDisbursements = loans.filter((l) => !l.staff_receiving_funds_confirmed_at)
   const paymentStaging = loans.filter((l) => l.staff_receiving_funds_confirmed_at && ["approved", "md_approved", "payment_staging", "staged"].includes(l.status))
   const confirmedDisbursements = loans.filter((l) => l.staff_receiving_funds_confirmed_at && !paymentStaging.some((staged) => staged.id === l.id))
-  const tabLoans = activeTab === "pending" ? pendingDisbursements : activeTab === "staging" ? paymentStaging : confirmedDisbursements
+  const tabLoans = activeTab === "pending" ? pendingDisbursements : activeTab === "repayment" ? paymentStaging : confirmedDisbursements
   const pageCount = Math.max(1, Math.ceil(tabLoans.length / pageSize))
   const visibleLoans = useMemo(() => tabLoans.slice((page - 1) * pageSize, page * pageSize), [tabLoans, page, pageSize])
-  const changeTab = (tab: "pending" | "staging" | "confirmed") => { setActiveTab(tab); setPage(1) }
+  const changeTab = (tab: "pending" | "repayment" | "confirmed") => { setActiveTab(tab); setPage(1) }
   const changePageSize = (value: string) => { setPageSize(Number(value)); setPage(1) }
 
   const renderLoanCard = (loan: DisbursedLoan) => {
@@ -163,7 +163,7 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-4">
             <div className="flex rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Disbursement status">
-              {[{ key: "pending" as const, label: "Pending Confirmation", count: pendingDisbursements.length }, { key: "staging" as const, label: "Payment Staging", count: paymentStaging.length }, { key: "confirmed" as const, label: "Confirmed", count: confirmedDisbursements.length }].map((tab) => <button key={tab.key} type="button" role="tab" aria-selected={activeTab === tab.key} onClick={() => changeTab(tab.key)} className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${activeTab === tab.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}>{tab.label} <span className="ml-1 text-xs text-slate-400">{tab.count}</span></button>)}
+              {[{ key: "pending" as const, label: "Pending Confirmation", count: pendingDisbursements.length }, { key: "repayment" as const, label: "Repayment Tracking", count: paymentStaging.length }, { key: "confirmed" as const, label: "Confirmed", count: confirmedDisbursements.length }].map((tab) => <button key={tab.key} type="button" role="tab" aria-selected={activeTab === tab.key} onClick={() => changeTab(tab.key)} className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${activeTab === tab.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}>{tab.label} <span className="ml-1 text-xs text-slate-400">{tab.count}</span></button>)}
             </div>
             <label className="flex items-center gap-2 text-sm text-slate-500">Rows per page<select value={pageSize} onChange={(event) => changePageSize(event.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-slate-900"><option value="10">10</option><option value="50">50</option><option value="100">100</option></select></label>
           </div>

@@ -20,6 +20,8 @@ type LoanLite = {
   repayment_duration_months?: number | null
   recovery_start_date?: string | null
   disbursement_date?: string | null
+  disbursement_confirmed_at?: string | null
+  staff_receiving_funds_confirmed_at?: string | null
   md_approved_at?: string | null
   repayment_status?: string | null
 }
@@ -51,7 +53,8 @@ export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
     const unique = new Map<string, LoanLite>()
     for (const loan of loans || []) {
       if (!loan?.id || unique.has(loan.id)) continue
-      if (!TRACKABLE.has(String(loan.status || '')) || !loan.md_approved_at || !loan.disbursement_date) continue
+      const hasDisbursementEvidence = loan.disbursement_date || loan.staff_receiving_funds_confirmed_at || loan.disbursement_confirmed_at || loan.md_approved_at
+      if (!TRACKABLE.has(String(loan.status || '')) || !loan.md_approved_at || !hasDisbursementEvidence) continue
       unique.set(loan.id, loan)
     }
     return Array.from(unique.values()).filter((l) => {
@@ -104,7 +107,7 @@ export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
     setError(null)
     try {
       const duration = selected.recovery_months || selected.repayment_duration_months || 12
-      const startDate = selected.recovery_start_date || selected.disbursement_date || new Date().toISOString().slice(0, 10)
+      const startDate = selected.recovery_start_date || selected.disbursement_date || selected.disbursement_confirmed_at || selected.staff_receiving_funds_confirmed_at || new Date().toISOString().slice(0, 10)
       const res = await fetch('/api/loan/repayment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -149,7 +152,7 @@ export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
             Repayment Tracking
           </CardTitle>
           <CardDescription>
-            Track monthly repayments only after MD approval and Accounts confirms the loan was disbursed. Accounts must confirm each scheduled payment as paid or not paid.
+            Track every confirmed loan repayment from the schedule. Accounts or the HR Loan Office confirms payment status, while staff can view their due dates, paid amounts, balance, and expected completion date for planning.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
