@@ -182,19 +182,23 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const { data: requesterLocation } = profile?.assigned_location_id
       ? await adminSupabase.from("geofence_locations").select("name, location_type").eq("id", profile.assigned_location_id).maybeSingle()
       : { data: null }
+    const { data: targetLocation } = targetProfile.assigned_location_id
+      ? await adminSupabase.from("geofence_locations").select("name, location_type").eq("id", targetProfile.assigned_location_id).maybeSingle()
+      : { data: null }
     const requesterLocationText = `${requesterLocation?.name || ""} ${requesterLocation?.location_type || ""}`.toLowerCase()
+    const targetLocationText = `${targetLocation?.name || ""} ${targetLocation?.location_type || ""}`.toLowerCase()
     const isRegionalItAdmin = normalizedRequesterRole === "it_admin" && Boolean(profile?.assigned_location_id) && !/(head office|swanzy|archive|awutu|cocoa clinic)/.test(requesterLocationText)
-    const isRegionalManagerTarget = ["regional_manager", "regional_manager_office"].includes(normalizedTargetRole)
+    const isRegionalStaffTarget = Boolean(targetProfile.assigned_location_id) && !/(head office|swanzy|archive|awutu|cocoa clinic)/.test(targetLocationText)
     const isSelfUpdate = user.id === id
 
-    if (isRegionalItAdmin && !isSelfUpdate && !isRegionalManagerTarget) {
-      return NextResponse.json({ error: "Regional IT Admins may only update Regional Manager appointment, assumption, and category data." }, { status: 403 })
+    if (isRegionalItAdmin && !isSelfUpdate && !isRegionalStaffTarget) {
+      return NextResponse.json({ error: "Regional IT Admins may only update staff assigned to a regional office." }, { status: 403 })
     }
 
     if (isRegionalItAdmin) {
       const permittedFields = isSelfUpdate
         ? ["date_of_appointment", "date_of_assumption"]
-        : ["date_of_appointment", "date_of_assumption", "staff_category"]
+        : ["date_of_appointment", "date_of_assumption", "staff_category", "role"]
       const fieldMap: Record<string, string> = {
         first_name: "first_name", last_name: "last_name", employee_id: "employee_id", department_id: "department_id",
         position: "position", role: "role", is_active: "is_active", assigned_location_id: "assigned_location_id",
@@ -208,7 +212,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         return String(incoming ?? "") !== String(existing ?? "")
       })
       if (changedFields.some((field) => !permittedFields.includes(field))) {
-        return NextResponse.json({ error: isSelfUpdate ? "Regional IT Admins may edit only their own appointment and assumption dates." : "Regional IT Admins may edit only Regional Manager appointment, assumption, and category data." }, { status: 403 })
+        return NextResponse.json({ error: isSelfUpdate ? "Regional IT Admins may edit only their own appointment and assumption dates." : "Regional IT Admins may edit appointment, assumption, category, and role data for regional staff." }, { status: 403 })
       }
     }
 
