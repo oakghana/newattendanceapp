@@ -21,6 +21,12 @@ interface FDApprovedLoan {
   loan_type?: string
   request_number?: string
   requested_amount?: number
+  basic_salary?: number
+  salary_advance_amount?: number
+  salary_advance_multiplier?: number
+  deduction_period_months?: number
+  repayment_duration_months?: number
+  recovery_months?: number
   fd_score?: number
   fd_value?: number
   fd_note?: string
@@ -31,8 +37,22 @@ interface FDApprovedLoan {
   approval_date?: string
 }
 
+function getSalaryAdvanceAmount(loan: Record<string, unknown>) {
+  const loanType = String(loan.loan_type_key || loan.loan_type || loan.loan_type_label || '').toLowerCase()
+  if (!loanType.includes('salary') || !loanType.includes('advance')) return undefined
+
+  const basicSalary = Number(loan.basic_salary)
+  const requestedMonths = Number(
+    loan.salary_advance_multiplier ?? loan.deduction_period_months ?? loan.repayment_duration_months ?? loan.recovery_months,
+  )
+  if (!Number.isFinite(basicSalary) || basicSalary <= 0 || !Number.isFinite(requestedMonths) || requestedMonths <= 0) return undefined
+
+  return Math.round(basicSalary * Math.trunc(requestedMonths) * 100) / 100
+}
+
 function normalizeFdApprovedLoan(loan: Record<string, unknown>): FDApprovedLoan {
   const staffNumber = String(loan.staff_number || loan.employee_id || '').trim()
+  const salaryAdvanceAmount = getSalaryAdvanceAmount(loan)
   const staffUserId = String(loan.user_id || loan.staff_user_id || '').trim()
   const staffName = String(loan.staff_full_name || loan.staff_name || '').trim()
   const staffIdentifier = staffNumber || staffUserId
@@ -46,7 +66,13 @@ function normalizeFdApprovedLoan(loan: Record<string, unknown>): FDApprovedLoan 
     staff_user_id: staffUserId || undefined,
     loan_type: String(loan.loan_type_label || loan.loan_type || loan.loan_type_key || '').trim() || undefined,
     request_number: String(loan.request_number || '').trim() || undefined,
-    requested_amount: Number(loan.requested_amount ?? loan.fixed_amount ?? 0),
+    requested_amount: salaryAdvanceAmount ?? Number(loan.requested_amount ?? loan.fixed_amount ?? 0),
+    basic_salary: loan.basic_salary == null ? undefined : Number(loan.basic_salary),
+    salary_advance_amount: salaryAdvanceAmount,
+    salary_advance_multiplier: loan.salary_advance_multiplier == null ? undefined : Number(loan.salary_advance_multiplier),
+    deduction_period_months: loan.deduction_period_months == null ? undefined : Number(loan.deduction_period_months),
+    repayment_duration_months: loan.repayment_duration_months == null ? undefined : Number(loan.repayment_duration_months),
+    recovery_months: loan.recovery_months == null ? undefined : Number(loan.recovery_months),
     fd_score: loan.fd_score == null ? undefined : Number(loan.fd_score),
     fd_value: loan.fd_value == null ? undefined : Number(loan.fd_value),
     fd_note: fdNote,
@@ -442,7 +468,12 @@ export function HRLoanOfficeFDApproved() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600 font-semibold">Loan Amount</p>
-                  <p className="text-sm font-medium">₵{Number(selectedForPush.requested_amount || 0).toLocaleString()}</p>
+                  <p className="text-sm font-medium">₵{Number(selectedForPush.requested_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+  {selectedForPush.basic_salary && (selectedForPush.salary_advance_multiplier || selectedForPush.deduction_period_months || selectedForPush.repayment_duration_months || selectedForPush.recovery_months) ? (
+    <p className="mt-1 text-xs text-slate-500">
+      Basic salary ₵{selectedForPush.basic_salary.toLocaleString()} × {selectedForPush.salary_advance_multiplier || selectedForPush.deduction_period_months || selectedForPush.repayment_duration_months || selectedForPush.recovery_months} month(s)
+    </p>
+  ) : null}
                 </div>
                 <div>
                   <p className="text-xs text-slate-600 font-semibold">FD Score</p>

@@ -168,7 +168,7 @@ describe('Loan Workflow - FD Review and Payment Flow', () => {
 
       expect(fdReview.review_status).toBe('approved')
       expect(fdReview.reviewed_by_user_id).toBeDefined()
-      console.log('✓ Accounts Executive approved FD (score: 75, threshold: 39)')
+      console.log('✓ Accounts Executive approved FD (score: 75, threshold: 40)')
     })
 
     it('should reject FD if score below threshold', () => {
