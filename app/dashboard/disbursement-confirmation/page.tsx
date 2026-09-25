@@ -132,7 +132,7 @@ export default async function DisbursementConfirmationPage() {
   // manual confirmation or regeneration step.
   const legacyLoans = rawLoans.filter((loan: any) =>
     String(loan.hod_review_note || "").toLowerCase().startsWith("bulk imported by administrator") &&
-    !loan.staff_receiving_funds_confirmed_at
+    !loan.repayment_plan_generated_at
   )
   if (legacyLoans.length > 0) {
     const nowIso = new Date().toISOString()

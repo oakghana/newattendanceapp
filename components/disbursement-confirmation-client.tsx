@@ -27,6 +27,7 @@ interface DisbursedLoan {
   repayment_duration_months?: number | null
   disbursement_date?: string | null
   disbursement_confirmed_at?: string | null
+  repayment_plan_generated_at?: string | null
 }
 
 interface DisbursementConfirmationClientProps {
@@ -105,8 +106,8 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
   const pendingDisbursements = loans.filter((l) => !l.staff_receiving_funds_confirmed_at)
   // Repayment Tracking starts from every account-confirmed disbursement, regardless of
   // the repayment status label assigned by the imported or current workflow.
-  const paymentStaging = loans.filter((l) => Boolean(l.staff_receiving_funds_confirmed_at))
-  const confirmedDisbursements = loans.filter((l) => l.staff_receiving_funds_confirmed_at && !paymentStaging.some((staged) => staged.id === l.id))
+  const paymentStaging = loans.filter((l) => Boolean(l.staff_receiving_funds_confirmed_at) && !l.repayment_plan_generated_at)
+  const confirmedDisbursements = loans.filter((l) => Boolean(l.staff_receiving_funds_confirmed_at) && Boolean(l.repayment_plan_generated_at))
   const tabLoans = activeTab === "pending" ? pendingDisbursements : activeTab === "repayment" ? paymentStaging : confirmedDisbursements
   const pageCount = Math.max(1, Math.ceil(tabLoans.length / pageSize))
   const visibleLoans = useMemo(() => tabLoans.slice((page - 1) * pageSize, page * pageSize), [tabLoans, page, pageSize])
@@ -122,7 +123,11 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
       const response = await fetch('/api/loan/repayment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ loanRequestId: loan.id, startDate, durationMonths: duration }) })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Unable to generate repayment schedule')
-      toast({ title: 'Repayment schedule ready', description: `The schedule for ${loan.staff_full_name || loan.request_number} has been generated.` })
+      const generatedAt = new Date().toISOString()
+      setLoans((previous) => previous.map((item) => item.id === loan.id ? { ...item, repayment_plan_generated_at: generatedAt, repayment_status: "active", status: "partially_recovered" } : item))
+      setActiveTab("confirmed")
+      setPage(1)
+      toast({ title: 'Repayment schedule ready', description: `${loan.staff_full_name || loan.request_number} was moved to Confirmed.` })
     } catch (error: any) {
       toast({ title: 'Schedule generation failed', description: error?.message || 'Unable to generate repayment schedule.', variant: 'destructive' })
     } finally { setGeneratingId(null) }
