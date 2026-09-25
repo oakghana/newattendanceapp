@@ -189,10 +189,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const targetLocationText = `${targetLocation?.name || ""} ${targetLocation?.location_type || ""}`.toLowerCase()
     const isRegionalItAdmin = normalizedRequesterRole === "it_admin" && Boolean(profile?.assigned_location_id) && !/(head office|swanzy|archive|awutu|cocoa clinic)/.test(requesterLocationText)
     const isRegionalStaffTarget = Boolean(targetProfile.assigned_location_id) && !/(head office|swanzy|archive|awutu|cocoa clinic)/.test(targetLocationText)
+    const isSameRegionalLocation = Boolean(profile?.assigned_location_id) && profile.assigned_location_id === targetProfile.assigned_location_id
     const isSelfUpdate = user.id === id
 
-    if (isRegionalItAdmin && !isSelfUpdate && !isRegionalStaffTarget) {
-      return NextResponse.json({ error: "Regional IT Admins may only update staff assigned to a regional office." }, { status: 403 })
+    // Regional IT Admins are scoped to their own assigned regional office. A
+    // regional admin must not edit records belonging to another location.
+    if (isRegionalItAdmin && !isSelfUpdate && (!isRegionalStaffTarget || !isSameRegionalLocation)) {
+      return NextResponse.json({ error: "Regional IT Admins may only update staff assigned to their own regional location." }, { status: 403 })
     }
 
     if (isRegionalItAdmin) {
