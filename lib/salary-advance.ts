@@ -29,3 +29,11 @@ export function calculateSalaryAdvanceFromFdNote(
   if (!match) return null
   return calculateSalaryAdvance(match[1].replace(/,/g, ""), requestedMonthsValue)
 }
+
+export function isSalaryAdvanceLoanType(
+  loanTypeKey: string | null | undefined,
+  loanTypeLabel?: string | null,
+): boolean {
+  const normalized = `${loanTypeKey || ""} ${loanTypeLabel || ""}`.toLowerCase().replace(/[_-]+/g, " ")
+  return /\bsalary\s+advance\b/.test(normalized)
+}

@@ -1,5 +1,5 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server"
-import { calculateSalaryAdvanceFromFdNote } from "@/lib/salary-advance"
+import { calculateSalaryAdvanceFromFdNote, isSalaryAdvanceLoanType } from "@/lib/salary-advance"
 import { NextResponse } from "next/server"
 import { canApproveFdScore, canEnterFdScore, canRejectFdByScore, formatFdScoreAdjustmentMemo, GOOD_FD_THRESHOLD, isFdExemptLoanType } from "@/lib/loan-workflow"
 import { createMemoToken } from "@/lib/secure-memo"
@@ -203,7 +203,7 @@ export async function GET(request: Request) {
       const staffName = loan.staff_full_name || fullName(profile) || "Unknown Staff"
       const calculatedByName = fullName(calculator) || null
       const requestedMonths = loan.salary_advance_multiplier || loan.deduction_period_months || loan.repayment_duration_months
-      const salaryAdvance = loan.loan_type_key === "salary_advance"
+      const salaryAdvance = isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label)
         ? calculateSalaryAdvanceFromFdNote(loan.fd_note, requestedMonths)
         : null
 

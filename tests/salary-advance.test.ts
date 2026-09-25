@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { calculateSalaryAdvance, calculateSalaryAdvanceFromFdNote } from '../lib/salary-advance'
+import { calculateSalaryAdvance, calculateSalaryAdvanceFromFdNote, isSalaryAdvanceLoanType } from '../lib/salary-advance'
 
 describe('calculateSalaryAdvance', () => {
+  it('recognizes current and legacy salary advance type values', () => {
+    expect(isSalaryAdvanceLoanType('salary_advance')).toBe(true)
+    expect(isSalaryAdvanceLoanType('salary-advance')).toBe(true)
+    expect(isSalaryAdvanceLoanType(null, 'Salary Advance')).toBe(true)
+    expect(isSalaryAdvanceLoanType('staff_loan', 'Staff Loan')).toBe(false)
+  })
+
   it('multiplies the monthly value of annual salary by the requested months', () => {
     expect(calculateSalaryAdvance(120_000, 2)).toEqual({
       annualSalary: 120_000,

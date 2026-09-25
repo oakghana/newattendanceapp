@@ -18,6 +18,7 @@ import { verifyMemoToken } from "@/lib/secure-memo"
 import { getMemoLocationAddress } from "@/lib/location-mappings"
 import { ensureMemoSecurity } from "@/lib/memo-security"
 import { formatDateDDMMYYYY } from "@/lib/date-utils"
+import { isSalaryAdvanceLoanType } from "@/lib/salary-advance"
 
 export const runtime = "nodejs"
 
@@ -225,7 +226,7 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
               `Proposed Recovery Start Date: ${fmtMemoMonth(loan.recovery_start_date || loan.next_payment_due || loan.repayment_start_date)}`,
               `Proposed Recovery Duration: ${loan.recovery_months || loan.recovery_period_months || loan.recovery_duration_months || "TBD"} month(s)`,
             ]),
-        ...(loan.loan_type_key === "salary_advance" && loan.basic_salary
+        ...(isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label) && loan.basic_salary
           ? [
               `Verified Monthly Salary: GHc ${fmtAmount(loan.basic_salary)}`,
               ...(loan.salary_advance_days ? [`Number of Days on Salary Advice: ${loan.salary_advance_days}`] : []),
@@ -257,7 +258,7 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
       ...(isFuneralLoan
         ? ["This funeral support does not require repayment or monthly salary deductions."]
         : [`The loan would be recovered in ${maintainedRecoveryMonths || "TBD"} Equal Monthly Instalment from your salary effective, ${recovStart}.`]),
-      ...(loan.loan_type_key === "salary_advance" && loan.basic_salary
+      ...(isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label) && loan.basic_salary
         ? [`Verified Basic Salary: GHc ${fmtAmount(loan.basic_salary)}.`]
         : []),
       `By a copy of this letter, the ${memoCopyRecipient} has been advised to release the said amount to you effective, ${disbMonth}.`,

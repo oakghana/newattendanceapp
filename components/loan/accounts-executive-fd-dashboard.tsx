@@ -720,59 +720,68 @@ export function AccountsExecutiveFDDashboard({
               </div>
 
               {/* Decision Section */}
-              <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4 space-y-3">
-                <p className="font-semibold text-sm text-slate-900">Your Decision</p>
+              {(() => {
+                const originalScore = Math.round(Number(selectedReview.fd_score) || 0)
+                const currentScore = adjustedFdScore.trim() === '' ? originalScore : Math.round(Number(adjustedFdScore))
+                const isScoreChanged = Number.isFinite(currentScore) && currentScore !== originalScore
+                const isAdjustmentReasonMissing = isScoreChanged && !adjustmentReason.trim()
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-700">FD value (%)</label>
-                    <p className="text-[11px] text-slate-500 mt-1">You may keep the calculated score or type a new value without recalculation.</p>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={1}
-                      value={adjustedFdScore}
-                      onChange={e => setAdjustedFdScore(e.target.value)}
-                      className="mt-2"
-                    />
-                    <p className="text-[11px] text-slate-500 mt-1">
-                      Calculated score: {Math.round(Number(selectedReview.fd_score) || 0)}%
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-700">
-                      Reason for change {Math.round(Number(adjustedFdScore) || 0) !== Math.round(Number(selectedReview.fd_score) || 0) ? '*' : '(required if you change the value)'}
-                    </label>
-                    <Textarea
-                      placeholder="Required when you enter a new FD value without calculation. HR Loan Office will see this reason."
-                      value={adjustmentReason}
-                      onChange={e => setAdjustmentReason(e.target.value)}
-                      className="mt-2 min-h-16 text-sm"
-                    />
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="text-xs font-semibold text-slate-700">Verification Findings *</label>
-                  <Textarea
-                    placeholder="Enter your verification findings and calculations..."
-                    value={verificationMemo}
-                    onChange={e => setVerificationMemo(e.target.value)}
-                    className="mt-2 min-h-16 text-sm"
-                  />
-                </div>
+                return (
+                  <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                    <p className="font-semibold text-sm text-slate-900">Your Decision</p>
 
-                <div>
-                  <label className="text-xs font-semibold text-slate-700">Decision Reason *</label>
-                  <Textarea
-                    placeholder="Enter approval or rejection reason..."
-                    value={reviewDecision}
-                    onChange={e => setReviewDecision(e.target.value)}
-                    className="mt-2 min-h-12 text-sm"
-                  />
-                </div>
-              </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700">FD value (%)</label>
+                        <p className="text-[11px] text-slate-500 mt-1">You may keep the calculated score or type a new value without recalculation.</p>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={adjustedFdScore}
+                          onChange={e => setAdjustedFdScore(e.target.value)}
+                          className="mt-2"
+                        />
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          Calculated score: {originalScore}%
+                        </p>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700">
+                          Reason for change {isScoreChanged ? <span className="text-destructive">*</span> : <span className="text-slate-400 font-normal">(optional — required only if you change the value)</span>}
+                        </label>
+                        <Textarea
+                          placeholder={isScoreChanged ? "Required: Explain why you are changing the calculated FD value..." : "Optional: Explain reason if changing the FD value..."}
+                          value={adjustmentReason}
+                          onChange={e => setAdjustmentReason(e.target.value)}
+                          className="mt-2 min-h-16 text-sm"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700">Verification Findings <span className="text-slate-400 font-normal">(optional)</span></label>
+                      <Textarea
+                        placeholder="Enter optional verification findings and calculations..."
+                        value={verificationMemo}
+                        onChange={e => setVerificationMemo(e.target.value)}
+                        className="mt-2 min-h-16 text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700">Decision Reason <span className="text-slate-400 font-normal">(optional)</span></label>
+                      <Textarea
+                        placeholder="Enter optional approval or rejection reason..."
+                        value={reviewDecision}
+                        onChange={e => setReviewDecision(e.target.value)}
+                        className="mt-2 min-h-12 text-sm"
+                      />
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
           )}
 
@@ -787,8 +796,11 @@ export function AccountsExecutiveFDDashboard({
             </Button>
             {/* Calculate if rejection is allowed based on FD score and loan type */}
             {(() => {
+              const originalScore = Math.round(Number(selectedReview?.fd_score) || 0)
+              const fdScore = adjustedFdScore.trim() === '' ? originalScore : Math.round(Number(adjustedFdScore))
+              const isScoreChanged = Number.isFinite(fdScore) && fdScore !== originalScore
+              const isAdjustmentReasonMissing = isScoreChanged && !adjustmentReason.trim()
               const isExceptionLoanType = isFdExemptLoanTypeLocal(selectedReview?.loan_type, selectedReview?.loan_type)
-              const fdScore = adjustedFdScore.trim() === '' ? Number(selectedReview?.fd_score ?? 0) : Number(adjustedFdScore)
               const canReject = selectedReview
                 ? !isExceptionLoanType && isPoorFdScoreLocal(fdScore, selectedReview.fd_good)
                 : false
@@ -798,7 +810,7 @@ export function AccountsExecutiveFDDashboard({
                   <Button
                     variant="destructive"
                     onClick={handleReject}
-                    disabled={submitting || !reviewDecision || !canReject}
+                    disabled={submitting || !canReject || isAdjustmentReasonMissing}
                     size="sm"
                     title={!canReject ? (isExceptionLoanType ? `${selectedReview?.loan_type} loans cannot be rejected - must be pushed to HR Loan Office` : `FD scores of ${GOOD_FD_THRESHOLD}% or higher cannot be rejected`) : ""}
                   >
@@ -817,15 +829,24 @@ export function AccountsExecutiveFDDashboard({
                 </>
               )
             })()}
-            <Button
-              onClick={handleApprove}
-              disabled={submitting || !verificationMemo}
-              className="bg-emerald-600 hover:bg-emerald-700"
-              size="sm"
-            >
-              <CheckCircle className="h-4 w-4 mr-1" />
-              Approve
-            </Button>
+            {(() => {
+              const originalScore = Math.round(Number(selectedReview?.fd_score) || 0)
+              const fdScore = adjustedFdScore.trim() === '' ? originalScore : Math.round(Number(adjustedFdScore))
+              const isScoreChanged = Number.isFinite(fdScore) && fdScore !== originalScore
+              const isAdjustmentReasonMissing = isScoreChanged && !adjustmentReason.trim()
+
+              return (
+                <Button
+                  onClick={handleApprove}
+                  disabled={submitting || isAdjustmentReasonMissing}
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                  size="sm"
+                >
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                  Approve
+                </Button>
+              )
+            })()}
           </DialogFooter>
         </DialogContent>
       </Dialog>

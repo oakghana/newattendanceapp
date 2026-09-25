@@ -20,7 +20,7 @@ import {
   normalizeRole,
 } from "@/lib/loan-workflow"
 import { createMemoToken } from "@/lib/secure-memo"
-import { calculateSalaryAdvance } from "@/lib/salary-advance"
+import { calculateSalaryAdvance, isSalaryAdvanceLoanType } from "@/lib/salary-advance"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
 type ActionKey =
@@ -141,7 +141,7 @@ function buildAutoMemo(req: any) {
     "",
     "Your loan request has been approved.",
   `Approved Amount: GHc ${Number(req.salary_advance_amount || req.fixed_amount || req.requested_amount || 0).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-  ...(req.loan_type_key === "salary_advance" && req.basic_salary && req.salary_advance_multiplier
+  ...(isSalaryAdvanceLoanType(req.loan_type_key, req.loan_type_label) && req.basic_salary && req.salary_advance_multiplier
     ? [`Basic Salary: GHc ${Number(req.basic_salary).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} × ${req.salary_advance_multiplier} month(s)`]
     : []),
   `Disbursement Date: ${req.disbursement_date || "TBD"}`,
@@ -169,7 +169,7 @@ function buildHrTermsMemo(req: any, disbursementDate: string, recoveryStartDate:
         `Recovery Start Date: ${recoveryStartDate}`,
         `Recovery Duration: ${req.deduction_period_months || recoveryMonths} month(s)`,
       ]),
-  ...(req.loan_type_key === "salary_advance" && req.salary_advance_amount
+  ...(isSalaryAdvanceLoanType(req.loan_type_key, req.loan_type_label) && req.salary_advance_amount
     ? [`Approved Salary Advance: GHc ${Number(req.salary_advance_amount).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`]
     : []),
   `${note ? `HR Note: ${note}` : ""}`,
@@ -566,7 +566,7 @@ export async function POST(request: NextRequest) {
         update.recovery_months = null
         update.recovery_start_date = null
         update.deduction_period_months = null
-      } else if (req.loan_type_key === "salary_advance") {
+      } else if (isSalaryAdvanceLoanType(req.loan_type_key, req.loan_type_label)) {
         const checkedMonths = clampSalaryAdvanceRecoveryMonths(req.loan_type_key, normalizedRecoveryMonths)
         if (checkedMonths === null) {
           return NextResponse.json(
@@ -578,7 +578,7 @@ export async function POST(request: NextRequest) {
       } else {
         update.recovery_months = normalizedRecoveryMonths
       }
-      if (req.loan_type_key === "salary_advance") {
+      if (isSalaryAdvanceLoanType(req.loan_type_key, req.loan_type_label)) {
         const basicSalary = Number(body.basic_salary)
         if (!Number.isFinite(basicSalary) || basicSalary <= 0) {
           return NextResponse.json({ error: "A verified basic salary is required for salary advance requests." }, { status: 400 })
@@ -954,7 +954,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Loan must be in FD-approved status to push to HR Executive" }, { status: 400 })
       }
 
-      if (req.loan_type_key === "salary_advance") {
+      if (isSalaryAdvanceLoanType(req.loan_type_key, req.loan_type_label)) {
         const salaryAdvanceDays = Math.trunc(Number(body.salary_advance_days))
         if (!Number.isFinite(salaryAdvanceDays) || salaryAdvanceDays < 1) {
           return NextResponse.json({ error: "Number of days is required on the salary advice before forwarding to HR Executive." }, { status: 400 })
