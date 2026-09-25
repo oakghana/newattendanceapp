@@ -4471,7 +4471,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           )}
 
           {/* ── Loan type breakdown ── */}
-          {loanOfficeTypeSummary.length > 0 && (
+          {loanOfficeStageBuckets.length > 0 && (
             <div id="loan-office-loanTypeBreakdown" className="order-3 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
               <button type="button" data-loan-section-toggle className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("loanTypeBreakdown")}>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.loanTypeBreakdown ? "-rotate-90" : ""}`} />
@@ -4482,7 +4482,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               </button>
               {!collapsedSections.loanTypeBreakdown && (
               <div className="grid gap-px bg-slate-100 divide-x-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {loanOfficeTypeSummary.map((item) => (
+                {loanOfficeStageBuckets.map((item) => (
                   <div key={`loan-summary-${item.loanKey}`} className="bg-white px-5 py-4">
                     <p className="font-semibold text-slate-900 text-sm">{item.loanLabel}</p>
                     <p className="mt-0.5 text-xs text-slate-400 mb-3">Total: {item.totalUnique}</p>
