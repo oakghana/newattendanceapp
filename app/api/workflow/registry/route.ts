@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
-import { canDoDirectorHr, canDoHrOffice, canDoLoanOffice, normalizeRole } from "@/lib/loan-workflow"
+import { normalizeRole } from "@/lib/loan-workflow"
 
-function canManageTemplates(role: string, deptName?: string | null, deptCode?: string | null) {
-  return (
-    role === "admin" ||
-    role === "hr_leave_office" ||
-    canDoHrOffice(role, deptName, deptCode) ||
-    canDoDirectorHr(role, deptName, deptCode) ||
-    canDoLoanOffice(role, deptName, deptCode)
-  )
-}
+function canManageTemplates(role: string, _deptName?: string | null, _deptCode?: string | null) {
+  return String(role || "").trim().toLowerCase() === "admin"
+  }
 
 export async function GET(request: NextRequest) {
   try {
@@ -59,8 +53,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       signatures: signaturesRes.data || [],
-      templates: templatesRes.data || [],
-      canManageTemplates: canManageTemplates(role, deptName, deptCode),
+  templates: canManageTemplates(role, deptName, deptCode) ? templatesRes.data || [] : [],
+  canManageTemplates: canManageTemplates(role, deptName, deptCode),
     })
   } catch (error: any) {
     console.error("workflow registry get error", error)
