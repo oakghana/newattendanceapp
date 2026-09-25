@@ -1668,45 +1668,26 @@ export default function LoanAppPage() {
       !isPoorFdScore(row.fd_score, row.fd_good) && row.fd_score != null
     const isPoorFd = (row: LoanRequest) =>
       row.status === "rejected_fd" || isPoorFdScore(row.fd_score, row.fd_good)
-  const isGoodFdNotPushed = (row: LoanRequest) =>
-  isGoodFd(row) && !["pending_hr_executive_review", "awaiting_hr_executives", "awaiting_director_hr", "approved_director", "director_rejected"].includes(row.status)
+    const isPendingFd = (row: LoanRequest) =>
+      row.fd_score == null && ["hod_approved", "sent_to_accounts", "pending_fd"].includes(String(row.status || ""))
+    const isGoodFdNotPushed = (row: LoanRequest) =>
+      isGoodFd(row) && !["pending_hr_loan_office", "pending_hr_executive_review", "awaiting_hr_executives", "awaiting_hr_terms", "awaiting_director_hr", "approved_director", "director_rejected", "archived"].includes(String(row.status || ""))
 
-
-    return loanOfficeTypeOptions.map((opt) => {
-      const rows = loanOfficeWorkspaceRows.filter((row) => row.loan_type_key === opt.loanKey)
-      const goodFd = rows.filter((row) => isGoodFd(row)).length
-      const poorFd = rows.filter((row) => isPoorFd(row)).length
-      const goodFdNotPushed = rows.filter((row) => isGoodFdNotPushed(row)).length
-      const sentForApproval = rows.filter((row) => row.status === "awaiting_director_hr").length
-      const archivable = rows.filter((row) => isArchivableStatus(row.status)).length
-      const totalUnique = new Set(
-        rows
-          .filter(
-            (row) =>
-              isGoodFd(row) ||
-              isPoorFd(row) ||
-              isGoodFdNotPushed(row) ||
-              row.status === "awaiting_director_hr" ||
-              isArchivableStatus(row.status),
-          )
-          .map((row) => row.id),
-      ).size
-
-      return {
-        ...opt,
-        totalUnique,
-        goodFd,
-        poorFd,
-        goodFdNotPushed,
-        sentForApproval,
-        archivable,
-      }
-    })
-  }, [loanOfficeTypeOptions, loanOfficeWorkspaceRows])
+    return {
+      pending: loanOfficeWorkspaceRows.filter(isPendingFd),
+      "good-fd": loanOfficeWorkspaceRows.filter(isGoodFd),
+      "poor-fd": loanOfficeWorkspaceRows.filter(isPoorFd),
+      "good-fd-not-pushed": loanOfficeWorkspaceRows.filter(isGoodFdNotPushed),
+      "sent-for-approval": loanOfficeWorkspaceRows.filter((row) => ["awaiting_hr_executives", "awaiting_director_hr"].includes(String(row.status || ""))),
+      "fd-approved-accounts-exec": loanOfficeWorkspaceRows.filter((row) => ["pending_hr_loan_office", "pending_hr_executive_review", "awaiting_hr_terms"].includes(String(row.status || ""))),
+      archivable: loanOfficeWorkspaceRows.filter((row) => isArchivableStatus(String(row.status || ""))),
+      archived: loanOfficeWorkspaceRows.filter((row) => isArchivedStatus(String(row.status || ""))),
+    }
+  }, [loanOfficeWorkspaceRows])
 
   const filteredLoanOfficeStageRows = useMemo(() => {
-const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loanOfficeStageBuckets] || []
-  const rows = filterAndSortRows(bucketRows, loanOfficeSearch, loanOfficeStatus, loanOfficeSort, loanOfficeLocation, loanOfficeDept)
+    const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loanOfficeStageBuckets] || []
+    const rows = filterAndSortRows(bucketRows, loanOfficeSearch, loanOfficeStatus, loanOfficeSort, loanOfficeLocation, loanOfficeDept)
   return rows.sort((a, b) => {
     const priority = (status: string) => status === "hod_approved" ? 0 : status === "pending_hod" ? 1 : 2
     return priority(String(a.status || "")) - priority(String(b.status || ""))
