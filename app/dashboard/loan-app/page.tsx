@@ -3218,6 +3218,30 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     setSelectedLoanIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
+  const bulkApproveSelectedLoans = async () => {
+    const canBulkApprove = Boolean(data?.profile?.hod || data?.profile?.directorHr || data?.profile?.viewAllTabs)
+    if (!canBulkApprove || selectedLoanIds.length === 0) {
+      toast({ title: "No selection", description: "Select one or more pending requests first." })
+      return
+    }
+    const rows = Object.values(data?.inbox || {}).flat() as LoanRequest[]
+    const selectedRows = rows.filter((row) => selectedLoanIds.includes(row.id))
+    let completed = 0
+    for (const row of selectedRows) {
+      const action = row.status === "pending_hod" ? "hod_decision" : row.status === "awaiting_hr_executive" || row.status === "awaiting_director_hr" ? "director_finalize" : null
+      if (!action) continue
+      const response = await fetch("/api/loan/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: row.id, action, decision: "approve", note: "Bulk approval" }),
+      })
+      if (response.ok) completed += 1
+    }
+    setSelectedLoanIds([])
+    toast({ title: "Bulk approval complete", description: `${completed} request(s) approved. Pending or ineligible requests were skipped.` })
+    await loadData()
+  }
+
   const deleteSelectedLoanRequests = async () => {
     if (!isAdmin) return
     if (selectedLoanIds.length === 0) {
@@ -6310,13 +6334,26 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     Delete Selected ({selectedLoanIds.length})
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
-          )}
-          {isAdmin && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Historical Loan Import</CardTitle>
+  </CardContent>
+  </Card>
+  )}
+  {(data?.profile?.hod || data?.profile?.directorHr || data?.profile?.viewAllTabs) && (
+  <Card className="border-emerald-200">
+    <CardHeader>
+      <CardTitle>Bulk Approval</CardTitle>
+      <CardDescription>Select pending requests in your queue, then approve them together.</CardDescription>
+    </CardHeader>
+    <CardContent>
+      <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={() => void bulkApproveSelectedLoans()} disabled={selectedLoanIds.length === 0}>
+        Approve Selected ({selectedLoanIds.length})
+      </Button>
+    </CardContent>
+  </Card>
+  )}
+  {isAdmin && (
+  <Card>
+  <CardHeader>
+  <CardTitle>Historical Loan Import</CardTitle>
                 <CardDescription>Download the template and upload already approved and disbursed loans from previous months.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -6477,8 +6514,8 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 const isExpanded = expandedLoanIds.has(row.id)
                 return (
                 <div key={row.id} className="rounded border text-sm">
-                  {isAdmin && isExpanded && (
-                    <div className="flex items-center justify-between p-3 pb-2 border-b">
+  {(isAdmin || data?.profile?.hod || data?.profile?.directorHr) && isExpanded && (
+  <div className="flex items-center justify-between p-3 pb-2 border-b">
                       <label className="flex items-center gap-2 text-xs text-muted-foreground">
                         <input type="checkbox" checked={selectedLoanIds.includes(row.id)} onChange={() => toggleSelectedLoanId(row.id)} />
                         Select

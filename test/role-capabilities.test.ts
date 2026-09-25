@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   canAccessDisbursementConfirmation,
+  canManageOwnSignature,
   canEditDriverLicenses,
   canEditFleetInventory,
   canManageTransport,
@@ -14,7 +15,13 @@ import {
   isTransportDepartmentHod,
 } from "../lib/role-capabilities"
 
-describe("Disbursement confirmation access", () => {
+  describe("Signature access", () => {
+    it.each(["department_head", "hod", "accounts_executive"])("allows %s to manage a signature", (role) => {
+      expect(canManageOwnSignature(role)).toBe(true)
+    })
+  })
+
+  describe("Disbursement confirmation access", () => {
   it.each(["admin", "administrator", "super_admin", "god", "accounts", "accounts_executive", "hr_executive", "loan_office", "hr_loan_office", "accounts_loan_office"])("allows %s", (role) => {
     expect(canAccessDisbursementConfirmation(role)).toBe(true)
   })

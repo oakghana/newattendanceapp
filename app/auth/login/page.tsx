@@ -402,7 +402,7 @@ export default function LoginPage() {
           <div className="mt-6 border-t border-border/60 pt-6 text-center">
             <p className="text-sm font-medium text-foreground">Quality Control Company Limited</p>
             <p className="mt-1 text-xs text-muted-foreground">Intranet Portal, managed by the IT Department</p>
-            <p className="mt-3 inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">🚀 V.2.2-5-09-26</p>
+            <p className="mt-3 inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">V.3-25-09-26</p>
           </div>
           </CardContent>
         </Card>

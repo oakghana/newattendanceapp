@@ -1168,6 +1168,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const [hodDeptFilter, setHodDeptFilter] = useState("all")
   const [hrOfficeLocationFilter, setHrOfficeLocationFilter] = useState("all")
   const [hrOfficeDeptFilter, setHrOfficeDeptFilter] = useState("all")
+  const [hrOfficeRankFilter, setHrOfficeRankFilter] = useState("all")
   const [hrApproverLocationFilter, setHrApproverLocationFilter] = useState("all")
   const [hrApproverDeptFilter, setHrApproverDeptFilter] = useState("all")
   const [analyticsRange, setAnalyticsRange] = useState(() => getCurrentMonthRange())
@@ -1979,7 +1980,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
 
   useEffect(() => {
     setHrOfficePage(1)
-  }, [hrOfficePageSize, hrOfficeShowArchived, hrOfficeSearch, hrOfficeStatusFilter, hrOfficeSortBy])
+  }, [hrOfficePageSize, hrOfficeShowArchived, hrOfficeSearch, hrOfficeStatusFilter, hrOfficeLocationFilter, hrOfficeRankFilter, hrOfficeDeptFilter, hrOfficeSortBy])
 
   useEffect(() => {
     if (activeTab !== "hr-office" || !hrOfficeAutoRefresh) return
@@ -2119,8 +2120,17 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
     return Array.from(set).sort()
   }, [data?.requests])
 
+  const allLeaveRanks: string[] = useMemo(() => {
+  const set = new Set<string>()
+  for (const r of (data?.requests || [])) {
+    const rank = String(r?.user?.rank || r?.rank || "")
+    if (rank) set.add(rank)
+  }
+  return Array.from(set).sort()
+  }, [data?.requests])
+
   const allLeaveDepts: string[] = useMemo(() => {
-    const set = new Set<string>()
+  const set = new Set<string>()
     for (const r of (data?.requests || [])) {
       const dept = String(r?.user?.departments?.name || r?.user?.department_name || r?.department_name || "")
       if (dept) set.add(dept)
@@ -2210,13 +2220,18 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       })
     }
 
-    if (hrOfficeLocationFilter !== "all") {
-      rows = rows.filter((r: any) => {
-        const loc = String(r?.user?.geofence_locations?.name || r?.user?.location_name || r?.location_name || "")
-        return loc === hrOfficeLocationFilter
-      })
-    }
-    if (hrOfficeDeptFilter !== "all") {
+  if (hrOfficeLocationFilter !== "all") {
+  rows = rows.filter((r: any) => {
+  const loc = String(r?.user?.geofence_locations?.name || r?.user?.location_name || r?.location_name || "")
+  return loc === hrOfficeLocationFilter
+  })
+  }
+
+  if (hrOfficeRankFilter !== "all") {
+  rows = rows.filter((r: any) => String(r?.user?.rank || r?.rank || "") === hrOfficeRankFilter)
+  }
+
+  if (hrOfficeDeptFilter !== "all") {
       rows = rows.filter((r: any) => {
         const dept = String(r?.user?.departments?.name || r?.user?.department_name || r?.department_name || "")
         return dept === hrOfficeDeptFilter
@@ -3560,6 +3575,13 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                       <SelectContent>
                         <SelectItem value="all">All locations</SelectItem>
                         {allLeaveLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Select value={hrOfficeRankFilter} onValueChange={setHrOfficeRankFilter}>
+                      <SelectTrigger className="h-9 w-40"><SelectValue placeholder="All ranks" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All ranks</SelectItem>
+                        {allLeaveRanks.map((rank) => <SelectItem key={rank} value={rank}>{rank}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <Select value={hrOfficeDeptFilter} onValueChange={setHrOfficeDeptFilter}>

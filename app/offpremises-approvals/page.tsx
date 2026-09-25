@@ -54,7 +54,7 @@ export default function OffPremisesApprovalPage() {
         }
 
         // Check if user has permission to view this page
-        const hasPermission = ['admin', 'department_head', 'regional_manager', 'regional_hr'].includes(profile.role)
+        const hasPermission = ['admin', 'department_head', 'regional_manager', 'regional_hr', 'accounts_executive'].includes(String(profile.role || '').toLowerCase())
         if (!hasPermission) {
           setError('You do not have permission to view this page')
           return
