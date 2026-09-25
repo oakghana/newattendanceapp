@@ -37,6 +37,8 @@ type LoanRow = {
   next_payment_due: string | null
   next_payment_amount: number
   expected_completion_date: string | null
+  disbursement_date?: string | null
+  recovery_start_date?: string | null
   completed_payment_date?: string | null
   reapplication_eligible?: boolean
   repayment_status: string
@@ -54,6 +56,8 @@ export function RunningLoansReport() {
   const [nextPaymentDue, setNextPaymentDue] = useState("")
   const [nextPaymentAmount, setNextPaymentAmount] = useState("")
   const [completionDate, setCompletionDate] = useState("")
+  const [disbursementDate, setDisbursementDate] = useState("")
+  const [recoveryStartDate, setRecoveryStartDate] = useState("")
   const [reason, setReason] = useState("")
   const [saving, setSaving] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
@@ -81,13 +85,13 @@ export function RunningLoansReport() {
 
   const exportPdf = () => window.print()
   const openEdit = (row: LoanRow) => {
-    setEditingLoan(row); setPaidToDate(String(row.paid_to_date)); setOutstanding(String(row.outstanding_balance)); setNextPaymentDue(row.next_payment_due || ""); setNextPaymentAmount(String(row.next_payment_amount)); setCompletionDate(row.expected_completion_date || ""); setReason(""); setEditError(null)
+    setEditingLoan(row); setPaidToDate(String(row.paid_to_date)); setOutstanding(String(row.outstanding_balance)); setNextPaymentDue(row.next_payment_due || ""); setNextPaymentAmount(String(row.next_payment_amount)); setCompletionDate(row.expected_completion_date || ""); setDisbursementDate(row.disbursement_date || ""); setRecoveryStartDate(row.recovery_start_date || ""); setReason(""); setEditError(null)
   }
   const saveEdit = async () => {
     if (!editingLoan) return
     setSaving(true); setEditError(null)
     try {
-      const response = await fetch("/api/loan/running-loans/edit", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ loanRequestId: editingLoan.id, paidToDate, outstandingBalance: outstanding, nextPaymentDue, nextPaymentAmount, expectedCompletionDate: completionDate, reason }) })
+      const response = await fetch("/api/loan/running-loans/edit", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ loanRequestId: editingLoan.id, paidToDate, outstandingBalance: outstanding, nextPaymentDue, nextPaymentAmount, expectedCompletionDate: completionDate, disbursementDate, recoveryStartDate, reason }) })
       const body = await response.json()
       if (!response.ok) throw new Error(body.error || "Could not save correction")
       setEditingLoan(null); await mutate()
@@ -126,7 +130,7 @@ export function RunningLoansReport() {
           </>}
         </CardContent>
       </Card>
-      <Dialog open={Boolean(editingLoan)} onOpenChange={(open) => !open && setEditingLoan(null)}><DialogContent><DialogHeader><DialogTitle>Edit running-loan operations</DialogTitle><DialogDescription>Only payment tracking fields can be changed. Principal, recovery period, and loan term are locked.</DialogDescription></DialogHeader>{editingLoan && <div className="grid gap-3"><p className="text-sm text-muted-foreground">{editingLoan.staff?.full_name || "Unknown staff"} · {editingLoan.loan_type_label || "Loan"}</p><div className="grid gap-1"><Label htmlFor="paid-to-date">Paid to date</Label><Input id="paid-to-date" type="number" min="0" step="0.01" value={paidToDate} onChange={(e) => setPaidToDate(e.target.value)} /></div><div className="grid gap-1"><Label htmlFor="outstanding">Outstanding</Label><Input id="outstanding" type="number" min="0" step="0.01" value={outstanding} onChange={(e) => setOutstanding(e.target.value)} /></div><div className="grid gap-1"><Label htmlFor="next-payment-due">Next payment date</Label><Input id="next-payment-due" type="date" value={nextPaymentDue} onChange={(e) => setNextPaymentDue(e.target.value)} /></div><div className="grid gap-1"><Label htmlFor="next-payment-amount">Next payment amount</Label><Input id="next-payment-amount" type="number" min="0" step="0.01" value={nextPaymentAmount} onChange={(e) => setNextPaymentAmount(e.target.value)} /></div><div className="grid gap-1"><Label htmlFor="completion-date">Finishes</Label><Input id="completion-date" type="date" value={completionDate} onChange={(e) => setCompletionDate(e.target.value)} /></div><div className="grid gap-1"><Label htmlFor="correction-reason">Reason for correction</Label><Input id="correction-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Explain the correction" /></div>{editError && <p className="text-sm text-destructive">{editError}</p>}</div>}<DialogFooter><Button variant="outline" onClick={() => setEditingLoan(null)}>Cancel</Button><Button onClick={() => void saveEdit()} disabled={saving}>{saving ? "Saving…" : "Save correction"}</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={Boolean(editingLoan)} onOpenChange={(open) => !open && setEditingLoan(null)}><DialogContent><DialogHeader><DialogTitle>Edit running-loan operations</DialogTitle><DialogDescription>Only payment tracking fields can be changed. Principal, recovery period, and loan term are locked.</DialogDescription></DialogHeader>{editingLoan && <div className="grid gap-3"><p className="text-sm text-muted-foreground">{editingLoan.staff?.full_name || "Unknown staff"} · {editingLoan.loan_type_label || "Loan"}</p><div className="grid gap-1"><Label htmlFor="paid-to-date">Paid to date</Label><Input id="paid-to-date" type="number" min="0" step="0.01" value={paidToDate} onChange={(e) => setPaidToDate(e.target.value)} /></div><div className="grid gap-1"><Label htmlFor="outstanding">Outstanding</Label><Input id="outstanding" type="number" min="0" step="0.01" value={outstanding} onChange={(e) => setOutstanding(e.target.value)} /></div><div className="grid gap-1"><Label htmlFor="disbursement-date">Disbursement date</Label><Input id="disbursement-date" type="date" value={disbursementDate} onChange={(e) => setDisbursementDate(e.target.value)} /></div><div className="grid gap-1"><Label htmlFor="recovery-start-date">Recovery date</Label><Input id="recovery-start-date" type="date" value={recoveryStartDate} onChange={(e) => setRecoveryStartDate(e.target.value)} /></div><div className="grid gap-1"><Label htmlFor="next-payment-due">Next payment date</Label><Input id="next-payment-due" type="date" value={nextPaymentDue} onChange={(e) => setNextPaymentDue(e.target.value)} /></div><div className="grid gap-1"><Label htmlFor="next-payment-amount">Next payment amount</Label><Input id="next-payment-amount" type="number" min="0" step="0.01" value={nextPaymentAmount} onChange={(e) => setNextPaymentAmount(e.target.value)} /></div><div className="grid gap-1"><Label htmlFor="completion-date">Finishes</Label><Input id="completion-date" type="date" value={completionDate} onChange={(e) => setCompletionDate(e.target.value)} /></div><div className="grid gap-1"><Label htmlFor="correction-reason">Reason for correction</Label><Input id="correction-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Explain the correction" /></div>{editError && <p className="text-sm text-destructive">{editError}</p>}</div>}<DialogFooter><Button variant="outline" onClick={() => setEditingLoan(null)}>Cancel</Button><Button onClick={() => void saveEdit()} disabled={saving}>{saving ? "Saving…" : "Save correction"}</Button></DialogFooter></DialogContent></Dialog>
       <div className="hidden print:block text-xs text-muted-foreground">Generated {date(data?.generated_at || null)} · QCC Attendance Electronic System</div>
     </div>
   )
