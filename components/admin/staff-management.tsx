@@ -1083,7 +1083,7 @@ export function StaffManagement() {
                     </div>
                     <div>
                       <Label htmlFor="dateOfAssumption" className="font-medium">
-                        Date of Assumption <span className="text-muted-foreground font-normal">(Optional)</span>
+                        Date of Assumption <span className="text-muted-foreground font-normal">(Optional — leave blank if not applicable)</span>
                       </Label>
                       <Input
                         id="dateOfAssumption"
