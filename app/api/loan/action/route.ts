@@ -977,8 +977,23 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Loan must be in FD-approved status to push to HR Executive" }, { status: 400 })
       }
 
-      // Update status to pending_hr_executive_review
+      // Update status to pending_hr_executive_review. Keep the HR memo and
+      // handoff metadata on the same atomic update as the status transition.
       update.status = "pending_hr_executive_review"
+      update.hr_note = String(body.hr_loan_office_memo || body.note || "").trim() || null
+      update.hr_forwarded_at = new Date().toISOString()
+      update.hr_officer_id = user.id
+      const pushLoanType = String(req.loan_type_key || req.loan_type || req.loan_type_label || "").toLowerCase()
+      const fdSalary = String(req.fd_note || "").match(/Consolidated Monthly Salary:\s*(?:GHc|GHS|₵)\s*([\d,]+(?:\.\d+)?)/i)?.[1]
+      const pushBasicSalary = Number(fdSalary?.replace(/,/g, "") || req.basic_salary)
+      const pushMonths = Number(req.salary_advance_multiplier || req.deduction_period_months || req.repayment_duration_months || req.recovery_months)
+      if ((pushLoanType.includes("salary") && pushLoanType.includes("advance")) && pushBasicSalary > 0 && pushMonths > 0) {
+        const pushTotal = Math.round(pushBasicSalary * Math.trunc(pushMonths) * 100) / 100
+        update.basic_salary = pushBasicSalary
+        update.salary_advance_amount = pushTotal
+        update.requested_amount = pushTotal
+        update.fixed_amount = pushTotal
+      }
       toStatus = "pending_hr_executive_review"
 
       // Store the disbursement and recovery dates (convert YYYY-MM to YYYY-MM-01)

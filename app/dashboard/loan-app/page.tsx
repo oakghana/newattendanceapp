@@ -1668,33 +1668,9 @@ export default function LoanAppPage() {
       !isPoorFdScore(row.fd_score, row.fd_good) && row.fd_score != null
     const isPoorFd = (row: LoanRequest) =>
       row.status === "rejected_fd" || isPoorFdScore(row.fd_score, row.fd_good)
-    const isGoodFdNotPushed = (row: LoanRequest) =>
-      isGoodFd(row) && !["awaiting_director_hr", "approved_director", "director_rejected"].includes(row.status)
-    const isPending = (row: LoanRequest) =>
-      row.fd_good === null && row.fd_score === null && !isArchivableStatus(row.status) && !isArchivedStatus(row.status)
-    const isFdApprovedByAccounts = (row: LoanRequest) =>
-      row.status === "pending_hr_loan_office"
+  const isGoodFdNotPushed = (row: LoanRequest) =>
+  isGoodFd(row) && !["pending_hr_executive_review", "awaiting_hr_executives", "awaiting_director_hr", "approved_director", "director_rejected"].includes(row.status)
 
-    return {
-      pending: loanOfficeRowsForSelectedType.filter((row) => isPending(row)),
-      "good-fd": loanOfficeRowsForSelectedType.filter((row) => isGoodFd(row)),
-      "poor-fd": loanOfficeRowsForSelectedType.filter((row) => isPoorFd(row)),
-      "good-fd-not-pushed": loanOfficeRowsForSelectedType.filter((row) => isGoodFdNotPushed(row)),
-      "sent-for-approval": loanOfficeRowsForSelectedType.filter((row) => row.status === "awaiting_director_hr"),
-      "fd-approved-accounts-exec": loanOfficeRowsForSelectedType.filter((row) => isFdApprovedByAccounts(row)),
-      archivable: loanOfficeRowsForSelectedType.filter((row) => isArchivableStatus(row.status)),
-      archived: loanOfficeRowsForSelectedType.filter((row) => isArchivedStatus(row.status)),
-    }
-  }, [loanOfficeRowsForSelectedType])
-
-  const loanOfficeTypeSummary = useMemo(() => {
-    const isArchivableStatus = (status: string) => ["approved_director", "director_rejected", "rejected_fd", "committee_rejected", "hod_rejected"].includes(status)
-    const isGoodFd = (row: LoanRequest) =>
-      !isPoorFdScore(row.fd_score, row.fd_good) && row.fd_score != null
-    const isPoorFd = (row: LoanRequest) =>
-      row.status === "rejected_fd" || isPoorFdScore(row.fd_score, row.fd_good)
-    const isGoodFdNotPushed = (row: LoanRequest) =>
-      isGoodFd(row) && !["awaiting_director_hr", "approved_director", "director_rejected"].includes(row.status)
 
     return loanOfficeTypeOptions.map((opt) => {
       const rows = loanOfficeWorkspaceRows.filter((row) => row.loan_type_key === opt.loanKey)
