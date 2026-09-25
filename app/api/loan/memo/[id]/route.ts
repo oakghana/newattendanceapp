@@ -735,6 +735,26 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     })
     y += (ccList.length + 1) * 4.5 + 4
 
+    // Imported approvals are retained for record purposes and must be clearly distinguished
+    // from loans approved through the current portal workflow.
+    if (Boolean(loan.is_imported)) {
+      const importedFootnote = "Administrative note: This loan was approved previously through an external/legacy process and imported into the portal for record-keeping and archive purposes. This memo is generated for documentation only and does not represent a new approval."
+      const footnoteLines = doc.splitTextToSize(importedFootnote, contentWidth)
+      if (y + footnoteLines.length * 4.2 + 8 > pageHeight - 16) {
+        doc.addPage()
+        y = 24
+      }
+      doc.setFillColor(248, 250, 252)
+      doc.setDrawColor(148, 163, 184)
+      doc.setLineWidth(0.3)
+      doc.roundedRect(marginLeft, y - 3.5, contentWidth, footnoteLines.length * 4.2 + 7, 1.5, 1.5, "FD")
+      doc.setFont("helvetica", "italic")
+      doc.setFontSize(7.8)
+      doc.setTextColor(71, 85, 105)
+      doc.text(footnoteLines, marginLeft + 3, y + 1)
+      y += footnoteLines.length * 4.2 + 10
+    }
+
     // ─── MD Approval Stamp — Professional Square Stamp with MD Signature ─
     // Only show if MD has ACTUALLY approved (md_approved_at is populated)
     // Don't show at awaiting_director_hr stage — that means HR signed but MD hasn't approved yet
