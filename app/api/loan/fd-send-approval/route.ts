@@ -48,16 +48,37 @@ export async function POST(request: Request) {
       fd_calculation_data,
     } = body
 
-    if (!loan_request_id || fd_score === undefined) {
+    if (!loan_request_id || fd_score === undefined || fd_score === null || fd_score === "") {
       return NextResponse.json({ error: "Missing required fields: loan_request_id, fd_score" }, { status: 400 })
     }
 
-    // Update the loan request with FD data and set status to pending accounts FD review
+    const normalizedFdScore = Number(fd_score)
+    if (!Number.isFinite(normalizedFdScore) || normalizedFdScore < 0 || normalizedFdScore > 100) {
+      return NextResponse.json({ error: "FD score must be a number between 0 and 100" }, { status: 400 })
+    }
+
+    const { data: loanRequest, error: loanRequestError } = await admin
+      .from("loan_requests")
+      .select("id, status")
+      .eq("id", loan_request_id)
+      .maybeSingle()
+
+    if (loanRequestError) {
+      return NextResponse.json({ error: "Unable to load the loan request", details: loanRequestError.message }, { status: 500 })
+    }
+    if (!loanRequest) {
+      return NextResponse.json({ error: "Loan request not found" }, { status: 404 })
+    }
+    if (!["sent_to_accounts", "pending_accounts_fd_review"].includes(String(loanRequest.status || ""))) {
+      return NextResponse.json({ error: "This request is not waiting for an Accounts FD review" }, { status: 409 })
+    }
+
+    // Update the loan request with FD data and set status to pending accounts FD review.
     const { error: updateError } = await admin
       .from("loan_requests")
       .update({
-        fd_score,
-        fd_good: fd_good ?? false,
+        fd_score: normalizedFdScore,
+        fd_good: fd_good ?? normalizedFdScore >= 40,
         fd_note: JSON.stringify(fd_calculation_data || {}),
         status: "pending_accounts_fd_review",
         loan_office_forwarded_at: new Date().toISOString(),

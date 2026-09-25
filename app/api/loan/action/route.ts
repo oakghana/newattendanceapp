@@ -482,7 +482,9 @@ export async function POST(request: NextRequest) {
       if (!canEnterFdScore(role, deptName, deptCode)) {
         return NextResponse.json({ error: "Only the Accounts Loan Office can enter FD scores" }, { status: 403 })
       }
-      if (req.status !== "sent_to_accounts") return NextResponse.json({ error: "Request is not at Accounts stage" }, { status: 400 })
+      if (!["sent_to_accounts", "pending_accounts_fd_review"].includes(String(req.status || ""))) {
+        return NextResponse.json({ error: "Request is not at Accounts FD stage" }, { status: 400 })
+      }
 
       const fdScore = Number(body.fd_score)
       if (!Number.isFinite(fdScore)) {
