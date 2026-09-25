@@ -226,7 +226,10 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
               `Proposed Recovery Duration: ${loan.recovery_months || loan.recovery_period_months || loan.recovery_duration_months || "TBD"} month(s)`,
             ]),
         ...(loan.loan_type_key === "salary_advance" && loan.basic_salary
-          ? [`Verified Basic Salary: GHc ${fmtAmount(loan.basic_salary)}`]
+          ? [
+              `Verified Monthly Salary: GHc ${fmtAmount(loan.basic_salary)}`,
+              ...(loan.salary_advance_days ? [`Number of Days on Salary Advice: ${loan.salary_advance_days}`] : []),
+            ]
           : []),
         ...(cleanedHrNote ? [`HR Note: ${cleanedHrNote}`] : []),
         "You will receive a final memo once Director HR concludes review.",

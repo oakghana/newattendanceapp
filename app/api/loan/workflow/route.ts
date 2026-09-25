@@ -12,6 +12,7 @@ import {
   normalizeRole,
 } from "@/lib/loan-workflow"
 import { deriveStaffCategoryFromPosition } from "@/lib/annual-leave-entitlement"
+import { isRegionalManagerScopeMatch, resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
 const HOD_AUTO_ADVANCE_DAYS = 3
 const POST_LOAN_OFFICE_DELAY_DAYS = 5
@@ -345,6 +346,9 @@ export async function GET() {
   const managerRegionId = String((profile as any)?.region_id || "")
   const isRegionalManager = role === "regional_manager"
     const isDepartmentHead = ["department_head", "accounts_executive", "transport_manager", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(role)
+    const regionalOwnedLocationIds = isRegionalManager
+      ? await resolveOwnedLocationIdsForRegionalOffice(admin, managerLocationId, managerRegionId)
+      : []
 
     let linkedStaffIds: string[] = []
     const { data: linkageRows } = await admin
@@ -397,11 +401,21 @@ export async function GET() {
   const locationStaffIds = locationStaffRows
     .filter((row: any) => !/regional\s+office|regional\s+location/i.test(String(row?.geofence_locations?.name || "")))
     .map((row: any) => String(row.id || "")).filter(Boolean)
+  const regionalLocationStaffRows = isRegionalManager && regionalOwnedLocationIds.length > 0
+    ? ((await admin.from("user_profiles").select("id").in("assigned_location_id", regionalOwnedLocationIds).eq("is_active", true).limit(5000)).data || [])
+    : []
+  const regionalRegionStaffRows = isRegionalManager && managerRegionId
+    ? ((await admin.from("user_profiles").select("id").eq("region_id", managerRegionId).eq("is_active", true).limit(5000)).data || [])
+    : []
+  const regionalStaffIds = [...regionalLocationStaffRows, ...regionalRegionStaffRows]
+    .map((row: any) => String(row.id || ""))
+    .filter(Boolean)
   // Department Heads must be scoped strictly to their own department and
   // assigned location. Location-only staff are not valid HOD queue members.
   const reviewerScopedStaffIds = Array.from(new Set([
   ...linkedStaffIds,
   ...departmentStaffIds,
+  ...regionalStaffIds,
   ]))
 
     const loanTypesWithTermsQuery = () =>
@@ -605,9 +619,7 @@ export async function GET() {
     if (isDepartmentHead && !endorsableStaffIds.has(String(row.user_id || ""))) continue
     if (isRegionalManager) {
       const requester = pendingRequesterMap.get(String(row.user_id || ""))
-      const sameRegion = Boolean(managerRegionId && requester?.region_id && String(managerRegionId) === String(requester.region_id))
-      const sameLocation = Boolean(managerLocationId && requester?.assigned_location_id && String(managerLocationId) === String(requester.assigned_location_id))
-      if (!sameRegion && !sameLocation) continue
+      if (!isRegionalManagerScopeMatch(managerRegionId, regionalOwnedLocationIds, requester?.assigned_location_id, requester?.region_id)) continue
     }
     if (!seen.has(row.id)) {
           seen.add(row.id)
@@ -615,7 +627,7 @@ export async function GET() {
         }
       }
       for (const row of data) {
-        row.can_endorse = !isDepartmentHead || endorsableStaffIds.has(String(row.user_id || ""))
+        row.can_endorse = isRegionalManager || !isDepartmentHead || endorsableStaffIds.has(String(row.user_id || ""))
       }
       data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       return { data, error }

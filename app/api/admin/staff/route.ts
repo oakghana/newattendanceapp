@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
+import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
 function createJsonResponse(data: any, status = 200) {
   return new NextResponse(JSON.stringify(data), {
@@ -93,7 +94,7 @@ export async function GET(request: NextRequest) {
     // Fetch the requesting user's profile to check role and location (use admin client)
     const { data: requestingProfile } = await adminDb
       .from("user_profiles")
-      .select("role, assigned_location_id")
+      .select("role, assigned_location_id, region_id, geofence_locations!assigned_location_id(name)")
       .eq("id", user.id)
       .single()
 
@@ -127,17 +128,22 @@ export async function GET(request: NextRequest) {
         updated_at
       `, { count: 'exact' })
 
-    // Regional managers see staff at their regional office and all child district/facility locations
-    if (requestingProfile?.role === "regional_manager" && requestingProfile?.assigned_location_id) {
-      const rmLocationId = requestingProfile.assigned_location_id
-      const { data: childLocations } = await adminDb
-        .from("geofence_locations")
-        .select("id")
-        .eq("parent_location_id", rmLocationId)
-        .eq("is_active", true)
-      const scopeLocationIds = Array.from(
-        new Set([rmLocationId, ...((childLocations || []).map((row: any) => String(row.id)).filter(Boolean))]),
+    const requestingRole = String(requestingProfile?.role || "").trim().toLowerCase().replace(/[\s-]+/g, "_")
+    const requestingLocationName = String((requestingProfile as any)?.geofence_locations?.name || "")
+    const isRegionalStaffAdministrator = requestingProfile?.assigned_location_id && (
+      requestingRole === "regional_manager" ||
+      (requestingRole === "it_admin" && !isNonRegionalLocation(requestingLocationName))
+    )
+
+    if (isRegionalStaffAdministrator) {
+      const scopeLocationIds = await resolveOwnedLocationIdsForRegionalOffice(
+        adminDb,
+        requestingProfile.assigned_location_id,
+        requestingProfile.region_id,
       )
+      if (scopeLocationIds.length === 0) {
+        return createJsonResponse({ success: false, error: "No regional staff locations are assigned to this account." }, 403)
+      }
       query = query.in("assigned_location_id", scopeLocationIds)
     }
 

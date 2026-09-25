@@ -456,8 +456,8 @@ export async function POST(request: NextRequest) {
       ...locationSnapshot,
       loan_type_key: loanType.loan_key,
       loan_type_label: loanType.loan_label,
-      fixed_amount: (loanType as any).fixed_amount || null,
-      requested_amount: (loanType as any).fixed_amount || Number(requested_amount || 0) || null,
+      fixed_amount: loanType.loan_key === "salary_advance" ? null : (loanType as any).fixed_amount || null,
+      requested_amount: loanType.loan_key === "salary_advance" ? null : (loanType as any).fixed_amount || Number(requested_amount || 0) || null,
       hr_note: (loanType as any).loan_terms || null,
       recovery_months: requestRecoveryMonths,
       repayment_duration_months: initialDurationMonths,
@@ -651,8 +651,8 @@ export async function PUT(request: NextRequest) {
         updatePayload.loan_type_label = loanType.loan_label
         updatePayload.committee_required = Boolean(loanType.requires_committee)
         updatePayload.requires_fd_check = loanType.requires_fd_check !== false
-        updatePayload.fixed_amount = (loanType as any).fixed_amount || null
-        updatePayload.requested_amount = (loanType as any).fixed_amount || null
+        updatePayload.fixed_amount = loanType.loan_key === "salary_advance" ? null : (loanType as any).fixed_amount || null
+        updatePayload.requested_amount = loanType.loan_key === "salary_advance" ? null : (loanType as any).fixed_amount || null
         updatePayload.hr_note = (loanType as any).loan_terms || null
         const chosenMonths = clampSalaryAdvanceRecoveryMonths(
           loanType.loan_key,

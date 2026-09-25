@@ -22,6 +22,7 @@ interface FDApprovedLoan {
   request_number?: string
   requested_amount?: number
   basic_salary?: number
+  annual_salary?: number
   salary_advance_amount?: number
   salary_advance_multiplier?: number
   deduction_period_months?: number
@@ -68,6 +69,7 @@ function normalizeFdApprovedLoan(loan: Record<string, unknown>): FDApprovedLoan 
     request_number: String(loan.request_number || '').trim() || undefined,
     requested_amount: salaryAdvanceAmount ?? Number(loan.requested_amount ?? loan.fixed_amount ?? 0),
     basic_salary: loan.basic_salary == null ? undefined : Number(loan.basic_salary),
+    annual_salary: loan.annual_salary == null ? undefined : Number(loan.annual_salary),
     salary_advance_amount: salaryAdvanceAmount,
     salary_advance_multiplier: loan.salary_advance_multiplier == null ? undefined : Number(loan.salary_advance_multiplier),
     deduction_period_months: loan.deduction_period_months == null ? undefined : Number(loan.deduction_period_months),
@@ -92,6 +94,7 @@ export function HRLoanOfficeFDApproved() {
   const [selectedForPush, setSelectedForPush] = useState<FDApprovedLoan | null>(null)
   const [selectedDetailLoan, setSelectedDetailLoan] = useState<FDApprovedLoan | null>(null)
   const [pushMemo, setPushMemo] = useState('')
+  const [salaryAdvanceDays, setSalaryAdvanceDays] = useState('')
   const [pushing, setPushing] = useState(false)
   const { toast } = useToast()
 
@@ -153,6 +156,7 @@ export function HRLoanOfficeFDApproved() {
   const openHandoffDialog = (loan: FDApprovedLoan, defaultMemo: string) => {
     setSelectedForPush(loan)
     setPushMemo(defaultMemo)
+    setSalaryAdvanceDays('')
   }
 
   const handleViewDetails = (loan: FDApprovedLoan) => {
@@ -178,6 +182,11 @@ export function HRLoanOfficeFDApproved() {
       toast({ title: 'Error', description: 'Please enter a memo before pushing to HR Executive', variant: 'destructive' })
       return
     }
+    const isSalaryAdvance = String(selectedForPush.loan_type || '').toLowerCase().includes('salary')
+    if (isSalaryAdvance && Number(salaryAdvanceDays) < 1) {
+      toast({ title: 'Error', description: 'Enter the number of days on the salary advice', variant: 'destructive' })
+      return
+    }
 
     try {
       setPushing(true)
@@ -187,6 +196,7 @@ export function HRLoanOfficeFDApproved() {
         body: JSON.stringify({
           loan_request_id: selectedForPush.id,
           hr_loan_office_memo: pushMemo,
+          salary_advance_days: Number(salaryAdvanceDays) || null,
           action: 'push_to_hr_executive',
         }),
       })
@@ -200,6 +210,7 @@ export function HRLoanOfficeFDApproved() {
         })
         setSelectedForPush(null)
         setPushMemo('')
+        setSalaryAdvanceDays('')
         // Refresh the loans list
         await fetchFdApprovedLoans()
       } else {
@@ -515,6 +526,21 @@ export function HRLoanOfficeFDApproved() {
                 />
               </div>
 
+              {String(selectedForPush.loan_type || '').toLowerCase().includes('salary') && (
+                <div>
+                  <label className="text-sm font-semibold text-slate-900">Number of Days on Salary Advice *</label>
+                  <Input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={salaryAdvanceDays}
+                    onChange={(event) => setSalaryAdvanceDays(event.target.value)}
+                    placeholder="Enter number of days"
+                    className="mt-2"
+                  />
+                </div>
+              )}
+
               {/* Process Flow */}
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded">
                 <p className="text-xs font-semibold text-emerald-900 mb-2">Approval Flow:</p>
@@ -534,7 +560,7 @@ export function HRLoanOfficeFDApproved() {
             </Button>
             <Button
               onClick={handlePushToHRExecutive}
-              disabled={pushing || !pushMemo.trim()}
+              disabled={pushing || !pushMemo.trim() || (String(selectedForPush?.loan_type || '').toLowerCase().includes('salary') && Number(salaryAdvanceDays) < 1)}
               className="bg-blue-600 hover:bg-blue-700"
             >
               <Send className="h-4 w-4 mr-2" />

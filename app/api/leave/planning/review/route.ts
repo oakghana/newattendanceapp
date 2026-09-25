@@ -3,6 +3,7 @@ import { notifyLeaveHodApproved, notifyLeaveHodDecision } from "@/lib/workflow-e
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { calculateRequestedDays, summarizeManagerReviewStatus, type LeavePlanReviewDecision } from "@/lib/leave-planning"
 import { isAnnualLeave, canNonRegionalPipelineAct, canRegionalPipelineAct, isSelfLeaveWorkflowRoute, resolveStaffAssignments } from "@/lib/hr-workflow"
+import { isRegionalManagerScopeMatch, resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
 function isSchemaIssue(error: any) {
   const code = error?.code || ""
@@ -84,6 +85,9 @@ export async function POST(request: NextRequest) {
     }
 
     const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
+    const regionalOwnedLocationIds = role === "regional_manager"
+      ? await resolveOwnedLocationIdsForRegionalOffice(admin, profile.assigned_location_id, profile.region_id)
+      : []
     const isRegionalForward = action === "forward_to_regional_manager"
     if (isRegionalForward && !isRegionalHr) {
       return NextResponse.json({ error: "Only the assigned Regional HR Office can forward a regional leave request to the Regional Manager." }, { status: 403 })
@@ -236,9 +240,12 @@ export async function POST(request: NextRequest) {
         }
       } else {
         const targetProfile = Array.isArray(targetRequest.user_profiles) ? targetRequest.user_profiles[0] : targetRequest.user_profiles
-        const sameScope = profile.assigned_location_id
-          ? targetProfile?.assigned_location_id === profile.assigned_location_id
-          : Boolean((profile as any).region_id && targetProfile?.region_id === (profile as any).region_id)
+        const sameScope = isRegionalManagerScopeMatch(
+          profile.region_id,
+          regionalOwnedLocationIds,
+          targetProfile?.assigned_location_id,
+          targetProfile?.region_id,
+        )
         if (!sameScope) {
           return NextResponse.json({ error: "This request is outside your assigned location or region." }, { status: 403 })
         }
@@ -308,9 +315,12 @@ export async function POST(request: NextRequest) {
 
     if (isRegionalManagerApproval && isRegionalRequest) {
       const staffProfile = Array.isArray((leavePlan as any).user_profiles) ? (leavePlan as any).user_profiles[0] : (leavePlan as any).user_profiles
-      const sameScope = profile.assigned_location_id
-        ? staffProfile?.assigned_location_id === profile.assigned_location_id
-        : Boolean((profile as any).region_id && staffProfile?.region_id === (profile as any).region_id)
+      const sameScope = isRegionalManagerScopeMatch(
+        profile.region_id,
+        regionalOwnedLocationIds,
+        staffProfile?.assigned_location_id,
+        staffProfile?.region_id,
+      )
       if (!sameScope) {
         return NextResponse.json({ error: "This regional request is outside your assigned region or location." }, { status: 403 })
       }

@@ -143,6 +143,7 @@ export async function GET(request: Request) {
         requested_amount,
   monthly_deduction,
   basic_salary,
+  annual_salary,
   salary_advance_multiplier,
   salary_advance_amount,
   deduction_period_months,
@@ -651,6 +652,7 @@ ${accounts_notes ? `\nHR Loan Office Remarks: ${accounts_notes}` : ""}${isManual
         ...(fd_calculation_data?.basic_salary > 0 && fd_calculation_data?.salary_advance_multiplier > 0
           ? {
               basic_salary: Number(fd_calculation_data.basic_salary),
+              annual_salary: Number(fd_calculation_data.annual_salary),
               salary_advance_multiplier: Math.trunc(Number(fd_calculation_data.salary_advance_multiplier)),
               salary_advance_amount: Number(fd_calculation_data.salary_advance_amount),
               requested_amount: Number(fd_calculation_data.salary_advance_amount),

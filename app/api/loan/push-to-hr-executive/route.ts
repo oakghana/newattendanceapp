@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, createClientAndGetUser } from '@/lib/supabase/server'
 import { canDoHrOffice, normalizeRole } from '@/lib/loan-workflow'
+import { calculateSalaryAdvance } from '@/lib/salary-advance'
 
 export async function POST(request: NextRequest) {
   try {
-    const { loan_request_id, hr_loan_office_memo } = await request.json()
+    const { loan_request_id, hr_loan_office_memo, salary_advance_days } = await request.json()
 
     if (!loan_request_id) {
       return NextResponse.json({ error: 'loan_request_id is required' }, { status: 400 })
@@ -54,17 +55,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Recompute Salary Advance from the verified basic salary and requested
-    // multiplier so the handoff and memo never persist the loan-type default.
+    // Recompute Salary Advance from verified annual salary and requested months.
     const loanType = String(loanRequest.loan_type_key || loanRequest.loan_type || loanRequest.loan_type_label || '').toLowerCase()
-    const basicSalary = Number(loanRequest.basic_salary)
     const multiplier = Number(
       loanRequest.salary_advance_multiplier ?? loanRequest.deduction_period_months ?? loanRequest.repayment_duration_months ?? loanRequest.recovery_months,
     )
     const isSalaryAdvance = loanType.includes('salary') && loanType.includes('advance')
-    const calculatedSalaryAdvance = isSalaryAdvance && Number.isFinite(basicSalary) && basicSalary > 0 && Number.isFinite(multiplier) && multiplier > 0
-      ? Math.round(basicSalary * Math.trunc(multiplier) * 100) / 100
+    const calculatedSalaryAdvance = isSalaryAdvance
+      ? calculateSalaryAdvance(
+          loanRequest.annual_salary ?? (Number(loanRequest.basic_salary) > 0 ? Number(loanRequest.basic_salary) * 12 : null),
+          multiplier,
+        )
       : null
+    const salaryAdvanceDays = Math.trunc(Number(salary_advance_days))
+
+    if (isSalaryAdvance && (!Number.isFinite(salaryAdvanceDays) || salaryAdvanceDays < 1)) {
+      return NextResponse.json({ error: 'Number of days is required on the salary advice before forwarding to HR Executive.' }, { status: 400 })
+    }
+    if (isSalaryAdvance && !calculatedSalaryAdvance) {
+      return NextResponse.json({ error: 'Accounts must provide a valid annual salary before this salary advance can be forwarded.' }, { status: 400 })
+    }
 
     // HR Loan Office forwards first to the HR Executive stage. The HR Executive
     // then approves and advances the request to the Director HR/MD stage.
@@ -73,9 +83,13 @@ export async function POST(request: NextRequest) {
       .from('loan_requests')
       .update({
         ...(calculatedSalaryAdvance == null ? {} : {
-          salary_advance_amount: calculatedSalaryAdvance,
-          requested_amount: calculatedSalaryAdvance,
-          fixed_amount: calculatedSalaryAdvance,
+          annual_salary: calculatedSalaryAdvance.annualSalary,
+          basic_salary: calculatedSalaryAdvance.monthlySalary,
+          salary_advance_multiplier: calculatedSalaryAdvance.requestedMonths,
+          salary_advance_amount: calculatedSalaryAdvance.amount,
+          salary_advance_days: salaryAdvanceDays,
+          requested_amount: calculatedSalaryAdvance.amount,
+          fixed_amount: calculatedSalaryAdvance.amount,
         }),
         status: 'awaiting_hr_executives',
         director_hr_id: null,

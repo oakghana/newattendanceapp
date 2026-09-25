@@ -19,6 +19,7 @@ import {
   type OutstandingLoans,
   OUTSTANDING_LOAN_LABELS,
 } from '@/lib/fd-calculator'
+import { calculateSalaryAdvance } from '@/lib/salary-advance'
 
 interface LoanRequest {
   id: string
@@ -32,6 +33,7 @@ interface LoanRequest {
   loan_type_label?: string
   monthly_deduction?: number
   basic_salary?: number | null
+  annual_salary?: number | null
   salary_advance_multiplier?: number | null
   salary_advance_amount?: number | null
   deduction_period_months?: number | null
@@ -82,12 +84,10 @@ export function FDCalculationSubmission({
   )
 
   const isSalaryAdvance = String(loanRequest.loan_type_key || loanRequest.loan_type_label || '').toLowerCase().includes('salary')
-  const [salaryPerAnnum, setSalaryPerAnnum] = useState('')
-  const [basicSalary, setBasicSalary] = useState(loanRequest.basic_salary != null ? String(loanRequest.basic_salary) : '')
+  const [salaryPerAnnum, setSalaryPerAnnum] = useState(loanRequest.annual_salary != null ? String(loanRequest.annual_salary) : '')
   const salaryAdvanceMultiplier = Number(loanRequest.salary_advance_multiplier || loanRequest.recovery_months || 0)
-  const salaryAdvanceAmount = isSalaryAdvance && Number(basicSalary) > 0 && salaryAdvanceMultiplier > 0
-    ? Number(basicSalary) * salaryAdvanceMultiplier
-    : 0
+  const salaryAdvance = isSalaryAdvance ? calculateSalaryAdvance(salaryPerAnnum, salaryAdvanceMultiplier) : null
+  const salaryAdvanceAmount = salaryAdvance?.amount ?? 0
   const [consolidatedMonthly, setConsolidatedMonthly] = useState('')
   const [otherAllowances, setOtherAllowances] = useState('')
   const [grossDeduction, setGrossDeduction] = useState(
@@ -253,7 +253,8 @@ export function FDCalculationSubmission({
           submission_type: 'automated_calculation',
           fd_calculation_data: {
             salary_per_annum: result.salary_per_annum,
-            basic_salary: isSalaryAdvance ? Number(basicSalary) : undefined,
+            annual_salary: isSalaryAdvance ? Number(salaryPerAnnum) : undefined,
+            basic_salary: salaryAdvance?.monthlySalary,
             salary_advance_multiplier: isSalaryAdvance ? salaryAdvanceMultiplier : undefined,
             salary_advance_amount: isSalaryAdvance ? salaryAdvanceAmount : undefined,
             consolidated_salary_per_month: result.consolidated_salary_per_month,
@@ -380,9 +381,8 @@ export function FDCalculationSubmission({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
                 {isSalaryAdvance && (
                   <div className="space-y-1.5 rounded-md border border-emerald-200 bg-emerald-50 p-3 sm:col-span-2 md:col-span-3">
-                    <Label htmlFor="salary-advance-basic" className="text-xs">Verified Basic Salary / Month (GH¢) *</Label>
-                    <Input id="salary-advance-basic" type="number" min={0} step="0.01" placeholder="Enter basic salary only" value={basicSalary} onChange={e => setBasicSalary(e.target.value)} />
-                    <p className="text-[10px] text-emerald-800">Salary advance multiplier: {salaryAdvanceMultiplier || 'not set'} month(s). Calculated approved amount: {salaryAdvanceAmount > 0 ? GHC(salaryAdvanceAmount) : '—'}.</p>
+                    <p className="text-xs font-medium text-emerald-900">Salary advance amount</p>
+                    <p className="text-[10px] text-emerald-800">Annual salary ÷ 12 × {salaryAdvanceMultiplier || 'requested'} month(s) = {salaryAdvanceAmount > 0 ? GHC(salaryAdvanceAmount) : '—'}. Enter the annual salary below.</p>
                   </div>
                 )}
                 <div className="space-y-1.5">

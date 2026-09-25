@@ -20,6 +20,8 @@ import {
   normalizeRole,
 } from "@/lib/loan-workflow"
 import { createMemoToken } from "@/lib/secure-memo"
+import { calculateSalaryAdvance } from "@/lib/salary-advance"
+import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
 type ActionKey =
   | "hod_decision"
@@ -268,9 +270,10 @@ export async function POST(request: NextRequest) {
 
         if (role === "regional_manager") {
           const sameRegion = reviewerRegion && requesterRegion && reviewerRegion === requesterRegion
-          const sameLocation = reviewerLocation && requesterLocation && reviewerLocation === requesterLocation
-          if (!sameRegion && !sameLocation) {
-            return NextResponse.json({ error: "Regional managers can endorse staff loans within their assigned region or location, regardless of department." }, { status: 403 })
+          const ownedLocationIds = await resolveOwnedLocationIdsForRegionalOffice(admin, reviewerLocation, reviewerRegion)
+          const ownsRequesterLocation = Boolean(requesterLocation && ownedLocationIds.includes(requesterLocation))
+          if (!sameRegion && !ownsRequesterLocation) {
+            return NextResponse.json({ error: "Regional managers can endorse staff loans within their assigned regional office and associated districts, regardless of department." }, { status: 403 })
           }
         }
 
@@ -380,39 +383,6 @@ export async function POST(request: NextRequest) {
       update.loan_office_reviewer_id = user.id
       update.loan_office_note = note
       if (body.memo_cc !== undefined) update.memo_cc = String(body.memo_cc || "").trim() || null
-      if (req.loan_type_key === "salary_advance") {
-        const basicSalary = Number(body.basic_salary)
-        if (action === "loan_office_forward" && (!Number.isFinite(basicSalary) || basicSalary <= 0)) {
-          return NextResponse.json({ error: "A verified basic salary is required before forwarding a salary advance to Accounts." }, { status: 400 })
-        }
-        if (Number.isFinite(basicSalary) && basicSalary > 0) {
-          update.basic_salary = basicSalary
-
-          // Salary advances are calculated from the verified basic salary and
-          // the requested number of months, never from the loan type default.
-          const requestedMonths = Number(
-            req.salary_advance_multiplier ?? req.deduction_period_months ?? req.repayment_duration_months ?? req.recovery_months,
-          )
-          const months = Number.isFinite(requestedMonths) && requestedMonths > 0 ? Math.trunc(requestedMonths) : 1
-          const calculatedAmount = Math.round(basicSalary * months * 100) / 100
-          update.salary_advance_multiplier = months
-          update.salary_advance_amount = calculatedAmount
-          update.requested_amount = calculatedAmount
-          update.fixed_amount = calculatedAmount
-        }
-      }
-
-      // A poor FD is a terminal Accounts rejection and must never be forwarded
-      // from the Loan Office to HR Executive/HR Terms.
-      if (action === "loan_office_forward" && req.requires_fd_check !== false) {
-        const currentFdScore = Number(req.fd_score)
-        if (Number.isFinite(currentFdScore) && currentFdScore < GOOD_FD_THRESHOLD) {
-          return NextResponse.json(
-            { error: `This request has a poor FD score of ${Math.round(currentFdScore)}%. It was rejected and cannot be forwarded to HR.` },
-            { status: 400 },
-          )
-        }
-      }
 
       if (action === "loan_office_update_request") {
         toStatus = req.status
@@ -425,6 +395,13 @@ export async function POST(request: NextRequest) {
         toStatus = requiresFdCheck ? "sent_to_accounts" : "awaiting_hr_terms"
         update.status = toStatus
         update.loan_office_forwarded_at = new Date().toISOString()
+        if (requiresFdCheck) {
+          // This is the pre-Accounts handoff. Legacy zero values are not an FD
+          // decision and must not block or pre-classify the request.
+          update.fd_score = null
+          update.fd_good = null
+          update.fd_checked_at = null
+        }
 
         const loanStaffName = String(req.staff_full_name || "").trim() || "Staff Member"
         if (requiresFdCheck) {
@@ -975,6 +952,28 @@ export async function POST(request: NextRequest) {
 
       if (req.status !== "pending_hr_loan_office") {
         return NextResponse.json({ error: "Loan must be in FD-approved status to push to HR Executive" }, { status: 400 })
+      }
+
+      if (req.loan_type_key === "salary_advance") {
+        const salaryAdvanceDays = Math.trunc(Number(body.salary_advance_days))
+        if (!Number.isFinite(salaryAdvanceDays) || salaryAdvanceDays < 1) {
+          return NextResponse.json({ error: "Number of days is required on the salary advice before forwarding to HR Executive." }, { status: 400 })
+        }
+
+        const salaryAdvance = calculateSalaryAdvance(
+          req.annual_salary ?? (Number(req.basic_salary) > 0 ? Number(req.basic_salary) * 12 : null),
+          req.salary_advance_multiplier ?? req.deduction_period_months ?? req.repayment_duration_months ?? req.recovery_months,
+        )
+        if (!salaryAdvance) {
+          return NextResponse.json({ error: "Accounts must provide a valid annual salary before this salary advance can be forwarded." }, { status: 400 })
+        }
+
+        update.salary_advance_days = salaryAdvanceDays
+        update.basic_salary = salaryAdvance.monthlySalary
+        update.salary_advance_multiplier = salaryAdvance.requestedMonths
+        update.salary_advance_amount = salaryAdvance.amount
+        update.requested_amount = salaryAdvance.amount
+        update.fixed_amount = salaryAdvance.amount
       }
 
       // Update status to pending_hr_executive_review

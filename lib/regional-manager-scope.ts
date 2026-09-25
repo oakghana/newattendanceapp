@@ -9,6 +9,21 @@ export type LocationHierarchyRow = {
   district_id?: string | null
 }
 
+export function isRegionalManagerScopeMatch(
+  managerRegionId: string | null | undefined,
+  ownedLocationIds: string[],
+  staffLocationId: string | null | undefined,
+  staffRegionId: string | null | undefined,
+): boolean {
+  const managerRegion = String(managerRegionId || "")
+  const staffRegion = String(staffRegionId || "")
+  const staffLocation = String(staffLocationId || "")
+  return Boolean(
+    (managerRegion && staffRegion && managerRegion === staffRegion) ||
+    (staffLocation && ownedLocationIds.includes(staffLocation)),
+  )
+}
+
 /**
  * Resolve the regional office that owns a staff work location.
  * District offices are linked via parent_location_id to their regional office.

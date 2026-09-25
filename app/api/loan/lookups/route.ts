@@ -600,14 +600,15 @@ export async function POST(request: NextRequest) {
         : null
       const requiresCommittee = Boolean(body?.requires_committee)
       const requiresFdCheck = body?.requires_fd_check !== false
+      const isSalaryAdvance = loanKey.toLowerCase() === "salary_advance"
 
       if (!loanKey || !Number.isFinite(fixedAmount) || !Number.isFinite(maxAmount)) {
         return NextResponse.json({ error: "loan_key, fixed_amount and max_amount are required" }, { status: 400 })
       }
 
       const updatePayload: any = {
-        fixed_amount: fixedAmount,
-        max_amount: maxAmount,
+        fixed_amount: isSalaryAdvance ? 0 : fixedAmount,
+        max_amount: isSalaryAdvance ? 0 : maxAmount,
         min_qualification_note: minQualification,
         loan_terms: loanTerms,
         default_recovery_months: defaultRecoveryMonths,
@@ -627,8 +628,8 @@ export async function POST(request: NextRequest) {
 
       if (error && isSchemaIssue(error)) {
         const fallbackPayload: any = {
-          fixed_amount: fixedAmount,
-          max_amount: maxAmount,
+          fixed_amount: isSalaryAdvance ? 0 : fixedAmount,
+          max_amount: isSalaryAdvance ? 0 : maxAmount,
           min_qualification_note: minQualification,
           requires_committee: requiresCommittee,
           requires_fd_check: requiresFdCheck,

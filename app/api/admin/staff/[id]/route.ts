@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
+import { isNonRegionalLocation } from "@/lib/location-mappings"
+import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -87,7 +89,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     // Use adminSupabase to bypass RLS and read the user's role. Role values have
     // historically been stored with either hyphens or underscores, so normalize
     // before checking authorization (especially for regional IT Admin profiles).
-    const { data: profile } = await adminSupabase.from("user_profiles").select("role, assigned_location_id").eq("id", user.id).single()
+    const { data: profile } = await adminSupabase.from("user_profiles").select("role, assigned_location_id, region_id").eq("id", user.id).single()
     const normalizedRequesterRole = String(profile?.role || "")
       .trim()
       .toLowerCase()
@@ -182,26 +184,30 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const { data: requesterLocation } = profile?.assigned_location_id
       ? await adminSupabase.from("geofence_locations").select("name, location_type").eq("id", profile.assigned_location_id).maybeSingle()
       : { data: null }
-    const { data: targetLocation } = targetProfile.assigned_location_id
-      ? await adminSupabase.from("geofence_locations").select("name, location_type").eq("id", targetProfile.assigned_location_id).maybeSingle()
-      : { data: null }
-    const requesterLocationText = `${requesterLocation?.name || ""} ${requesterLocation?.location_type || ""}`.toLowerCase()
-    const targetLocationText = `${targetLocation?.name || ""} ${targetLocation?.location_type || ""}`.toLowerCase()
-    const isRegionalItAdmin = normalizedRequesterRole === "it_admin" && Boolean(profile?.assigned_location_id) && !/(head office|swanzy|archive|awutu|cocoa clinic)/.test(requesterLocationText)
-    const isRegionalStaffTarget = Boolean(targetProfile.assigned_location_id) && !/(head office|swanzy|archive|awutu|cocoa clinic)/.test(targetLocationText)
-    const isSameRegionalLocation = Boolean(profile?.assigned_location_id) && profile.assigned_location_id === targetProfile.assigned_location_id
+    const isRegionalItAdmin = normalizedRequesterRole === "it_admin" && Boolean(profile?.assigned_location_id) && !isNonRegionalLocation(requesterLocation?.name)
     const isSelfUpdate = user.id === id
+    const regionalOwnedLocationIds = isRegionalItAdmin
+      ? await resolveOwnedLocationIdsForRegionalOffice(adminSupabase, profile.assigned_location_id, profile.region_id)
+      : []
+    const currentTargetInScope = Boolean(
+      targetProfile.assigned_location_id && regionalOwnedLocationIds.includes(String(targetProfile.assigned_location_id)),
+    )
+    const nextTargetInScope = Boolean(
+      mergedAssignedLocationId && mergedAssignedLocationId !== "none" && regionalOwnedLocationIds.includes(String(mergedAssignedLocationId)),
+    )
 
-    // Regional IT Admins are scoped to their own assigned regional office. A
-    // regional admin must not edit records belonging to another location.
-    if (isRegionalItAdmin && !isSelfUpdate && (!isRegionalStaffTarget || !isSameRegionalLocation)) {
-      return NextResponse.json({ error: "Regional IT Admins may only update staff assigned to their own regional location." }, { status: 403 })
+    if (isRegionalItAdmin && !isSelfUpdate && (!currentTargetInScope || !nextTargetInScope)) {
+      return NextResponse.json({ error: "Regional IT Admins may only update staff within their assigned regional office and associated districts." }, { status: 403 })
     }
 
     if (isRegionalItAdmin) {
       const permittedFields = isSelfUpdate
         ? ["date_of_appointment", "date_of_assumption"]
-        : ["date_of_appointment", "date_of_assumption", "staff_category", "role"]
+        : [
+            "first_name", "last_name", "employee_id", "department_id", "position", "role", "is_active",
+            "assigned_location_id", "email", "staff_category", "date_of_appointment", "date_of_assumption",
+            "years_of_service", "contact_number",
+          ]
       const fieldMap: Record<string, string> = {
         first_name: "first_name", last_name: "last_name", employee_id: "employee_id", department_id: "department_id",
         position: "position", role: "role", is_active: "is_active", assigned_location_id: "assigned_location_id",
@@ -215,7 +221,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         return String(incoming ?? "") !== String(existing ?? "")
       })
       if (changedFields.some((field) => !permittedFields.includes(field))) {
-        return NextResponse.json({ error: isSelfUpdate ? "Regional IT Admins may edit only their own appointment and assumption dates." : "Regional IT Admins may edit appointment, assumption, category, and role data for regional staff." }, { status: 403 })
+        return NextResponse.json({ error: isSelfUpdate ? "Regional IT Admins may edit only their own appointment and assumption dates." : "One or more fields cannot be edited by a Regional IT Admin." }, { status: 403 })
       }
     }
 

@@ -18,6 +18,7 @@ import {
   buildAnnualLeaveEntitlementSummary,
 } from "@/lib/annual-leave-entitlement"
 import { resolveRegionalHrOffice, resolveSelfLeaveRoute, routeLeave } from "@/lib/hr-workflow"
+import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
 function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
   const year = referenceDate.getFullYear()
@@ -1113,11 +1114,16 @@ export async function GET(request: NextRequest) {
             .eq("status", "pending_regional_manager_approval")
             .eq("is_archived", false)
 
-          if (profile.assigned_location_id) {
+          const ownedLocationIds = await resolveOwnedLocationIdsForRegionalOffice(
+            admin,
+            profile.assigned_location_id,
+            profile.region_id,
+          )
+          if (ownedLocationIds.length > 0) {
             const { data: scopedStaff } = await admin
               .from("user_profiles")
               .select("id")
-              .eq("assigned_location_id", profile.assigned_location_id)
+              .in("assigned_location_id", ownedLocationIds)
             regionalPendingQuery = regionalPendingQuery.in("user_id", (scopedStaff || []).map((row: any) => row.id))
           } else if (profile.region_id) {
             const { data: scopedStaff } = await admin

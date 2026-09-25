@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  isRegionalManagerScopeMatch,
   isRegionalManagerLocationMatch,
   regionalManagerEligibleLocationIds,
   resolveRegionalOfficeIdFromLocation,
@@ -42,6 +43,12 @@ describe("regional manager scope", () => {
     expect(isRegionalManagerLocationMatch("dist-agona", agonaDistrict, "ro-central", byId)).toBe(true)
     expect(isRegionalManagerLocationMatch("dist-agona", agonaDistrict, "dist-agona", byId)).toBe(true)
     expect(isRegionalManagerLocationMatch("dist-agona", agonaDistrict, "other-ro", byId)).toBe(false)
+  })
+
+  it("matches staff in an owned district or the same region without using department", () => {
+    expect(isRegionalManagerScopeMatch("central", ["ro-central", "dist-agona"], "dist-agona", null)).toBe(true)
+    expect(isRegionalManagerScopeMatch("central", ["ro-central"], "other-location", "central")).toBe(true)
+    expect(isRegionalManagerScopeMatch("central", ["ro-central"], "other-location", "western")).toBe(false)
   })
 
   it("does not treat non-regional sites as regional hierarchy", () => {

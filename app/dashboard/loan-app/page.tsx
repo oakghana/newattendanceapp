@@ -133,8 +133,10 @@ type LoanRequest = {
   disbursement_date: string | null
   recovery_months: number | null
   basic_salary?: number | null
+  annual_salary?: number | null
   salary_advance_multiplier?: number | null
   salary_advance_amount?: number | null
+  salary_advance_days?: number | null
   deduction_period_months?: number | null
   director_letter: string | null
   director_letter_original?: string | null
@@ -245,6 +247,22 @@ type WorkflowResponse = {
     directorGoodFd: LoanRequest[]
     allLoans: LoanRequest[]
   }
+}
+
+function isSalaryAdvanceLoan(row: Pick<LoanRequest, "loan_type_key" | "loan_type_label">): boolean {
+  return row.loan_type_key === "salary_advance" || String(row.loan_type_label || "").toLowerCase().includes("salary advance")
+}
+
+function displayLoanAmount(row: LoanRequest): string {
+  if (isSalaryAdvanceLoan(row)) {
+    const calculatedAmount = Number(row.salary_advance_amount)
+    return Number.isFinite(calculatedAmount) && calculatedAmount > 0
+      ? calculatedAmount.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : "Pending Accounts calculation"
+  }
+
+  const amount = Number(row.fixed_amount || row.requested_amount || 0)
+  return amount.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 type LookupPayload = {
@@ -848,7 +866,10 @@ function buildDirectorAutoMemoDraft(
   const submittedDate = (row.submitted_at || row.created_at || today).toString().slice(0, 10)
   const months = row.deduction_period_months || row.recovery_months || "—"
   const salaryAdvanceLine = isSalaryAdvance && row.basic_salary && row.salary_advance_multiplier
-    ? `Basic Salary: GHc ${fmtAmount(row.basic_salary)} × ${row.salary_advance_multiplier} month(s) = GHc ${fmtAmount(amount)}`
+    ? `Monthly Salary: GHc ${fmtAmount(row.basic_salary)} × ${row.salary_advance_multiplier} month(s) = GHc ${fmtAmount(amount)}`
+    : null
+  const salaryAdvanceDaysLine = isSalaryAdvance && row.salary_advance_days
+    ? `Number of Days on Salary Advice: ${row.salary_advance_days}`
     : null
   const signerName = String(signer?.name || "HR EXECUTIVE").trim().toUpperCase()
   const signerPosition = String(signer?.position || "HR EXECUTIVE").trim().toUpperCase()
@@ -873,6 +894,7 @@ function buildDirectorAutoMemoDraft(
     "",
   `We refer to your loan application dated ${submittedDate} on the above subject and wish to inform you that, Management has given approval for you to be granted a ${loanLabel} of ${amtWords} Ghana Cedis (GHc${amtFormatted}).`,
   ...(salaryAdvanceLine ? [salaryAdvanceLine] : []),
+  ...(salaryAdvanceDaysLine ? [salaryAdvanceDaysLine] : []),
   "",
     `The loan would be recovered in ${months} Equal Monthly Instalment from your salary effective, ${recoveryMonth}.`,
     "",
@@ -1128,6 +1150,7 @@ export default function LoanAppPage() {
   const [modalRecovery, setModalRecovery] = useState("")
   const [modalMonths, setModalMonths] = useState("")
   const [modalBasicSalary, setModalBasicSalary] = useState("")
+  const [modalSalaryAdvanceDays, setModalSalaryAdvanceDays] = useState("")
   const [modalHodName, setModalHodName] = useState("")
   const [modalHodRank, setModalHodRank] = useState("")
   const [modalHodLocation, setModalHodLocation] = useState("")
@@ -2449,7 +2472,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     const payload = {
       id: editingId,
       loan_type_key: loanTypeKey,
-      requested_amount: selectedType?.fixed_amount || 0,
+      requested_amount: isSalaryAdvanceRequest ? null : selectedType?.fixed_amount || 0,
       reason: trimmedReason,
       supporting_document_url: supportingDocumentUrl,
       recovery_months: salaryAdvanceMonths,
@@ -2979,6 +3002,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
         setModalRecovery("")
         setModalMonths("")
         setModalBasicSalary("")
+        setModalSalaryAdvanceDays("")
         setModalHodName("")
         setModalHodRank("")
         setModalHodLocation("")
@@ -3440,7 +3464,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           <Card>
             <CardHeader>
               <CardTitle>{editingId ? "Edit Loan Request" : "New Loan Request"}</CardTitle>
-              <CardDescription>Loan amount is fixed by selected loan type and auto-populated in GHc.</CardDescription>
+              <CardDescription>{isSalaryAdvanceRequest ? "Accounts calculates the amount from verified annual salary and your requested months." : "Loan amount is fixed by selected loan type and auto-populated in GHc."}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3459,14 +3483,14 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   />
                   {selectedType && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      Fixed amount: GHc {fmtAmount(selectedType.fixed_amount)} | FD check: {selectedType.requires_fd_check ? "Required" : "Not required"} | Committee: {selectedType.requires_committee ? "Required" : "Not required"} | Qualification: {selectedType.min_qualification_note || "By staff grade"}
+                      {isSalaryAdvanceRequest ? "Amount: Calculated by Accounts" : `Fixed amount: GHc ${fmtAmount(selectedType.fixed_amount)}`} | FD check: {selectedType.requires_fd_check ? "Required" : "Not required"} | Committee: {selectedType.requires_committee ? "Required" : "Not required"} | Qualification: {selectedType.min_qualification_note || "By staff grade"}
                     </p>
                   )}
                 </div>
                 <div>
                   <Label>Requested Amount (GHc)</Label>
                   <Input
-                    value={fmtAmount(selectedType?.fixed_amount || 0)}
+                    value={isSalaryAdvanceRequest ? "Pending Accounts calculation" : fmtAmount(selectedType?.fixed_amount || 0)}
                     readOnly
                     disabled
                     className="bg-muted text-foreground"
@@ -3544,7 +3568,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     <Badge className={statusBadgeClass(row.status, "soft")}>{statusText(row.status)}</Badge>
                   </div>
                   {row.staff_full_name && <div className="text-sm font-semibold text-purple-900">Staff: {row.staff_full_name}</div>}
-                  <div className="text-sm text-muted-foreground">Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)}</div>
+                  <div className="text-sm text-muted-foreground">Amount: {isSalaryAdvanceLoan(row) && !row.salary_advance_amount ? displayLoanAmount(row) : `GHc ${displayLoanAmount(row)}`}</div>
                   <div className="text-xs text-muted-foreground">Current handler: <strong>{stageOwner(row.status)}</strong></div>
                   <div className="flex flex-wrap gap-1">
                     {WORKFLOW_ORDER.map((stage) => {
@@ -3965,7 +3989,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
   <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
-                        <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{displayLoanAmount(row)}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
                         {canSeeFdReviewerName && <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>}
                         <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
@@ -4225,7 +4249,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">{row.loan_type_label || row.loan_type_key}</td>
                         <td className="px-4 py-3 text-xs font-semibold text-slate-800 whitespace-nowrap tabular-nums">
-                          {row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}
+                          {displayLoanAmount(row)}
                         </td>
                         <td className="px-4 py-3 text-xs whitespace-nowrap tabular-nums">
                           {row.fd_score != null ? (
@@ -7535,7 +7559,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               <DialogDescription>
                 <span className="font-semibold">{actionModal.row.request_number}</span> — {actionModal.row.loan_type_label} | {actionModal.row.staff_full_name || actionModal.row.staff_number || "Staff"}
                 {actionModal.row.staff_rank ? ` | ${actionModal.row.staff_rank}` : ""}
-                {" | GHc "}{fmtAmount(actionModal.row.fixed_amount || actionModal.row.requested_amount)}
+                {" | "}{isSalaryAdvanceLoan(actionModal.row) && !actionModal.row.salary_advance_amount ? displayLoanAmount(actionModal.row) : `GHc ${displayLoanAmount(actionModal.row)}`}
               </DialogDescription>
             )}
           </DialogHeader>
@@ -7564,22 +7588,6 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     <strong>Note:</strong> These details were captured earlier and are shown here for review only. Click <strong>Save &amp; Forward to Accounts</strong> to send this request to the Accounts Loan Office.
                   </p>
                 </div>
-              {actionModal.row?.loan_type_key === "salary_advance" && (
-                <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
-                  <Label className="text-xs font-semibold text-amber-900">Basic Salary (GHc)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={modalBasicSalary}
-                    onChange={(e) => setModalBasicSalary(e.target.value)}
-                    placeholder="Enter verified monthly basic salary"
-                    className="mt-1 h-8 text-xs"
-                    required
-                  />
-                  <p className="mt-1 text-[11px] text-amber-800">Required for every salary advance before forwarding to Accounts for FD calculation.</p>
-                </div>
-              )}
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label className="text-xs">Staff Name</Label>
@@ -7600,13 +7608,6 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 </div>
                 <Label className="text-xs">Reference Number</Label>
                 <Input value={modalReferenceNumber} disabled placeholder="e.g. QCC/HR/SWL/V2/001" className="h-7 text-xs" />
-                {actionModal.row!.loan_type_key === "salary_advance" && (
-                  <div>
-                    <Label className="text-xs">Verified Basic Salary (GHc)</Label>
-                    <Input type="number" min="0" step="0.01" value={modalBasicSalary} onChange={(e) => setModalBasicSalary(e.target.value)} placeholder="Enter verified monthly basic salary" className="h-7 text-xs" />
-                    <p className="mt-1 text-[11px] text-muted-foreground">Accounts Loan Office will confirm this amount during FD review and it will appear on the approval memo.</p>
-                  </div>
-                )}
                 <Label className="text-xs">THRO (Your Boss / Manager)</Label>
                 <Select value={modalHodReviewerId} onValueChange={setModalHodReviewerId} disabled>
                   <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Choose your boss" /></SelectTrigger>
@@ -7655,6 +7656,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   loan_type_label: actionModal.row.loan_type_label,
                   monthly_deduction: actionModal.row.monthly_deduction ?? undefined,
                   basic_salary: actionModal.row.basic_salary ?? undefined,
+                  annual_salary: actionModal.row.annual_salary ?? undefined,
                   salary_advance_multiplier: actionModal.row.salary_advance_multiplier ?? undefined,
                   salary_advance_amount: actionModal.row.salary_advance_amount ?? undefined,
                   status: actionModal.row.status,
@@ -7816,10 +7818,6 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {actionModal.actionType === "loan_office" && actionModal.row && (
               <>
                 <Button onClick={() => {
-                  if (actionModal.row!.loan_type_key === "salary_advance" && Number(modalBasicSalary) <= 0) {
-                    toast({ title: "Basic salary required", description: "Enter the verified basic salary before forwarding this salary advance.", variant: "destructive" })
-                    return
-                  }
                   const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone, modalHodName, modalHodRank, modalHodLocation)
                   runAction({
                     action: "loan_office_forward",
@@ -7836,7 +7834,6 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     hod_reviewer_id: modalHodReviewerId || null,
                     director_approver_id: modalDirectorApproverId || null,
                     memo_cc: modalMemoCC || null,
-                    basic_salary: Number(modalBasicSalary || 0),
                   })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>Save &amp; Forward to Accounts</Button>
@@ -7927,10 +7924,14 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {actionModal.actionType === "push_to_hr_executive" && actionModal.row && (
               <Button 
                 className="bg-blue-600 hover:bg-blue-700"
-                disabled={!modalDisbursement || !modalRecovery || !modalMemoRef}
+                disabled={!modalDisbursement || !modalRecovery || !modalMemoRef || (actionModal.row.loan_type_key === "salary_advance" && Number(modalSalaryAdvanceDays) < 1)}
                 onClick={async () => {
                   if (!modalDisbursement || !modalRecovery || !modalMemoRef) {
                     toast({ title: "Missing Required Fields", description: "Please fill in all required fields (Disbursement Date, Recovery Start Date, Reference Number) before pushing to HR Executive.", variant: "destructive" })
+                    return
+                  }
+                  if (actionModal.row!.loan_type_key === "salary_advance" && Number(modalSalaryAdvanceDays) < 1) {
+                    toast({ title: "Number of days required", description: "Enter the number of days on the salary advice before forwarding.", variant: "destructive" })
                     return
                   }
                   await runAction({
@@ -7944,6 +7945,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     memo_cc: modalCcRecipients,
                     accounts_signatory: modalAccountSignatory,
                     hr_executive_signatory: modalHrSignatory,
+                    salary_advance_days: Number(modalSalaryAdvanceDays) || null,
                   })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}
@@ -8027,6 +8029,20 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   onChange={(e) => setModalRecovery(e.target.value)} 
                   className="h-8 text-xs"
                 />
+                {actionModal.row?.loan_type_key === "salary_advance" && (
+                  <>
+                    <Label className="text-sm font-semibold">Number of Days on Salary Advice *</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={modalSalaryAdvanceDays}
+                      onChange={(e) => setModalSalaryAdvanceDays(e.target.value)}
+                      placeholder="Enter number of days"
+                      className="h-8 text-xs"
+                    />
+                  </>
+                )}
                 <Label className="text-sm font-semibold">Reference Number *</Label>
                 <Input 
                   value={modalMemoRef} 
