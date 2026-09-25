@@ -115,6 +115,8 @@ export async function GET() {
       paymentsByLoan.set(payment.loan_request_id, (paymentsByLoan.get(payment.loan_request_id) || 0) + Number(payment.amount_paid || 0))
       approvedPaymentDates.set(payment.loan_request_id, [...(approvedPaymentDates.get(payment.loan_request_id) || []), payment.payment_date || payment.submitted_at])
     }
+    const { data: overrides } = ids.length ? await admin.from("loan_admin_operational_overrides").select("loan_request_id, paid_to_date, outstanding_balance, next_payment_due, next_payment_amount, expected_completion_date").in("loan_request_id", ids) : { data: [] }
+    const overrideByLoan = new Map((overrides || []).map((item: any) => [item.loan_request_id, item]))
     const scheduleByLoan = new Map<string, any[]>()
     for (const item of schedules || []) scheduleByLoan.set(item.loan_request_id, [...(scheduleByLoan.get(item.loan_request_id) || []), item])
 
@@ -126,8 +128,14 @@ export async function GET() {
       const remaining = schedule.filter((item) => item.status !== "paid" && item.status !== "waived")
       const completionDate = schedule.at(-1)?.due_date || null
       const nextPayment = remaining[0] || null
-      const approvedFullPaymentDate = outstanding <= 0 ? (approvedPaymentDates.get(loan.id) || []).sort().at(-1) || null : null
-      const isCompleted = outstanding <= 0
+      const override: any = overrideByLoan.get(loan.id)
+      const effectivePaidToDate = override?.paid_to_date == null ? paidToDate : Number(override.paid_to_date)
+      const effectiveOutstanding = override?.outstanding_balance == null ? outstanding : Number(override.outstanding_balance)
+      const effectiveNextDue = override?.next_payment_due || nextPayment?.due_date || null
+      const effectiveNextAmount = override?.next_payment_amount == null ? Number(nextPayment?.monthly_amount || 0) : Number(override.next_payment_amount)
+      const effectiveCompletion = override?.expected_completion_date || completionDate
+      const approvedFullPaymentDate = effectiveOutstanding <= 0 ? (approvedPaymentDates.get(loan.id) || []).sort().at(-1) || null : null
+      const isCompleted = effectiveOutstanding <= 0
       return {
         ...loan,
         staff: (() => {
@@ -145,11 +153,11 @@ export async function GET() {
           }
         })(),
         total_amount: total,
-        paid_to_date: paidToDate,
-        outstanding_balance: outstanding,
-        next_payment_due: nextPayment?.due_date || null,
-        next_payment_amount: Number(nextPayment?.monthly_amount || 0),
-        expected_completion_date: completionDate,
+        paid_to_date: effectivePaidToDate,
+        outstanding_balance: effectiveOutstanding,
+        next_payment_due: effectiveNextDue,
+        next_payment_amount: effectiveNextAmount,
+        expected_completion_date: effectiveCompletion,
         completed_payment_date: approvedFullPaymentDate,
         reapplication_eligible: isCompleted,
         repayment_status: isCompleted ? "completed" : remaining.some((item) => item.status === "overdue") ? "overdue" : "on_track",
