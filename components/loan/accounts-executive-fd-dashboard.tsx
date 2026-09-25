@@ -43,7 +43,7 @@ interface FDReview {
   review_status: 'pending_review' | 'approved' | 'rejected'
 }
 
-const GOOD_FD_THRESHOLD = 39
+const GOOD_FD_THRESHOLD = 40
 
 function coerceFdScoreLocal(score: number | string | null | undefined): number | null {
   if (typeof score === 'number' && Number.isFinite(score)) return score
