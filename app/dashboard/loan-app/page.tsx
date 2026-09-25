@@ -7601,9 +7601,25 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     <strong>Note:</strong> These details were captured earlier and are shown here for review only. Click <strong>Save &amp; Forward to Accounts</strong> to send this request to the Accounts Loan Office.
                   </p>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-xs">Staff Name</Label>
+              {actionModal.row?.loan_type_key === "salary_advance" && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+                  <Label className="text-xs font-semibold text-amber-900">Basic Salary (GHc)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={modalBasicSalary}
+                    onChange={(e) => setModalBasicSalary(e.target.value)}
+                    placeholder="Enter verified monthly basic salary"
+                    className="mt-1 h-8 text-xs"
+                    required
+                  />
+                  <p className="mt-1 text-[11px] text-amber-800">Required for every salary advance before forwarding to Accounts for FD calculation.</p>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Staff Name</Label>
                     <Input value={modalStaffFullName} disabled placeholder="Enter staff's full name" className="h-7 text-xs" />
                   </div>
                   <div>
@@ -7675,6 +7691,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   repayment_duration_months: actionModal.row.repayment_duration_months || actionModal.row.recovery_months || 12,
                   loan_type_label: actionModal.row.loan_type_label,
                   monthly_deduction: actionModal.row.monthly_deduction ?? undefined,
+                  basic_salary: actionModal.row.basic_salary ?? undefined,
+                  salary_advance_multiplier: actionModal.row.salary_advance_multiplier ?? undefined,
+                  salary_advance_amount: actionModal.row.salary_advance_amount ?? undefined,
                   status: actionModal.row.status,
                   fd_calculated: actionModal.row.fd_score != null,
                   fd_score: actionModal.row.fd_score ?? undefined,
@@ -7834,6 +7853,10 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {actionModal.actionType === "loan_office" && actionModal.row && (
               <>
                 <Button onClick={() => {
+                  if (actionModal.row!.loan_type_key === "salary_advance" && Number(modalBasicSalary) <= 0) {
+                    toast({ title: "Basic salary required", description: "Enter the verified basic salary before forwarding this salary advance.", variant: "destructive" })
+                    return
+                  }
                   const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone, modalHodName, modalHodRank, modalHodLocation)
                   runAction({
                     action: "loan_office_forward",
