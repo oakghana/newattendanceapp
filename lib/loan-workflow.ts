@@ -16,9 +16,9 @@ export type LoanWorkflowStatus =
 /**
  * Acceptable FD threshold (percent of net-to-gross).
  * Scores at or above this value are acceptable and must never be auto-rejected.
- * Example: 39%, 42%, 49% are all reviewable / approvable.
- */
-export const GOOD_FD_THRESHOLD = 39
+  * Example: 40%, 42%, and 49% are all reviewable / approvable; scores below 40% are poor.
+  */
+  export const GOOD_FD_THRESHOLD = 40
 
 /**
  * Funeral, Insurance, and any Repair loans (incl. vehicle repair) are FD-exempt:

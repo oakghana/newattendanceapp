@@ -161,7 +161,7 @@ describe('Loan Workflow - FD Review and Payment Flow', () => {
     })
 
     it('should allow Accounts Executive to review FD', () => {
-      // Accounts Executive reviews with FD value of 75 (above threshold of 39)
+      // Accounts Executive reviews with FD value of 75 (at or above threshold of 40)
       fdReview.review_status = 'approved'
       fdReview.reviewed_by_user_id = 'accounts_exec_001'
       fdReview.review_date = new Date().toISOString()
@@ -175,8 +175,8 @@ describe('Loan Workflow - FD Review and Payment Flow', () => {
       // Test rejection scenario
       const lowFdReview = { ...fdReview, fd_value: 20 } // Below threshold
 
-      expect(lowFdReview.fd_value).toBeLessThan(39)
-      console.log('✓ FD review would be rejected if score < 39')
+      expect(lowFdReview.fd_value).toBeLessThan(40)
+      console.log('✓ FD review would be rejected if score < 40')
     })
 
     it('should exempt Funeral/Insurance/Repair loans from FD rejection', () => {
