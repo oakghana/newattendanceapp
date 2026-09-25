@@ -112,7 +112,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       assigned_location_id,
       email,
       date_of_appointment,
-      date_of_assumption,
       years_of_service,
       contact_number,
     } = body
@@ -154,7 +153,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const mergedPosition = position !== undefined ? position : targetProfile.position
     const mergedStaffCategory = staff_category !== undefined ? staff_category : targetProfile.staff_category
     const mergedDateOfAppointment = date_of_appointment !== undefined ? date_of_appointment : targetProfile.date_of_appointment
-    const mergedDateOfAssumption = date_of_assumption !== undefined ? date_of_assumption : targetProfile.date_of_assumption
     const mergedYearsOfService = years_of_service !== undefined ? years_of_service : targetProfile.years_of_service
     const mergedContactNumber = contact_number !== undefined ? contact_number : targetProfile.contact_number
     const mergedAssignedLocationId =
@@ -300,7 +298,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       is_active: mergedIsActive,
       assigned_location_id: locationId,
       date_of_appointment: mergedDateOfAppointment || null,
-      date_of_assumption: mergedDateOfAssumption || null,
       years_of_service: mergedYearsOfService !== undefined && mergedYearsOfService !== "" && mergedYearsOfService !== null ? parseInt(String(mergedYearsOfService), 10) : null,
       contact_number: mergedContactNumber || null,
       updated_at: new Date().toISOString(),
