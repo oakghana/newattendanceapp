@@ -501,13 +501,16 @@ function getUserLoanTier(position?: string | null, role?: string | null, staffCa
   if (/\bjunior\b/.test(normalizedCategory)) return "junior"
   if (/\bsenior\b/.test(normalizedCategory)) return "senior"
   if (/\bmanager\b/.test(normalizedCategory)) return "manager"
+  // QCC treats Officer as the Senior tier for loan eligibility, regardless of
+  // the user's administrative application role (for example, IT Admin).
+  if (/\bofficer\b/.test(normalizedCategory)) return "senior"
 
   const normalizedPosition = String(position || "").toLowerCase()
   const normalizedRole = String(role || "").toLowerCase()
 
   // Manager tier: manager, director, head, regional, admin
-  if (/manager|director|head|regional|admin|executive/.test(normalizedPosition) || 
-      /manager|director|admin/.test(normalizedRole)) {
+  if (/manager|director|head|regional|executive/.test(normalizedPosition) ||
+      /manager|director/.test(normalizedRole)) {
     return "manager"
   }
   
