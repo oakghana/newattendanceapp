@@ -385,7 +385,33 @@ export async function POST(request: NextRequest) {
         if (action === "loan_office_forward" && (!Number.isFinite(basicSalary) || basicSalary <= 0)) {
           return NextResponse.json({ error: "A verified basic salary is required before forwarding a salary advance to Accounts." }, { status: 400 })
         }
-        if (Number.isFinite(basicSalary) && basicSalary > 0) update.basic_salary = basicSalary
+        if (Number.isFinite(basicSalary) && basicSalary > 0) {
+          update.basic_salary = basicSalary
+
+          // Salary advances are calculated from the verified basic salary and
+          // the requested number of months, never from the loan type default.
+          const requestedMonths = Number(
+            req.salary_advance_multiplier ?? req.deduction_period_months ?? req.repayment_duration_months ?? req.recovery_months,
+          )
+          const months = Number.isFinite(requestedMonths) && requestedMonths > 0 ? Math.trunc(requestedMonths) : 1
+          const calculatedAmount = Math.round(basicSalary * months * 100) / 100
+          update.salary_advance_multiplier = months
+          update.salary_advance_amount = calculatedAmount
+          update.requested_amount = calculatedAmount
+          update.fixed_amount = calculatedAmount
+        }
+      }
+
+      // A poor FD is a terminal Accounts rejection and must never be forwarded
+      // from the Loan Office to HR Executive/HR Terms.
+      if (action === "loan_office_forward" && req.requires_fd_check !== false) {
+        const currentFdScore = Number(req.fd_score)
+        if (Number.isFinite(currentFdScore) && currentFdScore < GOOD_FD_THRESHOLD) {
+          return NextResponse.json(
+            { error: `This request has a poor FD score of ${Math.round(currentFdScore)}%. It was rejected and cannot be forwarded to HR.` },
+            { status: 400 },
+          )
+        }
       }
 
       if (action === "loan_office_update_request") {
