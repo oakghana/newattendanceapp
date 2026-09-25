@@ -143,7 +143,6 @@ export async function GET(request: Request) {
         requested_amount,
   monthly_deduction,
   basic_salary,
-  annual_salary,
   salary_advance_multiplier,
   salary_advance_amount,
   deduction_period_months,
@@ -644,32 +643,44 @@ ${accounts_notes ? `\nHR Loan Office Remarks: ${accounts_notes}` : ""}${isManual
         .join("\n")
     }
 
-    const { data: updatedLoan, error: updateError } = await admin
+    const annualSalary = Number(fd_calculation_data?.annual_salary)
+    const updatePayload = {
+      fd_score,
+      fd_good: fd_good !== undefined ? Boolean(fd_good) : Number(fd_score) >= 39,
+      ...(fd_calculation_data?.basic_salary > 0 && fd_calculation_data?.salary_advance_multiplier > 0
+        ? {
+            basic_salary: Number(fd_calculation_data.basic_salary),
+            ...(Number.isFinite(annualSalary) && annualSalary > 0 ? { annual_salary: annualSalary } : {}),
+            salary_advance_multiplier: Math.trunc(Number(fd_calculation_data.salary_advance_multiplier)),
+            salary_advance_amount: Number(fd_calculation_data.salary_advance_amount),
+            requested_amount: Number(fd_calculation_data.salary_advance_amount),
+          }
+        : {}),
+      fd_note: finalNotes,
+      fd_document_url,
+      fd_checked_at: new Date().toISOString(),
+      status: "pending_accounts_fd_review",
+      loan_office_reviewer_id: user.id,
+      loan_office_forwarded_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    let { data: updatedLoan, error: updateError } = await admin
       .from("loan_requests")
-      .update({
-        fd_score,
-        fd_good: fd_good !== undefined ? Boolean(fd_good) : Number(fd_score) >= 39,
-        ...(fd_calculation_data?.basic_salary > 0 && fd_calculation_data?.salary_advance_multiplier > 0
-          ? {
-              basic_salary: Number(fd_calculation_data.basic_salary),
-              annual_salary: Number(fd_calculation_data.annual_salary),
-              salary_advance_multiplier: Math.trunc(Number(fd_calculation_data.salary_advance_multiplier)),
-              salary_advance_amount: Number(fd_calculation_data.salary_advance_amount),
-              requested_amount: Number(fd_calculation_data.salary_advance_amount),
-            }
-          : {}),
-        fd_note: finalNotes,
-        fd_document_url,
-        fd_checked_at: new Date().toISOString(),
-        // Remain / return to pending Accounts Executive FD review (LO cannot approve)
-        status: "pending_accounts_fd_review",
-        loan_office_reviewer_id: user.id,
-        loan_office_forwarded_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", loan_request_id)
       .select("id, status, request_number, staff_full_name")
       .single()
+
+    if (updateError?.code === "42703" && /annual_salary/i.test(String(updateError.message || ""))) {
+      const { annual_salary: _annualSalary, ...legacyPayload } = updatePayload as typeof updatePayload & { annual_salary?: number }
+      ;({ data: updatedLoan, error: updateError } = await admin
+        .from("loan_requests")
+        .update(legacyPayload)
+        .eq("id", loan_request_id)
+        .select("id, status, request_number, staff_full_name")
+        .single())
+    }
 
     if (updateError) {
       console.error("[v0] Error setting FD on loan:", updateError)
