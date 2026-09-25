@@ -22,6 +22,7 @@ interface FDApprovedLoan {
   request_number?: string
   requested_amount?: number
   basic_salary?: number
+  salary_advance_amount?: number
   salary_advance_multiplier?: number
   deduction_period_months?: number
   repayment_duration_months?: number
@@ -67,6 +68,7 @@ function normalizeFdApprovedLoan(loan: Record<string, unknown>): FDApprovedLoan 
     request_number: String(loan.request_number || '').trim() || undefined,
     requested_amount: salaryAdvanceAmount ?? Number(loan.requested_amount ?? loan.fixed_amount ?? 0),
     basic_salary: loan.basic_salary == null ? undefined : Number(loan.basic_salary),
+    salary_advance_amount: salaryAdvanceAmount,
     salary_advance_multiplier: loan.salary_advance_multiplier == null ? undefined : Number(loan.salary_advance_multiplier),
     deduction_period_months: loan.deduction_period_months == null ? undefined : Number(loan.deduction_period_months),
     repayment_duration_months: loan.repayment_duration_months == null ? undefined : Number(loan.repayment_duration_months),

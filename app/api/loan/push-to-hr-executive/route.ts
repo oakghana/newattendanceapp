@@ -54,12 +54,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Recompute Salary Advance from the verified basic salary and requested
+    // multiplier so the handoff and memo never persist the loan-type default.
+    const loanType = String(loanRequest.loan_type_key || loanRequest.loan_type || loanRequest.loan_type_label || '').toLowerCase()
+    const basicSalary = Number(loanRequest.basic_salary)
+    const multiplier = Number(
+      loanRequest.salary_advance_multiplier ?? loanRequest.deduction_period_months ?? loanRequest.repayment_duration_months ?? loanRequest.recovery_months,
+    )
+    const isSalaryAdvance = loanType.includes('salary') && loanType.includes('advance')
+    const calculatedSalaryAdvance = isSalaryAdvance && Number.isFinite(basicSalary) && basicSalary > 0 && Number.isFinite(multiplier) && multiplier > 0
+      ? Math.round(basicSalary * Math.trunc(multiplier) * 100) / 100
+      : null
+
     // HR Loan Office forwards first to the HR Executive stage. The HR Executive
     // then approves and advances the request to the Director HR/MD stage.
     const now = new Date().toISOString()
     const { data: updatedLoan, error: updateError } = await admin
       .from('loan_requests')
       .update({
+        ...(calculatedSalaryAdvance == null ? {} : {
+          salary_advance_amount: calculatedSalaryAdvance,
+          requested_amount: calculatedSalaryAdvance,
+          fixed_amount: calculatedSalaryAdvance,
+        }),
         status: 'awaiting_hr_executives',
         director_hr_id: null,
         hr_note: memo,
