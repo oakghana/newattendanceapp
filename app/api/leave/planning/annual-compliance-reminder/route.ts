@@ -113,8 +113,8 @@ export async function POST(request: NextRequest) {
       recipient_id: s.id,
       type: "annual_leave_compliance_reminder",
       title: `${urgency}: Annual Leave Plan Required`,
-      message: `📅 You have ${daysLeft} day${daysLeft !== 1 ? "s" : ""} left to submit your Annual Leave Plan for ${currentPeriod}. Submissions close on 1st October. Your leave grant payment processing depends on an approved plan — submit now via Leave Planning.`,
-      data: { leave_year_period: currentPeriod, days_until_deadline: daysLeft, deadline: "October 1" },
+      message: `📅 You have ${daysLeft} day${daysLeft !== 1 ? "s" : ""} left to submit your Annual Leave Plan for ${currentPeriod}. Submissions close on 20th October. Your leave grant payment processing depends on an approved plan — submit now via Leave Planning.`,
+      data: { leave_year_period: currentPeriod, days_until_deadline: daysLeft, deadline: "October 20" },
       is_read: false,
     }))
 
