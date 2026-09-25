@@ -55,6 +55,7 @@ interface StaffMember {
   assigned_location_id?: string
   region_id?: string | null
   date_of_appointment?: string | null
+  date_of_assumption?: string | null
   years_of_service?: number | string | null
   contact_number?: string | null
   departments?: {
@@ -153,8 +154,9 @@ export function StaffManagement() {
     staff_category: "Junior",
     role: "staff",
     assigned_location_id: "",
-    date_of_appointment: "",
-    years_of_service: "",
+  date_of_appointment: "",
+  date_of_assumption: "",
+  years_of_service: "",
     contact_number: "",
   })
 
@@ -475,8 +477,9 @@ export function StaffManagement() {
           editingStaff.assigned_location_id ||
           editingStaff.geofence_locations?.id ||
           null,
-        date_of_appointment: editingStaff.date_of_appointment || null,
-        years_of_service:
+  date_of_appointment: editingStaff.date_of_appointment || null,
+  date_of_assumption: editingStaff.date_of_assumption || null,
+  years_of_service:
           editingStaff.years_of_service !== undefined && editingStaff.years_of_service !== ""
             ? parseInt(String(editingStaff.years_of_service), 10)
             : null,
@@ -1077,6 +1080,18 @@ export function StaffManagement() {
                         className="mt-1"
                       />
                       <p className="text-xs text-muted-foreground mt-1">Years of service auto-calculates from this date</p>
+                    </div>
+                    <div>
+                      <Label htmlFor="dateOfAssumption" className="font-medium">
+                        Date of Assumption <span className="text-muted-foreground font-normal">(Optional)</span>
+                      </Label>
+                      <Input
+                        id="dateOfAssumption"
+                        type="date"
+                        value={newStaff.date_of_assumption || ""}
+                        onChange={(e) => setNewStaff({ ...newStaff, date_of_assumption: e.target.value })}
+                        className="mt-1"
+                      />
                     </div>
                     <div>
                       <Label htmlFor="yearsOfService" className="font-medium">
