@@ -299,6 +299,15 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
   if (profileError || !profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
   if (loanError || !loan) return NextResponse.json({ error: "Loan not found" }, { status: 404 })
+
+  // Always resolve the latest administrator corrections at memo-render time.
+  // This prevents previously generated memo values from becoming stale after a running-loan edit.
+  const { data: operationalOverride } = await admin
+    .from("loan_admin_operational_overrides")
+    .select("paid_to_date, outstanding_balance, next_payment_due, next_payment_amount, expected_completion_date, recovery_start_date, recovery_months, disbursement_date")
+    .eq("loan_request_id", loanId)
+    .maybeSingle()
+  if (operationalOverride) Object.assign(loan, Object.fromEntries(Object.entries(operationalOverride).filter(([, value]) => value !== null && value !== "")))
   const postManagingDirectorStatuses = new Set(["approved_director", "md_approved", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
   if (!postManagingDirectorStatuses.has(String((loan as any).status || "")) || !(loan as any).md_approved_at) {
     return NextResponse.json({ error: "This loan cannot be downloaded until it has been approved by the Managing Director." }, { status: 409 })
