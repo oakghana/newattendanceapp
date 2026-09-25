@@ -47,9 +47,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify loan is in pending_hr_loan_office status
-    if (loanRequest.status !== 'pending_hr_loan_office') {
+    if (!['pending_hr_loan_office', 'fd_approved'].includes(String(loanRequest.status))) {
       return NextResponse.json(
-        { error: `Loan must be in pending_hr_loan_office status. Current status: ${loanRequest.status}` },
+        { error: `Loan must be FD-approved before handoff. Current status: ${loanRequest.status}` },
         { status: 400 }
       )
     }
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
           requested_amount: calculatedSalaryAdvance,
           fixed_amount: calculatedSalaryAdvance,
         }),
-        status: 'awaiting_hr_executives',
+        status: 'pending_hr_executive_review',
         director_hr_id: null,
         hr_note: memo,
         hr_officer_id: user.id,
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
         actor_role: role || 'hr_loan_office',
         action_key: 'pushed_to_hr_executive',
         from_status: 'pending_hr_loan_office',
-        to_status: 'awaiting_hr_executives',
+        to_status: 'pending_hr_executive_review',
         note: `HR Loan Office pushed approved FD loan to HR Executive for signing and approval. Memo: ${memo}`,
       })
 
