@@ -136,6 +136,8 @@ type LoanRequest = {
   salary_advance_multiplier?: number | null
   salary_advance_amount?: number | null
   deduction_period_months?: number | null
+  requested_days?: number | null
+  number_of_days_requested?: number | null
   director_letter: string | null
   director_letter_original?: string | null
   director_signature_text: string | null
@@ -7927,10 +7929,10 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {actionModal.actionType === "push_to_hr_executive" && actionModal.row && (
               <Button 
                 className="bg-blue-600 hover:bg-blue-700"
-                disabled={!modalDisbursement || !modalRecovery || !modalMemoRef}
+                disabled={!modalDisbursement || !modalRecovery}
                 onClick={async () => {
-                  if (!modalDisbursement || !modalRecovery || !modalMemoRef) {
-                    toast({ title: "Missing Required Fields", description: "Please fill in all required fields (Disbursement Date, Recovery Start Date, Reference Number) before pushing to HR Executive.", variant: "destructive" })
+                  if (!modalDisbursement || !modalRecovery) {
+                    toast({ title: "Missing Required Fields", description: "Please fill in the Disbursement Date and Recovery Start Date before pushing to HR Executive.", variant: "destructive" })
                     return
                   }
                   await runAction({
@@ -7939,7 +7941,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     hr_loan_office_memo: modalNote,
                     disbursement_date: modalDisbursement,
                     recovery_start_date: modalRecovery,
-                    reference_number: modalMemoRef,
+                    reference_number: null,
                     memo_recipient: modalAccountSignatory,
                     memo_cc: modalCcRecipients,
                     accounts_signatory: modalAccountSignatory,
@@ -8005,6 +8007,32 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   </div>
                 )}
 
+                {actionModal.row?.loan_type_key === "salary_advance" && (() => {
+                  const basicSalary = Number(actionModal.row.basic_salary || 0)
+                  const requestedMonths = Number(actionModal.row.salary_advance_multiplier || actionModal.row.deduction_period_months || actionModal.row.recovery_months || 0)
+                  const approvedAmount = basicSalary > 0 && requestedMonths > 0
+                    ? basicSalary * Math.trunc(requestedMonths)
+                    : Number(actionModal.row.salary_advance_amount || actionModal.row.fixed_amount || actionModal.row.requested_amount || 0)
+                  const requestedDays = actionModal.row.requested_days || actionModal.row.number_of_days_requested
+                  return (
+                    <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 shadow-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-indigo-950">Salary Advance Approval Summary</p>
+                          <p className="text-xs text-indigo-700">Confirm these approved terms before forwarding to HR Executive.</p>
+                        </div>
+                        <span className="rounded-full bg-indigo-600 px-3 py-1 text-sm font-bold text-white">GHc {fmtAmount(approvedAmount)}</span>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-indigo-950 sm:grid-cols-4">
+                        <div><p className="text-indigo-600">Approved basic salary</p><p className="font-semibold">GHc {fmtAmount(basicSalary)}</p></div>
+                        <div><p className="text-indigo-600">Requested period</p><p className="font-semibold">{requestedDays ? `${requestedDays} day(s)` : `${requestedMonths || "—"} month(s)`}</p></div>
+                        <div><p className="text-indigo-600">Payment duration</p><p className="font-semibold">{requestedMonths || "—"} month(s)</p></div>
+                        <div><p className="text-indigo-600">Calculation</p><p className="font-semibold">{basicSalary > 0 && requestedMonths > 0 ? `${fmtAmount(basicSalary)} × ${Math.trunc(requestedMonths)}` : "Verified amount"}</p></div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
                 <Label className="text-sm font-semibold">Processing Memo</Label>
                 <Textarea 
                   value={modalNote} 
@@ -8027,13 +8055,11 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   onChange={(e) => setModalRecovery(e.target.value)} 
                   className="h-8 text-xs"
                 />
-                <Label className="text-sm font-semibold">Reference Number *</Label>
-                <Input 
-                  value={modalMemoRef} 
-                  onChange={(e) => setModalMemoRef(e.target.value)} 
-                  placeholder="e.g. QCC/HRD/SWL/V.2/81/oak" 
-                  className="h-8 text-xs"
-                />
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <Label className="text-sm font-semibold text-slate-700">Memo Reference Number</Label>
+                  <p className="mt-1 text-xs text-slate-600">Assigned later by the HR Records Office. HR Loan Office does not enter this during the FD handoff.</p>
+                  <Input value="To be assigned by HR Records Office" disabled className="mt-2 h-8 bg-slate-100 text-xs text-slate-500" aria-label="Memo reference assigned by HR Records Office" />
+                </div>
 
                 <div className="border-t border-slate-200 pt-4 mt-4">
                   <Label className="text-sm font-semibold mb-3 block">Memo CC Recipients</Label>
