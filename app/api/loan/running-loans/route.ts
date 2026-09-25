@@ -103,7 +103,7 @@ export async function GET() {
     const [{ data: payments }, { data: schedules }, { data: staffById }, { data: staffByEmployeeId }] = await Promise.all([
       ids.length ? admin.from("loan_payment_records").select("loan_request_id, amount_paid, overall_status, accounts_approval_status, payment_date, submitted_at").in("loan_request_id", ids).eq("accounts_approval_status", "approved") : Promise.resolve({ data: [] }),
       ids.length ? admin.from("loan_repayment_schedule").select("loan_request_id, due_date, monthly_amount, paid_amount, paid_date, status").in("loan_request_id", ids).order("due_date", { ascending: true }) : Promise.resolve({ data: [] }),
-      staffIds.length ? admin.from("user_profiles").select("id, employee_id, first_name, last_name, department_id").in("id", staffIds) : Promise.resolve({ data: [] }),
+      staffIds.length ? admin.from("user_profiles").select("id, employee_id, first_name, last_name, department_id, assigned_location_id, geofence_locations!user_profiles_assigned_location_id_fkey(name)").in("id", staffIds) : Promise.resolve({ data: [] }),
       staffIds.length ? admin.from("user_profiles").select("id, employee_id, first_name, last_name, department_id").in("employee_id", staffIds) : Promise.resolve({ data: [] }),
     ])
 
@@ -136,10 +136,12 @@ export async function GET() {
             ...person,
             full_name: [person.first_name, person.last_name].filter(Boolean).join(" ") || loan.staff_full_name || "Unknown staff",
             staff_number: person.employee_id || loan.staff_number || "",
+            location_name: person.geofence_locations?.name || loan.staff_location_name || "Unknown location",
           } : {
             full_name: loan.staff_full_name || "Unknown staff",
             staff_number: loan.staff_number || "",
             department_id: loan.department_id || "",
+            location_name: loan.staff_location_name || "Unknown location",
           }
         })(),
         total_amount: total,

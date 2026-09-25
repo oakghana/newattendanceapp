@@ -124,9 +124,10 @@ export async function GET(req: NextRequest) {
         employee_id,
         profile_image_url,
         assigned_location_id,
-        position
-      )
-    `)
+  position,
+  geofence_locations!user_profiles_assigned_location_id_fkey (name)
+  )
+  `)
     .order("created_at", { ascending: false })
 
   if (view === "pending") {
@@ -138,11 +139,16 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query.limit(200)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Attach category to each loan using the map
-  const loans = (data || []).map((l: Record<string, unknown>) => ({
-    ...l,
-    loan_category: l.loan_type_key ? (loanTypeCategoryMap[l.loan_type_key as string] || null) : null,
-  }))
+  // Attach category and resolve the staff location from the profile assignment.
+  const loans = (data || []).map((l: Record<string, unknown>) => {
+    const profile = l.user_profiles as Record<string, unknown> | null
+    const assignedLocation = profile?.geofence_locations as { name?: string } | null
+    return {
+      ...l,
+      staff_location_name: assignedLocation?.name || l.staff_location_name || "Unknown location",
+      loan_category: l.loan_type_key ? (loanTypeCategoryMap[l.loan_type_key as string] || null) : null,
+    }
+  })
 
   return NextResponse.json({ loans, loanTypeCategoryMap })
 }
