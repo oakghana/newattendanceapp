@@ -177,7 +177,7 @@ export function TransportWorkspace({
   const isBasicStaff = ["staff", "contract", "audit_staff"].includes(normalizedRole)
   const isNonRegionalWorkspaceRole = isNonRegionalLocation && !isRegionalOnlyWorkspace
   const isNonRegionalStaff = !isRegionalOnlyWorkspace && (isBasicStaff || isNonRegionalWorkspaceRole)
-  const canCreateRequest = isChiefDriver || isRegionalHr || isActingHod || isBasicStaff
+  const isHeadOfficeRequester = isNonRegionalStaff || isActingHod
   const canViewDriverLicense = isChiefDriver || isRegionalHr || isRegionalManager || isDriver || isTransportManager || canManage
   const canManageFleet = isManagingDirector || isChiefDriver || isRegionalHr || isRegionalManager || isTransportManager || canManage
   const [requestOpen, setRequestOpen] = useState(false)
@@ -208,7 +208,7 @@ export function TransportWorkspace({
       const uploaded = await uploadResponse.json()
       documents.push({ name: file.name, url: uploaded.url, type: file.type, size: file.size })
     }
-    const isNonRegionalRequester = !isRegionalOnlyWorkspace && (isActingHod || isBasicStaff)
+    const isNonRegionalRequester = isNonRegionalStaff || isActingHod
     const submittedLocation = String(requesterLocation || "").trim()
     const approvedLocation = NON_REGIONAL_TRANSPORT_LOCATIONS.includes(submittedLocation as (typeof NON_REGIONAL_TRANSPORT_LOCATIONS)[number])
       ? submittedLocation
@@ -542,7 +542,7 @@ export function TransportWorkspace({
             href: "/dashboard/transport/nonregional/new",
             cta: "Request transport",
             badge: "Head Office",
-            onClick: !isLinkedHod ? () => setHodRequiredOpen(true) : undefined,
+            onClick: () => setRequestOpen(true),
           },
           {
             title: "My requests",
@@ -822,17 +822,19 @@ export function TransportWorkspace({
   <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
         <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-[min(1100px,calc(100vw-1rem))] overflow-x-hidden overflow-y-auto p-4 sm:w-[calc(100vw-2rem)] sm:max-w-[min(1100px,calc(100vw-2rem))] sm:p-6">
           <DialogHeader>
-            <DialogTitle>{isDepartmentHead ? "New Head Office transport request" : "New regional transport request"}</DialogTitle>
+            <DialogTitle>{isHeadOfficeRequester ? "New Head Office transport request" : "New regional transport request"}</DialogTitle>
             <DialogDescription>
-              {isDepartmentHead
-                ? "Complete the transport requisition. Your Department Head authorization is required before Managing Director review."
+              {isHeadOfficeRequester
+                ? isDepartmentHead
+                  ? "Complete the transport requisition. Your Department Head authorization is required before Managing Director review."
+                  : "Complete the transport requisition. It will follow the Head Office endorsement, Managing Director approval, and vehicle assignment workflow."
                 : isRegionalHr
                 ? "Complete the regional requisition and select whether the request is for transport within your region or support from Head Office."
                 : "Complete the digital regional requisition. The selected route determines the next approval desk after Regional Manager endorsement."}
             </DialogDescription>
           </DialogHeader>
           <form className="flex min-w-0 flex-col gap-4" onSubmit={handleRequestSubmit}>
-            <div className={`grid gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-4 ${isDepartmentHead ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
+            <div className={`grid gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-4 ${isHeadOfficeRequester ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Requester</p>
                 <p className="mt-1 font-medium">{requesterName || "Authenticated user"}</p>
@@ -841,7 +843,7 @@ export function TransportWorkspace({
                 <p className="text-xs font-medium text-muted-foreground">Department</p>
                 <p className="mt-1 font-medium">{requesterDepartment || "Department profile"}</p>
               </div>
-              {isDepartmentHead && (
+              {isHeadOfficeRequester && isDepartmentHead && (
                 <div>
                   <p className="text-xs font-medium text-muted-foreground">Authorization</p>
                   <p className="mt-1 font-medium text-primary">Department Head signature required</p>
@@ -904,7 +906,7 @@ export function TransportWorkspace({
               <p className="text-sm font-semibold">Transport use only</p>
               <p className="text-xs text-muted-foreground">Recommended vehicle, driver, and final sign-off will be completed by Transport Management after MD approval.</p>
             </div>
-            {!isDepartmentHead && (
+            {(!isHeadOfficeRequester || !isDepartmentHead) && (
               <div className="grid gap-2">
                 <Label htmlFor="transport-documents">Supporting documents</Label>
                 <div className="flex items-center gap-2 rounded-md border border-dashed p-3">
