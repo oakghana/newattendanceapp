@@ -22,6 +22,11 @@ interface DisbursedLoan {
   staff_receiving_funds_confirmed_by: string | null
   created_at: string
   department_name?: string
+  recovery_start_date?: string | null
+  recovery_months?: number | null
+  repayment_duration_months?: number | null
+  disbursement_date?: string | null
+  disbursement_confirmed_at?: string | null
 }
 
 interface DisbursementConfirmationClientProps {
@@ -98,20 +103,37 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
   }
 
   const pendingDisbursements = loans.filter((l) => !l.staff_receiving_funds_confirmed_at)
-  const paymentStaging = loans.filter((l) => l.staff_receiving_funds_confirmed_at && ["approved", "md_approved", "payment_staging", "staged"].includes(l.status))
+  // Repayment Tracking starts from every account-confirmed disbursement, regardless of
+  // the repayment status label assigned by the imported or current workflow.
+  const paymentStaging = loans.filter((l) => Boolean(l.staff_receiving_funds_confirmed_at))
   const confirmedDisbursements = loans.filter((l) => l.staff_receiving_funds_confirmed_at && !paymentStaging.some((staged) => staged.id === l.id))
   const tabLoans = activeTab === "pending" ? pendingDisbursements : activeTab === "repayment" ? paymentStaging : confirmedDisbursements
   const pageCount = Math.max(1, Math.ceil(tabLoans.length / pageSize))
   const visibleLoans = useMemo(() => tabLoans.slice((page - 1) * pageSize, page * pageSize), [tabLoans, page, pageSize])
   const changeTab = (tab: "pending" | "repayment" | "confirmed") => { setActiveTab(tab); setPage(1) }
   const changePageSize = (value: string) => { setPageSize(Number(value)); setPage(1) }
+  const [generatingId, setGeneratingId] = useState<string | null>(null)
+
+  const generateSchedule = async (loan: DisbursedLoan) => {
+    setGeneratingId(loan.id)
+    try {
+      const duration = loan.recovery_months || loan.repayment_duration_months || 12
+      const startDate = loan.recovery_start_date || loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at
+      const response = await fetch('/api/loan/repayment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ loanRequestId: loan.id, startDate, durationMonths: duration }) })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Unable to generate repayment schedule')
+      toast({ title: 'Repayment schedule ready', description: `The schedule for ${loan.staff_full_name || loan.request_number} has been generated.` })
+    } catch (error: any) {
+      toast({ title: 'Schedule generation failed', description: error?.message || 'Unable to generate repayment schedule.', variant: 'destructive' })
+    } finally { setGeneratingId(null) }
+  }
 
   const renderLoanCard = (loan: DisbursedLoan) => {
     const pending = !loan.staff_receiving_funds_confirmed_at
     return <div key={loan.id} className={`rounded-xl border p-4 transition-all ${pending ? "border-amber-200 bg-gradient-to-r from-white to-amber-50 hover:border-amber-300" : "border-emerald-200 bg-emerald-50"}`}>
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3 min-w-0 flex-1"><div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${pending ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{loan.staff_full_name ? loan.staff_full_name.split(" ").filter(Boolean).map((p) => p[0]).join("").toUpperCase().slice(0, 2) : "ST"}</div><div className="min-w-0"><p className="font-bold text-slate-900 truncate">{loan.request_number} · {loan.staff_full_name || "Staff Member"}</p><p className="text-xs text-slate-500 truncate">{loan.staff_number && `#${loan.staff_number} · `}{loan.department_name || ""}{loan.staff_rank && ` · ${loan.staff_rank}`}</p><div className="flex items-center gap-3 text-sm flex-wrap mt-1"><span className="font-semibold text-slate-700">GHc {Number(loan.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span><span className="text-xs text-slate-400">{loan.loan_type_label}</span>{!pending && <span className="text-xs text-slate-500">Confirmed by {loan.staff_receiving_funds_confirmed_by || "Accounts"} on {new Date(loan.staff_receiving_funds_confirmed_at!).toLocaleDateString("en-GB")}</span>}</div></div></div>
-        {pending && canConfirm ? <Button onClick={() => handleConfirmDisbursement(loan.id)} disabled={confirmingId === loan.id} className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">{confirmingId === loan.id ? <><Loader2 className="h-4 w-4 animate-spin" />Confirming...</> : <><CheckCircle2 className="h-4 w-4" />Confirm Received</>}</Button> : pending ? <Badge variant="outline" className="bg-slate-100 text-slate-600"><Eye className="h-3.5 w-3.5 mr-1" />View Only</Badge> : <Button variant="outline" onClick={async () => { const res = await fetch("/api/loan/memo-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: loan.id }) }); const data = await res.json(); if (data.path) window.open(data.path, "_blank") }}><Download className="h-3.5 w-3.5" />Memo</Button>}
+        {pending && canConfirm ? <Button onClick={() => handleConfirmDisbursement(loan.id)} disabled={confirmingId === loan.id} className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">{confirmingId === loan.id ? <><Loader2 className="h-4 w-4 animate-spin" />Confirming...</> : <><CheckCircle2 className="h-4 w-4" />Confirm Received</>}</Button> : pending ? <Badge variant="outline" className="bg-slate-100 text-slate-600"><Eye className="h-3.5 w-3.5 mr-1" />View Only</Badge> : activeTab === "repayment" ? <Button variant="default" onClick={() => void generateSchedule(loan)} disabled={generatingId === loan.id}><FileText className="h-3.5 w-3.5" />{generatingId === loan.id ? "Generating..." : "Generate Schedule"}</Button> : <Button variant="outline" onClick={async () => { const res = await fetch("/api/loan/memo-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: loan.id }) }); const data = await res.json(); if (data.path) window.open(data.path, "_blank") }}><Download className="h-3.5 w-3.5" />Memo</Button>}
       </div>
     </div>
   }
