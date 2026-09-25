@@ -159,7 +159,7 @@ export function isAdminRole(role?: string | null): boolean {
 }
 
 export function canAccessDisbursementConfirmation(role?: string | null): boolean {
-  return ["accounts", "accounts_executive"].includes(normalizeAppRole(role))
+  return ["admin", "accounts", "accounts_executive"].includes(normalizeAppRole(role))
 }
 
 /**

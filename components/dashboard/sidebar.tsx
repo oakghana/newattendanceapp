@@ -159,7 +159,7 @@ const navigationItems = [
     title: "HR Records",
     href: "/dashboard/hr-records",
     icon: ScrollText,
-    roles: ["hr_records", "hr_records_officer", "hr_records_manager"],
+    roles: ["admin", "hr_records", "hr_records_officer", "hr_records_manager"],
     category: "admin",
     executive: true,
   },
@@ -176,7 +176,7 @@ const navigationItems = [
     title: "Disbursement Confirmation",
     href: "/dashboard/disbursement-confirmation",
     icon: CheckCircle2,
-    roles: ["accounts", "accounts_executive"],
+    roles: ["admin", "accounts", "accounts_executive"],
     category: "main",
   },
   {

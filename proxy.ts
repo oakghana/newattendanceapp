@@ -89,6 +89,9 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   // HR Records reference-management queue
   "/dashboard/hr-records": ["admin", "hr_records", "it-admin", "system_admin"],
 
+  // Administrators may view disbursement status; confirmation actions remain Accounts-only.
+  "/dashboard/disbursement-confirmation": ["admin", "accounts", "accounts_executive"],
+
   // Regional Manager pages
   "/dashboard/regional": ["admin", "regional_manager"],
   "/dashboard/department": ["admin", "department_head", "regional_manager"],

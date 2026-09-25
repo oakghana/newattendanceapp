@@ -22,11 +22,11 @@ import {
   })
 
   describe("Disbursement confirmation access", () => {
-  it.each(["accounts", "accounts_executive"])("allows %s", (role) => {
+  it.each(["admin", "accounts", "accounts_executive"])("allows %s to view", (role) => {
     expect(canAccessDisbursementConfirmation(role)).toBe(true)
   })
 
-  it.each(["admin", "administrator", "super_admin", "god", "hr_executive", "loan_office", "hr_loan_office", "accounts_loan_office", "staff", "secretary", "hr_records", "regional_hr", null, undefined])("denies %s", (role) => {
+  it.each(["super_admin", "god", "hr_executive", "loan_office", "hr_loan_office", "accounts_loan_office", "staff", "secretary", "hr_records", "regional_hr", null, undefined])("denies %s", (role) => {
     expect(canAccessDisbursementConfirmation(role)).toBe(false)
   })
 })
