@@ -26,6 +26,8 @@ interface FDReview {
   loan_type?: string
   request_number?: string
   requested_amount?: number
+  monthly_salary?: number
+  salary_advance_months?: number
   monthly_deduction?: number
   repayment_months?: number
   fd_value: number
@@ -662,6 +664,11 @@ export function AccountsExecutiveFDDashboard({
                 <div className="bg-slate-50 p-3 rounded">
                   <p className="text-xs font-semibold text-slate-600">Amount</p>
                   <p className="text-sm font-medium">₵{Number(selectedReview.requested_amount || 0).toLocaleString()}</p>
+                  {selectedReview.monthly_salary && selectedReview.salary_advance_months ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Monthly salary ₵{Number(selectedReview.monthly_salary).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} × {selectedReview.salary_advance_months} month(s)
+                    </p>
+                  ) : null}
                 </div>
                 <div className="bg-slate-50 p-3 rounded">
                   <p className="text-xs font-semibold text-slate-600">Ref</p>

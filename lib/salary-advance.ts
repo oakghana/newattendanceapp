@@ -20,3 +20,12 @@ export function calculateSalaryAdvance(
 
   return { annualSalary, monthlySalary, requestedMonths, amount }
 }
+
+export function calculateSalaryAdvanceFromFdNote(
+  fdNote: string | null | undefined,
+  requestedMonthsValue: number | string | null | undefined,
+): SalaryAdvanceCalculation | null {
+  const match = String(fdNote || "").match(/Salary Per Annum:\s*(?:GH[¢c]?\s*)?([\d,]+(?:\.\d+)?)/i)
+  if (!match) return null
+  return calculateSalaryAdvance(match[1].replace(/,/g, ""), requestedMonthsValue)
+}

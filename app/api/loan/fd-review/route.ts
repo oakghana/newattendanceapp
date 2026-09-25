@@ -1,4 +1,5 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { calculateSalaryAdvanceFromFdNote } from "@/lib/salary-advance"
 import { NextResponse } from "next/server"
 import { canApproveFdScore, canEnterFdScore, canRejectFdByScore, formatFdScoreAdjustmentMemo, GOOD_FD_THRESHOLD, isFdExemptLoanType } from "@/lib/loan-workflow"
 import { createMemoToken } from "@/lib/secure-memo"
@@ -191,6 +192,8 @@ export async function GET(request: Request) {
     const fullName = (p?: { first_name?: string | null; last_name?: string | null } | null) =>
       p ? `${p.first_name || ""} ${p.last_name || ""}`.trim() : ""
 
+    const amountRepairs: PromiseLike<unknown>[] = []
+
     // Map to the shape the FD dashboard component expects
     const reviews = (loanRequests || []).map(loan => {
       // Get staff name from profile if loan_requests.staff_full_name is missing
@@ -199,6 +202,23 @@ export async function GET(request: Request) {
       const reviewer = profileMap.get(loan.accounts_reviewer_id)
       const staffName = loan.staff_full_name || fullName(profile) || "Unknown Staff"
       const calculatedByName = fullName(calculator) || null
+      const requestedMonths = loan.salary_advance_multiplier || loan.deduction_period_months || loan.repayment_duration_months
+      const salaryAdvance = loan.loan_type_key === "salary_advance"
+        ? calculateSalaryAdvanceFromFdNote(loan.fd_note, requestedMonths)
+        : null
+
+      if (salaryAdvance && Number(loan.requested_amount) !== salaryAdvance.amount) {
+        amountRepairs.push(
+          admin.from("loan_requests").update({
+            basic_salary: salaryAdvance.monthlySalary,
+            salary_advance_multiplier: salaryAdvance.requestedMonths,
+            salary_advance_amount: salaryAdvance.amount,
+            requested_amount: salaryAdvance.amount,
+            fixed_amount: salaryAdvance.amount,
+            updated_at: new Date().toISOString(),
+          }).eq("id", loan.id),
+        )
+      }
       
       return {
       id: loan.id,
@@ -210,7 +230,9 @@ export async function GET(request: Request) {
       accounts_reviewer_name: fullName(reviewer) || null,
       staff_number: loan.staff_number,
       loan_type: loan.loan_type_label || loan.loan_type_key,
-      requested_amount: loan.requested_amount,
+      requested_amount: salaryAdvance?.amount ?? loan.requested_amount,
+      monthly_salary: salaryAdvance?.monthlySalary ?? loan.basic_salary,
+      salary_advance_months: salaryAdvance?.requestedMonths ?? requestedMonths,
       monthly_deduction: loan.monthly_deduction,
       repayment_months: loan.repayment_duration_months,
       // FD is a percent (net-to-gross), not currency — keep fd_value === fd_score for UI
@@ -229,6 +251,13 @@ export async function GET(request: Request) {
         status: loan.status,
       }
     })
+
+    if (amountRepairs.length > 0) {
+      const repairResults = await Promise.all(amountRepairs)
+      for (const result of repairResults as Array<{ error?: unknown }>) {
+        if (result.error) console.error("[v0] Failed to repair legacy salary advance amount:", result.error)
+      }
+    }
 
     return NextResponse.json({
       success: true,

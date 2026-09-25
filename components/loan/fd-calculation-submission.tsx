@@ -126,9 +126,12 @@ export function FDCalculationSubmission({
   const effectiveConsolidated =
     parseFloat(consolidatedMonthly) > 0 ? parseFloat(consolidatedMonthly) : derivedConsolidated
   const recoveryMonthsNum = parseFloat(recoveryPeriodMonths) || 0
+  const effectiveRequestedAmount = isSalaryAdvance && salaryAdvanceAmount > 0
+    ? salaryAdvanceAmount
+    : loanRequest.requested_amount
   const installmentPreview =
-    recoveryMonthsNum > 0 && loanRequest.requested_amount > 0
-      ? loanRequest.requested_amount / recoveryMonthsNum
+    recoveryMonthsNum > 0 && effectiveRequestedAmount > 0
+      ? effectiveRequestedAmount / recoveryMonthsNum
       : 0
 
   const buildFdInput = (): FDCalculationInput => ({
@@ -139,7 +142,7 @@ export function FDCalculationSubmission({
       parseFloat(consolidatedMonthly) > 0 ? parseFloat(consolidatedMonthly) : undefined,
     other_allowances_monthly: parseFloat(otherAllowances) || 0,
     gross_deduction_monthly: parseFloat(grossDeduction) || 0,
-    requested_loan_amount: loanRequest.requested_amount,
+    requested_loan_amount: effectiveRequestedAmount,
     recovery_period_months: recoveryMonthsNum || loanRequest.repayment_duration_months || 0,
     loan_type: loanRequest.loan_type_label,
     outstanding_loans: parsedOutstanding,
