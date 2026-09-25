@@ -4894,8 +4894,6 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Loan Amount</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Total Paid</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Outstanding</th>
-                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Next Payment Due</th>
-                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Completion Date</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Repayment Status</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Status</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Mark Completed</th>
@@ -5061,41 +5059,6 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                                 ) : (
                                   <span className="text-slate-400">—</span>
                                 )
-                              })()}
-                            </td>
-                            {/* Next Payment Due */}
-                            <td className="px-4 py-3">
-                              {(() => {
-                                const nextDue = currentLoan?.next_payment_due
-                                if (nextDue) {
-                                  return <span className="text-sm text-slate-700">{new Date(nextDue).toLocaleDateString('en-GH', { month: 'short', day: 'numeric' })}</span>
-                                }
-                                // Calculate next due from approval date
-                                if (currentLoan?.md_approved_at) {
-                                  const approvalDate = new Date(currentLoan.md_approved_at)
-                                  const nextPaymentDate = new Date(approvalDate.setMonth(approvalDate.getMonth() + 1))
-                                  return <span className="text-sm text-slate-700">{nextPaymentDate.toLocaleDateString('en-GH', { month: 'short', day: 'numeric' })}</span>
-                                }
-                                return <span className="text-slate-400">—</span>
-                              })()}
-                            </td>
-                            {/* Expected Completion Date */}
-                            <td className="px-4 py-3">
-                              {(() => {
-                                const completionDate = currentLoan?.expected_completion_date
-                                if (completionDate) {
-                                  return <span className="text-sm text-slate-700">{new Date(completionDate).toLocaleDateString('en-GH', { month: 'short', year: '2-digit' })}</span>
-                                }
-                                // Calculate from approval date + duration (use recovery_months first, then repayment_duration_months)
-                                if (currentLoan?.md_approved_at) {
-                                  const duration = currentLoan?.recovery_months || currentLoan?.repayment_duration_months
-                                  if (duration) {
-                                    const approvalDate = new Date(currentLoan.md_approved_at)
-                                    const lastPaymentDate = new Date(approvalDate.setMonth(approvalDate.getMonth() + duration))
-                                    return <span className="text-sm text-slate-700">{lastPaymentDate.toLocaleDateString('en-GH', { month: 'short', year: '2-digit' })}</span>
-                                  }
-                                }
-                                return <span className="text-slate-400">—</span>
                               })()}
                             </td>
                             {/* Repayment Status */}
