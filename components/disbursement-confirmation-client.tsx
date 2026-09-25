@@ -1,10 +1,9 @@
 "use client"
 
-import { useState } from "react"
-import { createClient } from "@/lib/supabase/client"
+import { useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, Clock, FileText, Loader2, Download, Eye, ShieldAlert } from "lucide-react"
+import { CheckCircle2, Clock, FileText, Loader2, Download, Eye } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { canConfirmDisbursement } from "@/lib/role-capabilities"
 
@@ -33,6 +32,9 @@ interface DisbursementConfirmationClientProps {
 export function DisbursementConfirmationClient({ loans: initialLoans, userProfile }: DisbursementConfirmationClientProps) {
   const [loans, setLoans] = useState(initialLoans)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<"pending" | "staging" | "confirmed">("pending")
+  const [pageSize, setPageSize] = useState(10)
+  const [page, setPage] = useState(1)
   const { toast } = useToast()
 
   const canConfirm = canConfirmDisbursement(userProfile?.role)
@@ -96,7 +98,23 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
   }
 
   const pendingDisbursements = loans.filter((l) => !l.staff_receiving_funds_confirmed_at)
-  const confirmedDisbursements = loans.filter((l) => l.staff_receiving_funds_confirmed_at)
+  const paymentStaging = loans.filter((l) => l.staff_receiving_funds_confirmed_at && ["approved", "md_approved", "payment_staging", "staged"].includes(l.status))
+  const confirmedDisbursements = loans.filter((l) => l.staff_receiving_funds_confirmed_at && !paymentStaging.some((staged) => staged.id === l.id))
+  const tabLoans = activeTab === "pending" ? pendingDisbursements : activeTab === "staging" ? paymentStaging : confirmedDisbursements
+  const pageCount = Math.max(1, Math.ceil(tabLoans.length / pageSize))
+  const visibleLoans = useMemo(() => tabLoans.slice((page - 1) * pageSize, page * pageSize), [tabLoans, page, pageSize])
+  const changeTab = (tab: "pending" | "staging" | "confirmed") => { setActiveTab(tab); setPage(1) }
+  const changePageSize = (value: string) => { setPageSize(Number(value)); setPage(1) }
+
+  const renderLoanCard = (loan: DisbursedLoan) => {
+    const pending = !loan.staff_receiving_funds_confirmed_at
+    return <div key={loan.id} className={`rounded-xl border p-4 transition-all ${pending ? "border-amber-200 bg-gradient-to-r from-white to-amber-50 hover:border-amber-300" : "border-emerald-200 bg-emerald-50"}`}>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3 min-w-0 flex-1"><div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${pending ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{loan.staff_full_name ? loan.staff_full_name.split(" ").filter(Boolean).map((p) => p[0]).join("").toUpperCase().slice(0, 2) : "ST"}</div><div className="min-w-0"><p className="font-bold text-slate-900 truncate">{loan.request_number} · {loan.staff_full_name || "Staff Member"}</p><p className="text-xs text-slate-500 truncate">{loan.staff_number && `#${loan.staff_number} · `}{loan.department_name || ""}{loan.staff_rank && ` · ${loan.staff_rank}`}</p><div className="flex items-center gap-3 text-sm flex-wrap mt-1"><span className="font-semibold text-slate-700">GHc {Number(loan.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span><span className="text-xs text-slate-400">{loan.loan_type_label}</span>{!pending && <span className="text-xs text-slate-500">Confirmed by {loan.staff_receiving_funds_confirmed_by || "Accounts"} on {new Date(loan.staff_receiving_funds_confirmed_at!).toLocaleDateString("en-GB")}</span>}</div></div></div>
+        {pending && canConfirm ? <Button onClick={() => handleConfirmDisbursement(loan.id)} disabled={confirmingId === loan.id} className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">{confirmingId === loan.id ? <><Loader2 className="h-4 w-4 animate-spin" />Confirming...</> : <><CheckCircle2 className="h-4 w-4" />Confirm Received</>}</Button> : pending ? <Badge variant="outline" className="bg-slate-100 text-slate-600"><Eye className="h-3.5 w-3.5 mr-1" />View Only</Badge> : <Button variant="outline" onClick={async () => { const res = await fetch("/api/loan/memo-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: loan.id }) }); const data = await res.json(); if (data.path) window.open(data.path, "_blank") }}><Download className="h-3.5 w-3.5" />Memo</Button>}
+      </div>
+    </div>
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -142,8 +160,19 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
           </div>
         </div>
 
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-4">
+            <div className="flex rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Disbursement status">
+              {[{ key: "pending" as const, label: "Pending Confirmation", count: pendingDisbursements.length }, { key: "staging" as const, label: "Payment Staging", count: paymentStaging.length }, { key: "confirmed" as const, label: "Confirmed", count: confirmedDisbursements.length }].map((tab) => <button key={tab.key} type="button" role="tab" aria-selected={activeTab === tab.key} onClick={() => changeTab(tab.key)} className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${activeTab === tab.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}>{tab.label} <span className="ml-1 text-xs text-slate-400">{tab.count}</span></button>)}
+            </div>
+            <label className="flex items-center gap-2 text-sm text-slate-500">Rows per page<select value={pageSize} onChange={(event) => changePageSize(event.target.value)} className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-slate-900"><option value="10">10</option><option value="50">50</option><option value="100">100</option></select></label>
+          </div>
+          <div className="space-y-3 p-4">{visibleLoans.length > 0 ? visibleLoans.map(renderLoanCard) : <div className="rounded-lg border border-dashed border-slate-300 p-10 text-center text-slate-500">No loans in this tab.</div>}</div>
+          {tabLoans.length > 0 && <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-sm text-slate-500"><span>Showing {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, tabLoans.length)} of {tabLoans.length}</span><div className="flex items-center gap-2"><Button variant="outline" size="sm" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1}>Previous</Button><span className="min-w-16 text-center">Page {page} of {pageCount}</span><Button variant="outline" size="sm" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={page === pageCount}>Next</Button></div></div>}
+        </div>
+
         {/* Pending Section */}
-        {pendingDisbursements.length > 0 && (
+        {false && pendingDisbursements.length > 0 && (
           <div className="mb-8">
             <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
               <Clock className="h-5 w-5 text-amber-500" />
@@ -212,7 +241,7 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
         )}
 
         {/* Confirmed Section */}
-        {confirmedDisbursements.length > 0 && (
+        {false && confirmedDisbursements.length > 0 && (
           <div>
             <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-emerald-600" />
