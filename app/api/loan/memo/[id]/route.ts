@@ -218,12 +218,12 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
       subject: `APPLICATION FOR ${String(loan.loan_type_label || "LOAN").toUpperCase()} (TERMS SET)`,
       paragraphs: [
         `We refer to your loan application dated ${fmtDate(loan.hr_forwarded_at)} on the above subject and wish to inform you that HR has prepared your loan terms and forwarded your request to Director HR for final decision.`,
-        `Proposed Disbursement Date: ${fmtMemoMonth(loan.disbursement_date)}`,
+        `Proposed Disbursement Date: ${fmtMemoMonth(loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || loan.md_approved_at)}`,
         ...(isFuneralLoan
           ? ["Repayment: Not required. No monthly salary deduction applies."]
           : [
-              `Proposed Recovery Start Date: ${fmtMemoMonth(loan.recovery_start_date)}`,
-              `Proposed Recovery Duration: ${loan.recovery_months || "TBD"} month(s)`,
+              `Proposed Recovery Start Date: ${fmtMemoMonth(loan.recovery_start_date || loan.next_payment_due || loan.repayment_start_date)}`,
+              `Proposed Recovery Duration: ${loan.recovery_months || loan.recovery_period_months || loan.recovery_duration_months || "TBD"} month(s)`,
             ]),
         ...(loan.loan_type_key === "salary_advance" && loan.basic_salary
           ? [`Verified Basic Salary: GHc ${fmtAmount(loan.basic_salary)}`]
@@ -235,8 +235,14 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
     }
   }
 
-  const disbMonth = fmtMemoMonth(loan.disbursement_date)
-  const recovStart = fmtMemoMonth(loan.recovery_start_date)
+  // Use the administrator-maintained Running Loans values first. For older records
+  // that predate the override table, use the confirmed disbursement and repayment
+  // schedule dates before displaying TBD.
+  const maintainedDisbursementDate = loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || loan.md_approved_at
+  const maintainedRecoveryStartDate = loan.recovery_start_date || loan.next_payment_due || loan.repayment_start_date
+  const maintainedRecoveryMonths = loan.recovery_months || loan.recovery_period_months || loan.recovery_duration_months
+  const disbMonth = fmtMemoMonth(maintainedDisbursementDate)
+  const recovStart = fmtMemoMonth(maintainedRecoveryStartDate)
   const memoCopyRecipient =
     extractMemoCopyRecipient(loan.hr_note) ||
     extractMemoCopyRecipient(loan.loan_office_note) ||
@@ -247,7 +253,7 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
       `We refer to your loan application dated ${fmtDate(loan.created_at)} on the above subject and wish to inform you that, Management has given approval for you to be granted a ${loan.loan_type_label || "Loan"} of ${amount}.`,
       ...(isFuneralLoan
         ? ["This funeral support does not require repayment or monthly salary deductions."]
-        : [`The loan would be recovered in ${loan.recovery_months || "TBD"} Equal Monthly Instalment from your salary effective, ${recovStart}.`]),
+        : [`The loan would be recovered in ${maintainedRecoveryMonths || "TBD"} Equal Monthly Instalment from your salary effective, ${recovStart}.`]),
       ...(loan.loan_type_key === "salary_advance" && loan.basic_salary
         ? [`Verified Basic Salary: GHc ${fmtAmount(loan.basic_salary)}.`]
         : []),
