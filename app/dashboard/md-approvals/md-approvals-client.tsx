@@ -25,6 +25,9 @@ import {
   MapPin,
   Building2,
   FileDown,
+  Search,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -776,6 +779,9 @@ export function MdApprovalsClient({ profile }: Props) {
   const [filterLoanType, setFilterLoanType] = useState("")
   const [filterCategory, setFilterCategory] = useState("")
   const [showFilters, setShowFilters] = useState(false)
+  const [memoSearch, setMemoSearch] = useState("")
+  const [memoPage, setMemoPage] = useState(1)
+  const [memoPageSize, setMemoPageSize] = useState(10)
 
   const fetchApprovedLoans = useCallback(async () => {
     setLoadingApproved(true)
@@ -865,7 +871,8 @@ export function MdApprovalsClient({ profile }: Props) {
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }
@@ -959,6 +966,11 @@ export function MdApprovalsClient({ profile }: Props) {
   // Filtered stamped memos — 5 dimensions
   const filteredStampedMemos = useMemo(() => {
     return allStampedMemos.filter((l) => {
+      const query = memoSearch.trim().toLowerCase()
+      if (query) {
+        const searchable = [l.staff_full_name, l.staff_number, l.request_number, l.loan_type_label, l.staff_location_name, l.departments?.name].filter(Boolean).join(" ").toLowerCase()
+        if (!searchable.includes(query)) return false
+      }
       if (filterLocation && l.staff_location_name !== filterLocation) return false
       if (filterDepartment && l.departments?.name !== filterDepartment) return false
       if (filterMonth && l.md_approved_at && getMonthKey(l.md_approved_at) !== filterMonth) return false
@@ -966,8 +978,10 @@ export function MdApprovalsClient({ profile }: Props) {
       if (filterCategory && l.loan_category !== filterCategory) return false
       return true
     })
-  }, [allStampedMemos, filterLocation, filterDepartment, filterMonth, filterLoanType, filterCategory])
+  }, [allStampedMemos, memoSearch, filterLocation, filterDepartment, filterMonth, filterLoanType, filterCategory])
 
+  const memoPageCount = Math.max(1, Math.ceil(filteredStampedMemos.length / memoPageSize))
+  const paginatedStampedMemos = useMemo(() => filteredStampedMemos.slice((memoPage - 1) * memoPageSize, memoPage * memoPageSize), [filteredStampedMemos, memoPage, memoPageSize])
   const activeFilterCount = [filterLocation, filterDepartment, filterMonth, filterLoanType, filterCategory].filter(Boolean).length
 
   const clearFilters = () => {
@@ -976,6 +990,8 @@ export function MdApprovalsClient({ profile }: Props) {
     setFilterMonth("")
     setFilterLoanType("")
     setFilterCategory("")
+    setMemoSearch("")
+    setMemoPage(1)
   }
 
   // Derived KPIs for header
@@ -1155,7 +1171,14 @@ export function MdApprovalsClient({ profile }: Props) {
                   </Button>
                 </div>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 p-4">
+              <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+    <div className="relative max-w-xl">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+      <input value={memoSearch} onChange={(event) => { setMemoSearch(event.target.value); setMemoPage(1) }} placeholder="Search staff, employee number, request number, loan, location..." className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" aria-label="Search approved memos" />
+      {memoSearch && <button type="button" onClick={() => { setMemoSearch(""); setMemoPage(1) }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700" aria-label="Clear memo search"><X className="h-4 w-4" /></button>}
+    </div>
+  </div>
+  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 p-4">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1">
                     <MapPin className="h-3 w-3" />Location
@@ -1254,7 +1277,7 @@ export function MdApprovalsClient({ profile }: Props) {
                   <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide text-right">Actions</span>
                 </div>
                 <div className="divide-y divide-slate-100">
-                  {filteredStampedMemos.map((memo) => {
+                  {paginatedStampedMemos.map((memo) => {
                     const approvedDate = memo.md_approved_at
                       ? new Date(memo.md_approved_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
                       : "—"
@@ -1373,11 +1396,17 @@ export function MdApprovalsClient({ profile }: Props) {
                   })}
                 </div>
                 {/* Table footer */}
-                <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 bg-slate-50">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-t border-slate-100 bg-slate-50">
                   <span className="text-xs text-slate-400">
-                    Showing <span className="font-semibold text-slate-600">{filteredStampedMemos.length}</span> of{" "}
-                    <span className="font-semibold text-slate-600">{allStampedMemos.length}</span> approved memos
+                    Showing <span className="font-semibold text-slate-600">{filteredStampedMemos.length === 0 ? 0 : (memoPage - 1) * memoPageSize + 1}–{Math.min(memoPage * memoPageSize, filteredStampedMemos.length)}</span> of{" "}
+                    <span className="font-semibold text-slate-600">{filteredStampedMemos.length}</span> approved memos
                   </span>
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-2 text-xs text-slate-500">Rows per page<select value={memoPageSize} onChange={(event) => { setMemoPageSize(Number(event.target.value)); setMemoPage(1) }} className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"><option value="10">10</option><option value="25">25</option><option value="50">50</option></select></label>
+                    <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => setMemoPage((page) => Math.max(1, page - 1))} disabled={memoPage === 1}><ChevronLeft className="h-3.5 w-3.5" />Previous</Button>
+                    <span className="min-w-20 text-center text-xs font-medium text-slate-500">Page {memoPage} of {memoPageCount}</span>
+                    <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => setMemoPage((page) => Math.min(memoPageCount, page + 1))} disabled={memoPage >= memoPageCount}>Next<ChevronRight className="h-3.5 w-3.5" /></Button>
+                  </div>
                   <span className="text-xs font-semibold text-emerald-700 tabular-nums">
                     Total: GHc{" "}
                     {filteredStampedMemos
