@@ -47,8 +47,14 @@ export default async function TransportRequestsPage() {
     else if (!locationId && !districtId && regionId) requestsQuery = requestsQuery.eq("assigned_region_id", regionId)
     requestsQuery = requestsQuery.in("workflow_stage", ["regional_manager_endorsement", "hr_records_review", "hr_executive_signing", "approved", "referenced", "completed", "closed"])
   }
-  // Regional drivers must only see regional trips assigned to them, never non-regional or other regions' requests.
-  if (isRegionalDriver) requestsQuery = requestsQuery.eq("assigned_driver_id", user.id)
+  // Regional Chief Drivers can review requests for their assigned region/location.
+  // Head Office Chief Drivers retain nationwide visibility for transport operations.
+  if (isRegionalDriver) {
+    if (locationId) requestsQuery = requestsQuery.or(`origin_location_id.eq.${locationId},origin_location_id.is.null`)
+    if (!locationId && districtId) requestsQuery = requestsQuery.eq("linked_district_id", districtId)
+    else if (!locationId && !districtId && regionId) requestsQuery = requestsQuery.eq("assigned_region_id", regionId)
+    requestsQuery = requestsQuery.eq("request_type", "regional_transport")
+  }
   let { data: requests, error: requestsError } = await requestsQuery
   const { data: ownRequests, error: ownRequestsError } = await supabase
     .from("transport_requests")
@@ -71,7 +77,12 @@ export default async function TransportRequestsPage() {
       else if (!locationId && !districtId && regionId) fallbackQuery = fallbackQuery.eq("assigned_region_id", regionId)
       fallbackQuery = fallbackQuery.in("workflow_stage", ["regional_manager_endorsement", "hr_records_review", "hr_executive_signing", "approved", "referenced", "completed", "closed"])
     }
-    if (isRegionalDriver) fallbackQuery = fallbackQuery.eq("assigned_driver_id", user.id)
+    if (isRegionalDriver) {
+      if (locationId) fallbackQuery = fallbackQuery.or(`origin_location_id.eq.${locationId},origin_location_id.is.null`)
+      if (!locationId && districtId) fallbackQuery = fallbackQuery.eq("linked_district_id", districtId)
+      else if (!locationId && !districtId && regionId) fallbackQuery = fallbackQuery.eq("assigned_region_id", regionId)
+      fallbackQuery = fallbackQuery.eq("request_type", "regional_transport")
+    }
     const fallback = await fallbackQuery
     const fallbackRequests = fallback.data?.map((request) => ({ ...request, assigned_region: [], regional_manager_signer_id: null, regional_manager_signed_at: null, hr_executive_signer_id: null, hr_executive_signed_at: null, hr_executive_signature_data_url: null })) ?? []
     const fallbackOwnRequests = ownRequests ?? []
