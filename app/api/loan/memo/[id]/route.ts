@@ -746,7 +746,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     // Imported approvals are retained for record purposes and must be clearly distinguished
     // from loans approved through the current portal workflow.
-    if (Boolean(loan.is_imported)) {
+    const isImportedHistoricalLoan = Boolean(loan.is_imported) || String(loan.hod_review_note || "").toLowerCase().startsWith("bulk imported by administrator")
+    if (isImportedHistoricalLoan) {
       const importedFootnote = "Administrative note: This loan was approved previously through an external/legacy process and imported into the portal for record-keeping and archive purposes. This memo is generated for documentation only and does not represent a new approval."
       const footnoteLines = doc.splitTextToSize(importedFootnote, contentWidth)
       if (y + footnoteLines.length * 4.2 + 8 > pageHeight - 16) {
