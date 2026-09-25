@@ -18,6 +18,7 @@ import {
   canEnterFdScore,
   canSendFdForAccountsExecutiveReview,
   formatFdScoreAdjustmentMemo,
+  isFuneralLoanType,
   parseFdScoreAdjustment,
 } from '../lib/loan-workflow'
 
@@ -185,6 +186,11 @@ describe('Loan Workflow - FD Review and Payment Flow', () => {
       // Funeral loans should proceed to HR even with low FD
       expect(funeralLoan.loan_type).toMatch(/Funeral|Insurance|Repair/)
       console.log('✓ Funeral loan is FD-exempt and can proceed to HR')
+    })
+
+    it('identifies funeral support as non-repayable', () => {
+      expect(isFuneralLoanType('funeral_support')).toBe(true)
+      expect(isFuneralLoanType('salary_advance')).toBe(false)
     })
 
     it('should transition loan to awaiting_hr_terms after FD approval', () => {

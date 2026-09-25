@@ -321,6 +321,8 @@ const STATUS_COLORS: Record<string, string> = {
   awaiting_hr_terms: "bg-cyan-100 text-cyan-800",
   awaiting_director_hr: "bg-indigo-100 text-indigo-800",
   approved_director: "bg-emerald-100 text-emerald-800",
+  partially_recovered: "bg-teal-100 text-teal-800",
+  payment_completed: "bg-slate-200 text-slate-700",
   director_rejected: "bg-red-100 text-red-800",
   archived: "bg-slate-200 text-slate-700",
 }
@@ -337,6 +339,8 @@ const STATUS_LABELS: Record<string, string> = {
   awaiting_director_hr: "Awaiting HR Executives",
   archived: "Archived",
   approved_director: "Approved by HR Executives",
+  partially_recovered: "Payment In Progress",
+  payment_completed: "Payment Completed",
   director_rejected: "HR Executives Denied",
 }
 
@@ -416,6 +420,8 @@ function statusBadgeClass(status: string, emphasis: "soft" | "solid" = "soft") {
       awaiting_hr_terms: "bg-cyan-700 text-white",
       awaiting_director_hr: "bg-indigo-700 text-white",
       approved_director: "bg-emerald-700 text-white",
+      partially_recovered: "bg-teal-700 text-white",
+      payment_completed: "bg-slate-700 text-white",
       director_rejected: "bg-red-800 text-white",
     }
     return `text-[11px] font-semibold whitespace-nowrap px-2.5 py-1 ${solidMap[status] || "bg-slate-700 text-white"}`
@@ -433,6 +439,8 @@ function stageOwner(status: string) {
     awaiting_hr_terms: "HR Office",
     awaiting_director_hr: "Executive HR",
     approved_director: "Completed",
+    partially_recovered: "Repaying",
+    payment_completed: "Cleared",
     hod_rejected: "Closed at HOD",
     rejected_fd: "Closed at Accounts",
     committee_rejected: "Closed at Committee",
@@ -550,6 +558,10 @@ function isQualifiedForLoan(loanTypeKey: string, staffRank?: string | null): boo
   if (key.includes("_manager")) return isManagerOrAbove
   if (key.includes("_senior")) return isSeniorOrAbove
   return true
+}
+
+function isFuneralLoan(row: Pick<LoanRequest, "loan_type_key" | "loan_type_label">): boolean {
+  return /funeral/.test(`${row.loan_type_key} ${row.loan_type_label}`.toLowerCase())
 }
 
 function downloadApprovalLetter(row: LoanRequest, profile: WorkflowResponse["profile"]) {
@@ -1112,6 +1124,7 @@ export default function LoanAppPage() {
   const [modalDisbursement, setModalDisbursement] = useState("")
   const [modalRecovery, setModalRecovery] = useState("")
   const [modalMonths, setModalMonths] = useState("")
+  const [modalBasicSalary, setModalBasicSalary] = useState("")
   const [modalHodName, setModalHodName] = useState("")
   const [modalHodRank, setModalHodRank] = useState("")
   const [modalHodLocation, setModalHodLocation] = useState("")
@@ -1163,6 +1176,9 @@ export default function LoanAppPage() {
   const [templateTitle, setTemplateTitle] = useState("")
   const [templateSubject, setTemplateSubject] = useState("")
   const [templateBody, setTemplateBody] = useState("")
+  const [loanImportFile, setLoanImportFile] = useState<File | null>(null)
+  const [loanImportLoading, setLoanImportLoading] = useState(false)
+  const [loanImportSummary, setLoanImportSummary] = useState<string | null>(null)
   const [selectedStaffForLink, setSelectedStaffForLink] = useState("")
   const [selectedHodsForLink, setSelectedHodsForLink] = useState<string[]>([])
   const [hodLinkSearch, setHodLinkSearch] = useState("")
@@ -2735,6 +2751,56 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     await loadRegistry()
   }
 
+  const downloadLoanImportTemplate = async () => {
+    const response = await fetch("/api/admin/bulk-import/loan/template", { cache: "no-store" })
+    if (!response.ok) {
+      toast({ title: "Template download failed", description: "Could not generate the loan import template.", variant: "destructive" })
+      return
+    }
+
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = "loan-import-template.xlsx"
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  const importHistoricalLoans = async () => {
+    if (!loanImportFile) {
+      toast({ title: "Choose a file", description: "Select the XLSX file to import.", variant: "destructive" })
+      return
+    }
+
+    setLoanImportLoading(true)
+    setLoanImportSummary(null)
+    try {
+      const formData = new FormData()
+      formData.append("file", loanImportFile)
+      const response = await fetch("/api/admin/bulk-import/loan", {
+        method: "POST",
+        body: formData,
+      })
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to import loan records")
+      }
+
+      const summary = `${result.success || 0} imported, ${result.failed || 0} failed`
+      setLoanImportSummary(summary)
+      toast({ title: "Loan import complete", description: summary })
+      setLoanImportFile(null)
+      await loadData()
+    } catch (error: any) {
+      toast({ title: "Import failed", description: error?.message || "Could not import the loan template.", variant: "destructive" })
+    } finally {
+      setLoanImportLoading(false)
+    }
+  }
+
   const toggleHodSelection = (hodId: string) => {
     setSelectedHodsForLink((prev) =>
       prev.includes(hodId) ? prev.filter((id) => id !== hodId) : [...prev, hodId],
@@ -2909,6 +2975,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
         setModalDisbursement("")
         setModalRecovery("")
         setModalMonths("")
+        setModalBasicSalary("")
         setModalHodName("")
         setModalHodRank("")
         setModalHodLocation("")
@@ -2936,6 +3003,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           setModalStaffRank(row.staff_rank || "")
           setModalCorporateEmail(row.corporate_email || "")
           setModalReferenceNumber(formatReferenceNumber(row.reference_number, row.request_number))
+          setModalBasicSalary(row.basic_salary ? String(row.basic_salary) : "")
           setModalHodName(parsedLoanOfficeNote.throName || data?.profile.currentHodProfile?.name || row.hod_name || "")
           setModalHodRank(parsedLoanOfficeNote.throRank || data?.profile.currentHodProfile?.rank || row.hod_rank || "")
           setModalHodLocation(parsedLoanOfficeNote.throLocation || data?.profile.currentHodProfile?.location || row.hod_location || row.staff_location_name || "")
@@ -2959,6 +3027,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           setModalDisbursement(entry?.disbursement || "")
           setModalRecovery(entry?.recovery || "")
           setModalMonths(entry?.months || (row.recovery_months ? String(row.recovery_months) : fallbackMonths))
+          setModalBasicSalary(row.basic_salary ? String(row.basic_salary) : "")
           setModalNote(parsedHrNote.cleanedNote)
           setModalHodName(entry?.hodName || parsedHrNote.throName || data?.profile.currentHodProfile?.name || row.hod_name || "")
           setModalHodRank(entry?.hodRank || parsedHrNote.throRank || data?.profile.currentHodProfile?.rank || row.hod_rank || "")
@@ -6244,6 +6313,37 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               </CardContent>
             </Card>
           )}
+          {isAdmin && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Historical Loan Import</CardTitle>
+                <CardDescription>Download the template and upload already approved and disbursed loans from previous months.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={downloadLoanImportTemplate}>
+                    <FileSpreadsheet className="mr-2 h-4 w-4" /> Download Template
+                  </Button>
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-600 hover:border-slate-400">
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      className="hidden"
+                      onChange={(event) => setLoanImportFile(event.target.files?.[0] || null)}
+                    />
+                    {loanImportFile ? loanImportFile.name : "Choose XLSX file"}
+                  </label>
+                  <Button onClick={importHistoricalLoans} disabled={loanImportLoading}>
+                    {loanImportLoading ? "Importing..." : "Import Loans"}
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Imported rows are created as live loan records, so the staff member can see them immediately and new applications stay blocked until repayment is cleared.
+                </p>
+                {loanImportSummary && <p className="text-sm font-medium text-slate-700">{loanImportSummary}</p>}
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardHeader className="pb-2">
               <div className="flex items-start justify-between gap-4">
@@ -6251,9 +6351,16 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   <CardTitle className="text-xl font-bold text-slate-900">All Loan Requests</CardTitle>
                   <CardDescription className="text-slate-500">Full cross-organization visibility for admin, HR loan office, and Director HR.</CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredAllLoans, "all-loan-requests.csv")} className="shrink-0">
-                  <Download className="h-4 w-4 mr-1" /> Export
-                </Button>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredAllLoans, "all-loan-requests.csv")} className="shrink-0">
+                    <Download className="h-4 w-4 mr-1" /> Export
+                  </Button>
+                  {isAdmin && (
+                    <Button variant="outline" size="sm" onClick={downloadLoanImportTemplate} className="shrink-0">
+                      <FileSpreadsheet className="h-4 w-4 mr-1" /> Import Template
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {/* Summary stats bar */}
@@ -7474,6 +7581,13 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 </div>
                 <Label className="text-xs">Reference Number</Label>
                 <Input value={modalReferenceNumber} disabled placeholder="e.g. QCC/HR/SWL/V2/001" className="h-7 text-xs" />
+                {actionModal.row!.loan_type_key === "salary_advance" && (
+                  <div>
+                    <Label className="text-xs">Verified Basic Salary (GHc)</Label>
+                    <Input type="number" min="0" step="0.01" value={modalBasicSalary} onChange={(e) => setModalBasicSalary(e.target.value)} placeholder="Enter verified monthly basic salary" className="h-7 text-xs" />
+                    <p className="mt-1 text-[11px] text-muted-foreground">Accounts Loan Office will confirm this amount during FD review and it will appear on the approval memo.</p>
+                  </div>
+                )}
                 <Label className="text-xs">THRO (Your Boss / Manager)</Label>
                 <Select value={modalHodReviewerId} onValueChange={setModalHodReviewerId} disabled>
                   <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Choose your boss" /></SelectTrigger>
@@ -7614,19 +7728,28 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     <Label className="text-xs">Disbursement Date</Label>
                     <Input type="month" value={modalDisbursement} onChange={(e) => setModalDisbursement(e.target.value)} className="h-7 text-xs" />
                   </div>
-                  <div>
-                    <Label className="text-xs">Recovery Start Date</Label>
-                    <Input type="month" value={modalRecovery} onChange={(e) => setModalRecovery(e.target.value)} className="h-7 text-xs" />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Recovery Months</Label>
-                    <Input type="number" value={modalMonths} onChange={(e) => setModalMonths(e.target.value)} placeholder="e.g. 24" className="h-7 text-xs" />
-                  </div>
+                  {!isFuneralLoan(actionModal.row!) && <>
+                    <div>
+                      <Label className="text-xs">Recovery Start Date</Label>
+                      <Input type="month" value={modalRecovery} onChange={(e) => setModalRecovery(e.target.value)} className="h-7 text-xs" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Recovery Months</Label>
+                      <Input type="number" value={modalMonths} onChange={(e) => setModalMonths(e.target.value)} placeholder="e.g. 24" className="h-7 text-xs" />
+                    </div>
+                  </>}
                   <div>
                     <Label className="text-xs">Memo Reference</Label>
                     <Input value={modalMemoRef} onChange={(e) => setModalMemoRef(e.target.value)} placeholder="e.g. QCC/HRD/SWL/V.2/81/oak" className="h-7 text-xs" />
                   </div>
                 </div>
+                {isFuneralLoan(actionModal.row!) && <p className="text-xs text-emerald-700">Funeral support is non-repayable. No recovery date, monthly deduction, or repayment period is required.</p>}
+                {actionModal.row!.loan_type_key === "salary_advance" && (
+                  <div>
+                    <Label className="text-xs">Verified Basic Salary (GHc)</Label>
+                    <Input type="number" min="0" step="0.01" value={modalBasicSalary} onChange={(e) => setModalBasicSalary(e.target.value)} placeholder="Enter verified monthly basic salary" className="h-7 text-xs" />
+                  </div>
+                )}
                 <Label className="text-xs">Memo CC Recipients (one per line)</Label>
                 <Textarea value={modalMemoCC} onChange={(e) => setModalMemoCC(e.target.value)} placeholder="Managing Director&#10;Deputy Director Finance" rows={2} className="text-xs" />
                 <Label className="text-xs">Your Boss's Rank / Title</Label>
@@ -7687,6 +7810,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     hod_reviewer_id: modalHodReviewerId || null,
                     director_approver_id: modalDirectorApproverId || null,
                     memo_cc: modalMemoCC || null,
+                    basic_salary: Number(modalBasicSalary || 0),
                   })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>Save &amp; Forward to Accounts</Button>
@@ -7708,6 +7832,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     recovery_start_date: modalRecovery || actionModal.row!.recovery_start_date,
                     disbursement_date: modalDisbursement || actionModal.row!.disbursement_date,
                     recovery_months: Number(modalMonths) || actionModal.row!.recovery_months || null,
+                    basic_salary: Number(modalBasicSalary) || actionModal.row!.basic_salary || null,
                     hod_name: modalHodName,
                     hod_rank: modalHodRank,
                     hod_location: modalHodLocation,
@@ -7748,6 +7873,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     disbursement_date: convertMonthToDate(modalDisbursement),
                     recovery_start_date: convertMonthToDate(modalRecovery),
                     recovery_months: Number(modalMonths || 0),
+                    basic_salary: Number(modalBasicSalary || 0),
                     reference_number: modalMemoRef || null,
                     hod_name: modalHodName || null,
                     hod_rank: modalHodRank || null,

@@ -11,6 +11,7 @@ import {
   canDoHodReview,
   canDoHrOffice,
   canDoLoanOffice,
+  isFuneralLoanType,
   normalizeRole,
 } from "@/lib/loan-workflow"
 import { verifyMemoToken } from "@/lib/secure-memo"
@@ -170,7 +171,8 @@ async function resolveThroRecipient(admin: any, loan: any, applicantId: string) 
 function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
   const parsedHrNote = splitThroTelephoneFromNote(loan.hr_note)
   const cleanedHrNote = parsedHrNote.cleanedNote
-  const amount = `GHc ${fmtAmount(loan.fixed_amount || loan.requested_amount)}`
+  const amount = `GHc ${fmtAmount(loan.salary_advance_amount || loan.fixed_amount || loan.requested_amount)}`
+  const isFuneralLoan = isFuneralLoanType(loan.loan_type_key, loan.loan_type_label)
 
   if (loan.status === "rejected_fd") {
     // Funeral, Repair, and Issuance loans must never receive a rejection memo —
@@ -217,8 +219,15 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
       paragraphs: [
         `We refer to your loan application dated ${fmtDate(loan.hr_forwarded_at)} on the above subject and wish to inform you that HR has prepared your loan terms and forwarded your request to Director HR for final decision.`,
         `Proposed Disbursement Date: ${fmtDate(loan.disbursement_date)}`,
-        `Proposed Recovery Start Date: ${fmtDate(loan.recovery_start_date)}`,
-        `Proposed Recovery Duration: ${loan.recovery_months || "TBD"} month(s)`,
+        ...(isFuneralLoan
+          ? ["Repayment: Not required. No monthly salary deduction applies."]
+          : [
+              `Proposed Recovery Start Date: ${fmtDate(loan.recovery_start_date)}`,
+              `Proposed Recovery Duration: ${loan.recovery_months || "TBD"} month(s)`,
+            ]),
+        ...(loan.loan_type_key === "salary_advance" && loan.basic_salary
+          ? [`Verified Basic Salary: GHc ${fmtAmount(loan.basic_salary)}`]
+          : []),
         ...(cleanedHrNote ? [`HR Note: ${cleanedHrNote}`] : []),
         "You will receive a final memo once Director HR concludes review.",
         "You can count on our co-operation.",
@@ -236,7 +245,12 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
     subject: `APPLICATION FOR ${String(loan.loan_type_label || "LOAN").toUpperCase()}`,
     paragraphs: [
       `We refer to your loan application dated ${fmtDate(loan.created_at)} on the above subject and wish to inform you that, Management has given approval for you to be granted a ${loan.loan_type_label || "Loan"} of ${amount}.`,
-      `The loan would be recovered in ${loan.recovery_months || "TBD"} Equal Monthly Instalment from your salary effective, ${recovStart}.`,
+      ...(isFuneralLoan
+        ? ["This funeral support does not require repayment or monthly salary deductions."]
+        : [`The loan would be recovered in ${loan.recovery_months || "TBD"} Equal Monthly Instalment from your salary effective, ${recovStart}.`]),
+      ...(loan.loan_type_key === "salary_advance" && loan.basic_salary
+        ? [`Verified Basic Salary: GHc ${fmtAmount(loan.basic_salary)}.`]
+        : []),
       `By a copy of this letter, the ${memoCopyRecipient} has been advised to release the said amount to you effective, ${disbMonth}.`,
       "You can count on our co-operation.",
     ],

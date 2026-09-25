@@ -5,6 +5,7 @@ import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { isSchemaIssue, normalizeRole, requestIsEditable } from "@/lib/loan-workflow"
 import { getNextQccReference } from "@/lib/reference-number"
 import { getAssignmentGuidance, resolveStaffAssignments } from "@/lib/hr-workflow"
+import { isLoanRepaymentOutstanding } from "@/lib/loan-clearance"
 
 const LOAN_REQUEST_SUBMISSION_ENABLED = true
 
@@ -81,18 +82,28 @@ async function checkForActiveLoanOfSameType(
   // This allows staff to request different loan types while having an active loan
   let query = admin
     .from("loan_requests")
-.select("id, status, request_number, loan_type_label, loan_type_key")
-  .eq("user_id", userId)
-  .eq("loan_type_key", loanType)
-    .in("status", ["pending_hod", "awaiting_hr_terms", "awaiting_committee", "staff_receiving_funds", "partially_recovered", "approved_director", "hod_approved", "sent_to_accounts"])
+    .select("id, status, request_number, loan_type_label, loan_type_key, repayment_status")
+    .eq("user_id", userId)
+    .eq("loan_type_key", loanType)
+    .in("status", [
+      "pending_hod",
+      "awaiting_hr_terms",
+      "awaiting_committee",
+      "staff_receiving_funds",
+      "partially_recovered",
+      "approved_director",
+      "hod_approved",
+      "sent_to_accounts",
+      "payment_completed",
+    ])
     .order("created_at", { ascending: false })
 
   if (excludeId) query = query.neq("id", excludeId)
 
-  const { data, error } = await query.limit(5)
+  const { data, error } = await query.limit(20)
   if (error) return null
 
-  const rows = data || []
+  const rows = (data || []).filter((row: any) => isLoanRepaymentOutstanding(row))
   if (rows.length === 0) return null
 
   const activeLoan = rows[0]
@@ -604,7 +615,7 @@ export async function PUT(request: NextRequest) {
 
     const incomingSupportDoc = supporting_document_url ?? existing.supporting_document_url ?? null
 
-    let updatePayload: any = {
+    const updatePayload: any = {
       requested_amount: Number(requested_amount || 0) || null,
       reason: normalizedReason || null,
       supporting_document_url: incomingSupportDoc,

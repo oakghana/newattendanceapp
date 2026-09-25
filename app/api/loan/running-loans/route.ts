@@ -27,6 +27,18 @@ const ALLOWED_ROLES = new Set([
   "committee",
 ])
 
+const RUNNING_LOAN_STATUSES = [
+  "hod_approved",
+  "sent_to_accounts",
+  "approved_director",
+  "awaiting_committee",
+  "awaiting_hr_terms",
+  "awaiting_director_hr",
+  "staff_receiving_funds",
+  "partially_recovered",
+  "payment_completed",
+]
+
 export async function GET() {
   try {
     const { user } = await createClientAndGetUser()
@@ -76,15 +88,15 @@ export async function GET() {
     const { data: loans, error: loansError } = await admin
       .from("loan_requests")
       .select("*")
-      // Start with All Loans, then keep only MD-approved loans with a confirmed disbursement.
-      .in("status", ["hod_approved", "sent_to_accounts", "approved_director", "awaiting_committee", "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered"])
+      // Include imported active and completed loans so historical records remain visible.
+      .in("status", RUNNING_LOAN_STATUSES)
       .not("md_approved_at", "is", null)
       .not("disbursement_date", "is", null)
       .order("created_at", { ascending: false })
     if (loansError) throw loansError
 
     const confirmedLoans = (loans || []).filter((loan: any) => {
-      return Boolean(loan.md_approved_at && loan.disbursement_date) && ["hod_approved", "sent_to_accounts", "approved_director", "awaiting_committee", "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered"].includes(String(loan.status || ""))
+      return Boolean(loan.md_approved_at && loan.disbursement_date) && RUNNING_LOAN_STATUSES.includes(String(loan.status || ""))
     })
     const ids = confirmedLoans.map((loan) => loan.id)
     const staffIds = [...new Set(confirmedLoans.map((loan) => loan.staff_id || loan.user_id).filter(Boolean))]

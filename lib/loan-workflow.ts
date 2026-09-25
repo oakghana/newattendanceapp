@@ -33,6 +33,11 @@ export function isFdExemptLoanType(loanTypeKey: string | null | undefined, loanT
   return EXEMPT.test(key) || EXEMPT.test(label)
 }
 
+/** Funeral support is a grant and must never carry a salary-recovery schedule. */
+export function isFuneralLoanType(loanTypeKey: string | null | undefined, loanTypeLabel?: string | null): boolean {
+  return /funeral/.test(String(loanTypeKey || "").toLowerCase()) || /funeral/.test(String(loanTypeLabel || "").toLowerCase())
+}
+
 /** Coerce FD score from number | string safely. */
 export function coerceFdScore(score: number | string | null | undefined): number | null {
   if (typeof score === "number" && Number.isFinite(score)) return score

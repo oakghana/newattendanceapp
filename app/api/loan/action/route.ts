@@ -16,6 +16,7 @@ import {
   canDoHodReview,
   canDoHrOffice,
   canDoLoanOffice,
+  isFuneralLoanType,
   normalizeRole,
 } from "@/lib/loan-workflow"
 import { createMemoToken } from "@/lib/secure-memo"
@@ -126,6 +127,7 @@ async function getDirectorSavedSignature(admin: any, userId: string) {
 }
 
 function buildAutoMemo(req: any) {
+  const isFuneralLoan = isFuneralLoanType(req.loan_type_key, req.loan_type_label)
   return [
     "QUALITY CONTROL COMPANY LIMITED",
     "HUMAN RESOURCES DEPARTMENT",
@@ -141,21 +143,30 @@ function buildAutoMemo(req: any) {
     ? [`Basic Salary: GHc ${Number(req.basic_salary).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} × ${req.salary_advance_multiplier} month(s)`]
     : []),
   `Disbursement Date: ${req.disbursement_date || "TBD"}`,
-    `Recovery Start Date: ${req.recovery_start_date || "TBD"}`,
-  `Deduction Period: ${req.deduction_period_months || req.recovery_months || "TBD"} month(s)`,
+  ...(isFuneralLoan
+    ? ["This funeral support does not require repayment or monthly salary deductions."]
+    : [
+        `Recovery Start Date: ${req.recovery_start_date || "TBD"}`,
+        `Deduction Period: ${req.deduction_period_months || req.recovery_months || "TBD"} month(s)`,
+      ]),
   "",
     "Please contact HR/Accounts for processing and disbursement instructions.",
   ].join("\n")
 }
 
 function buildHrTermsMemo(req: any, disbursementDate: string, recoveryStartDate: string, recoveryMonths: number, note?: string | null) {
+  const isFuneralLoan = isFuneralLoanType(req.loan_type_key, req.loan_type_label)
   return [
     `Reference: ${memoReference(req)}`,
     "Loan Terms Set by HR Office",
     "",
     `Disbursement Date: ${disbursementDate}`,
-    `Recovery Start Date: ${recoveryStartDate}`,
-  `Recovery Duration: ${req.deduction_period_months || recoveryMonths} month(s)`,
+  ...(isFuneralLoan
+    ? ["Repayment: Not required. No monthly salary deduction applies."]
+    : [
+        `Recovery Start Date: ${recoveryStartDate}`,
+        `Recovery Duration: ${req.deduction_period_months || recoveryMonths} month(s)`,
+      ]),
   ...(req.loan_type_key === "salary_advance" && req.salary_advance_amount
     ? [`Approved Salary Advance: GHc ${Number(req.salary_advance_amount).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`]
     : []),
@@ -369,6 +380,13 @@ export async function POST(request: NextRequest) {
       update.loan_office_reviewer_id = user.id
       update.loan_office_note = note
       if (body.memo_cc !== undefined) update.memo_cc = String(body.memo_cc || "").trim() || null
+      if (req.loan_type_key === "salary_advance") {
+        const basicSalary = Number(body.basic_salary)
+        if (action === "loan_office_forward" && (!Number.isFinite(basicSalary) || basicSalary <= 0)) {
+          return NextResponse.json({ error: "A verified basic salary is required before forwarding a salary advance to Accounts." }, { status: 400 })
+        }
+        if (Number.isFinite(basicSalary) && basicSalary > 0) update.basic_salary = basicSalary
+      }
 
       if (action === "loan_office_update_request") {
         toStatus = req.status
@@ -531,16 +549,21 @@ export async function POST(request: NextRequest) {
       const normalizedRecoveryMonths = Number.isFinite(recoveryMonths) && recoveryMonths > 0 ? Math.trunc(recoveryMonths) : null
       const deductionPeriodMonths = Number(body.deduction_period_months)
       const normalizedDeductionPeriodMonths = Number.isFinite(deductionPeriodMonths) && deductionPeriodMonths > 0 ? Math.trunc(deductionPeriodMonths) : null
+      const isFuneralLoan = isFuneralLoanType(req.loan_type_key, req.loan_type_label)
 
-      if (!disbursementDate || !recoveryStartDate || normalizedRecoveryMonths === null) {
-        return NextResponse.json({ error: "disbursement_date, recovery_start_date, and valid recovery_months are required" }, { status: 400 })
+      if (!disbursementDate || (!isFuneralLoan && (!recoveryStartDate || normalizedRecoveryMonths === null))) {
+        return NextResponse.json({ error: isFuneralLoan ? "disbursement_date is required" : "disbursement_date, recovery_start_date, and valid recovery_months are required" }, { status: 400 })
       }
 
       toStatus = "awaiting_director_hr"
       update.status = toStatus
       update.hr_officer_id = user.id
       update.hr_note = note
-      if (req.loan_type_key === "salary_advance") {
+      if (isFuneralLoan) {
+        update.recovery_months = null
+        update.recovery_start_date = null
+        update.deduction_period_months = null
+      } else if (req.loan_type_key === "salary_advance") {
         const checkedMonths = clampSalaryAdvanceRecoveryMonths(req.loan_type_key, normalizedRecoveryMonths)
         if (checkedMonths === null) {
           return NextResponse.json(
@@ -552,6 +575,18 @@ export async function POST(request: NextRequest) {
       } else {
         update.recovery_months = normalizedRecoveryMonths
       }
+      if (req.loan_type_key === "salary_advance") {
+        const basicSalary = Number(body.basic_salary)
+        if (!Number.isFinite(basicSalary) || basicSalary <= 0) {
+          return NextResponse.json({ error: "A verified basic salary is required for salary advance requests." }, { status: 400 })
+        }
+        update.basic_salary = basicSalary
+        const multiplier = Number(req.salary_advance_multiplier || update.recovery_months || 0)
+        if (Number.isFinite(multiplier) && multiplier > 0) {
+          update.salary_advance_amount = basicSalary * Math.trunc(multiplier)
+          update.requested_amount = update.salary_advance_amount
+        }
+      }
       // Only validate reference number if explicitly provided and non-empty
       const refInput = String(body.reference_number || "").trim()
       if (refInput) {
@@ -562,8 +597,10 @@ export async function POST(request: NextRequest) {
         update.reference_number = normalizedReference
       }
       update.disbursement_date = disbursementDate
-      update.recovery_start_date = recoveryStartDate
-      if (normalizedDeductionPeriodMonths !== null) update.deduction_period_months = normalizedDeductionPeriodMonths
+      if (!isFuneralLoan) {
+        update.recovery_start_date = recoveryStartDate
+        if (normalizedDeductionPeriodMonths !== null) update.deduction_period_months = normalizedDeductionPeriodMonths
+      }
       update.hr_forwarded_at = new Date().toISOString()
       if (body.memo_cc) update.memo_cc = body.memo_cc
       const hrDirectorLetter = String(body.director_letter || "").trim()
@@ -604,13 +641,16 @@ export async function POST(request: NextRequest) {
       }
 
       // Notify staff that terms are set and awaiting Director HR
-      const hrMemo = buildHrTermsMemo(req, disbursementDate, recoveryStartDate, recoveryMonths, note)
+      const memoRequest = { ...req, ...update }
+      const hrMemo = buildHrTermsMemo(memoRequest, disbursementDate, recoveryStartDate, recoveryMonths, note)
       const hrMemoPath = buildMemoPath(req.id, req.user_id)
       await notifyUsers(
         admin,
         [req.user_id],
         "Loan Terms Set — Pending Director HR Approval",
-        `Your request ${req.request_number} terms have been set by HR Office (Disbursement: ${disbursementDate}; Recovery Start: ${recoveryStartDate}; ${recoveryMonths} months) and forwarded to Director HR for final approval.`,
+        isFuneralLoan
+          ? `Your funeral support request ${req.request_number} has been set for disbursement on ${disbursementDate} with no repayment or monthly salary deduction, and forwarded to Director HR for final approval.`
+          : `Your request ${req.request_number} terms have been set by HR Office (Disbursement: ${disbursementDate}; Recovery Start: ${recoveryStartDate}; ${recoveryMonths} months) and forwarded to Director HR for final approval.`,
         "loan_hr_terms_set",
         { request_id: req.id, memo: hrMemo, memo_path: hrMemoPath },
       )
@@ -765,7 +805,8 @@ export async function POST(request: NextRequest) {
       update.director_signature_mode = savedSignature?.mode || "typed"
       update.director_signature_text = savedSignature?.text || directorName
       update.director_signature_data_url = savedSignature?.dataUrl || null
-      const autoMemo = decision === "approve" ? buildAutoMemo(req) : null
+      const approvedRequest = { ...req, ...update }
+      const autoMemo = decision === "approve" ? buildAutoMemo(approvedRequest) : null
       update.director_letter = directorLetter || autoMemo
       if (isHrExecutiveStage && !String(req.director_letter_original || "").trim()) {
         update.director_letter_original = String(req.director_letter || directorLetter || autoMemo || "").trim() || null
@@ -806,7 +847,9 @@ export async function POST(request: NextRequest) {
           [req.user_id],
           decision === "approve" ? "Final Loan Approval" : "Loan Request Declined",
           decision === "approve"
-            ? `Your request ${req.request_number} is fully approved. Disbursement: ${req.disbursement_date || "TBD"}; Recovery starts: ${req.recovery_start_date || "TBD"}; Duration: ${req.recovery_months || "TBD"} months.`
+            ? isFuneralLoanType(req.loan_type_key, req.loan_type_label)
+              ? `Your funeral support request ${req.request_number} is fully approved. Disbursement: ${req.disbursement_date || "TBD"}. No repayment or monthly salary deduction applies.`
+              : `Your request ${req.request_number} is fully approved. Disbursement: ${req.disbursement_date || "TBD"}; Recovery starts: ${req.recovery_start_date || "TBD"}; Duration: ${req.recovery_months || "TBD"} months.`
             : `Your request ${req.request_number} was declined.${note ? ` Reason: ${note}` : ""}`,
           decision === "approve" ? "loan_final_approved" : "loan_final_rejected",
           {
@@ -970,6 +1013,7 @@ export async function POST(request: NextRequest) {
 
       update.loan_office_payment_completed_by = user.id
       update.loan_office_payment_completed_at = new Date().toISOString()
+      update.repayment_status = "completed"
       toStatus = "payment_completed"
       update.status = toStatus
 
