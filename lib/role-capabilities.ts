@@ -185,6 +185,7 @@ export function canManageOwnSignature(role?: string | null): boolean {
     [
       "department_head",
       "hod",
+      "accounts_executive",
       "transport_manager",
       "regional_manager",
       "managing_director",

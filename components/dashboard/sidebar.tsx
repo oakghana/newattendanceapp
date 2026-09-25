@@ -212,7 +212,7 @@ const navigationItems = [
     title: "Defaulters",
     href: "/dashboard/defaulters",
     icon: AlertCircle,
-    roles: ["admin", "department_head"],
+    roles: ["admin", "department_head", "accounts_executive"],
     category: "admin",
   },
   {
