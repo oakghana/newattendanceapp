@@ -391,6 +391,21 @@ function fmtAmount(n?: number | null) {
   return (Number(n || 0)).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+function getSalaryAdvanceTerms(row: LoanRequest) {
+  const fdDetails = String(row.fd_note || "")
+  const consolidatedSalary = fdDetails.match(/Consolidated Monthly Salary:\s*(?:GHc|GHS|₵)\s*([\d,]+(?:\.\d+)?)/i)?.[1]
+  const basicSalary = Number(
+    consolidatedSalary?.replace(/,/g, "") || row.basic_salary || 0,
+  )
+  const months = Number(
+    row.salary_advance_multiplier || row.deduction_period_months || row.repayment_duration_months || row.recovery_months || 0,
+  )
+  const amount = basicSalary > 0 && months > 0
+    ? Math.round(basicSalary * Math.trunc(months) * 100) / 100
+    : Number(row.salary_advance_amount || row.fixed_amount || row.requested_amount || 0)
+  return { basicSalary, months: Math.trunc(months), amount }
+}
+
 function toIsoDate(value: Date) {
   return value.toISOString().slice(0, 10)
 }
@@ -828,9 +843,8 @@ function buildDirectorAutoMemoDraft(
   signer?: MemoSigner,
 ) {
   const isSalaryAdvance = row.loan_type_key === "salary_advance" || String(row.loan_type_label || "").toLowerCase().includes("salary advance")
-  const calculatedSalaryAdvanceAmount = isSalaryAdvance && row.salary_advance_amount != null
-    ? Number(row.salary_advance_amount)
-    : null
+  const salaryTerms = isSalaryAdvance ? getSalaryAdvanceTerms(row) : null
+  const calculatedSalaryAdvanceAmount = salaryTerms?.amount ?? null
   const amount = calculatedSalaryAdvanceAmount ?? row.fixed_amount ?? row.requested_amount ?? 0
   const amtNum = Number(amount)
   const amtFormatted = amtNum.toLocaleString("en-GH", { minimumFractionDigits: 2 })
@@ -849,8 +863,9 @@ function buildDirectorAutoMemoDraft(
   const disbursementMonth = fmtMemoMonth(row.disbursement_date)
   const submittedDate = (row.submitted_at || row.created_at || today).toString().slice(0, 10)
   const months = row.deduction_period_months || row.recovery_months || "—"
-  const salaryAdvanceLine = isSalaryAdvance && row.basic_salary && row.salary_advance_multiplier
-    ? `Basic Salary: GHc ${fmtAmount(row.basic_salary)} × ${row.salary_advance_multiplier} month(s) = GHc ${fmtAmount(amount)}`
+  const salaryAdvanceLine = isSalaryAdvance && salaryTerms && salaryTerms.basicSalary > 0 && salaryTerms.months > 0
+  ? `Approved Monthly Salary: GHc ${fmtAmount(salaryTerms.basicSalary)} × ${salaryTerms.months} month(s) = Total Salary Advance: GHc ${fmtAmount(amount)}`
+
     : null
   const signerName = String(signer?.name || "HR EXECUTIVE").trim().toUpperCase()
   const signerPosition = String(signer?.position || "HR EXECUTIVE").trim().toUpperCase()
@@ -7536,8 +7551,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {actionModal.row && (
               <DialogDescription>
                 <span className="font-semibold">{actionModal.row.request_number}</span> — {actionModal.row.loan_type_label} | {actionModal.row.staff_full_name || actionModal.row.staff_number || "Staff"}
-                {actionModal.row.staff_rank ? ` | ${actionModal.row.staff_rank}` : ""}
-                {" | GHc "}{fmtAmount(actionModal.row.fixed_amount || actionModal.row.requested_amount)}
+  {actionModal.row.staff_rank ? ` | ${actionModal.row.staff_rank}` : ""}
+  {" | GHc "}{fmtAmount(actionModal.row.loan_type_key === "salary_advance" ? getSalaryAdvanceTerms(actionModal.row).amount : (actionModal.row.fixed_amount || actionModal.row.requested_amount))}
+
               </DialogDescription>
             )}
           </DialogHeader>
@@ -8008,11 +8024,11 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 )}
 
                 {actionModal.row?.loan_type_key === "salary_advance" && (() => {
-                  const basicSalary = Number(actionModal.row.basic_salary || 0)
-                  const requestedMonths = Number(actionModal.row.salary_advance_multiplier || actionModal.row.deduction_period_months || actionModal.row.recovery_months || 0)
-                  const approvedAmount = basicSalary > 0 && requestedMonths > 0
-                    ? basicSalary * Math.trunc(requestedMonths)
-                    : Number(actionModal.row.salary_advance_amount || actionModal.row.fixed_amount || actionModal.row.requested_amount || 0)
+  const salaryTerms = getSalaryAdvanceTerms(actionModal.row)
+  const basicSalary = salaryTerms.basicSalary
+  const requestedMonths = salaryTerms.months
+  const approvedAmount = salaryTerms.amount
+
                   const requestedDays = actionModal.row.requested_days || actionModal.row.number_of_days_requested
                   return (
                     <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 shadow-sm">
