@@ -355,14 +355,15 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
     const tick = () => {
       if (!baseServerMs) return
       const elapsedMs = performance.now() - basePerfMs
-      setGhanaTime(formatAccraTime(baseServerMs + elapsedMs))
+      const nextTime = formatAccraTime(baseServerMs + elapsedMs)
+      setGhanaTime((currentTime) => currentTime === nextTime ? currentTime : nextTime)
     }
 
     void syncServerTime()
     const tickId = setInterval(tick, 60_000)
     const syncId = setInterval(() => {
       void syncServerTime()
-    }, 60_000)
+    }, 5 * 60_000)
 
     return () => {
       clearInterval(tickId)
