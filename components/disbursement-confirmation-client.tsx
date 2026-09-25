@@ -118,7 +118,7 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
     setGeneratingId(loan.id)
     try {
       const duration = loan.recovery_months || loan.repayment_duration_months || 12
-      const startDate = loan.recovery_start_date || loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at
+      const startDate = loan.recovery_start_date || loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || new Date().toISOString().slice(0, 10)
       const response = await fetch('/api/loan/repayment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ loanRequestId: loan.id, startDate, durationMonths: duration }) })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Unable to generate repayment schedule')
