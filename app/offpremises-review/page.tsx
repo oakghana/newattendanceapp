@@ -20,7 +20,7 @@ export default async function OffPremisesReviewPage() {
     .eq("id", user.id)
     .single()
 
-  if (!profile || !["admin", "it-admin", "department_head", "regional_manager"].includes(profile.role)) {
+  if (!profile || !["admin", "it-admin", "department_head", "regional_manager", "accounts_executive"].includes(String(profile.role || "").toLowerCase())) {
     redirect("/dashboard")
   }
 

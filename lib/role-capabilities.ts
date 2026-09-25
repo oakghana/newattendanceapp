@@ -94,7 +94,7 @@ export function isDualTransportHod(
 
 export function canManageTransport(role?: string | null): boolean {
   const normalizedRole = normalizeAppRole(role)
-  return isRegionalHrRole(role) || isRegionalManagerRole(role) || isChiefDriverRole(role) || isTransportManagerRole(role) || isAdminRole(role) || ["it-admin", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
+  return isRegionalHrRole(role) || isRegionalManagerRole(role) || isChiefDriverRole(role) || isTransportManagerRole(role) || isAdminRole(role) || ["it-admin", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "accounts_executive"].includes(normalizedRole)
 }
 
 /** Driver license register edit/verify: Transport Manager (nationwide) and Chief Driver (their location/region) only.

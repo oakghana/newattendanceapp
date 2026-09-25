@@ -40,6 +40,6 @@ export default async function NewNonRegionalRequisitionPage() {
   const isNonRegionalStaff = ["staff", "contract", "audit_staff"].includes(normalizedRole)
   if (isNonRegionalStaff && !isExplicitNonRegionalLocation) redirect("/dashboard/transport")
   if (isNonRegionalStaff && !isLinkedToHod) redirect("/dashboard/transport")
-  if (!isAssignedHod && !isLinkedToHod && !["staff", "contract", "audit_staff", "hr_records", "department_head", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "admin", "it-admin"].includes(normalizedRole)) redirect("/dashboard/transport/nonregional")
+  if (!isAssignedHod && !isLinkedToHod && !["staff", "contract", "audit_staff", "hr_records", "department_head", "accounts_executive", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "admin", "it-admin"].includes(normalizedRole)) redirect("/dashboard/transport/nonregional")
   return <main className="mx-auto w-full max-w-4xl"><NonRegionalRequisitionForm /></main>
 }

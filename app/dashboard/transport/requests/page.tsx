@@ -23,7 +23,7 @@ export default async function TransportRequestsPage() {
   const isRegionalDriver = isRegionalDriverRole(profile.role)
   // Non-regional drivers only ever see their nonregional trips; regional drivers stay here (scoped to their own assigned trips below).
   if (normalizedRole === "driver" && !isRegionalDriver) redirect("/dashboard/transport/nonregional")
-  const canCreate = isChiefDriverRole(profile.role) || isRegionalHrRole(profile.role) || ["department_head", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
+  const canCreate = isChiefDriverRole(profile.role) || isRegionalHrRole(profile.role) || ["department_head", "accounts_executive", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
   const canAct = isRegionalManagerRole(profile.role) || isChiefDriverRole(profile.role)
   const canHrRecords = ["hr_records", "hr_records_officer", "hr_records_manager"].includes(normalizedRole)
   const canManagingDirector = normalizedRole === "managing_director"
