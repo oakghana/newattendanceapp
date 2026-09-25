@@ -35,9 +35,10 @@ export async function POST(request: NextRequest) {
     const duration = durationMonths || 12
     const start = startDate ? new Date(startDate) : new Date()
 
-    const { data: loan, error: loanError } = await admin.from("loan_requests").select("id, status, md_approved_at, disbursement_date").eq("id", loanRequestId).maybeSingle()
+    const { data: loan, error: loanError } = await admin.from("loan_requests").select("id, status, md_approved_at, disbursement_date, recovery_start_date, recovery_months, repayment_duration_months, hod_review_note").eq("id", loanRequestId).maybeSingle()
     if (loanError || !loan) return NextResponse.json({ error: "Loan request not found" }, { status: 404 })
-    if (!loan.md_approved_at || !loan.disbursement_date || !["partially_recovered", "payment_completed"].includes(String(loan.status))) {
+    const isLegacyImported = String(loan.hod_review_note || "").toLowerCase().startsWith("bulk imported by administrator")
+    if (!isLegacyImported && (!loan.md_approved_at || !loan.disbursement_date || !["partially_recovered", "payment_completed"].includes(String(loan.status)))) {
       return NextResponse.json({ error: "Repayment schedules are available only for MD-approved loans confirmed as disbursed by Accounts." }, { status: 409 })
     }
 

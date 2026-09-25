@@ -387,6 +387,7 @@ export async function POST(request: NextRequest) {
         requires_fd_check: loanType.requires_fd_check !== false,
         status: importStatus,
         hod_reviewer_id: hodReviewerId,
+        // This marker is also used by memo generation to preserve the historical-import audit footnote.
         hod_review_note: importStatus === "payment_completed"
           ? "Bulk imported by Administrator — historical loan imported as fully cleared."
           : "Bulk imported by Administrator — historical approved/disbursed loan imported for repayment tracking.",

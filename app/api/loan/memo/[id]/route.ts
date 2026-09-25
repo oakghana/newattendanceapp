@@ -77,7 +77,7 @@ function fmtMemoMonth(value?: string | null) {
   if (!value) return "TBD"
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return String(value)
-  return date.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
+  return date.toLocaleDateString("en-GB", { month: "long" })
 }
 
 function extractMemoCopyRecipient(note?: string | null) {
@@ -218,12 +218,12 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
       subject: `APPLICATION FOR ${String(loan.loan_type_label || "LOAN").toUpperCase()} (TERMS SET)`,
       paragraphs: [
         `We refer to your loan application dated ${fmtDate(loan.hr_forwarded_at)} on the above subject and wish to inform you that HR has prepared your loan terms and forwarded your request to Director HR for final decision.`,
-        `Proposed Disbursement Date: ${fmtDate(loan.disbursement_date)}`,
+        `Proposed Disbursement Date: ${fmtMemoMonth(loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || loan.md_approved_at)}`,
         ...(isFuneralLoan
           ? ["Repayment: Not required. No monthly salary deduction applies."]
           : [
-              `Proposed Recovery Start Date: ${fmtDate(loan.recovery_start_date)}`,
-              `Proposed Recovery Duration: ${loan.recovery_months || "TBD"} month(s)`,
+              `Proposed Recovery Start Date: ${fmtMemoMonth(loan.recovery_start_date || loan.next_payment_due || loan.repayment_start_date)}`,
+              `Proposed Recovery Duration: ${loan.recovery_months || loan.recovery_period_months || loan.recovery_duration_months || "TBD"} month(s)`,
             ]),
         ...(loan.loan_type_key === "salary_advance" && loan.basic_salary
           ? [`Verified Basic Salary: GHc ${fmtAmount(loan.basic_salary)}`]
@@ -235,8 +235,14 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
     }
   }
 
-  const disbMonth = fmtMemoMonth(loan.disbursement_date)
-  const recovStart = fmtMemoMonth(loan.recovery_start_date)
+  // Use the administrator-maintained Running Loans values first. For older records
+  // that predate the override table, use the confirmed disbursement and repayment
+  // schedule dates before displaying TBD.
+  const maintainedDisbursementDate = loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || loan.md_approved_at
+  const maintainedRecoveryStartDate = loan.recovery_start_date || loan.next_payment_due || loan.repayment_start_date
+  const maintainedRecoveryMonths = loan.recovery_months || loan.recovery_period_months || loan.recovery_duration_months
+  const disbMonth = fmtMemoMonth(maintainedDisbursementDate)
+  const recovStart = fmtMemoMonth(maintainedRecoveryStartDate)
   const memoCopyRecipient =
     extractMemoCopyRecipient(loan.hr_note) ||
     extractMemoCopyRecipient(loan.loan_office_note) ||
@@ -247,7 +253,7 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
       `We refer to your loan application dated ${fmtDate(loan.created_at)} on the above subject and wish to inform you that, Management has given approval for you to be granted a ${loan.loan_type_label || "Loan"} of ${amount}.`,
       ...(isFuneralLoan
         ? ["This funeral support does not require repayment or monthly salary deductions."]
-        : [`The loan would be recovered in ${loan.recovery_months || "TBD"} Equal Monthly Instalment from your salary effective, ${recovStart}.`]),
+        : [`The loan would be recovered in ${maintainedRecoveryMonths || "TBD"} Equal Monthly Instalment from your salary effective, ${recovStart}.`]),
       ...(loan.loan_type_key === "salary_advance" && loan.basic_salary
         ? [`Verified Basic Salary: GHc ${fmtAmount(loan.basic_salary)}.`]
         : []),
@@ -299,6 +305,15 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
   if (profileError || !profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
   if (loanError || !loan) return NextResponse.json({ error: "Loan not found" }, { status: 404 })
+
+  // Always resolve the latest administrator corrections at memo-render time.
+  // This prevents previously generated memo values from becoming stale after a running-loan edit.
+  const { data: operationalOverride } = await admin
+    .from("loan_admin_operational_overrides")
+    .select("paid_to_date, outstanding_balance, next_payment_due, next_payment_amount, expected_completion_date, recovery_start_date, recovery_months, disbursement_date")
+    .eq("loan_request_id", loanId)
+    .maybeSingle()
+  if (operationalOverride) Object.assign(loan, Object.fromEntries(Object.entries(operationalOverride).filter(([, value]) => value !== null && value !== "")))
   const postManagingDirectorStatuses = new Set(["approved_director", "md_approved", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
   if (!postManagingDirectorStatuses.has(String((loan as any).status || "")) || !(loan as any).md_approved_at) {
     return NextResponse.json({ error: "This loan cannot be downloaded until it has been approved by the Managing Director." }, { status: 409 })
@@ -734,6 +749,27 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       doc.text(entry, marginLeft + 10, y + (i + 1) * 4.5)
     })
     y += (ccList.length + 1) * 4.5 + 4
+
+    // Imported approvals are retained for record purposes and must be clearly distinguished
+    // from loans approved through the current portal workflow.
+    const isImportedHistoricalLoan = Boolean(loan.is_imported) || String(loan.hod_review_note || "").toLowerCase().startsWith("bulk imported by administrator")
+    if (isImportedHistoricalLoan) {
+      const importedFootnote = "Administrative note: This loan was approved previously through an external/legacy process and imported into the portal for record-keeping and archive purposes. This memo is generated for documentation only and does not represent a new approval."
+      const footnoteLines = doc.splitTextToSize(importedFootnote, contentWidth)
+      if (y + footnoteLines.length * 4.2 + 8 > pageHeight - 16) {
+        doc.addPage()
+        y = 24
+      }
+      doc.setFillColor(248, 250, 252)
+      doc.setDrawColor(148, 163, 184)
+      doc.setLineWidth(0.3)
+      doc.roundedRect(marginLeft, y - 3.5, contentWidth, footnoteLines.length * 4.2 + 7, 1.5, 1.5, "FD")
+      doc.setFont("helvetica", "italic")
+      doc.setFontSize(7.8)
+      doc.setTextColor(71, 85, 105)
+      doc.text(footnoteLines, marginLeft + 3, y + 1)
+      y += footnoteLines.length * 4.2 + 10
+    }
 
     // ─── MD Approval Stamp — Professional Square Stamp with MD Signature ─
     // Only show if MD has ACTUALLY approved (md_approved_at is populated)

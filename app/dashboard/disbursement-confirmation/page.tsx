@@ -126,6 +126,43 @@ export default async function DisbursementConfirmationPage() {
 
   // Collect all user_ids and staff_numbers to batch resolve profiles
   const rawLoans = loans || []
+
+  // Historical imports already represent money received. Normalize them into the
+  // confirmed workflow and create schedules immediately so they never need a
+  // manual confirmation or regeneration step.
+  const legacyLoans = rawLoans.filter((loan: any) =>
+    String(loan.hod_review_note || "").toLowerCase().startsWith("bulk imported by administrator") &&
+    !loan.repayment_plan_generated_at
+  )
+  if (legacyLoans.length > 0) {
+    const nowIso = new Date().toISOString()
+    await Promise.all(legacyLoans.map(async (loan: any) => {
+      const confirmedAt = loan.disbursement_date || loan.recovery_start_date || loan.created_at || nowIso
+      const durationMonths = Math.max(1, Math.trunc(Number(loan.recovery_months || loan.repayment_duration_months || 12)))
+      await admin.from("loan_requests").update({
+        status: "partially_recovered",
+        repayment_status: "active",
+        staff_receiving_funds_confirmed_at: confirmedAt,
+        staff_receiving_funds_confirmed_by: "Historical import — automatically confirmed",
+        repayment_duration_months: durationMonths,
+        updated_at: nowIso,
+      }).eq("id", loan.id)
+      const scheduleResult = await admin.rpc("generate_repayment_schedule", {
+        p_loan_request_id: loan.id,
+        p_start_date: loan.recovery_start_date || loan.disbursement_date || nowIso.slice(0, 10),
+        p_duration_months: durationMonths,
+      })
+      if (!scheduleResult.error) {
+        await admin.from("loan_requests").update({ repayment_plan_generated_at: nowIso }).eq("id", loan.id)
+      }
+      loan.status = "partially_recovered"
+      loan.repayment_status = "active"
+      loan.staff_receiving_funds_confirmed_at = confirmedAt
+      loan.staff_receiving_funds_confirmed_by = "Historical import — automatically confirmed"
+      loan.repayment_duration_months = durationMonths
+    }))
+  }
+
   const userIds = Array.from(new Set(rawLoans.map((l: any) => l.user_id).filter(Boolean))) as string[]
   const staffNumbers = Array.from(new Set(rawLoans.map((l: any) => l.staff_number).filter(Boolean))) as string[]
   const loanIds = rawLoans.map((l: any) => l.id)

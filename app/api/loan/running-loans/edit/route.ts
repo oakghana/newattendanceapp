@@ -30,11 +30,14 @@ export async function PATCH(request: NextRequest) {
       next_payment_due: body.nextPaymentDue || null,
       next_payment_amount: numberField(body.nextPaymentAmount, "Next payment amount"),
       expected_completion_date: body.expectedCompletionDate || null,
+      recovery_start_date: body.recoveryStartDate || null,
+      recovery_months: body.recoveryMonths == null || body.recoveryMonths === "" ? null : Math.trunc(Number(body.recoveryMonths)),
+      disbursement_date: body.disbursementDate || null,
       reason,
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     }
-    if (values.paid_to_date === undefined && values.outstanding_balance === undefined && values.next_payment_amount === undefined && !values.next_payment_due && !values.expected_completion_date) {
+    if (values.paid_to_date === undefined && values.outstanding_balance === undefined && values.next_payment_amount === undefined && !values.next_payment_due && !values.expected_completion_date && !values.disbursement_date && !values.recovery_start_date) {
       return NextResponse.json({ error: "At least one operational field must be supplied." }, { status: 400 })
     }
     const { data: loan } = await admin.from("loan_requests").select("id, status, fixed_amount, repayment_duration_months").eq("id", loanRequestId).maybeSingle()
