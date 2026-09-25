@@ -177,7 +177,7 @@ export function TransportWorkspace({
   const isBasicStaff = ["staff", "contract", "audit_staff"].includes(normalizedRole)
   const isNonRegionalWorkspaceRole = isNonRegionalLocation && !isRegionalOnlyWorkspace
   const isNonRegionalStaff = !isRegionalOnlyWorkspace && (isBasicStaff || isNonRegionalWorkspaceRole)
-  const isHeadOfficeRequester = isNonRegionalStaff || isActingHod
+  const isHeadOfficeRequester = !isRegionalOnlyWorkspace && (isNonRegionalStaff || isNonRegionalLocation || Boolean(requesterLocation.trim()))
   const canViewDriverLicense = isChiefDriver || isRegionalHr || isRegionalManager || isDriver || isTransportManager || canManage
   const canManageFleet = isManagingDirector || isChiefDriver || isRegionalHr || isRegionalManager || isTransportManager || canManage
   const [requestOpen, setRequestOpen] = useState(false)

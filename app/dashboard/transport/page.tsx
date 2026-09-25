@@ -50,6 +50,9 @@ export default async function TransportPage() {
     "awutu stores",
     "cocoa clinic",
   ].some((location) => preliminaryLocationName.includes(location))
+  const isHeadOfficeLocation = isExplicitNonRegionalLocation || Boolean(
+    locationName && !preliminaryLocationName.includes("regional") && !preliminaryLocationName.includes("district"),
+  )
   const isRegionalOrDistrictLinked = Boolean(
     !isExplicitNonRegionalLocation && (
       preliminaryLocationName.includes("regional") ||
@@ -254,7 +257,7 @@ export default async function TransportPage() {
       scopeLabel={scopeLabel}
       driverKind={isRegionalDriver ? "regional" : isNonRegionalDriver ? "nonregional" : undefined}
   isLinkedHod={isAssignedHod || isStaffLinkedToHod}
-  isNonRegionalLocation={isExplicitNonRegionalLocation}
+  isNonRegionalLocation={isHeadOfficeLocation}
   isChiefDriver={isChiefDriver}
     />
   )

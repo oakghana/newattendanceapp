@@ -14,6 +14,11 @@ const locations = new Set<string>(NON_REGIONAL_TRANSPORT_LOCATIONS)
 
 const VIEW_ROLES = new Set([
   "staff",
+  "accounts",
+  "accounts_executive",
+  "loan_office",
+  "hr_loan_office",
+  "accounts_loan_office",
   "hr",
   "hr_records",
   "department_head",
@@ -36,6 +41,11 @@ const VIEW_ROLES = new Set([
 
 const SUBMIT_ROLES = new Set([
   "staff",
+  "accounts",
+  "accounts_executive",
+  "loan_office",
+  "hr_loan_office",
+  "accounts_loan_office",
   "hr",
   "hr_records",
   "department_head",
@@ -263,7 +273,7 @@ export async function POST(request: Request) {
   const selectedSignature = hodWithSignature.find((item) => item.hod.id === selectedHod?.id)?.signature ?? null
   const hodId = selectedHod?.id ? String(selectedHod.id) : null
   let hodPrefillAuthorization: string | null = null
-  let hodSignatureDataUrl: string | null = selectedSignature
+  const hodSignatureDataUrl: string | null = selectedSignature
   if (selectedHod) {
     const hodName = [selectedHod.first_name, selectedHod.last_name].filter(Boolean).join(" ").trim()
     hodPrefillAuthorization = hodName ? `${hodName}${selectedHod.position ? ` — ${selectedHod.position}` : ""}`.toUpperCase() : null
