@@ -77,7 +77,7 @@ function fmtMemoMonth(value?: string | null) {
   if (!value) return "TBD"
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return String(value)
-  return date.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
+  return date.toLocaleDateString("en-GB", { month: "long" })
 }
 
 function extractMemoCopyRecipient(note?: string | null) {
@@ -218,11 +218,11 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
       subject: `APPLICATION FOR ${String(loan.loan_type_label || "LOAN").toUpperCase()} (TERMS SET)`,
       paragraphs: [
         `We refer to your loan application dated ${fmtDate(loan.hr_forwarded_at)} on the above subject and wish to inform you that HR has prepared your loan terms and forwarded your request to Director HR for final decision.`,
-        `Proposed Disbursement Date: ${fmtDate(loan.disbursement_date)}`,
+        `Proposed Disbursement Date: ${fmtMemoMonth(loan.disbursement_date)}`,
         ...(isFuneralLoan
           ? ["Repayment: Not required. No monthly salary deduction applies."]
           : [
-              `Proposed Recovery Start Date: ${fmtDate(loan.recovery_start_date)}`,
+              `Proposed Recovery Start Date: ${fmtMemoMonth(loan.recovery_start_date)}`,
               `Proposed Recovery Duration: ${loan.recovery_months || "TBD"} month(s)`,
             ]),
         ...(loan.loan_type_key === "salary_advance" && loan.basic_salary
