@@ -391,6 +391,11 @@ function fmtAmount(n?: number | null) {
   return (Number(n || 0)).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+function isSalaryAdvanceRequest(row: LoanRequest) {
+  const type = String(row.loan_type_key || row.loan_type_label || "").toLowerCase().replace(/[\s-]+/g, "_")
+  return type.includes("salary_advance") || (type.includes("salary") && type.includes("advance"))
+}
+
 function getSalaryAdvanceTerms(row: LoanRequest) {
   const fdDetails = String(row.fd_note || "")
   const consolidatedSalary = fdDetails.match(/Consolidated Monthly Salary:\s*(?:GHc|GHS|₵)\s*([\d,]+(?:\.\d+)?)/i)?.[1]
@@ -842,7 +847,7 @@ function buildDirectorAutoMemoDraft(
   currentHodProfile?: any,
   signer?: MemoSigner,
 ) {
-  const isSalaryAdvance = row.loan_type_key === "salary_advance" || String(row.loan_type_label || "").toLowerCase().includes("salary advance")
+  const isSalaryAdvance = isSalaryAdvanceRequest(row) || String(row.loan_type_label || "").toLowerCase().includes("salary advance")
   const salaryTerms = isSalaryAdvance ? getSalaryAdvanceTerms(row) : null
   const calculatedSalaryAdvanceAmount = salaryTerms?.amount ?? null
   const amount = calculatedSalaryAdvanceAmount ?? row.fixed_amount ?? row.requested_amount ?? 0
@@ -7552,7 +7557,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               <DialogDescription>
                 <span className="font-semibold">{actionModal.row.request_number}</span> — {actionModal.row.loan_type_label} | {actionModal.row.staff_full_name || actionModal.row.staff_number || "Staff"}
   {actionModal.row.staff_rank ? ` | ${actionModal.row.staff_rank}` : ""}
-  {" | GHc "}{fmtAmount(actionModal.row.loan_type_key === "salary_advance" ? getSalaryAdvanceTerms(actionModal.row).amount : (actionModal.row.fixed_amount || actionModal.row.requested_amount))}
+  {" | GHc "}{fmtAmount(isSalaryAdvanceRequest(actionModal.row) ? getSalaryAdvanceTerms(actionModal.row).amount : (actionModal.row.fixed_amount || actionModal.row.requested_amount))}
 
               </DialogDescription>
             )}
@@ -8023,7 +8028,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   </div>
                 )}
 
-                {actionModal.row?.loan_type_key === "salary_advance" && (() => {
+                {actionModal.row && isSalaryAdvanceRequest(actionModal.row) && (() => {
   const salaryTerms = getSalaryAdvanceTerms(actionModal.row)
   const basicSalary = salaryTerms.basicSalary
   const requestedMonths = salaryTerms.months
