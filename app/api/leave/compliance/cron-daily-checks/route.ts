@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     // ─── Step 1: Send annual leave reminders ───────────────────────────────
     const today = new Date()
     const currentYear = today.getFullYear()
-    const octoberFirst = new Date(currentYear, 9, 1)
+    const octoberFirst = new Date(currentYear, 9, 20)
     octoberFirst.setHours(0, 0, 0, 0)
     
     const reminderStart = new Date(octoberFirst)

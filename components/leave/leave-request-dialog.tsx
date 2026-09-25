@@ -303,7 +303,7 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
               <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold">Annual Leave Policy</p>
-                <p className="text-xs mt-1">Entitled: 30 days per leave year (2026). Submission deadline: First week of October. Minimum notice period: 2 weeks in advance.</p>
+                <p className="text-xs mt-1">Entitled: 30 days per leave year (2026). Submission deadline: 20th October. Minimum notice period: 2 weeks in advance.</p>
               </div>
             </div>
           )}

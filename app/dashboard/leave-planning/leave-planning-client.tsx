@@ -258,7 +258,7 @@ function getLeaveYearPeriodOptions(referenceDate: Date = new Date(), forwardCoun
 
 function isOctoberPlanningWindow(referenceDate: Date = new Date()) {
   // First week of October drives planning for the next leave cycle.
-  return referenceDate.getMonth() === 9 && referenceDate.getDate() <= 7
+  return referenceDate.getMonth() === 9 && referenceDate.getDate() <= 20
 }
 
 function getDefaultSelectedLeaveYearPeriod(referenceDate: Date = new Date()) {
