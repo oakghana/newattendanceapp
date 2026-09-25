@@ -203,11 +203,19 @@ export function HRLoanOfficeFDApproved() {
         // Refresh the loans list
         await fetchFdApprovedLoans()
       } else {
-        toast({ title: 'Error', description: data.error || 'Failed to push to HR Executive', variant: 'destructive' })
+        toast({
+          title: `Unable to push (${res.status})`,
+          description: [data.error, data.details].filter(Boolean).join(': ') || 'Failed to push to HR Executive',
+          variant: 'destructive',
+        })
       }
     } catch (error) {
       console.error('[v0] Error pushing to HR Executive:', error)
-      toast({ title: 'Error', description: 'Failed to push to HR Executive', variant: 'destructive' })
+      toast({
+        title: 'Unable to push to HR Executive',
+        description: error instanceof Error ? error.message : 'The request could not be completed. Please try again.',
+        variant: 'destructive',
+      })
     } finally {
       setPushing(false)
     }

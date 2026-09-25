@@ -56,12 +56,13 @@ export async function POST(request: NextRequest) {
 
     // Recompute Salary Advance from the verified basic salary and requested
     // multiplier so the handoff and memo never persist the loan-type default.
-    const loanType = String(loanRequest.loan_type_key || loanRequest.loan_type || loanRequest.loan_type_label || '').toLowerCase()
-    const basicSalary = Number(loanRequest.basic_salary)
+    const loanType = String(loanRequest.loan_type_key || loanRequest.loan_type || loanRequest.loan_type_label || '').toLowerCase().replace(/[\s-]+/g, '_')
+    const salaryFromFdNote = String(loanRequest.fd_note || '').match(/Consolidated Monthly Salary:\s*(?:GHc|GHS|₵)\s*([\d,]+(?:\.\d+)?)/i)?.[1]
+    const basicSalary = Number(salaryFromFdNote?.replace(/,/g, '') || loanRequest.basic_salary)
     const multiplier = Number(
       loanRequest.salary_advance_multiplier ?? loanRequest.deduction_period_months ?? loanRequest.repayment_duration_months ?? loanRequest.recovery_months,
     )
-    const isSalaryAdvance = loanType.includes('salary') && loanType.includes('advance')
+    const isSalaryAdvance = loanType.includes('salary_advance') || (loanType.includes('salary') && loanType.includes('advance'))
     const calculatedSalaryAdvance = isSalaryAdvance && Number.isFinite(basicSalary) && basicSalary > 0 && Number.isFinite(multiplier) && multiplier > 0
       ? Math.round(basicSalary * Math.trunc(multiplier) * 100) / 100
       : null
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest) {
         actor_role: role || 'hr_loan_office',
         action_key: 'pushed_to_hr_executive',
         from_status: 'pending_hr_loan_office',
-        to_status: 'awaiting_director_hr',
+        to_status: 'awaiting_hr_executives',
         note: `HR Loan Office pushed approved FD loan to HR Executive for signing and approval. Memo: ${memo}`,
       })
 
