@@ -1480,7 +1480,7 @@ export default function LoanAppPage() {
       normalizedRole === "accounts" ||
       (normalizedRole === "loan_office" && userDeptIsAccounts) ||
       (Boolean(p?.accounts) && !isAccountsExecutive)
-    if (isAccountsOffice) {
+    if (isAccountsOffice || isAccountsExecutive) {
       tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
       tabs.push({
         key: "fd-completed",

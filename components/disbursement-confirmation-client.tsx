@@ -104,7 +104,7 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-900">Disbursement Confirmation</h1>
-          <p className="text-slate-500 mt-2">Confirm staff have received their loan disbursements</p>
+          <p className="text-slate-500 mt-2">Confirm staff have received approved MD loans. Confirmation activates the repayment schedule and makes the loan available for repayment tracking.</p>
         </div>
 
         {/* Stats Cards */}

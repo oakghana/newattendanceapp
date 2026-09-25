@@ -3,10 +3,8 @@
 import { useMemo, useState } from "react"
 import useSWR from "swr"
 import * as XLSX from "xlsx"
-import { Download, FileSpreadsheet, FileText, Pencil, RefreshCw, Search } from "lucide-react"
+import { FileSpreadsheet, FileText, RefreshCw, Search } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -40,20 +38,12 @@ type LoanRow = {
   completed_payment_date?: string | null
   reapplication_eligible?: boolean
   repayment_status: string
-  staff?: { full_name?: string; first_name?: string; last_name?: string; employee_id?: string; staff_number?: string; department?: string; department_id?: string } | null
+  staff?: { full_name?: string; first_name?: string; last_name?: string; employee_id?: string; staff_number?: string; department?: string; department_id?: string; location_name?: string } | null
 }
 
 export function RunningLoansReport() {
   const { data, error, isLoading, mutate } = useSWR<{ data: LoanRow[]; generated_at: string }>("/api/loan/running-loans", fetcher)
   const [search, setSearch] = useState("")
-  const [editingLoan, setEditingLoan] = useState<LoanRow | null>(null)
-  const [fixedAmount, setFixedAmount] = useState("")
-  const [recoveryMonths, setRecoveryMonths] = useState("")
-  const [disbursementDate, setDisbursementDate] = useState("")
-  const [correctionNote, setCorrectionNote] = useState("")
-  const [savingCorrection, setSavingCorrection] = useState(false)
-  const [correctionError, setCorrectionError] = useState<string | null>(null)
-  const [correctionMessage, setCorrectionMessage] = useState<string | null>(null)
   const rows = data?.data || []
   const filtered = useMemo(() => rows.filter((row) => {
     const haystack = [row.staff?.full_name, row.staff?.staff_number, row.staff?.department, row.request_number, row.loan_type_label].join(" ").toLowerCase()
@@ -62,37 +52,13 @@ export function RunningLoansReport() {
   const totals = useMemo(() => filtered.reduce((sum, row) => ({ total: sum.total + row.total_amount, paid: sum.paid + row.paid_to_date, outstanding: sum.outstanding + row.outstanding_balance }), { total: 0, paid: 0, outstanding: 0 }), [filtered])
 
   const exportExcel = () => {
-    const exportRows = filtered.map((row) => ({ Staff: row.staff?.full_name || "", "Staff Number": row.staff?.staff_number || "", Department: row.staff?.department || "", "Loan Type": row.loan_type_label || "", "Loan Amount": row.total_amount, "Paid To Date": row.paid_to_date, Outstanding: row.outstanding_balance, "Next Payment Due": row.next_payment_due || "", "Completion Date": row.expected_completion_date || "", Status: row.repayment_status }))
+    const exportRows = filtered.map((row) => ({ Staff: row.staff?.full_name || "", "Staff Number": row.staff?.staff_number || "", Department: row.staff?.department || "", Location: row.staff?.location_name || "Unknown location", "Loan Type": row.loan_type_label || "", "Loan Amount": row.total_amount, "Paid To Date": row.paid_to_date, Outstanding: row.outstanding_balance, "Next Payment Due": row.next_payment_due || "", "Completion Date": row.expected_completion_date || "", Status: row.repayment_status }))
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportRows), "Running Loans")
     XLSX.writeFile(workbook, `running-loans-${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
   const exportPdf = () => window.print()
-
-  const openCorrection = (row: LoanRow) => {
-    setEditingLoan(row)
-    setFixedAmount(String(row.total_amount || ""))
-    setRecoveryMonths(String((row as LoanRow & { recovery_months?: number }).recovery_months || ""))
-    setDisbursementDate((row as LoanRow & { disbursement_date?: string }).disbursement_date || "")
-    setCorrectionNote("")
-    setCorrectionError(null)
-    setCorrectionMessage(null)
-  }
-
-  const saveCorrection = async () => {
-    if (!editingLoan) return
-    setSavingCorrection(true); setCorrectionError(null); setCorrectionMessage(null)
-    try {
-      const response = await fetch("/api/loan/running-loans/edit", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ loanId: editingLoan.id, fixedAmount, recoveryMonths, disbursementDate, correctionNote }) })
-      const body = await response.json()
-      if (!response.ok) throw new Error(body.error || "Could not correct running loan")
-      setCorrectionMessage("Correction saved and recorded in the loan audit trail.")
-      await mutate()
-      setEditingLoan(null)
-    } catch (saveError) { setCorrectionError(saveError instanceof Error ? saveError.message : "Could not correct running loan") }
-    finally { setSavingCorrection(false) }
-  }
 
   return (
     <div className="flex flex-col gap-4 print:text-foreground">
@@ -112,24 +78,9 @@ export function RunningLoansReport() {
           <div className="relative max-w-md print:hidden"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search staff, department, or loan" /></div>
           {isLoading && <p className="text-sm text-muted-foreground">Loading running loans…</p>}
           {error && <p className="text-sm text-destructive">{error.message}</p>}
-          {!isLoading && !error && <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Staff</TableHead><TableHead>Loan</TableHead><TableHead>Total</TableHead><TableHead>Paid to date</TableHead><TableHead>Outstanding</TableHead><TableHead>Next payment</TableHead><TableHead>Finishes</TableHead><TableHead>Full payment</TableHead><TableHead>Reapply</TableHead><TableHead>Status</TableHead><TableHead className="print:hidden">Actions</TableHead></TableRow></TableHeader><TableBody>{filtered.map((row) => <TableRow key={row.id}><TableCell><div className="font-medium">{row.staff?.full_name || "Unknown staff"}</div><div className="text-xs text-muted-foreground">{row.staff?.staff_number || "—"} · {row.staff?.department || "—"}</div></TableCell><TableCell>{row.loan_type_label || row.request_number || "Loan"}</TableCell><TableCell>{money(row.total_amount)}</TableCell><TableCell>{money(row.paid_to_date)}</TableCell><TableCell className="font-medium">{money(row.outstanding_balance)}</TableCell><TableCell>{date(row.next_payment_due)}<div className="text-xs text-muted-foreground">{money(row.next_payment_amount)}</div></TableCell><TableCell>{date(row.expected_completion_date)}</TableCell><TableCell>{row.completed_payment_date ? <><div>{date(row.completed_payment_date)}</div><div className="text-xs text-muted-foreground">Accounts approved</div></> : "—"}</TableCell><TableCell>{row.reapplication_eligible ? <Badge variant="secondary">Eligible to reapply</Badge> : "—"}</TableCell><TableCell><Badge variant={row.repayment_status === "overdue" ? "destructive" : row.repayment_status === "completed" ? "secondary" : "secondary"}>{row.repayment_status === "overdue" ? "Overdue" : row.repayment_status === "completed" ? "Completed" : "On track"}</Badge></TableCell><TableCell className="print:hidden"><Button variant="outline" size="sm" onClick={() => openCorrection(row)} aria-label={`Edit ${row.staff?.full_name || "running loan"}`}><Pencil data-icon="inline-start" />Edit</Button></TableCell></TableRow>)}</TableBody></Table>{filtered.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">No running loans found.</p>}</div>}
+          {!isLoading && !error && <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Staff</TableHead><TableHead>Location</TableHead><TableHead>Loan</TableHead><TableHead>Total</TableHead><TableHead>Paid to date</TableHead><TableHead>Outstanding</TableHead><TableHead>Next payment</TableHead><TableHead>Finishes</TableHead><TableHead>Full payment</TableHead><TableHead>Reapply</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{filtered.map((row) => <TableRow key={row.id}><TableCell><div className="font-medium">{row.staff?.full_name || "Unknown staff"}</div><div className="text-xs text-muted-foreground">{row.staff?.staff_number || "—"} · {row.staff?.department || "—"}</div></TableCell><TableCell>{row.staff?.location_name || "Unknown location"}</TableCell><TableCell>{row.loan_type_label || row.request_number || "Loan"}</TableCell><TableCell>{money(row.total_amount)}</TableCell><TableCell>{money(row.paid_to_date)}</TableCell><TableCell className="font-medium">{money(row.outstanding_balance)}</TableCell><TableCell>{date(row.next_payment_due)}<div className="text-xs text-muted-foreground">{money(row.next_payment_amount)}</div></TableCell><TableCell>{date(row.expected_completion_date)}</TableCell><TableCell>{row.completed_payment_date ? <><div>{date(row.completed_payment_date)}</div><div className="text-xs text-muted-foreground">Accounts approved</div></> : "—"}</TableCell><TableCell>{row.reapplication_eligible ? <Badge variant="secondary">Eligible to reapply</Badge> : "—"}</TableCell><TableCell><Badge variant={row.repayment_status === "overdue" ? "destructive" : row.repayment_status === "completed" ? "secondary" : "secondary"}>{row.repayment_status === "overdue" ? "Overdue" : row.repayment_status === "completed" ? "Completed" : "On track"}</Badge></TableCell></TableRow>)}</TableBody></Table>{filtered.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">No running loans found.</p>}</div>}
         </CardContent>
       </Card>
-      <Dialog open={Boolean(editingLoan)} onOpenChange={(open) => !open && setEditingLoan(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Correct running loan</DialogTitle><DialogDescription>Administrator corrections are written to the loan timeline and audit log.</DialogDescription></DialogHeader>
-          {editingLoan && <div className="grid gap-4 py-2">
-            <p className="text-sm text-muted-foreground">{editingLoan.staff?.full_name || "Unknown staff"} · {editingLoan.request_number || editingLoan.loan_type_label || "Loan"}</p>
-            <div className="grid gap-2"><Label htmlFor="correction-amount">Loan principal</Label><Input id="correction-amount" type="number" min="0.01" step="0.01" value={fixedAmount} onChange={(event) => setFixedAmount(event.target.value)} /></div>
-            <div className="grid gap-2"><Label htmlFor="correction-months">Recovery period (months)</Label><Input id="correction-months" type="number" min="1" max="120" value={recoveryMonths} onChange={(event) => setRecoveryMonths(event.target.value)} /></div>
-            <div className="grid gap-2"><Label htmlFor="correction-date">Disbursement date</Label><Input id="correction-date" type="date" value={disbursementDate} onChange={(event) => setDisbursementDate(event.target.value)} /></div>
-            <div className="grid gap-2"><Label htmlFor="correction-note">Reason for correction</Label><Input id="correction-note" value={correctionNote} onChange={(event) => setCorrectionNote(event.target.value)} placeholder="Explain what was corrected" /></div>
-            {correctionError && <p className="text-sm text-destructive">{correctionError}</p>}
-            {correctionMessage && <p className="text-sm text-green-700">{correctionMessage}</p>}
-          </div>}
-          <DialogFooter><Button variant="outline" onClick={() => setEditingLoan(null)}>Cancel</Button><Button onClick={() => void saveCorrection()} disabled={savingCorrection}>{savingCorrection ? "Saving…" : "Save correction"}</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
       <div className="hidden print:block text-xs text-muted-foreground">Generated {date(data?.generated_at || null)} · QCC Attendance Electronic System</div>
     </div>
   )
