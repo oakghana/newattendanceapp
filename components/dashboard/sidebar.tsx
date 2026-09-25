@@ -176,7 +176,7 @@ const navigationItems = [
     title: "Disbursement Confirmation",
     href: "/dashboard/disbursement-confirmation",
     icon: CheckCircle2,
-    roles: ["accounts", "accounts_executive", "loan_office", "hr_loan_office", "accounts_loan_office", "admin"],
+    roles: ["accounts", "accounts_executive"],
     category: "main",
   },
   {

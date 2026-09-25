@@ -48,7 +48,7 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
     if (!canConfirm) {
       toast({
         title: "Permission Denied",
-        description: "Only Accounts Executive and Accounts Officers are authorized to confirm loan disbursements.",
+        description: "Only the Accounts Office and Accounts Executive are authorized to initiate or confirm loan disbursements.",
         variant: "destructive",
       })
       return

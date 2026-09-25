@@ -159,23 +159,16 @@ export function isAdminRole(role?: string | null): boolean {
 }
 
 export function canAccessDisbursementConfirmation(role?: string | null): boolean {
-  return isAdminRole(role) || [
-    "accounts", "accounts_executive", "hr_executive",
-    "loan_office", "hr_loan_office", "accounts_loan_office",
-  ].includes(normalizeAppRole(role))
+  return ["accounts", "accounts_executive"].includes(normalizeAppRole(role))
 }
 
 /**
  * Recommended and authorized roles to sign off & confirm loan disbursement/repayment.
- * Only Accounts Executive, Accounts Officers, Accounts Loan Office, and System Admin
- * are authorized to click "Confirm Received" / financial sign-off.
- * All other roles (HR Executive, Loan Office, HR Leave Office) have Read-Only view access.
+ * Only the Accounts Office and Accounts Executive may initiate or confirm
+ * disbursement. All other roles, including administrators, are read-only here.
  */
 export function canConfirmDisbursement(role?: string | null): boolean {
-  const normalized = normalizeAppRole(role)
-  return isAdminRole(role) || [
-    "accounts", "accounts_executive", "accounts_loan_office",
-  ].includes(normalized)
+  return ["accounts", "accounts_executive"].includes(normalizeAppRole(role))
 }
 
 export function canManageOwnSignature(role?: string | null): boolean {
