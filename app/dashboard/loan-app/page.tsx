@@ -404,6 +404,17 @@ function fmtDate(d?: string | null) {
   return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
 }
 
+function fmtDateTime(d?: string | null) {
+  if (!d) return "N/A"
+  return new Date(d).toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
 function fmtAmount(n?: number | null) {
   return (Number(n || 0)).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
@@ -3689,7 +3700,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       <Badge className={`${isApproved ? "bg-white text-emerald-700" : isDenied ? "bg-white text-red-700" : "bg-white/20 text-white border border-white/40"} font-semibold text-xs px-3 py-1 flex items-center gap-1.5`}>
                         {isApproved ? (<><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Approved</>) : isDenied ? (<><XCircle className="h-3.5 w-3.5 text-red-600" /> {statusText(req.status)}</>) : (<><Hourglass className="h-3.5 w-3.5 animate-pulse" /> {statusText(req.status)}</>)}
                       </Badge>
-                      <p className="text-xs opacity-70">Submitted {fmtDate(req.submitted_at || req.created_at)}</p>
+                      <p className="text-xs opacity-70">Requested {fmtDateTime(req.submitted_at || req.created_at)}</p>
                     </div>
                   </div>
 
@@ -3994,7 +4005,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       <TableHead className="whitespace-nowrap">FD Score</TableHead>
                       {canSeeFdReviewerName && <TableHead className="whitespace-nowrap">FD Reviewer</TableHead>}
                       <TableHead className="whitespace-nowrap">Status</TableHead>
-                      <TableHead className="whitespace-nowrap">Submitted</TableHead>
+                      <TableHead className="whitespace-nowrap">Requested At</TableHead>
                       {p?.hod && <TableHead className="whitespace-nowrap">Action</TableHead>}
                     </TableRow>
                   </TableHeader>
@@ -4023,7 +4034,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                             {isOverdueForReviewer ? `Overdue HOD/RM (${overdueDays} days)` : statusText(row.status)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap"><span className="font-medium">{fmtDateTime(row.submitted_at || row.created_at)}</span></TableCell>
                         {p?.hod && (
                           <TableCell>
                             <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "hod")}>Review &amp; Decide</Button>
@@ -4310,7 +4321,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           )}
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
-                          {row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}
+                          {fmtDateTime(row.submitted_at || row.created_at)}
                         </td>
                         {p?.loanOffice && (
                           <td className="px-4 py-3 whitespace-nowrap">
@@ -4813,7 +4824,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       <TableHead className="whitespace-nowrap">FD Reviewer</TableHead>
                       <TableHead className="whitespace-nowrap">Status</TableHead>
                       <TableHead className="whitespace-nowrap">Attachment</TableHead>
-                      <TableHead className="whitespace-nowrap">Submitted</TableHead>
+                      <TableHead className="whitespace-nowrap">Requested At</TableHead>
                       {p?.accounts && <TableHead className="whitespace-nowrap">FD Action</TableHead>}
                     </TableRow>
                   </TableHeader>
@@ -4838,7 +4849,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                               <span className="text-slate-300">—</span>
                             )}
                           </TableCell>
-                          <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
+                          <TableCell className="text-xs whitespace-nowrap"><span className="font-medium">{fmtDateTime(row.submitted_at || row.created_at)}</span></TableCell>
                           {canEnterFdScore && (
                             <TableCell>
                               <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "accounts")}>
@@ -5727,7 +5738,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       <TableHead className="whitespace-nowrap">FD Reviewer</TableHead>
                       <TableHead className="whitespace-nowrap">Status</TableHead>
                       <TableHead className="whitespace-nowrap">Attachment</TableHead>
-                      <TableHead className="whitespace-nowrap">Submitted</TableHead>
+                      <TableHead className="whitespace-nowrap">Requested At</TableHead>
                       {p?.committee && <TableHead className="whitespace-nowrap">Action</TableHead>}
                     </TableRow>
                   </TableHeader>
@@ -5750,7 +5761,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                             <span className="text-slate-300">—</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap"><span className="font-medium">{fmtDateTime(row.submitted_at || row.created_at)}</span></TableCell>
                         {p?.committee && (
                           <TableCell>
                             <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "committee")}>Further Information</Button>
@@ -6080,7 +6091,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       <TableHead className="whitespace-nowrap">FD Score</TableHead>
                       <TableHead className="whitespace-nowrap">FD Reviewer</TableHead>
                       <TableHead className="whitespace-nowrap">Status</TableHead>
-                      <TableHead className="whitespace-nowrap">Submitted</TableHead>
+                      <TableHead className="whitespace-nowrap">Requested At</TableHead>
                       {p?.directorHr && <TableHead className="whitespace-nowrap">Action</TableHead>}
                     </TableRow>
                   </TableHeader>
@@ -6096,7 +6107,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                         <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>
                         <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap"><span className="font-medium">{fmtDateTime(row.submitted_at || row.created_at)}</span></TableCell>
                         {p?.directorHr && (
                           <TableCell>
                             <div className="flex flex-col gap-1">
