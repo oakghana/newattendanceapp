@@ -741,16 +741,38 @@ export async function DELETE(request: NextRequest) {
     const deleteAll = Boolean(body?.all)
     const id = String(body?.id || "")
 
+    const deleteLoanData = async (loanIds: string[]) => {
+      if (!loanIds.length) return
+
+      // Remove every request-scoped record before deleting the request itself so
+      // dashboards cannot count stale payment, repayment, or workflow data.
+      const dependentTables = [
+        "loan_monthly_payment_confirmations",
+        "loan_payment_evidence",
+        "loan_payment_records",
+        "loan_repayment_schedule",
+        "loan_admin_operational_overrides",
+        "loan_request_timeline",
+      ]
+
+      for (const table of dependentTables) {
+        const { error } = await admin.from(table).delete().in("loan_request_id", loanIds)
+        if (error) throw new Error(`Failed to remove ${table}: ${error.message}`)
+      }
+
+      const { error: requestDeleteError } = await admin.from("loan_requests").delete().in("id", loanIds)
+      if (requestDeleteError) throw requestDeleteError
+    }
+
     if (deleteAll) {
-      if (role !== "admin") return NextResponse.json({ error: "Only admin can delete all loan requests" }, { status: 403 })
+      if (role !== "admin") return NextResponse.json({ error: "Only admin can permanently delete all loan requests" }, { status: 403 })
 
-      const { error: archiveAllError } = await admin
-        .from("loan_requests")
-        .update({ status: "archived", updated_at: new Date().toISOString() })
-        .neq("status", "archived")
-      if (archiveAllError) throw archiveAllError
+      const { data: allLoans, error: allLoansError } = await admin.from("loan_requests").select("id")
+      if (allLoansError) throw allLoansError
+      const loanIds = (allLoans || []).map((loan: { id: string }) => loan.id)
+      await deleteLoanData(loanIds)
 
-      return NextResponse.json({ success: true, archived: true })
+      return NextResponse.json({ success: true, deleted: loanIds.length })
     }
 
     if (!id) return NextResponse.json({ error: "Request id is required" }, { status: 400 })
@@ -774,14 +796,9 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Archive instead of deleting so the request, timeline, memo metadata, and file references remain auditable.
-    const { error: archiveError } = await admin
-      .from("loan_requests")
-      .update({ status: "archived", updated_at: new Date().toISOString() })
-      .eq("id", id)
-    if (archiveError) throw archiveError
+    await deleteLoanData([id])
 
-    return NextResponse.json({ success: true, archivedId: id })
+    return NextResponse.json({ success: true, deletedId: id })
   } catch (error: any) {
     console.error("loan request delete error", error)
     return NextResponse.json({ error: error?.message || "Failed to delete request" }, { status: 500 })
