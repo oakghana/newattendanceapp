@@ -8044,14 +8044,14 @@ if (!modalDisbursement || !modalRecovery) {
                   </>
                 )}
 
-                <div className="border-t border-slate-200 pt-4 mt-4">
+                <div className="col-span-2 w-full border-t border-slate-200 pt-4 mt-4">
                   <Label className="text-sm font-semibold mb-3 block">Memo CC Recipients</Label>
                   <Textarea 
                     value={modalCcRecipients} 
                     onChange={(e) => setModalCcRecipients(e.target.value)} 
                     placeholder="Names and titles of CC recipients (one per line)" 
                     rows={3} 
-                    className="text-xs"
+                    className="w-full text-xs"
                   />
                 </div>
 
