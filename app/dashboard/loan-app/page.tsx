@@ -7924,13 +7924,13 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {actionModal.actionType === "push_to_hr_executive" && actionModal.row && (
               <Button 
                 className="bg-blue-600 hover:bg-blue-700"
-                disabled={!modalDisbursement || !modalRecovery || (actionModal.row.loan_type_key === "salary_advance" && Number(modalSalaryAdvanceDays) < 1)}
+                disabled={!modalDisbursement || !modalRecovery || (isSalaryAdvanceLoan(actionModal.row) && Number(modalSalaryAdvanceDays) < 1)}
                 onClick={async () => {
 if (!modalDisbursement || !modalRecovery) {
   toast({ title: "Missing Required Fields", description: "Please fill in all required fields (Disbursement Date and Recovery Start Date) before pushing to HR Executive.", variant: "destructive" })
                     return
                   }
-                  if (actionModal.row!.loan_type_key === "salary_advance" && Number(modalSalaryAdvanceDays) < 1) {
+                  if (isSalaryAdvanceLoan(actionModal.row!) && Number(modalSalaryAdvanceDays) < 1) {
                     toast({ title: "Number of days required", description: "Enter the number of days on the salary advice before forwarding.", variant: "destructive" })
                     return
                   }
@@ -8029,7 +8029,7 @@ if (!modalDisbursement || !modalRecovery) {
                   onChange={(e) => setModalRecovery(e.target.value)} 
                   className="h-8 text-xs"
                 />
-                {actionModal.row?.loan_type_key === "salary_advance" && (
+                {actionModal.row && isSalaryAdvanceLoan(actionModal.row) && (
                   <>
                     <Label className="text-sm font-semibold">Number of Days on Salary Advice *</Label>
                     <Input
