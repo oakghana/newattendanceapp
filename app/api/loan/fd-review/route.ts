@@ -308,6 +308,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Missing required fields: review_id, review_status" }, { status: 400 })
     }
 
+    const isCorrectionRequest = review_status === "correction_required"
     const isApproved = review_status === "approved"
 
     // First, fetch the current loan to preserve original fd_note with calculation details
@@ -342,7 +343,7 @@ export async function PATCH(request: Request) {
     }
 
     // Block illegal rejections: exempt loan types and scores >= threshold
-    if (!isApproved) {
+    if (!isApproved && !isCorrectionRequest) {
       const loanType = currentLoan?.loan_type_label || currentLoan?.loan_type_key
       if (isFdExemptLoanType(currentLoan?.loan_type_key, currentLoan?.loan_type_label)) {
         return NextResponse.json(
@@ -360,6 +361,10 @@ export async function PATCH(request: Request) {
           { status: 400 },
         )
       }
+    }
+
+    if (isCorrectionRequest && !String(adjustment_reason || fd_verification_memo || review_decision || '').trim()) {
+      return NextResponse.json({ error: "Provide the correction details for Accounts Office." }, { status: 400 })
     }
 
     const isExemptLoan = isFdExemptLoanType(currentLoan?.loan_type_key, currentLoan?.loan_type_label)
@@ -383,7 +388,11 @@ export async function PATCH(request: Request) {
 
     // Car loans still need Car Loan Committee sign-off after Accounts Executive clears FD.
     const isCarLoan = Boolean((currentLoan as any)?.committee_required)
-    const finalStatus = isApproved ? (isCarLoan ? "awaiting_committee" : "pending_hr_loan_office") : "fd_rejected"
+    const finalStatus = isCorrectionRequest
+      ? "fd_correction_required"
+      : isApproved
+        ? (isCarLoan ? "awaiting_committee" : "pending_hr_loan_office")
+        : "fd_rejected"
 
     // Update the loan_requests row directly
     const { data: updatedLoan, error: updateError } = await admin
@@ -414,10 +423,10 @@ export async function PATCH(request: Request) {
         loan_request_id: review_id,
         actor_id: user.id,
         actor_role: "accounts_executive",
-        action_key: isApproved ? "fd_approved" : "fd_rejected",
+        action_key: isCorrectionRequest ? "fd_correction_requested" : isApproved ? "fd_approved" : "fd_rejected",
         from_status: "pending_accounts_fd_review",
         to_status: finalStatus,
-        note: [adjustmentMemo, review_decision || (isApproved ? "FD approved by Accounts Executive" : "FD rejected by Accounts Executive")].filter(Boolean).join(" | "),
+        note: [adjustmentMemo, review_decision || (isCorrectionRequest ? "FD returned to Accounts Office for correction" : isApproved ? "FD approved by Accounts Executive" : "FD rejected by Accounts Executive")].filter(Boolean).join(" | "),
         metadata: scoreChanged
           ? {
               fd_original_score: normalizedOriginalScore,
@@ -511,9 +520,11 @@ export async function PATCH(request: Request) {
     return NextResponse.json({
       success: true,
       review: updatedLoan,
-      message: isApproved
-        ? (isCarLoan ? "FD approved. Loan forwarded to the Car Loan Committee." : "FD approved. Loan forwarded to HR Loan Office.")
-        : "FD rejected by Accounts Executive. Staff and Loan Office have been notified.",
+      message: isCorrectionRequest
+        ? "FD returned to Accounts Office for correction. It will be sent back to HR Loan Office before HR Executive approval."
+        : isApproved
+          ? (isCarLoan ? "FD approved. Loan forwarded to the Car Loan Committee." : "FD approved. Loan forwarded to HR Loan Office.")
+          : "FD rejected by Accounts Executive. Staff and Loan Office have been notified.",
     })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Internal server error"

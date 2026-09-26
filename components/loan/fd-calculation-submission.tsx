@@ -56,9 +56,17 @@ const FD_EDITABLE_STATUSES = new Set([
   'pending_accounts_fd_review',
   'fd_review_pending',
   'sent_to_accounts',
+  'fd_correction_required',
   'rejected_fd',
   'fd_rejected',
 ])
+
+function readFdNoteValue(note: string | undefined, label: string): string {
+  if (!note) return ''
+  const escaped = label.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')
+  const match = note.match(new RegExp(`${escaped}[^0-9-]*([0-9][0-9,]*(?:\\.[0-9]+)?)`, 'i'))
+  return match?.[1]?.replace(/,/g, '') || ''
+}
 
 const GHC = (n: number) =>
   `GH\u00a2 ${n.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -84,7 +92,11 @@ export function FDCalculationSubmission({
   )
 
   const isSalaryAdvance = String(loanRequest.loan_type_key || loanRequest.loan_type_label || '').toLowerCase().includes('salary')
-  const [salaryPerAnnum, setSalaryPerAnnum] = useState(loanRequest.annual_salary != null ? String(loanRequest.annual_salary) : '')
+  const [salaryPerAnnum, setSalaryPerAnnum] = useState(() =>
+    loanRequest.annual_salary != null
+      ? String(loanRequest.annual_salary)
+      : readFdNoteValue(loanRequest.fd_note, 'Salary Per Annum'),
+  )
   const salaryAdvanceMultiplier = Number(loanRequest.salary_advance_multiplier || loanRequest.recovery_months || 0)
   const salaryAdvance = isSalaryAdvance ? calculateSalaryAdvance(salaryPerAnnum, salaryAdvanceMultiplier) : null
   const salaryAdvanceAmount = salaryAdvance?.amount ?? 0
