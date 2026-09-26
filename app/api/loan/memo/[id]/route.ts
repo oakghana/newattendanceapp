@@ -105,6 +105,24 @@ function extractMemoCopyRecipient(note?: string | null) {
   return String(match[1] || "").trim() || null
 }
 
+function extractEditedMemoBody(value: string): string[] {
+  const normalized = value
+    .replace(/<\/?(?:div|p|br|h[1-6])[^>]*>/gi, "\n")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\r/g, "")
+    .trim()
+  const lines = normalized.split(/\n+/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean)
+  const bodyStart = lines.findIndex((line) => /^(we refer|we wish to inform|the loan would be recovered|management has given approval)/i.test(line))
+  const bodyLines = bodyStart >= 0 ? lines.slice(bodyStart) : lines
+  const seen = new Set<string>()
+  return bodyLines.filter((line) => {
+    const key = line.toLowerCase()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return !/^(quality control company|qccob?d|p\.?o\.? box|accra ghana|our ref|your ref|to:|through:|thro:|re:|human resources department|for: managing director)$/i.test(line)
+  })
+}
+
 const MEMO_WATERMARK_TEXT = "QCC-LOANLEAVE-APP"
 
 function applySignatureSideWatermark(doc: jsPDF, sigY: number, marginLeft: number) {
@@ -274,10 +292,7 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
   const savedMemoIsSalaryAdvance = isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label)
   const finalMemoStatuses = new Set(["approved", "approved_director", "hr_approved", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
   if (savedExecutiveMemo && finalMemoStatuses.has(String(loan.status || "").toLowerCase())) {
-    const paragraphs = savedExecutiveMemo
-      .split(/\n\s*\n|\r?\n(?=\S)/)
-      .map((paragraph: string) => paragraph.trim())
-      .filter(Boolean)
+    const paragraphs = extractEditedMemoBody(savedExecutiveMemo)
     if (paragraphs.length) {
       return {
         subject: `APPLICATION FOR ${savedMemoIsSalaryAdvance ? "SALARY ADVANCE" : String(loan.loan_type_label || "LOAN").toUpperCase()}`,
