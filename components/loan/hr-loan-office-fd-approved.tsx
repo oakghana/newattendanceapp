@@ -191,7 +191,7 @@ export function HRLoanOfficeFDApproved() {
       })
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || 'Failed to return FD calculation')
-      toast({ title: 'Returned to Accounts', description: 'Accounts can correct the FD calculation and resubmit it to HR Loan Office.' })
+      toast({ title: 'Returned to Accounts Office', description: 'The request is back in the Accounts calculation queue so the full FD calculation can be restarted.' })
       setSelectedForPush(null)
       setPushMemo('')
       await fetchFdApprovedLoans()
