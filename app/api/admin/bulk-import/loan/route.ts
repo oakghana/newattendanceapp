@@ -384,11 +384,13 @@ export async function POST(request: NextRequest) {
         disbursement_date: disbursementDate || null,
         recovery_start_date: effectiveRecoveryStartDate,
         md_approved_at: effectiveMdApprovedAt,
-        fd_score: fdScore,
-        fd_good: fdGood === null ? (fdScore === null ? null : fdScore >= 39) : fdGood,
-        fd_note: fdNote || null,
-        fd_document_url: fdDocumentUrl || null,
-        fd_checked_at: fdCheckedAt || null,
+  // Historical car-loan imports must not carry FD decisions. Accounts/FD
+  // must perform a fresh eligibility review after Committee sends the request.
+  fd_score: isLegacyCarCommitteeLoan ? null : fdScore,
+  fd_good: isLegacyCarCommitteeLoan ? null : (fdGood === null ? (fdScore === null ? null : fdScore >= 39) : fdGood),
+  fd_note: isLegacyCarCommitteeLoan ? null : (fdNote || null),
+  fd_document_url: isLegacyCarCommitteeLoan ? null : (fdDocumentUrl || null),
+  fd_checked_at: isLegacyCarCommitteeLoan ? null : (fdCheckedAt || null),
         repayment_status: effectiveRepaymentStatus,
         reason,
         supporting_document_url: null,
