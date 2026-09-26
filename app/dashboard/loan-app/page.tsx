@@ -4131,12 +4131,12 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {/* stage pills */}
             <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-5 py-2.5">
               {([ 
+  { key: "fd-approved-accounts-exec", label: "✓ FD Approved by Accounts" },
   { key: "good-fd",                    label: "Good FD" },
   { key: "sent-for-approval",         label: "Sent for Approval" },
   { key: "pending",                    label: "Pending FD" },
   { key: "poor-fd",                    label: "Poor FD" },
   { key: "good-fd-not-pushed",        label: "Not Pushed" },
-                { key: "fd-approved-accounts-exec", label: "✓ FD Approved by Accounts" },
                 { key: "archivable",                label: "Archivable" },
                 { key: "archived",                  label: "Archived" },
               ] as const).map(({ key, label }) => {
