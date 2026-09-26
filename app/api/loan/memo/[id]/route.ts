@@ -732,6 +732,19 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     // sigImgY: y-position where the signature image is placed, used by applySignatureSideWatermark
     // Initialised to -1 so the text fallback path knows no image has been rendered yet
+    // Every signed Managing Director memo closes with the standard courtesy line
+    // immediately before the approving signatory block.
+    doc.setFont("times", "normal")
+    doc.setFontSize(10)
+    doc.setTextColor(0, 0, 0)
+    if (y + 14 > pageHeight - 16) {
+      doc.addPage()
+      y = 24
+    }
+    y += 4
+    doc.text("You can count on our co-operation.", marginLeft, y)
+    y += 14
+
     let sigImgY = -1
 
     // Add signature image if available — RENDER ABOVE NAME (exact leave module approach)
