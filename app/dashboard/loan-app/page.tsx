@@ -7924,10 +7924,10 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {actionModal.actionType === "push_to_hr_executive" && actionModal.row && (
               <Button 
                 className="bg-blue-600 hover:bg-blue-700"
-                disabled={!modalDisbursement || !modalRecovery || !modalMemoRef || (actionModal.row.loan_type_key === "salary_advance" && Number(modalSalaryAdvanceDays) < 1)}
+                disabled={!modalDisbursement || !modalRecovery || (actionModal.row.loan_type_key === "salary_advance" && Number(modalSalaryAdvanceDays) < 1)}
                 onClick={async () => {
-                  if (!modalDisbursement || !modalRecovery || !modalMemoRef) {
-                    toast({ title: "Missing Required Fields", description: "Please fill in all required fields (Disbursement Date, Recovery Start Date, Reference Number) before pushing to HR Executive.", variant: "destructive" })
+if (!modalDisbursement || !modalRecovery) {
+  toast({ title: "Missing Required Fields", description: "Please fill in all required fields (Disbursement Date and Recovery Start Date) before pushing to HR Executive.", variant: "destructive" })
                     return
                   }
                   if (actionModal.row!.loan_type_key === "salary_advance" && Number(modalSalaryAdvanceDays) < 1) {
@@ -8043,7 +8043,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     />
                   </>
                 )}
-                <Label className="text-sm font-semibold">Reference Number *</Label>
+                <Label className="text-sm font-semibold">Reference Number</Label>
                 <Input 
                   value={modalMemoRef} 
                   onChange={(e) => setModalMemoRef(e.target.value)} 

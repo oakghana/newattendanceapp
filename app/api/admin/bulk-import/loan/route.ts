@@ -350,10 +350,17 @@ export async function POST(request: NextRequest) {
         : (requestedAmount || null)
 
       const nowIso = new Date().toISOString()
-      const importStatus = rowStatus || (disbursementDate ? "partially_recovered" : "approved_director")
-      const effectiveRecoveryStartDate = recoveryStartDate || disbursementDate || null
-      const effectiveMdApprovedAt = mdApprovedAt || disbursementDate || nowIso
-      const effectiveRepaymentStatus = requestedRepaymentStatus || (importStatus === "payment_completed" ? "completed" : ((importStatus === "partially_recovered" || importStatus === "staff_receiving_funds") ? "active" : null))
+      const normalizedRank = String(userRank || "").toLowerCase()
+      const isJuniorOrSenior = normalizedRank.includes("junior") || normalizedRank.includes("senior")
+      const isLegacyCarCommitteeLoan = loanType.loan_key.toLowerCase().includes("car") && isJuniorOrSenior
+      const importStatus = isLegacyCarCommitteeLoan
+        ? "awaiting_committee"
+        : (rowStatus || (disbursementDate ? "partially_recovered" : "approved_director"))
+      const effectiveRecoveryStartDate = isLegacyCarCommitteeLoan ? null : (recoveryStartDate || disbursementDate || null)
+      const effectiveMdApprovedAt = isLegacyCarCommitteeLoan ? null : (mdApprovedAt || disbursementDate || nowIso)
+      const effectiveRepaymentStatus = isLegacyCarCommitteeLoan
+        ? null
+        : (requestedRepaymentStatus || (importStatus === "payment_completed" ? "completed" : ((importStatus === "partially_recovered" || importStatus === "staff_receiving_funds") ? "active" : null)))
 
       // Bulk-imported loans skip the pending_hod stage entirely: they are created
       // directly as a historical approved/disbursed record so they are visible
@@ -387,11 +394,13 @@ export async function POST(request: NextRequest) {
         requires_fd_check: loanType.requires_fd_check !== false,
         status: importStatus,
         hod_reviewer_id: hodReviewerId,
-        // This marker is also used by memo generation to preserve the historical-import audit footnote.
-        hod_review_note: importStatus === "payment_completed"
-          ? "Bulk imported by Administrator — historical loan imported as fully cleared."
-          : "Bulk imported by Administrator — historical approved/disbursed loan imported for repayment tracking.",
-        hod_decision_at: nowIso,
+        // Legacy junior/senior car loans remain pending Committee review and must not look approved.
+        hod_review_note: isLegacyCarCommitteeLoan
+          ? "Bulk imported by Administrator — legacy car loan awaiting Committee review."
+          : (importStatus === "payment_completed"
+            ? "Bulk imported by Administrator — historical loan imported as fully cleared."
+            : "Bulk imported by Administrator — historical approved/disbursed loan imported for repayment tracking."),
+        hod_decision_at: isLegacyCarCommitteeLoan ? null : nowIso,
         submitted_at: nowIso,
       }
 
@@ -416,8 +425,12 @@ export async function POST(request: NextRequest) {
       // Timeline audit trail: record both the (skipped) staff submission and the
       // immediate HOD-approved decision so the request history reads correctly.
       try {
-        await addTimeline(admin, insertedLoan.id, importerId, importerRole, "staff_submit", null, "hod_approved", `Bulk imported by Administrator. Reason: ${reason}`)
-        await addTimeline(admin, insertedLoan.id, importerId, importerRole, "hod_auto_approved", "hod_approved", importStatus, `Imported directly as ${importStatus.replace(/_/g, " ")}.`)
+        if (isLegacyCarCommitteeLoan) {
+          await addTimeline(admin, insertedLoan.id, importerId, importerRole, "historical_import_committee_pending", null, "awaiting_committee", `Legacy ${userRank || "junior/senior"} car loan imported for Committee review. Reason: ${reason}`)
+        } else {
+          await addTimeline(admin, insertedLoan.id, importerId, importerRole, "staff_submit", null, "hod_approved", `Bulk imported by Administrator. Reason: ${reason}`)
+          await addTimeline(admin, insertedLoan.id, importerId, importerRole, "hod_auto_approved", "hod_approved", importStatus, `Imported directly as ${importStatus.replace(/_/g, " ")}.`)
+        }
       } catch {
         // Timeline is best-effort; do not fail the import if it cannot be written.
       }
@@ -455,14 +468,16 @@ export async function POST(request: NextRequest) {
           `A ${loanType.loan_label} loan request (${insertedLoan.request_number}) has been imported for you by HR/Admin as a historical loan record.`,
           { request_id: insertedLoan.id },
         )
-        await notifyLoanHodApproved(admin, {
-          loanRequestId: insertedLoan.id,
-          staffName: `${(userStaffNumber ? `${userStaffNumber} — ` : "")}${userEmail || employeeId || "Staff Member"}`,
-          loanType: loanType.loan_label,
-          requestNumber: insertedLoan.request_number,
-          hodName: "Administrator (Bulk Import)",
-          amount: finalRequestedAmount,
-        })
+        if (!isLegacyCarCommitteeLoan) {
+          await notifyLoanHodApproved(admin, {
+            loanRequestId: insertedLoan.id,
+            staffName: `${(userStaffNumber ? `${userStaffNumber} — ` : "")}${userEmail || employeeId || "Staff Member"}`,
+            loanType: loanType.loan_label,
+            requestNumber: insertedLoan.request_number,
+            hodName: "Administrator (Bulk Import)",
+            amount: finalRequestedAmount,
+          })
+        }
       } catch {
         // Notifications/emails are best-effort; do not fail the import on delivery issues.
       }
