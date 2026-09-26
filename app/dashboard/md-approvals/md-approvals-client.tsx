@@ -908,13 +908,21 @@ export function MdApprovalsClient({ profile }: Props) {
   }
 
   const handleApprove = async () => {
-    if (selected.size === 0) return
+    const signableSelectedIds = Array.from(selected).filter((id) => signableLoanIds.has(id))
+    if (signableSelectedIds.length === 0) {
+      toast({
+        title: "Caution: HR Records reference required",
+        description: "Only memos with a locked HR Records reference can be signed by the Managing Director.",
+        variant: "destructive",
+      })
+      return
+    }
     setIsApproving(true)
     try {
       const res = await fetch("/api/loan/md-approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ loanIds: Array.from(selected) }),
+        body: JSON.stringify({ loanIds: signableSelectedIds }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -953,9 +961,20 @@ export function MdApprovalsClient({ profile }: Props) {
   }
 
   const pendingLoans = useMemo(() => loans.filter((l) => !approvedIds.has(l.id)), [loans, approvedIds])
+  const signableLoanIds = useMemo(
+    () => new Set(pendingLoans.filter((loan) => Boolean(loan.reference_number?.trim()) && loan.memo_reference_locked === true).map((loan) => loan.id)),
+    [pendingLoans],
+  )
   const grouped = useMemo(() => groupByPeriod(pendingLoans), [pendingLoans])
   const totalPending = pendingLoans.length
-  const selectedCount = selected.size
+  const selectedCount = Array.from(selected).filter((id) => signableLoanIds.has(id)).length
+
+  useEffect(() => {
+    setSelected((previous) => {
+      const next = new Set(Array.from(previous).filter((id) => signableLoanIds.has(id)))
+      return next.size === previous.size ? previous : next
+    })
+  }, [signableLoanIds])
 
   // Derive filter options from stamped memos
   const locationOptions = useMemo(() => {
@@ -1465,8 +1484,8 @@ export function MdApprovalsClient({ profile }: Props) {
                   </Button>
                   <Button
                     onClick={handleApprove}
-                    disabled={isApproving}
-                    className="bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold px-6 shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 transition-all"
+                    disabled={isApproving || selectedCount === 0}
+                    className="bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50 hover:bg-amber-400 text-slate-900 font-bold px-6 shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 transition-all"
                   >
                     {isApproving ? (
                       <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Stamping...</>
