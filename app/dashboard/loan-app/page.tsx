@@ -1669,8 +1669,9 @@ export default function LoanAppPage() {
       !isPoorFdScore(row.fd_score, row.fd_good) && row.fd_score != null
     const isPoorFd = (row: LoanRequest) =>
       row.status === "rejected_fd" || isPoorFdScore(row.fd_score, row.fd_good)
-    const isGoodFdNotPushed = (row: LoanRequest) =>
-      isGoodFd(row) && !["awaiting_director_hr", "approved_director", "director_rejected"].includes(row.status)
+  const sentForApprovalStatuses = ["awaiting_director_hr", "pending_hr_executive_review", "awaiting_hr_executives"]
+  const isGoodFdNotPushed = (row: LoanRequest) =>
+  isGoodFd(row) && ![...sentForApprovalStatuses, "approved_director", "director_rejected"].includes(row.status)
     const isPending = (row: LoanRequest) =>
       row.fd_good === null && row.fd_score === null && !isArchivableStatus(row.status) && !isArchivedStatus(row.status)
     const isFdApprovedByAccounts = (row: LoanRequest) =>
@@ -1681,7 +1682,7 @@ export default function LoanAppPage() {
       "good-fd": loanOfficeRowsForSelectedType.filter((row) => isGoodFd(row)),
       "poor-fd": loanOfficeRowsForSelectedType.filter((row) => isPoorFd(row)),
       "good-fd-not-pushed": loanOfficeRowsForSelectedType.filter((row) => isGoodFdNotPushed(row)),
-      "sent-for-approval": loanOfficeRowsForSelectedType.filter((row) => row.status === "awaiting_director_hr"),
+      "sent-for-approval": loanOfficeRowsForSelectedType.filter((row) => sentForApprovalStatuses.includes(String(row.status))),
       "fd-approved-accounts-exec": loanOfficeRowsForSelectedType.filter((row) => isFdApprovedByAccounts(row)),
       archivable: loanOfficeRowsForSelectedType.filter((row) => isArchivableStatus(row.status)),
       archived: loanOfficeRowsForSelectedType.filter((row) => isArchivedStatus(row.status)),
@@ -1694,8 +1695,9 @@ export default function LoanAppPage() {
       !isPoorFdScore(row.fd_score, row.fd_good) && row.fd_score != null
     const isPoorFd = (row: LoanRequest) =>
       row.status === "rejected_fd" || isPoorFdScore(row.fd_score, row.fd_good)
-    const isGoodFdNotPushed = (row: LoanRequest) =>
-      isGoodFd(row) && !["awaiting_director_hr", "approved_director", "director_rejected"].includes(row.status)
+  const sentForApprovalStatuses = ["awaiting_director_hr", "pending_hr_executive_review", "awaiting_hr_executives"]
+  const isGoodFdNotPushed = (row: LoanRequest) =>
+  isGoodFd(row) && ![...sentForApprovalStatuses, "approved_director", "director_rejected"].includes(row.status)
 
     return loanOfficeTypeOptions.map((opt) => {
       const rows = loanOfficeWorkspaceRows.filter((row) => row.loan_type_key === opt.loanKey)
@@ -1711,7 +1713,7 @@ export default function LoanAppPage() {
               isGoodFd(row) ||
               isPoorFd(row) ||
               isGoodFdNotPushed(row) ||
-              row.status === "awaiting_director_hr" ||
+              sentForApprovalStatuses.includes(String(row.status)) ||
               isArchivableStatus(row.status),
           )
           .map((row) => row.id),
@@ -4117,11 +4119,11 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {/* stage pills */}
             <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-5 py-2.5">
               {([ 
-                { key: "pending",                    label: "Pending FD" },
-                { key: "good-fd",                    label: "Good FD" },
-                { key: "poor-fd",                    label: "Poor FD" },
-                { key: "good-fd-not-pushed",        label: "Not Pushed" },
-                { key: "sent-for-approval",         label: "Sent for Approval" },
+  { key: "good-fd",                    label: "Good FD" },
+  { key: "sent-for-approval",         label: "Sent for Approval" },
+  { key: "pending",                    label: "Pending FD" },
+  { key: "poor-fd",                    label: "Poor FD" },
+  { key: "good-fd-not-pushed",        label: "Not Pushed" },
                 { key: "fd-approved-accounts-exec", label: "✓ FD Approved by Accounts" },
                 { key: "archivable",                label: "Archivable" },
                 { key: "archived",                  label: "Archived" },
