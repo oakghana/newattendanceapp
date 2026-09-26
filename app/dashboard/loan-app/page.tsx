@@ -7960,6 +7960,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 className="whitespace-nowrap border-amber-500 bg-amber-50 px-3 text-sm font-semibold text-amber-800 hover:bg-amber-100"
                 onClick={() => {
                   setReturnAccountsReason("")
+                  setActionModal((s) => ({ ...s, open: false }))
                   setReturnAccountsDialogOpen(true)
                 }}
               >
