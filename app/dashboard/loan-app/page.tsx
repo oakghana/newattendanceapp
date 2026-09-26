@@ -7832,7 +7832,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             )}
           </div>
 
-          <DialogFooter className="flex-nowrap gap-2">
+          <DialogFooter className="flex flex-wrap items-center gap-2">
             <Button variant="outline" onClick={() => setActionModal((s) => ({ ...s, open: false }))}>Cancel</Button>
             {actionModal.actionType === "hod" && actionModal.row && (
               <>
@@ -8013,8 +8013,8 @@ if (!modalDisbursement || !modalRecovery) {
             )}
             {/* Push to HR Executive */}
             {actionModal.actionType === "push_to_hr_executive" && (
-              <>
-                <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-3">
+              <div className="w-full space-y-3">
+                <div className="bg-blue-50 border border-blue-200 rounded p-3">
                   <p className="text-xs text-blue-900">
                     This approved FD loan will be forwarded to HR Executive for review, signing, and approval. After HR Executive signs, it will appear on the MD's dashboard for final authorization.
                   </p>
@@ -8142,7 +8142,7 @@ if (!modalDisbursement || !modalRecovery) {
                     </Select>
                   </div>
                 </div>
-              </>
+              </div>
             )}
           </DialogFooter>
         </DialogContent>
