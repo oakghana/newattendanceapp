@@ -121,6 +121,8 @@ export async function GET(req: NextRequest) {
       created_at,
       md_approved_at,
       md_approved_by_name,
+      reference_number,
+      memo_reference_locked,
       user_id,
       staff_full_name,
       staff_number,
@@ -144,7 +146,9 @@ export async function GET(req: NextRequest) {
     .order("created_at", { ascending: false })
 
   if (view === "pending") {
-    query = query    .eq("status", "awaiting_director_hr").is("md_approved_at", null)
+    query = query
+      .in("status", ["awaiting_director_hr", "approved_director"])
+      .is("md_approved_at", null)
   } else {
     query = query.not("md_approved_at", "is", null).order("md_approved_at", { ascending: false })
   }

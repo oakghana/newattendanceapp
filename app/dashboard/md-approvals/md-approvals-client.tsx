@@ -57,6 +57,8 @@ interface Loan {
   created_at: string
   md_approved_at: string | null
   md_approved_by_name: string | null
+  reference_number?: string | null
+  memo_reference_locked?: boolean | null
   staff_full_name: string | null
   staff_number: string | null
   staff_location_name?: string | null
@@ -168,6 +170,8 @@ function LoanRow({
   const amount = loan.fixed_amount || loan.requested_amount
   const staffName = loan.staff_full_name || `${loan.user_profiles?.first_name ?? ""} ${loan.user_profiles?.last_name ?? ""}`.trim()
   const initials = staffName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
+  const referenceReady = Boolean(loan.reference_number?.trim()) && loan.memo_reference_locked === true
+  const canSign = referenceReady && !approved
 
   return (
     <div
@@ -175,18 +179,25 @@ function LoanRow({
         "group relative flex items-center gap-4 rounded-xl border px-5 py-4 cursor-pointer transition-all duration-200",
         approved
           ? "bg-emerald-50/60 border-emerald-200 opacity-70 pointer-events-none"
+          : !referenceReady
+          ? "bg-slate-50 border-slate-200 opacity-80 cursor-default"
           : selected
           ? "bg-amber-50 border-amber-300 shadow-md shadow-amber-100"
           : "bg-white border-slate-200 hover:border-amber-200 hover:bg-amber-50/40 hover:shadow-sm",
       )}
-      onClick={approved ? undefined : onToggle}
+      onClick={canSign ? onToggle : undefined}
     >
-      {!approved && (
+      {!approved && referenceReady && (
         <div className={cn(
           "flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-200",
           selected ? "bg-amber-500 border-amber-500" : "border-slate-300 bg-white group-hover:border-amber-400",
         )}>
           {selected && <CheckCircle2 className="h-3 w-3 text-white" />}
+        </div>
+      )}
+      {!approved && !referenceReady && (
+        <div className="flex-shrink-0 w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center">
+          <FileText className="h-3 w-3 text-slate-500" />
         </div>
       )}
       {approved && (
@@ -228,6 +239,9 @@ function LoanRow({
         {approved && loan.md_approved_at && (
           <div className="text-xs text-emerald-600 mt-0.5">Approved {fmtDate(loan.md_approved_at)}</div>
         )}
+        {!approved && !referenceReady && (
+          <div className="text-xs font-medium text-amber-700 mt-0.5">View only — awaiting HR Records reference</div>
+        )}
       </div>
       {approved && (
         <div className="absolute right-16 top-1/2 -translate-y-1/2 opacity-20 pointer-events-none select-none rotate-[-15deg]">
@@ -249,7 +263,8 @@ function PeriodSection({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   if (loans.length === 0) return null
-  const pendingLoans = loans.filter((l) => !approvedIds.has(l.id))
+  const pendingLoans = loans.filter((l) => !approvedIds.has(l.id) && Boolean(l.reference_number?.trim()) && l.memo_reference_locked === true)
+  const blockedLoans = loans.filter((l) => !approvedIds.has(l.id) && !pendingLoans.some((pending) => pending.id === l.id))
   const allSelected = pendingLoans.length > 0 && pendingLoans.every((l) => selected.has(l.id))
 
   return (
@@ -258,8 +273,13 @@ function PeriodSection({
         <div className="flex items-center gap-3">
           <span className="font-semibold text-slate-700 text-sm">{title}</span>
           <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-200 text-xs">
-            {pendingLoans.length} pending
+            {pendingLoans.length} signable
           </Badge>
+          {blockedLoans.length > 0 && (
+            <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-200 text-xs">
+              {blockedLoans.length} awaiting HR Records
+            </Badge>
+          )}
           {approvedIds.size > 0 && loans.some((l) => approvedIds.has(l.id)) && (
             <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">
               {loans.filter((l) => approvedIds.has(l.id)).length} approved
