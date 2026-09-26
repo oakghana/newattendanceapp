@@ -148,6 +148,30 @@ function stageOwnerForDelay(row: any) {
   return { ownerId: null, ownerRole: "unknown", stage: status || "Unknown" }
 }
 
+async function normalizeImportedCarLoansForCommittee(admin: any) {
+  const { data: importedCars, error } = await admin
+    .from("loan_requests")
+    .select("id, status, loan_type_key, loan_type_label, hod_review_note")
+    .ilike("hod_review_note", "Bulk imported by Administrator%")
+    .or("loan_type_key.ilike.%car%,loan_type_label.ilike.%car%")
+    .neq("status", "awaiting_committee")
+
+  if (error || !importedCars?.length) return
+
+  const ids = importedCars.map((loan: any) => loan.id)
+  const nowIso = new Date().toISOString()
+  await admin
+    .from("loan_requests")
+    .update({
+      status: "awaiting_committee",
+      committee_required: true,
+      repayment_status: null,
+      md_approved_at: null,
+      updated_at: nowIso,
+    })
+    .in("id", ids)
+}
+
 async function broadcastDelayedPostLoanOfficeRequests(admin: any) {
   const cutoffIso = new Date(Date.now() - POST_LOAN_OFFICE_DELAY_DAYS * 24 * 60 * 60 * 1000).toISOString()
 
@@ -567,8 +591,9 @@ export async function GET() {
     // must never blank out the identity/HOD data we already resolved above — that is
     // exactly what a staff member needs to see even when something else is degraded.
     try {
-    await autoAdvanceStaleHodRequests(admin)
-    await broadcastDelayedPostLoanOfficeRequests(admin)
+  await autoAdvanceStaleHodRequests(admin)
+  await normalizeImportedCarLoansForCommittee(admin)
+  await broadcastDelayedPostLoanOfficeRequests(admin)
 
     const viewAllTabs = isAdminRole(role)
 

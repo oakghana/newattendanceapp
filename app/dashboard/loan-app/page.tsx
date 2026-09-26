@@ -460,7 +460,12 @@ function statusBadgeClass(status: string, emphasis: "soft" | "solid" = "soft") {
   return `text-[11px] font-semibold whitespace-nowrap ${STATUS_COLORS[status] || "bg-slate-100 text-slate-800"}`
 }
 
-function stageOwner(status: string) {
+  function workflowStepIndex(status: string): number {
+    const terminalStatuses = new Set(["approved_director", "partially_recovered", "payment_completed"])
+    return WORKFLOW_ORDER.indexOf((terminalStatuses.has(status) ? "approved_director" : status) as typeof WORKFLOW_ORDER[number])
+  }
+
+  function stageOwner(status: string) {
   const map: Record<string, string> = {
     pending_hod: "HOD",
     hod_approved: "Loan Office",
@@ -3673,7 +3678,10 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           ) : (
             (data?.myRequests || []).map((req) => {
               const timeline = data?.myTimelines.find((x) => x.loan_request_id === req.id)?.entries || []
-              const currentStepIdx = WORKFLOW_ORDER.indexOf(req.status as typeof WORKFLOW_ORDER[number])
+              // Imported and already-disbursed loans have no live queue status, but their
+              // historical journey still completed the Committee stage. Map terminal
+              // repayment statuses to the final workflow step so Committee is shown as done.
+              const currentStepIdx = workflowStepIndex(req.status)
               const isDenied = ["hod_rejected","rejected_fd","committee_rejected","director_rejected"].includes(req.status)
               const isApproved = req.status === "approved_director"
 

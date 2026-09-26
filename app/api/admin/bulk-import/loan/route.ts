@@ -352,7 +352,9 @@ export async function POST(request: NextRequest) {
       const nowIso = new Date().toISOString()
       const normalizedRank = String(userRank || "").toLowerCase()
       const isJuniorOrSenior = normalizedRank.includes("junior") || normalizedRank.includes("senior")
-      const isLegacyCarCommitteeLoan = loanType.loan_key.toLowerCase().includes("car") && isJuniorOrSenior
+      // Every imported car loan must be reviewed by the Committee before it can
+      // become an approved/running loan, regardless of the staff rank in the file.
+      const isLegacyCarCommitteeLoan = loanType.loan_key.toLowerCase().includes("car") || loanType.loan_label.toLowerCase().includes("car")
       const importStatus = isLegacyCarCommitteeLoan
         ? "awaiting_committee"
         : (rowStatus || (disbursementDate ? "partially_recovered" : "approved_director"))
