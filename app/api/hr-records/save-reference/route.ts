@@ -60,25 +60,18 @@ export async function POST(request: NextRequest) {
 
   const now = new Date().toISOString()
   const currentStatus = String(row.status || "")
-  // HR Records is the FINAL stage of both pipelines it serves, so assigning the
-  // official reference must always land the request on a genuinely terminal
-  // status — never send it back into an earlier queue (e.g. HR Leave Office or
-  // Director HR). For leave, "hr_approved" (label: "Approved") is that terminal
-  // status; "pending_hr_records_reference" (the dedicated self-leave HR Records
-  // stage, reached only after HR Executive has already forwarded the request)
-  // is promoted to the same terminal "hr_approved" status once referenced. For
-  // loans, "referenced" is the terminal status HR Records lands the request on
-  // once the Director HR / Managing Director approval ("approved_director") has
-  // been officially referenced. Requests already sitting at a downstream/final
-  // status (hr_approved, approved, regional_manager_approved, referenced, etc.)
-  // are left untouched — a reference correction must never rewind their stage.
+  // HR Records assigns the official reference. Loans then continue to the
+  // Managing Director queue; leave and transport keep their existing reference
+  // behavior. A correction to an existing lock never rewinds the workflow.
   const nextStatus =
-    entity === "loan" || entity === "transport"
+    entity === "loan"
+      ? "awaiting_director_hr"
+      : entity === "transport"
       ? "referenced"
       : currentStatus === "pending_hr_records_reference"
         ? "hr_approved"
         : currentStatus
-  const nextWorkflowStage = entity === "loan" || entity === "transport" ? "referenced" : undefined
+  const nextWorkflowStage = entity === "loan" ? "awaiting_director_hr" : entity === "transport" ? "referenced" : undefined
   const update = entity === "transport"
     ? { [referenceColumn]: reference, status: nextStatus, workflow_stage: nextWorkflowStage, updated_at: now }
     : isCorrection

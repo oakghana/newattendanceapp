@@ -26,16 +26,29 @@ export async function POST(req: NextRequest) {
   const mdName = `${profile.first_name} ${profile.last_name}`.trim()
   const now = new Date().toISOString()
 
-  // Verify all provided loans are in 'approved_director' status before approving
+  // Verify all provided loans are in the post-HR-Records MD approval stage
   const { data: loans, error: fetchErr } = await admin
     .from("loan_requests")
-    .select("id, status, request_number, loan_type_label, staff_full_name")
+    .select("id, status, request_number, loan_type_label, staff_full_name, reference_number, memo_reference_locked")
     .in("id", loanIds)
-    .eq("status", "approved_director")
+    .eq("status", "awaiting_director_hr")
 
   if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })
   if (!loans || loans.length === 0) {
     return NextResponse.json({ error: "No eligible loans found. Loans must be at HR Executive approved stage." }, { status: 404 })
+  }
+
+  const unreferencedLoans = loans.filter((loan: any) => {
+    const reference = String(loan.reference_number || "").trim()
+    return !reference || loan.memo_reference_locked !== true
+  })
+  if (unreferencedLoans.length > 0) {
+    return NextResponse.json({
+      error: "Caution: this memo cannot be signed yet. HR Records must first assign and lock the official memo reference.",
+      code: "HR_RECORDS_REFERENCE_REQUIRED",
+      loanIds: unreferencedLoans.map((loan: any) => loan.id),
+      requestNumbers: unreferencedLoans.map((loan: any) => loan.request_number),
+    }, { status: 409 })
   }
 
   const eligibleIds = loans.map((l: any) => l.id)
@@ -108,6 +121,8 @@ export async function GET(req: NextRequest) {
       created_at,
       md_approved_at,
       md_approved_by_name,
+      reference_number,
+      memo_reference_locked,
       user_id,
       staff_full_name,
       staff_number,
@@ -131,7 +146,9 @@ export async function GET(req: NextRequest) {
     .order("created_at", { ascending: false })
 
   if (view === "pending") {
-    query = query.eq("status", "approved_director").is("md_approved_at", null)
+    query = query
+      .in("status", ["awaiting_director_hr", "approved_director"])
+      .is("md_approved_at", null)
   } else {
     query = query.not("md_approved_at", "is", null).order("md_approved_at", { ascending: false })
   }
