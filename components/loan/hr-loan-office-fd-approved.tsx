@@ -94,7 +94,6 @@ export function HRLoanOfficeFDApproved() {
   const [selectedForPush, setSelectedForPush] = useState<FDApprovedLoan | null>(null)
   const [selectedDetailLoan, setSelectedDetailLoan] = useState<FDApprovedLoan | null>(null)
   const [pushMemo, setPushMemo] = useState('')
-  const [referenceNumber, setReferenceNumber] = useState('')
   const [salaryAdvanceDays, setSalaryAdvanceDays] = useState('')
   const [pushing, setPushing] = useState(false)
   const { toast } = useToast()
@@ -157,7 +156,6 @@ export function HRLoanOfficeFDApproved() {
   const openHandoffDialog = (loan: FDApprovedLoan, defaultMemo: string) => {
     setSelectedForPush(loan)
     setPushMemo(defaultMemo)
-    setReferenceNumber('')
     setSalaryAdvanceDays('')
   }
 
@@ -198,7 +196,6 @@ export function HRLoanOfficeFDApproved() {
         body: JSON.stringify({
           loan_request_id: selectedForPush.id,
           hr_loan_office_memo: pushMemo,
-          reference_number: referenceNumber.trim() || null,
           salary_advance_days: Number(salaryAdvanceDays) || null,
           action: 'push_to_hr_executive',
         }),
@@ -213,7 +210,6 @@ export function HRLoanOfficeFDApproved() {
         })
         setSelectedForPush(null)
         setPushMemo('')
-        setReferenceNumber('')
         setSalaryAdvanceDays('')
         // Refresh the loans list
         await fetchFdApprovedLoans()
@@ -530,18 +526,6 @@ export function HRLoanOfficeFDApproved() {
                 />
               </div>
 
-              <div>
-                <label htmlFor="hr-loan-reference-number" className="text-sm font-semibold text-slate-900">Reference Number</label>
-                <p className="text-xs text-slate-500 mb-2">Enter the official reference number when available.</p>
-                <Input
-                  id="hr-loan-reference-number"
-                  value={referenceNumber}
-                  onChange={(event) => setReferenceNumber(event.target.value)}
-                  placeholder="e.g. QCC/HR/LOAN/2026/001"
-                  className="mt-2"
-                />
-              </div>
-
               {String(selectedForPush.loan_type || '').toLowerCase().includes('salary') && (
                 <div>
                   <label className="text-sm font-semibold text-slate-900">Number of Months for Recovery *</label>
@@ -551,7 +535,7 @@ export function HRLoanOfficeFDApproved() {
                     step="1"
                     value={salaryAdvanceDays}
                     onChange={(event) => setSalaryAdvanceDays(event.target.value)}
-                    placeholder="Enter recovery months"
+                    placeholder="Enter number of months"
                     className="mt-2"
                   />
                 </div>
