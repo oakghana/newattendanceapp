@@ -177,6 +177,31 @@ export function HRLoanOfficeFDApproved() {
     )
   }
 
+  const handleReturnToAccounts = async () => {
+    if (!selectedForPush || !pushMemo.trim()) {
+      toast({ title: 'Correction details required', description: 'Describe the FD error for Accounts before returning this record.', variant: 'destructive' })
+      return
+    }
+    try {
+      setPushing(true)
+      const res = await fetch('/api/loan/push-to-hr-executive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loan_request_id: selectedForPush.id, hr_loan_office_memo: pushMemo, action: 'return_to_accounts' }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to return FD calculation')
+      toast({ title: 'Returned to Accounts', description: 'Accounts can correct the FD calculation and resubmit it to HR Loan Office.' })
+      setSelectedForPush(null)
+      setPushMemo('')
+      await fetchFdApprovedLoans()
+    } catch (error) {
+      toast({ title: 'Return failed', description: error instanceof Error ? error.message : 'Try again', variant: 'destructive' })
+    } finally {
+      setPushing(false)
+    }
+  }
+
   const handlePushToHRExecutive = async () => {
     if (!selectedForPush || !pushMemo.trim()) {
       toast({ title: 'Error', description: 'Please enter a memo before pushing to HR Executive', variant: 'destructive' })
@@ -551,9 +576,17 @@ export function HRLoanOfficeFDApproved() {
             <Button variant="outline" onClick={() => setSelectedForPush(null)} disabled={pushing}>
               Cancel
             </Button>
-            <Button
-              onClick={handlePushToHRExecutive}
-              disabled={pushing || !pushMemo.trim() || (String(selectedForPush?.loan_type || '').toLowerCase().includes('salary') && Number(salaryAdvanceDays) < 1)}
+  <Button
+  variant="outline"
+  onClick={handleReturnToAccounts}
+  disabled={pushing || !pushMemo.trim()}
+  className="border-amber-500 text-amber-700 hover:bg-amber-50"
+  >
+  Return to Accounts
+  </Button>
+  <Button
+  onClick={handlePushToHRExecutive}
+  disabled={pushing || !pushMemo.trim() || (String(selectedForPush?.loan_type || '').toLowerCase().includes('salary') && Number(salaryAdvanceDays) < 1)}
               className="bg-blue-600 hover:bg-blue-700"
             >
               <Send className="h-4 w-4 mr-2" />

@@ -5,7 +5,7 @@ import { calculateSalaryAdvance } from '@/lib/salary-advance'
 
 export async function POST(request: NextRequest) {
   try {
-    const { loan_request_id, hr_loan_office_memo, reference_number } = await request.json()
+    const { loan_request_id, hr_loan_office_memo, reference_number, action } = await request.json()
 
     if (!loan_request_id) {
       return NextResponse.json({ error: 'loan_request_id is required' }, { status: 400 })
@@ -45,6 +45,32 @@ export async function POST(request: NextRequest) {
 
     if (fetchError || !loanRequest) {
       return NextResponse.json({ error: 'Loan request not found' }, { status: 404 })
+    }
+
+    if (action === 'return_to_accounts') {
+      if (!memo) return NextResponse.json({ error: 'Correction details are required' }, { status: 400 })
+      if (loanRequest.status !== 'pending_hr_loan_office') {
+        return NextResponse.json({ error: `Loan must be awaiting HR Loan Office review. Current status: ${loanRequest.status}` }, { status: 400 })
+      }
+      const now = new Date().toISOString()
+      const { data: updatedLoan, error: updateError } = await admin
+        .from('loan_requests')
+        .update({ status: 'pending_accounts_fd_review', fd_note: memo, hr_note: memo, updated_at: now })
+        .eq('id', loan_request_id)
+        .eq('status', 'pending_hr_loan_office')
+        .select()
+        .single()
+      if (updateError || !updatedLoan) return NextResponse.json({ error: 'This FD record was already processed or could not be returned.' }, { status: 409 })
+      await admin.from('loan_request_timeline').insert({
+        loan_request_id,
+        actor_id: user.id,
+        actor_role: role || 'hr_loan_office',
+        action_key: 'fd_returned_to_accounts',
+        from_status: 'pending_hr_loan_office',
+        to_status: 'pending_accounts_fd_review',
+        note: `HR Loan Office returned the FD calculation to Accounts for correction: ${memo}`,
+      })
+      return NextResponse.json({ success: true, loan: updatedLoan, message: 'FD calculation returned to Accounts for correction.' })
     }
 
     // Verify loan is in pending_hr_loan_office status
