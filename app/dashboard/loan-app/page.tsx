@@ -1141,6 +1141,9 @@ export default function LoanAppPage() {
   const [memoReviewModal, setMemoReviewModal] = useState<{ open: boolean; row: LoanRequest | null }>({ open: false, row: null })
   const [isSavingMemo, setIsSavingMemo] = useState(false)
   const [modalNote, setModalNote] = useState("")
+  const [returnAccountsDialogOpen, setReturnAccountsDialogOpen] = useState(false)
+  const [returnAccountsReason, setReturnAccountsReason] = useState("")
+  const [isReturningToAccounts, setIsReturningToAccounts] = useState(false)
   const [modalMemoCC, setModalMemoCC] = useState("Managing Director\nDeputy Managing Director\nDeputy Director Finance\nDeputy Director Human Resource\nAudit Manager\nRegistry Unit\nRecords Unit")
   const [modalDecision, setModalDecision] = useState<"approve" | "reject">("approve")
   const [modalFdScore, setModalFdScore] = useState("")
@@ -7955,29 +7958,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 type="button"
                 variant="outline"
                 className="whitespace-nowrap border-amber-500 bg-amber-50 px-3 text-sm font-semibold text-amber-800 hover:bg-amber-100"
-                disabled={!modalNote.trim()}
-                onClick={async () => {
-                  if (!actionModal.row || !modalNote.trim()) {
-                    toast({ title: "Correction details required", description: "Enter the correction details before returning this FD to Accounts.", variant: "destructive" })
-                    return
-                  }
-                  const response = await fetch("/api/loan/push-to-hr-executive", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      loan_request_id: actionModal.row.id,
-                      action: "return_to_accounts",
-                      hr_loan_office_memo: modalNote,
-                    }),
-                  })
-                  const result = await response.json()
-                  if (!response.ok) {
-                    toast({ title: "Return failed", description: result.error || "Could not return the FD to Accounts.", variant: "destructive" })
-                    return
-                  }
-                  toast({ title: "Returned to Accounts", description: "The FD calculation was sent back to Accounts for correction." })
-                  setActionModal((s) => ({ ...s, open: false }))
-                  await loadData()
+                onClick={() => {
+                  setReturnAccountsReason("")
+                  setReturnAccountsDialogOpen(true)
                 }}
               >
                 Return to Accounts
@@ -8149,7 +8132,59 @@ if (!modalDisbursement || !modalRecovery) {
       </Dialog>
 
       {/* ���─ Memo Review Modal (Executive HR / Director HR) ──────────── */}
-      <Dialog open={memoReviewModal.open} onOpenChange={(o) => {
+      <Dialog open={returnAccountsDialogOpen} onOpenChange={setReturnAccountsDialogOpen}>
+    <DialogContent className="max-w-md">
+      <DialogHeader>
+        <DialogTitle>Return FD to Accounts</DialogTitle>
+        <DialogDescription>Provide the correction reason so Accounts knows what must be amended.</DialogDescription>
+      </DialogHeader>
+      <div className="space-y-2">
+        <Label htmlFor="return-accounts-reason">Reason for return <span className="text-destructive">*</span></Label>
+        <Textarea
+          id="return-accounts-reason"
+          value={returnAccountsReason}
+          onChange={(event) => setReturnAccountsReason(event.target.value)}
+          placeholder="Explain the FD correction required..."
+          rows={5}
+          autoFocus
+        />
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={() => setReturnAccountsDialogOpen(false)} disabled={isReturningToAccounts}>Cancel</Button>
+        <Button
+          type="button"
+          className="bg-amber-600 text-white hover:bg-amber-700"
+          disabled={!returnAccountsReason.trim() || !actionModal.row || isReturningToAccounts}
+          onClick={async () => {
+            if (!actionModal.row || !returnAccountsReason.trim()) return
+            setIsReturningToAccounts(true)
+            try {
+              const response = await fetch("/api/loan/push-to-hr-executive", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ loan_request_id: actionModal.row.id, action: "return_to_accounts", hr_loan_office_memo: returnAccountsReason.trim() }),
+              })
+              const result = await response.json()
+              if (!response.ok) {
+                toast({ title: "Return failed", description: result.error || "Could not return the FD to Accounts.", variant: "destructive" })
+                return
+              }
+              toast({ title: "Returned to Accounts", description: "The FD calculation was sent back to Accounts for correction." })
+              setReturnAccountsDialogOpen(false)
+              setActionModal((s) => ({ ...s, open: false }))
+              await loadData()
+            } finally {
+              setIsReturningToAccounts(false)
+            }
+          }}
+        >
+          {isReturningToAccounts ? "Returning..." : "Confirm Return"}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+
+  <Dialog open={memoReviewModal.open} onOpenChange={(o) => {
         setMemoReviewModal((s) => ({ ...s, open: o }))
         if (!o && actionModal.actionType === "hr_terms" && actionModal.row) {
           setActionModal((s) => ({ ...s, open: true }))
