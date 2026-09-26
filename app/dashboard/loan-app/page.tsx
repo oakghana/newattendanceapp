@@ -1141,6 +1141,9 @@ export default function LoanAppPage() {
   const [memoReviewModal, setMemoReviewModal] = useState<{ open: boolean; row: LoanRequest | null }>({ open: false, row: null })
   const [isSavingMemo, setIsSavingMemo] = useState(false)
   const [modalNote, setModalNote] = useState("")
+  const [returnAccountsDialogOpen, setReturnAccountsDialogOpen] = useState(false)
+  const [returnAccountsReason, setReturnAccountsReason] = useState("")
+  const [isReturningToAccounts, setIsReturningToAccounts] = useState(false)
   const [modalMemoCC, setModalMemoCC] = useState("Managing Director\nDeputy Managing Director\nDeputy Director Finance\nDeputy Director Human Resource\nAudit Manager\nRegistry Unit\nRecords Unit")
   const [modalDecision, setModalDecision] = useState<"approve" | "reject">("approve")
   const [modalFdScore, setModalFdScore] = useState("")
@@ -1238,7 +1241,7 @@ export default function LoanAppPage() {
   const [loanOfficePage, setLoanOfficePage] = useState(1)
   const [loanOfficePageSize, setLoanOfficePageSize] = useState(10)
   const [loanOfficeTypeTab, setLoanOfficeTypeTab] = useState("all")
-  const [loanOfficeStageTab, setLoanOfficeStageTab] = useState("pending")
+  const [loanOfficeStageTab, setLoanOfficeStageTab] = useState("hod-approved")
   const [loanOfficeViewMode, setLoanOfficeViewMode] = useState<"table" | "card">("table")
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     paymentCompletion: true,
@@ -1676,8 +1679,11 @@ export default function LoanAppPage() {
       row.fd_good === null && row.fd_score === null && !isArchivableStatus(row.status) && !isArchivedStatus(row.status)
     const isFdApprovedByAccounts = (row: LoanRequest) =>
       row.status === "pending_hr_loan_office"
+    const isHodApproved = (row: LoanRequest) =>
+      row.status === "hod_approved"
 
     return {
+      "hod-approved": loanOfficeRowsForSelectedType.filter((row) => isHodApproved(row)),
       pending: loanOfficeRowsForSelectedType.filter((row) => isPending(row)),
       "good-fd": loanOfficeRowsForSelectedType.filter((row) => isGoodFd(row)),
       "poor-fd": loanOfficeRowsForSelectedType.filter((row) => isPoorFd(row)),
@@ -4104,7 +4110,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           </div>
 
           {/* ── Processing Queue ── */}
-          <div id="loan-office-loanOfficeQueue" className="order-2 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div id="loan-office-loanOfficeQueue" className="order-1 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
             {/* section header */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
               <button type="button" data-loan-section-toggle className="flex flex-1 items-center gap-2 text-left" onClick={() => toggleSection("loanOfficeQueue")}>
@@ -4114,7 +4120,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     Processing Queue
                     <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">{filteredLoanOfficeStageRows.length}</span>
                   </p>
-                  <p className="text-xs text-slate-500">Review HOD-approved requests, score FD, and forward for approval</p>
+                  <p className="text-xs text-slate-500">Review HOD-approved requests first, then process FD-approved requests from Accounts</p>
                 </div>
               </button>
               <div className="flex items-center gap-2">
@@ -4131,6 +4137,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {/* stage pills */}
             <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-5 py-2.5">
               {([ 
+  { key: "hod-approved",               label: "HOD Approved" },
   { key: "fd-approved-accounts-exec", label: "✓ FD Approved by Accounts" },
   { key: "good-fd",                    label: "Good FD" },
   { key: "sent-for-approval",         label: "Sent for Approval" },
@@ -4307,10 +4314,10 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                         </td>
                         {p?.loanOffice && (
                           <td className="px-4 py-3 whitespace-nowrap">
-                            {row.status === "hod_approved" ? (
+                            {(row.status === "hod_approved" || row.status === "fd_correction_required") ? (
                               <Button size="sm" className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800" onClick={() => openActionModal(row, "loan_office")}>
-                                Review &amp; Forward
-                              </Button>
+{row.status === "fd_correction_required" ? "Correct & Forward" : "Review & Forward"}
+                      </Button>
                             ) : row.status === "pending_hr_loan_office" ? (
                               <Button size="sm" className="h-7 bg-blue-600 text-xs text-white hover:bg-blue-700" onClick={() => openActionModal(row, "push_to_hr_executive")}>
                                 Push to HR Exec
@@ -4329,8 +4336,8 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3">
                 {pagedLoanOfficeStage.map((row) => (
                   <StageCard key={row.id} row={row}>
-                    {row.status === "hod_approved" && p?.loanOffice
-                      ? <Button size="sm" className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800" onClick={() => openActionModal(row, "loan_office")}>Review &amp; Forward</Button>
+                    {(row.status === "hod_approved" || row.status === "fd_correction_required") && p?.loanOffice
+                      ? <Button size="sm" className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800" onClick={() => openActionModal(row, "loan_office")}>{row.status === "fd_correction_required" ? "Correct & Forward" : "Review & Forward"}</Button>
                       : row.status === "pending_hr_loan_office" && p?.loanOffice
                       ? <Button size="sm" className="h-7 bg-blue-600 text-xs text-white hover:bg-blue-700" onClick={() => openActionModal(row, "push_to_hr_executive")}>Push to HR Exec</Button>
                       : <span className="text-xs text-slate-500">{statusText(row.status)}</span>
@@ -4354,7 +4361,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           </div>
 
           {/* ── HR Terms Queue ── */}
-          <div id="loan-office-hrTermsQueue" className="order-1 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div id="loan-office-hrTermsQueue" className="order-2 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
               <button type="button" data-loan-section-toggle className="flex flex-1 items-center gap-2 text-left" onClick={() => toggleSection("hrTermsQueue")}>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.hrTermsQueue ? "-rotate-90" : ""}`} />
@@ -7828,7 +7835,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             )}
           </div>
 
-          <DialogFooter className="gap-2 flex-wrap">
+          <DialogFooter className="flex flex-wrap items-center gap-2">
             <Button variant="outline" onClick={() => setActionModal((s) => ({ ...s, open: false }))}>Cancel</Button>
             {actionModal.actionType === "hod" && actionModal.row && (
               <>
@@ -7947,6 +7954,19 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               </Button>
             )}
             {actionModal.actionType === "push_to_hr_executive" && actionModal.row && (
+              <Button
+                type="button"
+                variant="outline"
+                className="whitespace-nowrap border-amber-500 bg-amber-50 px-3 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+                onClick={() => {
+                  setReturnAccountsReason("")
+                  setReturnAccountsDialogOpen(true)
+                }}
+              >
+                Return to Accounts
+              </Button>
+            )}
+            {actionModal.actionType === "push_to_hr_executive" && actionModal.row && (
               <Button 
                 className="bg-blue-600 hover:bg-blue-700"
                 disabled={!modalDisbursement || !modalRecovery || (isSalaryAdvanceLoan(actionModal.row) && Number(modalMonths) < 1)}
@@ -7976,8 +7996,8 @@ if (!modalDisbursement || !modalRecovery) {
             )}
             {/* Push to HR Executive */}
             {actionModal.actionType === "push_to_hr_executive" && (
-              <>
-                <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-3">
+              <div className="w-full space-y-3">
+                <div className="bg-blue-50 border border-blue-200 rounded p-3">
                   <p className="text-xs text-blue-900">
                     This approved FD loan will be forwarded to HR Executive for review, signing, and approval. After HR Executive signs, it will appear on the MD's dashboard for final authorization.
                   </p>
@@ -8105,14 +8125,66 @@ if (!modalDisbursement || !modalRecovery) {
                     </Select>
                   </div>
                 </div>
-              </>
+              </div>
             )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* ���─ Memo Review Modal (Executive HR / Director HR) ──────────── */}
-      <Dialog open={memoReviewModal.open} onOpenChange={(o) => {
+      <Dialog open={returnAccountsDialogOpen} onOpenChange={setReturnAccountsDialogOpen}>
+    <DialogContent className="max-w-md">
+      <DialogHeader>
+        <DialogTitle>Return FD to Accounts</DialogTitle>
+        <DialogDescription>Provide the correction reason so Accounts knows what must be amended.</DialogDescription>
+      </DialogHeader>
+      <div className="space-y-2">
+        <Label htmlFor="return-accounts-reason">Reason for return <span className="text-destructive">*</span></Label>
+        <Textarea
+          id="return-accounts-reason"
+          value={returnAccountsReason}
+          onChange={(event) => setReturnAccountsReason(event.target.value)}
+          placeholder="Explain the FD correction required..."
+          rows={5}
+          autoFocus
+        />
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={() => setReturnAccountsDialogOpen(false)} disabled={isReturningToAccounts}>Cancel</Button>
+        <Button
+          type="button"
+          className="bg-amber-600 text-white hover:bg-amber-700"
+          disabled={!returnAccountsReason.trim() || !actionModal.row || isReturningToAccounts}
+          onClick={async () => {
+            if (!actionModal.row || !returnAccountsReason.trim()) return
+            setIsReturningToAccounts(true)
+            try {
+              const response = await fetch("/api/loan/push-to-hr-executive", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ loan_request_id: actionModal.row.id, action: "return_to_accounts", hr_loan_office_memo: returnAccountsReason.trim() }),
+              })
+              const result = await response.json()
+              if (!response.ok) {
+                toast({ title: "Return failed", description: result.error || "Could not return the FD to Accounts.", variant: "destructive" })
+                return
+              }
+              toast({ title: "Returned to Accounts", description: "The FD calculation was sent back to Accounts for correction." })
+              setReturnAccountsDialogOpen(false)
+              setActionModal((s) => ({ ...s, open: false }))
+              await loadData()
+            } finally {
+              setIsReturningToAccounts(false)
+            }
+          }}
+        >
+          {isReturningToAccounts ? "Returning..." : "Confirm Return"}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+
+  <Dialog open={memoReviewModal.open} onOpenChange={(o) => {
         setMemoReviewModal((s) => ({ ...s, open: o }))
         if (!o && actionModal.actionType === "hr_terms" && actionModal.row) {
           setActionModal((s) => ({ ...s, open: true }))

@@ -379,6 +379,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const canAccess =
       loan.user_id === userId ||
       role === "admin" ||
+      role === "administrator" ||
+      role === "hr_records" ||
+      role === "hr_records_officer" ||
+      role === "hr_records_manager" ||
+      role === "hr_records_office" ||
       role === "managing_director" ||
       role === "secretary" ||
       role === "it-admin" ||

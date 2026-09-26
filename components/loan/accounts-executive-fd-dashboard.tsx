@@ -403,6 +403,40 @@ export function AccountsExecutiveFDDashboard({
     }
   }
 
+  const handleSendBackForCorrection = async () => {
+    if (!selectedReview) return
+    const reason = `${verificationMemo} ${reviewDecision}`.trim()
+    if (!reason) {
+      toast({ title: 'Correction reason required', description: 'Explain what Accounts Office must correct before sending this record back.', variant: 'destructive' })
+      return
+    }
+    try {
+      setSubmitting(true)
+      const res = await fetch('/api/loan/fd-review', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          review_id: selectedReview.id,
+          review_status: 'correction_required',
+          fd_verification_memo: verificationMemo,
+          review_decision: reviewDecision,
+          adjustment_reason: reason,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to return FD for correction')
+      toast({ title: 'Returned for correction', description: 'The record is back in the HR Loan Office queue for Accounts correction.' })
+      setSelectedReview(null)
+      setVerificationMemo('')
+      setReviewDecision('')
+      fetchPendingReviews()
+    } catch (error) {
+      toast({ title: 'Correction return failed', description: error instanceof Error ? error.message : 'Try again', variant: 'destructive' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const handleReject = async () => {
     if (!selectedReview) return
 
@@ -805,10 +839,19 @@ export function AccountsExecutiveFDDashboard({
                 ? !isExceptionLoanType && isPoorFdScoreLocal(fdScore, selectedReview.fd_good)
                 : false
 
-              return (
-                <>
-                  <Button
-                    variant="destructive"
+  return (
+  <>
+  <Button
+  variant="outline"
+  onClick={handleSendBackForCorrection}
+  disabled={submitting}
+  size="sm"
+  className="border-amber-500 text-amber-700 hover:bg-amber-50"
+  >
+  Send Back for Correction
+  </Button>
+  <Button
+  variant="destructive"
                     onClick={handleReject}
                     disabled={submitting || !canReject || isAdjustmentReasonMissing}
                     size="sm"

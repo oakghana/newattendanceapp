@@ -464,7 +464,7 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
     "/dashboard/excuse-duty-review",
   ])
 
-  const HR_RECORDS_SIDEBAR_ROLES = new Set(["hr_records", "hr_records_officer", "hr_records_manager"])
+  const HR_RECORDS_SIDEBAR_ROLES = new Set(["admin", "administrator", "hr_records", "hr_records_officer", "hr_records_manager"])
   const HR_LEAVE_OFFICE_SIDEBAR_ROLES = new Set(["hr_leave_office", "hr_office", "director_hr", "manager_hr", "regional_hr"])
   const isRegionalHr = effectiveRole === "regional_hr"
   const isHrRecordsOrLeaveOffice =
