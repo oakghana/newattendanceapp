@@ -7742,7 +7742,11 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     <div className="grid grid-cols-2 gap-2">
                       <div className="col-span-2">
                         <Label className="text-xs">Correct Car Loan Type</Label>
-                        <Select value={modalEditedLoanTypeKey} onValueChange={setModalEditedLoanTypeKey}>
+                        <Select value={modalEditedLoanTypeKey} onValueChange={(value) => {
+                          setModalEditedLoanTypeKey(value)
+                          const selectedType = (data?.loanTypes || []).find((type) => type.loan_key === value)
+                          if (selectedType?.fixed_amount != null) setModalRequestedAmount(String(selectedType.fixed_amount))
+                        }}>
                           <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select Junior or Senior" /></SelectTrigger>
                           <SelectContent>
                             {(data?.loanTypes || []).filter((type) => /car/i.test(`${type.loan_key} ${type.loan_label}`) && /junior|senior/i.test(`${type.loan_key} ${type.loan_label}`) && type.is_active !== false).map((type) => (
