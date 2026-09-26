@@ -47,6 +47,8 @@ export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
   const [error, setError] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [bulkGenerating, setBulkGenerating] = useState(false)
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null)
 
   const candidates = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -130,6 +132,23 @@ export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
     }
   }
 
+  const regenerateAllMissing = async () => {
+    setBulkGenerating(true)
+    setBulkMessage(null)
+    setError(null)
+    try {
+      const res = await fetch('/api/loan/repayment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'regenerate_all_missing' }) })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Unable to regenerate schedules')
+      setBulkMessage(`${json.generated || 0} schedule${json.generated === 1 ? '' : 's'} generated. ${json.remaining || 0} still need attention.`)
+      if (selectedId) await loadSchedule(selectedId)
+    } catch (e: any) {
+      setError(e?.message || 'Unable to regenerate schedules')
+    } finally {
+      setBulkGenerating(false)
+    }
+  }
+
   const amount = (l: LoanLite) => Number(l.fixed_amount || l.requested_amount || 0)
 
   const confirmPayment = async (row: ScheduleRow, paymentStatus: 'paid' | 'not_paid') => {
@@ -167,8 +186,13 @@ export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Refresh
             </Button>
+            <Button size="sm" onClick={() => void regenerateAllMissing()} disabled={bulkGenerating}>
+              {bulkGenerating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+              Generate all missing schedules
+            </Button>
           </div>
 
+          {bulkMessage && <p className="text-sm text-emerald-700">{bulkMessage}</p>}
           {candidates.length === 0 ? (
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-slate-500">
               No loans currently in a repayable / post-approval stage. Approved loans will appear here automatically.

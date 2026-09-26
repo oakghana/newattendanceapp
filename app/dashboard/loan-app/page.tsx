@@ -1523,7 +1523,7 @@ export default function LoanAppPage() {
 
     // Loan Office tab: ONLY for HR department loan office staff to process HOD-approved loans and perform FD checks
     // Supports both new (hr_loan_office) and legacy (loan_office in HR dept) role names
-    const isHRLoanOffice = (["hr_loan_office", "loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) || (p?.loanOffice && !userDeptIsAccounts)
+    const isHRLoanOffice = (["hr_loan_office", "loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) || normalizedRole.includes("hr_loan") || /hr.*loan.*office/i.test(`${normalizedRole} ${userDeptName}`)) && !userDeptIsAccounts || (p?.loanOffice && !userDeptIsAccounts)
     if (isHRLoanOffice) {
       tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice})` })
     }
@@ -1827,8 +1827,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     // Calculate monetary totals
     const rowAmount = (r: LoanRequest) => Number(r.fixed_amount || r.requested_amount || 0)
     const totalLoanValue = rows.reduce((sum: number, r: LoanRequest) => sum + rowAmount(r), 0)
-    const approvedStatuses = new Set(["hod_approved", "sent_to_accounts", "approved_director", "awaiting_committee", "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered", "payment_completed"])
-    const approvedRows = rows.filter((r: LoanRequest) => approvedStatuses.has(String(r.status || "")))
+  // A loan is approved only after the MD final approval stamp. Committee and earlier workflow stages are still pending.
+  const approvedRows = rows.filter((r: LoanRequest) => Boolean(r.md_approved_at) && String(r.status || "") !== "committee_rejected")
+
     const totalApprovedValue = approvedRows.reduce((sum: number, r: LoanRequest) => sum + rowAmount(r), 0)
     const avgLoanAmount = rows.length > 0 ? totalLoanValue / rows.length : 0
 
