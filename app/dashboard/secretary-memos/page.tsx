@@ -68,8 +68,7 @@ export default async function SecretaryMemosPage() {
     "referenced",
     "staff_receiving_funds",
     "partially_recovered",
-  "fully_recovered",
-  "archived",
+    "fully_recovered",
   ])
   .order("created_at", { ascending: false })
     .limit(300)
@@ -156,6 +155,7 @@ export default async function SecretaryMemosPage() {
       "fully_recovered",
     ])
     .not("md_approved_at", "is", null)
+    .neq("status", "archived")
     .order("md_approved_at", { ascending: false })
     .limit(300)
 
