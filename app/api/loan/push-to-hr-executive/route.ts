@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       }
       await admin.from('loan_request_timeline').insert(loanRequestIds.map((loan_request_id: string) => ({
         loan_request_id, actor_id: user.id, actor_role: role || 'hr_loan_office', action_key: 'pushed_to_hr_executive',
-        from_status: 'pending_hr_loan_office', to_status: 'awaiting_director_hr', note: `HR Loan Office bulk-forwarded this approved FD loan to HR Executive. Memo: ${memo}`,
+        from_status: 'pending_hr_loan_office', to_status: 'awaiting_hr_executives', note: `HR Loan Office bulk-forwarded this approved FD loan to HR Executive. Memo: ${memo}`,
       })))
       return NextResponse.json({ success: true, count: loanRequestIds.length, message: `${loanRequestIds.length} loans pushed to HR Executive` })
     }
@@ -183,12 +183,16 @@ export async function POST(request: NextRequest) {
         updated_at: now,
       })
       .eq('id', loan_request_id)
+      .eq('status', 'pending_hr_loan_office')
       .select()
       .single()
 
     if (updateError) {
       console.error('[v0] Error updating loan status:', updateError)
       return NextResponse.json({ error: 'Failed to update loan status', details: updateError.message }, { status: 500 })
+    }
+    if (!updatedLoan) {
+      return NextResponse.json({ error: 'This loan was already forwarded. Refresh and try again.' }, { status: 409 })
     }
 
     // Log to loan_request_timeline for audit trail
@@ -200,7 +204,7 @@ export async function POST(request: NextRequest) {
         actor_role: role || 'hr_loan_office',
         action_key: 'pushed_to_hr_executive',
         from_status: 'pending_hr_loan_office',
-        to_status: 'awaiting_director_hr',
+        to_status: 'awaiting_hr_executives',
         note: `HR Loan Office pushed approved FD loan to HR Executive for signing and approval. Memo: ${memo}`,
       })
 

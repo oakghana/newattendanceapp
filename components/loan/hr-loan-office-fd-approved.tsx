@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -333,7 +333,11 @@ export function HRLoanOfficeFDApproved() {
       </Card>
 
       {/* Loans Table/Cards */}
-      {filteredLoans.length === 0 ? (
+      {loading ? (
+        <Card>
+          <CardContent className="py-8 text-center text-sm text-slate-500">Loading FD-approved loans...</CardContent>
+        </Card>
+      ) : filteredLoans.length === 0 ? (
         <Card>
           <CardContent className="pt-8">
             <div className="text-center text-slate-500">
