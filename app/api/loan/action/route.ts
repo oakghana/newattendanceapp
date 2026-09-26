@@ -523,6 +523,35 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (action === "committee_forward_accounts") {
+      actionHandled = true
+      if (!canDoCommittee(role)) return NextResponse.json({ error: "Only committee/admin can forward" }, { status: 403 })
+      if (req.status !== "awaiting_committee") return NextResponse.json({ error: "Request is not at committee stage" }, { status: 400 })
+      if (!/car/i.test(String(req.loan_type_key || req.loan_type_label || ""))) {
+        return NextResponse.json({ error: "Only car loans can be sent through the committee FD verification flow" }, { status: 400 })
+      }
+
+      toStatus = "sent_to_accounts"
+      update.status = toStatus
+      update.committee_note = note || "Committee requested Accounts FD verification before final decision."
+      update.committee_reviewer_id = user.id
+      update.committee_decision_at = new Date().toISOString()
+
+      const { data: accountsUsers } = await admin
+        .from("user_profiles")
+        .select("id")
+        .in("role", ["loan_office", "accounts_executive", "admin"])
+        .eq("is_active", true)
+      await notifyUsers(
+        admin,
+        (accountsUsers || []).map((u: any) => u.id),
+        "Car Loan FD Verification Required",
+        `Committee sent ${req.request_number} to Accounts. Complete the FD review so it is recorded on the staff request before returning it to Committee.`,
+        "loan_committee_fd_requested",
+        { request_id: req.id },
+      )
+    }
+
     if (action === "committee_decision") {
       actionHandled = true
       if (!canDoCommittee(role)) return NextResponse.json({ error: "Only committee/admin can decide" }, { status: 403 })

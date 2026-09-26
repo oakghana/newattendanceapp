@@ -7896,7 +7896,25 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               </p>
             )}
             {actionModal.actionType === "committee" && actionModal.row && (
-              <Button variant="outline" onClick={() => setActionModal((s) => ({ ...s, open: false }))}>Close</Button>
+              <>
+                <Button variant="outline" onClick={() => setActionModal((s) => ({ ...s, open: false }))}>Close</Button>
+                {/car/i.test(`${actionModal.row.loan_type_key} ${actionModal.row.loan_type_label}`) && (
+                  <Button
+                    variant="outline"
+                    className="border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                    onClick={async () => {
+                      await runAction({
+                        action: "committee_forward_accounts",
+                        id: actionModal.row!.id,
+                        note: modalAdditionalInfo || "Committee requested Accounts FD verification before final decision.",
+                      })
+                      setActionModal((s) => ({ ...s, open: false }))
+                    }}
+                  >
+                    Send to Accounts for FD Verification
+                  </Button>
+                )}
+              </>
             )}
             {actionModal.actionType === "hr_terms" && actionModal.row && (
               <>
