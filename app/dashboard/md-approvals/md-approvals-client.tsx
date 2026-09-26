@@ -921,7 +921,12 @@ export function MdApprovalsClient({ profile }: Props) {
         setJustApproved([])
       }, 2200)
     } catch (err) {
-      toast({ title: "Approval failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" })
+      const message = err instanceof Error ? err.message : "Unknown error"
+      toast({
+        title: message.includes("HR Records") ? "Caution: HR Records reference required" : "Approval failed",
+        description: message,
+        variant: "destructive",
+      })
     } finally {
       setIsApproving(false)
     }

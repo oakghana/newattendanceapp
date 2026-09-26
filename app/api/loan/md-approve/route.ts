@@ -29,13 +29,26 @@ export async function POST(req: NextRequest) {
   // Verify all provided loans are in the post-HR-Records MD approval stage
   const { data: loans, error: fetchErr } = await admin
     .from("loan_requests")
-    .select("id, status, request_number, loan_type_label, staff_full_name")
+    .select("id, status, request_number, loan_type_label, staff_full_name, reference_number, memo_reference_locked")
     .in("id", loanIds)
     .eq("status", "awaiting_director_hr")
 
   if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })
   if (!loans || loans.length === 0) {
     return NextResponse.json({ error: "No eligible loans found. Loans must be at HR Executive approved stage." }, { status: 404 })
+  }
+
+  const unreferencedLoans = loans.filter((loan: any) => {
+    const reference = String(loan.reference_number || "").trim()
+    return !reference || loan.memo_reference_locked !== true
+  })
+  if (unreferencedLoans.length > 0) {
+    return NextResponse.json({
+      error: "Caution: this memo cannot be signed yet. HR Records must first assign and lock the official memo reference.",
+      code: "HR_RECORDS_REFERENCE_REQUIRED",
+      loanIds: unreferencedLoans.map((loan: any) => loan.id),
+      requestNumbers: unreferencedLoans.map((loan: any) => loan.request_number),
+    }, { status: 409 })
   }
 
   const eligibleIds = loans.map((l: any) => l.id)
