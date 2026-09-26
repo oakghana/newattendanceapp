@@ -156,7 +156,7 @@ export function HRLoanOfficeFDApproved() {
   const openHandoffDialog = (loan: FDApprovedLoan, defaultMemo: string) => {
     setSelectedForPush(loan)
     setPushMemo(defaultMemo)
-    setSalaryAdvanceDays('')
+    setSalaryAdvanceDays(String(loan.salary_advance_multiplier || loan.deduction_period_months || loan.repayment_duration_months || loan.recovery_months || ''))
   }
 
   const handleViewDetails = (loan: FDApprovedLoan) => {
@@ -216,6 +216,7 @@ export function HRLoanOfficeFDApproved() {
           loan_request_id: selectedForPush.id,
           hr_loan_office_memo: pushMemo,
           action: 'push_to_hr_executive',
+          recovery_months: Number(salaryAdvanceDays),
         }),
       })
 
