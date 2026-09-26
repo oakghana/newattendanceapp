@@ -658,7 +658,11 @@ export async function GET() {
         ? admin.from("loan_requests").select("*").in("status", ["hod_approved", "pending_hr_loan_office"]).order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null } as any),
       showAccounts
-        ? admin.from("loan_requests").select("*").eq("status", "sent_to_accounts").order("created_at", { ascending: false })
+        ? admin
+    .from("loan_requests")
+    .select("*")
+    .or("status.eq.sent_to_accounts,and(status.eq.pending_accounts_fd_review,hr_note.ilike.*Returned by HR Loan Office*)")
+    .order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null } as any),
       showAccounts
         ? admin.from("loan_requests").select("*").eq("status", "approved_director").order("created_at", { ascending: false })

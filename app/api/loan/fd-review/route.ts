@@ -99,8 +99,9 @@ export async function GET(request: Request) {
     // Accounts Executive sees loans where Loan Office has set FD and is awaiting AE decision
     let statusFilter: string[]
     if (statusParam === "pending_review") {
-      // Include sent_to_accounts when FD score already present (legacy path)
-      statusFilter = ["pending_accounts_fd_review", "fd_review_pending", "sent_to_accounts"]
+      // FD Approval is only for calculations awaiting Accounts Executive approval.
+      // `sent_to_accounts` belongs exclusively to the Accounts Office calculation queue.
+      statusFilter = ["pending_accounts_fd_review", "fd_review_pending"]
     } else if (statusParam === "approved") {
       // Everything Accounts Exec approved / forwarded toward HR Loan Office and beyond
       statusFilter = [
@@ -162,6 +163,11 @@ export async function GET(request: Request) {
 
     if (statusFilter.length > 0) {
       query = query.in("status", statusFilter)
+      if (statusParam === "pending_review") {
+        // Older requests may still carry the former status, but the HR return note
+        // identifies them as Accounts Office recalculation work, not AE approvals.
+        query = query.not("hr_note", "ilike", "%Returned by HR Loan Office%")
+      }
     }
 
     const { data: loanRequests, error: queryError } = await query
