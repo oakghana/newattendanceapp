@@ -434,7 +434,7 @@ export async function resolveRegionalManager(
  */
 export function hrRecordsCanReference(status: string | null | undefined, entity: "leave" | "loan" = "leave") {
   const value = String(status || "")
-  if (entity === "loan") return ["approved_director", "pending_hr_records_reference"].includes(value)
+  if (entity === "loan") return ["approved_director", "awaiting_director_hr", "pending_hr_records_reference"].includes(value)
   return ["hr_approved", "pending_hr_records_reference"].includes(value)
 }
 

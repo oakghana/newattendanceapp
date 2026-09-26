@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast"
 const FINAL_APPROVED_STATUSES = new Set([
   "hr_approved",
   "pending_hr_records_reference",
+  "awaiting_director_hr",
   "approved_director",
   "approved",
   "referenced",
