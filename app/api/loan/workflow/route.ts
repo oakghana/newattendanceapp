@@ -649,7 +649,7 @@ export async function GET() {
     const showAccounts = permissions.accounts || viewAllTabs
     // HR Loan Office can monitor committee-stage requests, while action rights remain
   // restricted to users with the committee permission.
-  const showCommittee = permissions.committee || viewAllTabs || role === "hr_loan_office"
+  const showCommittee = permissions.committee || viewAllTabs || role === "hr_loan_office" || role.includes("hr_loan") || (role === "loan_office" && /hr|human resource/i.test(`${deptName} ${deptCode}`))
     const showHrOffice = permissions.hrOffice || viewAllTabs
     const showDirectorHr = permissions.directorHr || viewAllTabs
 
