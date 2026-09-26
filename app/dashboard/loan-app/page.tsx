@@ -4104,7 +4104,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           </div>
 
           {/* ── Processing Queue ── */}
-          <div id="loan-office-loanOfficeQueue" className="order-2 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div id="loan-office-loanOfficeQueue" className="order-1 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
             {/* section header */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
               <button type="button" data-loan-section-toggle className="flex flex-1 items-center gap-2 text-left" onClick={() => toggleSection("loanOfficeQueue")}>
@@ -4354,7 +4354,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           </div>
 
           {/* ── HR Terms Queue ── */}
-          <div id="loan-office-hrTermsQueue" className="order-1 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div id="loan-office-hrTermsQueue" className="order-2 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
               <button type="button" data-loan-section-toggle className="flex flex-1 items-center gap-2 text-left" onClick={() => toggleSection("hrTermsQueue")}>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.hrTermsQueue ? "-rotate-90" : ""}`} />
@@ -7944,6 +7944,39 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 }}
               >
                 Submit Payment Evidence
+              </Button>
+            )}
+            {actionModal.actionType === "push_to_hr_executive" && actionModal.row && (
+              <Button
+                type="button"
+                variant="outline"
+                className="border-amber-500 bg-amber-50 font-semibold text-amber-800 hover:bg-amber-100"
+                disabled={!modalNote.trim()}
+                onClick={async () => {
+                  if (!actionModal.row || !modalNote.trim()) {
+                    toast({ title: "Correction details required", description: "Enter the correction details before returning this FD to Accounts.", variant: "destructive" })
+                    return
+                  }
+                  const response = await fetch("/api/loan/push-to-hr-executive", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      loan_request_id: actionModal.row.id,
+                      action: "return_to_accounts",
+                      hr_loan_office_memo: modalNote,
+                    }),
+                  })
+                  const result = await response.json()
+                  if (!response.ok) {
+                    toast({ title: "Return failed", description: result.error || "Could not return the FD to Accounts.", variant: "destructive" })
+                    return
+                  }
+                  toast({ title: "Returned to Accounts", description: "The FD calculation was sent back to Accounts for correction." })
+                  setActionModal((s) => ({ ...s, open: false }))
+                  await loadData()
+                }}
+              >
+                Return FD to Accounts for Correction
               </Button>
             )}
             {actionModal.actionType === "push_to_hr_executive" && actionModal.row && (
