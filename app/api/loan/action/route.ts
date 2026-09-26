@@ -29,6 +29,7 @@ type ActionKey =
   | "loan_office_forward"
   | "accounts_fd_update"
   | "committee_decision"
+  | "admin_committee_edit"
   | "hr_set_terms"
   | "director_finalize"
   | "save_memo_draft"
@@ -550,6 +551,66 @@ export async function POST(request: NextRequest) {
         "loan_committee_fd_requested",
         { request_id: req.id },
       )
+    }
+
+    if (action === "admin_committee_edit") {
+      actionHandled = true
+      if (normalizeRole(role) !== "admin") {
+        return NextResponse.json({ error: "Only administrators can edit committee car loan entries" }, { status: 403 })
+      }
+      if (req.status !== "awaiting_committee") {
+        return NextResponse.json({ error: "Only loans currently at committee stage can be edited" }, { status: 400 })
+      }
+      if (!/car/i.test(String(req.loan_type_key || req.loan_type_label || ""))) {
+        return NextResponse.json({ error: "Only car loan entries can be edited here" }, { status: 400 })
+      }
+
+      const requestedAmount = Number(body.requested_amount)
+      if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) {
+        return NextResponse.json({ error: "Enter a valid requested amount" }, { status: 400 })
+      }
+      const staffNumber = String(body.staff_number || "").trim()
+      const staffRank = String(body.staff_rank || "").trim()
+      const reason = String(body.reason || "").trim()
+      const loanTypeKey = String(body.loan_type_key || "").trim()
+      const { data: correctedLoanType } = loanTypeKey
+        ? await admin.from("loan_types").select("loan_key, loan_label, fixed_amount, max_amount, is_active").eq("loan_key", loanTypeKey).maybeSingle()
+        : { data: null }
+      if (!correctedLoanType || correctedLoanType.is_active === false || !/car/i.test(`${correctedLoanType.loan_key} ${correctedLoanType.loan_label}`) || !/junior|senior/i.test(`${correctedLoanType.loan_key} ${correctedLoanType.loan_label}`)) {
+        return NextResponse.json({ error: "Select an active Junior or Senior car loan type" }, { status: 400 })
+      }
+      if (staffNumber.length > 50 || staffRank.length > 120 || reason.length > 4000) {
+        return NextResponse.json({ error: "One or more edited fields are too long" }, { status: 400 })
+      }
+
+      update.requested_amount = requestedAmount
+      update.loan_type_key = correctedLoanType.loan_key
+      update.loan_type_label = correctedLoanType.loan_label
+      update.fixed_amount = correctedLoanType.fixed_amount ?? null
+      update.staff_number = staffNumber || null
+      update.staff_rank = staffRank || null
+      update.reason = reason || null
+      update.committee_note = note || req.committee_note || null
+      update.committee_reviewer_id = user.id
+
+      await timeline(admin, {
+        loan_request_id: req.id,
+        actor_id: user.id,
+        actor_role: role,
+        action_key: "admin_committee_edit",
+        from_status: req.status,
+        to_status: req.status,
+        note: note || "Administrator edited car loan entry at committee stage.",
+        metadata: {
+          requested_amount: { from: req.requested_amount, to: requestedAmount },
+          loan_type_key: { from: req.loan_type_key, to: correctedLoanType.loan_key },
+          loan_type_label: { from: req.loan_type_label, to: correctedLoanType.loan_label },
+          fixed_amount: { from: req.fixed_amount, to: correctedLoanType.fixed_amount ?? null },
+          staff_number: { from: req.staff_number, to: staffNumber || null },
+          staff_rank: { from: req.staff_rank, to: staffRank || null },
+          reason: { from: req.reason, to: reason || null },
+        },
+      })
     }
 
     if (action === "committee_decision") {

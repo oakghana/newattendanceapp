@@ -1199,6 +1199,11 @@ export default function LoanAppPage() {
   const [modalLastCarLoanDate, setModalLastCarLoanDate] = useState("")
   const [modalNeverHadCarLoan, setModalNeverHadCarLoan] = useState(false)
   const [modalAdditionalInfo, setModalAdditionalInfo] = useState("")
+  const [modalRequestedAmount, setModalRequestedAmount] = useState("")
+  const [modalEditedStaffNumber, setModalEditedStaffNumber] = useState("")
+  const [modalEditedStaffRank, setModalEditedStaffRank] = useState("")
+  const [modalEditedReason, setModalEditedReason] = useState("")
+  const [modalEditedLoanTypeKey, setModalEditedLoanTypeKey] = useState("")
 
   const [lookupData, setLookupData] = useState<LookupPayload | null>(null)
   const [lookupLoading, setLookupLoading] = useState(false)
@@ -1417,6 +1422,11 @@ export default function LoanAppPage() {
       setModalLastCarLoanDate("")
       setModalNeverHadCarLoan(false)
       setModalAdditionalInfo("")
+      setModalRequestedAmount(actionModal.row.requested_amount != null ? String(actionModal.row.requested_amount) : "")
+      setModalEditedStaffNumber(actionModal.row.staff_number || "")
+      setModalEditedStaffRank(actionModal.row.staff_rank || "")
+      setModalEditedReason(actionModal.row.reason || "")
+      setModalEditedLoanTypeKey(actionModal.row.loan_type_key || "")
     }
   }, [actionModal.open, actionModal.actionType, actionModal.row])
 
@@ -5742,7 +5752,6 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       <TableHead className="whitespace-nowrap">Rank</TableHead>
                       <TableHead className="whitespace-nowrap">Loan Type</TableHead>
                       <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
-                      <TableHead className="whitespace-nowrap">FD Score</TableHead>
                       <TableHead className="whitespace-nowrap">FD Reviewer</TableHead>
                       <TableHead className="whitespace-nowrap">Status</TableHead>
                       <TableHead className="whitespace-nowrap">Attachment</TableHead>
@@ -5759,7 +5768,6 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                         <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>
                         <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                         <TableCell className="text-xs whitespace-nowrap">
@@ -5784,7 +5792,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           )}
 
           {committeeViewMode === "card" && pagedCommittee.map((row) => (
-            <StageCard key={row.id} row={row}>
+            <StageCard key={row.id} row={row} hideFdScore>
               {p?.committee && <Button size="sm" onClick={() => openActionModal(row, "committee")}>Further Information</Button>}
             </StageCard>
           ))}
@@ -7728,6 +7736,41 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {/* Committee - Further Information */}
             {actionModal.actionType === "committee" && (
               <>
+                {isAdmin && /car/i.test(`${actionModal.row?.loan_type_key} ${actionModal.row?.loan_type_label}`) && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+                    <p className="mb-2 text-xs font-semibold text-amber-900">Administrator-only car loan edit</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="col-span-2">
+                        <Label className="text-xs">Correct Car Loan Type</Label>
+                        <Select value={modalEditedLoanTypeKey} onValueChange={setModalEditedLoanTypeKey}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select Junior or Senior" /></SelectTrigger>
+                          <SelectContent>
+                            {(data?.loanTypes || []).filter((type) => /car/i.test(`${type.loan_key} ${type.loan_label}`) && /junior|senior/i.test(`${type.loan_key} ${type.loan_label}`) && type.is_active !== false).map((type) => (
+                              <SelectItem key={type.loan_key} value={type.loan_key}>{type.loan_label} ({type.loan_key})</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="mt-1 text-[11px] text-muted-foreground">Options are loaded from the active loan type table.</p>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Requested Amount (GHc)</Label>
+                        <Input type="number" min="1" step="0.01" value={modalRequestedAmount} onChange={(e) => setModalRequestedAmount(e.target.value)} className="h-7 text-xs" />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Staff Number</Label>
+                        <Input value={modalEditedStaffNumber} onChange={(e) => setModalEditedStaffNumber(e.target.value)} className="h-7 text-xs" />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Staff Rank</Label>
+                        <Input value={modalEditedStaffRank} onChange={(e) => setModalEditedStaffRank(e.target.value)} className="h-7 text-xs" />
+                      </div>
+                      <div className="col-span-2">
+                        <Label className="text-xs">Reason / Purpose</Label>
+                        <Textarea value={modalEditedReason} onChange={(e) => setModalEditedReason(e.target.value)} rows={2} className="text-xs" />
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Label className="text-xs">Employee Name</Label>
@@ -7901,6 +7944,24 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {actionModal.actionType === "committee" && actionModal.row && (
               <>
                 <Button variant="outline" onClick={() => setActionModal((s) => ({ ...s, open: false }))}>Close</Button>
+                {isAdmin && /car/i.test(`${actionModal.row.loan_type_key} ${actionModal.row.loan_type_label}`) && (
+                  <Button
+                    onClick={async () => {
+                      await runAction({
+                        action: "admin_committee_edit",
+                        id: actionModal.row!.id,
+                        requested_amount: modalRequestedAmount,
+                        loan_type_key: modalEditedLoanTypeKey,
+                        staff_number: modalEditedStaffNumber,
+                        staff_rank: modalEditedStaffRank,
+                        reason: modalEditedReason,
+                        note: "Administrator edited the car loan entry at committee stage.",
+                      })
+                      setActionModal((s) => ({ ...s, open: false }))
+                      await loadData()
+                    }}
+                  >Save Car Loan Changes</Button>
+                )}
                 {/car/i.test(`${actionModal.row.loan_type_key} ${actionModal.row.loan_type_label}`) && (
                   <Button
                     variant="outline"
@@ -8929,7 +8990,7 @@ function CollapsibleSection({
   )
 }
 
-function StageCard({ row, children }: { row: LoanRequest; children: React.ReactNode }) {
+function StageCard({ row, children, hideFdScore = false }: { row: LoanRequest; children: React.ReactNode; hideFdScore?: boolean }) {
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -8945,9 +9006,9 @@ function StageCard({ row, children }: { row: LoanRequest; children: React.ReactN
               Auto-forwarded: HOD did not act in 3 days
             </Badge>
           )}
-          {row.fd_score !== null && (
-            <span className="inline-flex items-center gap-1 text-xs">
-              FD: <strong>{row.fd_score}</strong>
+  {!hideFdScore && row.fd_score !== null && (
+  <span className="inline-flex items-center gap-1 text-xs">
+  FD: <strong>{row.fd_score}</strong>
               {row.fd_good ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : null}
             </span>
           )}
