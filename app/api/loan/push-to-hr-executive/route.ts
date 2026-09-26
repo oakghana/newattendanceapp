@@ -5,7 +5,7 @@ import { calculateSalaryAdvance } from '@/lib/salary-advance'
 
 export async function POST(request: NextRequest) {
   try {
-    const { loan_request_id, hr_loan_office_memo, salary_advance_days } = await request.json()
+    const { loan_request_id, hr_loan_office_memo, reference_number, salary_advance_days } = await request.json()
 
     if (!loan_request_id) {
       return NextResponse.json({ error: 'loan_request_id is required' }, { status: 400 })
@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
     const { data: updatedLoan, error: updateError } = await admin
       .from('loan_requests')
       .update({
+        ...(String(reference_number || '').trim() ? { reference_number: String(reference_number).trim() } : {}),
         ...(calculatedSalaryAdvance == null ? {} : {
           annual_salary: calculatedSalaryAdvance.annualSalary,
           basic_salary: calculatedSalaryAdvance.monthlySalary,
