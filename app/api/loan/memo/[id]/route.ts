@@ -215,27 +215,37 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
   }
 
   if (loan.status === "awaiting_director_hr") {
+    const isSalaryAdvance = isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label)
+    const recoveryMonths = Number(loan.recovery_months)
+    const recoveryLabel = Number.isFinite(recoveryMonths) && recoveryMonths > 0
+      ? `${Math.trunc(recoveryMonths)} month${Math.trunc(recoveryMonths) === 1 ? "" : "s"}`
+      : "the approved recovery period"
     return {
-      subject: `APPLICATION FOR ${String(loan.loan_type_label || "LOAN").toUpperCase()} (TERMS SET)`,
-      paragraphs: [
-        `We refer to your loan application dated ${fmtDate(loan.hr_forwarded_at)} on the above subject and wish to inform you that HR has prepared your loan terms and forwarded your request to Director HR for final decision.`,
-        `Proposed Disbursement Date: ${fmtMemoMonth(loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || loan.md_approved_at)}`,
-        ...(isFuneralLoan
-          ? ["Repayment: Not required. No monthly salary deduction applies."]
-          : [
-              `Proposed Recovery Start Date: ${fmtMemoMonth(loan.recovery_start_date || loan.next_payment_due || loan.repayment_start_date)}`,
-              `Proposed Recovery Duration: ${loan.recovery_months || loan.recovery_period_months || loan.recovery_duration_months || "TBD"} month(s)`,
-            ]),
-        ...(isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label) && loan.basic_salary
-          ? [
-              `Verified Monthly Salary: GHc ${fmtAmount(loan.basic_salary)}`,
-              ...((loan.recovery_months || loan.deduction_period_months) ? [`Number of Months for Recovery: ${loan.recovery_months || loan.deduction_period_months}`] : []),
-            ]
-          : []),
-        ...(cleanedHrNote ? [`HR Note: ${cleanedHrNote}`] : []),
-        "You will receive a final memo once Director HR concludes review.",
-        "You can count on our co-operation.",
-      ],
+      subject: `APPLICATION FOR ${isSalaryAdvance ? "SALARY ADVANCE" : String(loan.loan_type_label || "LOAN").toUpperCase()} (TERMS SET)`,
+      paragraphs: isSalaryAdvance
+        ? [
+            `We refer to your loan application dated ${fmtDate(loan.hr_forwarded_at || loan.created_at)} regarding the above subject. HR has prepared the proposed terms and forwarded your request to the Director of Human Resource for final consideration.`,
+            `Proposed disbursement month: ${fmtMemoMonth(loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || loan.md_approved_at)}.`,
+            `Proposed recovery start month: ${fmtMemoMonth(loan.recovery_start_date || loan.next_payment_due || loan.repayment_start_date)}.`,
+            Number(loan.basic_salary) > 0 ? `Verified monthly salary: GHc ${fmtAmount(loan.basic_salary)}.` : "",
+            `Number of months for recovery: ${recoveryLabel}.`,
+            ...(cleanedHrNote ? [`HR note: ${cleanedHrNote}.`] : []),
+            "A final memo will be issued once the Director of Human Resource concludes the review.",
+            "We count on your usual co-operation.",
+          ].filter(Boolean)
+        : [
+            `We refer to your loan application dated ${fmtDate(loan.hr_forwarded_at)} on the above subject. HR has prepared the proposed terms and forwarded your request to the Director of Human Resource for final consideration.`,
+            `Proposed disbursement month: ${fmtMemoMonth(loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || loan.md_approved_at)}.`,
+            ...(isFuneralLoan
+              ? ["Repayment is not required and no monthly salary deduction applies."]
+              : [
+                  `Proposed recovery start month: ${fmtMemoMonth(loan.recovery_start_date || loan.next_payment_due || loan.repayment_start_date)}.`,
+                  `Proposed recovery duration: ${loan.recovery_months || loan.recovery_period_months || loan.recovery_duration_months || "TBD"} month(s).`,
+                ]),
+            ...(cleanedHrNote ? [`HR note: ${cleanedHrNote}.`] : []),
+            "A final memo will be issued once the Director of Human Resource concludes the review.",
+            "We count on your usual co-operation.",
+          ],
     }
   }
 
@@ -251,19 +261,35 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
     extractMemoCopyRecipient(loan.hr_note) ||
     extractMemoCopyRecipient(loan.loan_office_note) ||
     "Deputy Director, Finance"
+  const isSalaryAdvance = isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label)
+  const salaryAdvanceRecoveryMonths = Number(loan.recovery_months)
+  const salaryAdvanceMultiplier = Number(loan.salary_advance_multiplier)
+  const salaryAdvanceMonthlySalary = Number(loan.basic_salary)
+  const salaryAdvanceRecoveryLabel = Number.isFinite(salaryAdvanceRecoveryMonths) && salaryAdvanceRecoveryMonths > 0
+    ? `${Math.trunc(salaryAdvanceRecoveryMonths)} month${Math.trunc(salaryAdvanceRecoveryMonths) === 1 ? "" : "s"}`
+    : "the approved recovery period"
+  const salaryAdvanceParagraphs = isSalaryAdvance
+    ? [
+        `We refer to your loan application dated ${fmtDate(loan.created_at)} regarding the above subject. Management has approved your application for a Salary Advance of ${amount}.`,
+        ...(Number.isFinite(salaryAdvanceMonthlySalary) && salaryAdvanceMonthlySalary > 0
+          ? [`Your verified monthly salary is GHc ${fmtAmount(salaryAdvanceMonthlySalary)}${Number.isFinite(salaryAdvanceMultiplier) && salaryAdvanceMultiplier > 0 ? `, and the approved advance was calculated using ${Math.trunc(salaryAdvanceMultiplier)} month${Math.trunc(salaryAdvanceMultiplier) === 1 ? "" : "s"} of salary.` : "."}`]
+          : []),
+        `The approved amount will be recovered from your salary in ${salaryAdvanceRecoveryLabel} by equal monthly instalments, commencing in ${recovStart}.`,
+        `By a copy of this letter, the ${memoCopyRecipient} is authorised to release the approved amount to you effective ${disbMonth}.`,
+        "Please take note of these terms and make the necessary arrangements for the applicable salary deductions.",
+        "We count on your usual co-operation.",
+      ]
+    : [
+        `We refer to your loan application dated ${fmtDate(loan.created_at)} on the above subject and wish to inform you that Management has approved your application for a ${loan.loan_type_label || "Loan"} of ${amount}.`,
+        ...(isFuneralLoan
+          ? ["This funeral support does not require repayment or monthly salary deductions."]
+          : [`The loan will be recovered in ${maintainedRecoveryMonths || "the approved recovery period"} equal monthly instalments from your salary, commencing in ${recovStart}.`]),
+        `By a copy of this letter, the ${memoCopyRecipient} has been advised to release the approved amount to you effective ${disbMonth}.`,
+        "You can count on our co-operation.",
+      ]
   return {
-    subject: `APPLICATION FOR ${String(loan.loan_type_label || "LOAN").toUpperCase()}`,
-    paragraphs: [
-      `We refer to your loan application dated ${fmtDate(loan.created_at)} on the above subject and wish to inform you that, Management has given approval for you to be granted a ${loan.loan_type_label || "Loan"} of ${amount}.`,
-      ...(isFuneralLoan
-        ? ["This funeral support does not require repayment or monthly salary deductions."]
-        : [`The loan would be recovered in ${maintainedRecoveryMonths || "TBD"} Equal Monthly Instalment from your salary effective, ${recovStart}.`]),
-      ...(isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label) && loan.basic_salary
-        ? [`Verified Basic Salary: GHc ${fmtAmount(loan.basic_salary)}.`]
-        : []),
-      `By a copy of this letter, the ${memoCopyRecipient} has been advised to release the said amount to you effective, ${disbMonth}.`,
-      "You can count on our co-operation.",
-    ],
+    subject: `APPLICATION FOR ${isSalaryAdvance ? "SALARY ADVANCE" : String(loan.loan_type_label || "LOAN").toUpperCase()}`,
+    paragraphs: salaryAdvanceParagraphs,
   }
 }
 
