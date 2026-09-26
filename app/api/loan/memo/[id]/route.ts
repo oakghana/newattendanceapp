@@ -216,7 +216,7 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
 
   if (loan.status === "awaiting_director_hr") {
     const isSalaryAdvance = isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label)
-    const recoveryMonths = Number(loan.recovery_months)
+    const recoveryMonths = Number(loan.recovery_months ?? loan.deduction_period_months ?? loan.repayment_duration_months)
     const recoveryLabel = Number.isFinite(recoveryMonths) && recoveryMonths > 0
       ? `${Math.trunc(recoveryMonths)} month${Math.trunc(recoveryMonths) === 1 ? "" : "s"}`
       : "the approved recovery period"
@@ -254,7 +254,7 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
   // schedule dates before displaying TBD.
   const maintainedDisbursementDate = loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || loan.md_approved_at
   const maintainedRecoveryStartDate = loan.recovery_start_date || loan.next_payment_due || loan.repayment_start_date
-  const maintainedRecoveryMonths = loan.recovery_months || loan.recovery_period_months || loan.recovery_duration_months
+  const maintainedRecoveryMonths = loan.recovery_months || loan.deduction_period_months || loan.repayment_duration_months || loan.recovery_period_months || loan.recovery_duration_months
   const disbMonth = fmtMemoMonth(maintainedDisbursementDate)
   const recovStart = fmtMemoMonth(maintainedRecoveryStartDate)
   const memoCopyRecipient =
@@ -262,7 +262,7 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
     extractMemoCopyRecipient(loan.loan_office_note) ||
     "Deputy Director, Finance"
   const isSalaryAdvance = isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label)
-  const salaryAdvanceRecoveryMonths = Number(loan.recovery_months)
+  const salaryAdvanceRecoveryMonths = Number(loan.recovery_months ?? loan.deduction_period_months ?? loan.repayment_duration_months)
   const salaryAdvanceMultiplier = Number(loan.salary_advance_multiplier)
   const salaryAdvanceMonthlySalary = Number(loan.basic_salary)
   const salaryAdvanceRecoveryLabel = Number.isFinite(salaryAdvanceRecoveryMonths) && salaryAdvanceRecoveryMonths > 0
