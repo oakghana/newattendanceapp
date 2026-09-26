@@ -55,7 +55,16 @@ export async function POST(request: NextRequest) {
       const now = new Date().toISOString()
       const { data: updatedLoan, error: updateError } = await admin
         .from('loan_requests')
-        .update({ status: 'pending_accounts_fd_review', fd_note: memo, hr_note: memo, updated_at: now })
+        .update({
+          // Return to the Accounts Office calculation queue, not the Accounts Executive review queue.
+          status: 'sent_to_accounts',
+          fd_score: null,
+          fd_good: null,
+          fd_checked_at: null,
+          fd_note: null,
+          hr_note: memo,
+          updated_at: now,
+        })
         .eq('id', loan_request_id)
         .eq('status', 'pending_hr_loan_office')
         .select()
@@ -67,8 +76,8 @@ export async function POST(request: NextRequest) {
         actor_role: role || 'hr_loan_office',
         action_key: 'fd_returned_to_accounts',
         from_status: 'pending_hr_loan_office',
-        to_status: 'pending_accounts_fd_review',
-        note: `HR Loan Office returned the FD calculation to Accounts for correction: ${memo}`,
+        to_status: 'sent_to_accounts',
+        note: `HR Loan Office returned the FD calculation to the Accounts Office to restart the calculation: ${memo}`,
       })
       return NextResponse.json({ success: true, loan: updatedLoan, message: 'FD calculation returned to Accounts for correction.' })
     }
