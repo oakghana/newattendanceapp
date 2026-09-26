@@ -272,12 +272,12 @@ export async function POST(request: NextRequest) {
           const sameRegion = reviewerRegion && requesterRegion && reviewerRegion === requesterRegion
           const ownedLocationIds = await resolveOwnedLocationIdsForRegionalOffice(admin, reviewerLocation, reviewerRegion)
           const ownsRequesterLocation = Boolean(requesterLocation && ownedLocationIds.includes(requesterLocation))
-          if (!sameRegion && !ownsRequesterLocation) {
+          if (!isLinkedHodForRequest && !sameRegion && !ownsRequesterLocation) {
             return NextResponse.json({ error: "Regional managers can endorse staff loans within their assigned regional office and associated districts, regardless of department." }, { status: 403 })
           }
         }
 
-  if (isDepartmentHead) {
+  if (isDepartmentHead && !isLinkedHodForRequest) {
     const sameDept = reviewerDept && requesterDept && reviewerDept === requesterDept
     const sameLocation = reviewerLocation && requesterLocation && reviewerLocation === requesterLocation
     if (!sameDept || !sameLocation) {

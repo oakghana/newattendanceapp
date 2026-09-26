@@ -962,10 +962,14 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
             <p className="font-semibold text-slate-800 text-sm">
               {leaveTypeLabelShort(req.leave_type_key)} — {req.leave_year_period}
             </p>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {fmtDate(effectiveStart)} → {fmtDate(effectiveEnd)}
-              <span className="ml-2 font-medium text-slate-700">{effectiveDays} day(s)</span>
-            </p>
+  <p className="text-xs text-slate-500 mt-0.5">
+  {fmtDate(effectiveStart)} → {fmtDate(effectiveEnd)}
+  <span className="ml-2 font-medium text-slate-700">{effectiveDays} day(s)</span>
+  </p>
+  <p className="text-xs text-slate-500 mt-1">
+  <span className="font-medium text-slate-700">Submitted for audit:</span>{" "}
+  {req.submitted_at ? new Date(req.submitted_at).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "Not available"}
+  </p>
           </div>
           <Badge className={`text-xs border ${getStatusColor(req.status)} shrink-0`}>
             {getStatusLabel(req.status, Boolean(req.memo_reference_locked))}
@@ -2754,7 +2758,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
     return t
   }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hodReviewRequests.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests, normalizedRole])
 
-  // ── Render ────��──────��───────────────────────���───────────────────��──
+  // ── Render ────��──────��─────────────────���─────���───────────────────��──
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
       {/* ─��� Header Banner ──────�����──────────��──────��─────────────────── */}
