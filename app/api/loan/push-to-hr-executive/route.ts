@@ -5,10 +5,17 @@ import { calculateSalaryAdvance } from '@/lib/salary-advance'
 
 export async function POST(request: NextRequest) {
   try {
-    const { loan_request_id, hr_loan_office_memo, reference_number, action, recovery_months } = await request.json()
+    const body = await request.json()
+    const loanRequestIds = Array.isArray(body.loan_request_ids)
+      ? body.loan_request_ids.map((id: unknown) => String(id).trim()).filter(Boolean)
+      : body.loan_request_id ? [String(body.loan_request_id).trim()] : []
+    const { hr_loan_office_memo, reference_number, action, recovery_months } = body
 
-    if (!loan_request_id) {
-      return NextResponse.json({ error: 'loan_request_id is required' }, { status: 400 })
+    if (loanRequestIds.length === 0) {
+      return NextResponse.json({ error: 'At least one loan request is required' }, { status: 400 })
+    }
+    if (loanRequestIds.length > 100) {
+      return NextResponse.json({ error: 'You can forward a maximum of 100 loans at once' }, { status: 400 })
     }
 
     const memo = String(hr_loan_office_memo || '').trim()
@@ -36,6 +43,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only HR Loan Office users can push loans to HR Executive' }, { status: 403 })
     }
 
+    // Bulk forwarding uses the same status guard as the single-record flow.
+    if (loanRequestIds.length > 1) {
+      if (action !== 'push_to_hr_executive') {
+        return NextResponse.json({ error: 'Bulk forwarding only supports sending loans to HR Executive' }, { status: 400 })
+      }
+      const { data: loans, error: bulkFetchError } = await admin
+        .from('loan_requests')
+        .select('id, status')
+        .in('id', loanRequestIds)
+      if (bulkFetchError || !loans || loans.length !== loanRequestIds.length) {
+        return NextResponse.json({ error: 'One or more selected loans could not be found' }, { status: 404 })
+      }
+      const invalidLoans = loans.filter((loan) => loan.status !== 'pending_hr_loan_office')
+      if (invalidLoans.length > 0) {
+        return NextResponse.json({ error: `${invalidLoans.length} selected loan(s) are no longer awaiting HR Loan Office review. Refresh and try again.` }, { status: 409 })
+      }
+      const now = new Date().toISOString()
+      const { data: updatedLoans, error: bulkUpdateError } = await admin
+        .from('loan_requests')
+        .update({ status: 'awaiting_hr_executives', director_hr_id: null, hr_note: memo, hr_officer_id: user.id, hr_forwarded_at: now, updated_at: now })
+        .in('id', loanRequestIds)
+        .eq('status', 'pending_hr_loan_office')
+        .select('id')
+      if (bulkUpdateError || !updatedLoans || updatedLoans.length !== loanRequestIds.length) {
+        return NextResponse.json({ error: 'Some selected loans were already processed. Refresh and try again.' }, { status: 409 })
+      }
+      await admin.from('loan_request_timeline').insert(loanRequestIds.map((loan_request_id: string) => ({
+        loan_request_id, actor_id: user.id, actor_role: role || 'hr_loan_office', action_key: 'pushed_to_hr_executive',
+        from_status: 'pending_hr_loan_office', to_status: 'awaiting_director_hr', note: `HR Loan Office bulk-forwarded this approved FD loan to HR Executive. Memo: ${memo}`,
+      })))
+      return NextResponse.json({ success: true, count: loanRequestIds.length, message: `${loanRequestIds.length} loans pushed to HR Executive` })
+    }
+
+    const loan_request_id = loanRequestIds[0]
     // Fetch the loan request to verify it exists and get current status
     const { data: loanRequest, error: fetchError } = await admin
       .from('loan_requests')
