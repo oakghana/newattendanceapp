@@ -829,9 +829,43 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     doc.setFont("times", "normal")
     doc.setFontSize(8.5)
     doc.setTextColor(60, 60, 60)
-  // Distribution lists belong to the workflow record, not the edited memo body.
-  // Do not append them here because the edited source may already contain a closing block.
 
+    // Keep the distribution block outside the editable body so regenerating a
+    // signed PDF from an edited draft cannot drop either kind of recipient.
+    const defaultCcRecipients = ["Deputy Director, Finance"]
+    const enteredCcSources = [
+      (loan as any).memo_draft_cc,
+      (loan as any).cc_recipients,
+      (loan as any).cc_list,
+    ]
+    const ccRecipients: string[] = []
+    const seenCc = new Set<string>()
+    for (const source of enteredCcSources) {
+      const values = Array.isArray(source) ? source : String(source || "").split(/[\\r\\n,]+/)
+      for (const value of values) {
+        const recipient = String(value || "").replace(/\\s+/g, " ").trim()
+        const key = recipient.toLowerCase()
+        if (recipient && !seenCc.has(key)) {
+          seenCc.add(key)
+          ccRecipients.push(recipient)
+        }
+      }
+    }
+    for (const recipient of defaultCcRecipients) {
+      const key = recipient.toLowerCase()
+      if (!seenCc.has(key)) {
+        seenCc.add(key)
+        ccRecipients.push(recipient)
+      }
+    }
+    doc.setFont("times", "bold")
+    doc.text("cc:", marginLeft, y)
+    doc.setFont("times", "normal")
+    for (const recipient of ccRecipients) {
+      y += 4.8
+      doc.text(recipient, marginLeft + 10, y)
+    }
+    y += 3
 
     // Imported approvals are retained for record purposes and must be clearly distinguished
     // from loans approved through the current portal workflow.
