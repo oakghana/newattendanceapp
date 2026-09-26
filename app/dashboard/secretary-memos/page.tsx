@@ -24,6 +24,7 @@ export default async function SecretaryMemosPage() {
     redirect("/dashboard/attendance")
   }
   const isHrExecutive = isHrExecutiveRole(normalizedRole)
+  const isAdministrator = normalizedRole === "admin" || normalizedRole === "administrator"
 
   const visibility = await resolveMemoVisibilityScope(admin, user.id, normalizedRole)
   const effectiveVisibility = normalizedRole === "regional_manager"
@@ -67,16 +68,17 @@ export default async function SecretaryMemosPage() {
     "referenced",
     "staff_receiving_funds",
     "partially_recovered",
-    "fully_recovered",
+  "fully_recovered",
+  "archived",
   ])
-    .order("created_at", { ascending: false })
+  .order("created_at", { ascending: false })
     .limit(300)
 
   const visibleLoanMemos = isHrExecutive
     ? (loanMemos || []).filter((memo: any) => memo.director_hr_id === user.id)
     : scopedStaffIds
     ? (loanMemos || []).filter((memo: any) => memo.user_id && scopedStaffIds.includes(memo.user_id))
-    : loanMemos || []
+    : (loanMemos || []).filter((memo: any) => isAdministrator || memo.status !== "archived")
 
   // Fetch approved leave memos from leave_plan_requests (the correct table)
   const { data: rawLeaveMemos } = await admin

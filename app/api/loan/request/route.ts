@@ -744,13 +744,13 @@ export async function DELETE(request: NextRequest) {
     if (deleteAll) {
       if (role !== "admin") return NextResponse.json({ error: "Only admin can delete all loan requests" }, { status: 403 })
 
-      const { error: clearTimelineError } = await admin.from("loan_request_timeline").delete().not("id", "is", null)
-      if (clearTimelineError) throw clearTimelineError
+      const { error: archiveAllError } = await admin
+        .from("loan_requests")
+        .update({ status: "archived", updated_at: new Date().toISOString() })
+        .neq("status", "archived")
+      if (archiveAllError) throw archiveAllError
 
-      const { error: clearRequestsError } = await admin.from("loan_requests").delete().not("id", "is", null)
-      if (clearRequestsError) throw clearRequestsError
-
-      return NextResponse.json({ success: true, cleared: true })
+      return NextResponse.json({ success: true, archived: true })
     }
 
     if (!id) return NextResponse.json({ error: "Request id is required" }, { status: 400 })
@@ -774,14 +774,14 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Clear timeline first so orphan events never remain if FK cascade is absent.
-    const { error: timelineDeleteError } = await admin.from("loan_request_timeline").delete().eq("loan_request_id", id)
-    if (timelineDeleteError) throw timelineDeleteError
+    // Archive instead of deleting so the request, timeline, memo metadata, and file references remain auditable.
+    const { error: archiveError } = await admin
+      .from("loan_requests")
+      .update({ status: "archived", updated_at: new Date().toISOString() })
+      .eq("id", id)
+    if (archiveError) throw archiveError
 
-    const { error: deleteError } = await admin.from("loan_requests").delete().eq("id", id)
-    if (deleteError) throw deleteError
-
-    return NextResponse.json({ success: true, deletedId: id })
+    return NextResponse.json({ success: true, archivedId: id })
   } catch (error: any) {
     console.error("loan request delete error", error)
     return NextResponse.json({ error: error?.message || "Failed to delete request" }, { status: 500 })

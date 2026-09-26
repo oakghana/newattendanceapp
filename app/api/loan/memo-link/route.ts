@@ -37,16 +37,19 @@ export async function POST(request: NextRequest) {
     if (profileError || !profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     if (loanError || !loan) return NextResponse.json({ error: "Loan not found" }, { status: 404 })
 
+    const role = normalizeRole((profile as any).role)
+    const isAdministrator = role === "admin" || role === "administrator"
+    const loanStatus = String((loan as any).status || "")
+    const isArchived = loanStatus === "archived"
     const postManagingDirectorStatuses = new Set(["approved_director", "md_approved", "pending_hr_records_reference", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
     const hasManagingDirectorApproval = Boolean((loan as any).md_approved_at || (loan as any).md_approved_by_name)
-    if (!postManagingDirectorStatuses.has(String((loan as any).status || "")) || !hasManagingDirectorApproval) {
+    if (isArchived ? !isAdministrator : (!postManagingDirectorStatuses.has(loanStatus) || !hasManagingDirectorApproval)) {
       return NextResponse.json({ error: "This loan cannot be downloaded until it has been approved by the Managing Director." }, { status: 409 })
     }
     if (!String((loan as any).reference_number || "").trim()) {
       return NextResponse.json({ error: "Memo reference pending HR Records." }, { status: 409 })
     }
 
-    const role = normalizeRole((profile as any).role)
     const deptName = (profile as any)?.departments?.name || null
     const deptCode = (profile as any)?.departments?.code || null
     const { data: memoHodLink } = await admin
