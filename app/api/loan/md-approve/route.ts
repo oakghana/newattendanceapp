@@ -150,11 +150,16 @@ export async function GET(req: NextRequest) {
 
   if (view === "pending") {
   query = query
-  .in("status", ["awaiting_director_hr", "approved_director"])
-  .neq("status", "archived")
+  .eq("status", "awaiting_director_hr")
   .is("md_approved_at", null)
   } else {
-    query = query.not("md_approved_at", "is", null).neq("status", "archived").order("md_approved_at", { ascending: false })
+    // A timestamp alone is not proof of approval. Only final MD-approved
+    // statuses belong in this tab; this prevents in-progress loans with a
+    // stale/incorrect md_approved_at value from appearing as approved.
+    query = query
+      .in("status", ["approved_director", "md_approved"])
+      .not("md_approved_at", "is", null)
+      .order("md_approved_at", { ascending: false })
   }
 
   const { data, error } = await query.limit(200)
