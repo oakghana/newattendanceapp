@@ -423,22 +423,29 @@ export async function PATCH(request: Request) {
     // Car loans still need Car Loan Committee sign-off after Accounts Executive clears FD.
     const isCarLoan = Boolean((currentLoan as any)?.committee_required)
     const finalStatus = isCorrectionRequest
-      ? "fd_correction_required"
+      ? "sent_to_accounts"
       : isApproved
         ? (isCarLoan ? "awaiting_committee" : "pending_hr_loan_office")
         : "fd_rejected"
 
-    // Update the loan_requests row directly
+    const correctionNote = [
+      "Returned by Accounts Executive for full FD recalculation.",
+      review_decision,
+      fd_verification_memo,
+      adjustment_reason,
+    ].filter(Boolean).join(" ")
+
+    // A correction request must leave FD Approval immediately and restart in Accounts Office.
     const { data: updatedLoan, error: updateError } = await admin
       .from("loan_requests")
       .update({
-        fd_score: normalizedFinalScore,
-        fd_good: finalFdGood,
-        // Move to next stage: approved FD goes to HR loan office (or committee for car loans); rejected goes back
+        fd_score: isCorrectionRequest ? null : normalizedFinalScore,
+        fd_good: isCorrectionRequest ? null : finalFdGood,
         status: finalStatus,
         accounts_reviewer_id: user.id,
-        fd_note: updatedNote,
-        fd_checked_at: new Date().toISOString(),
+        fd_note: isCorrectionRequest ? null : updatedNote,
+        hr_note: isCorrectionRequest ? correctionNote : (currentLoan as any).hr_note,
+        fd_checked_at: isCorrectionRequest ? null : new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
       .eq("id", review_id)
@@ -457,10 +464,10 @@ export async function PATCH(request: Request) {
         loan_request_id: review_id,
         actor_id: user.id,
         actor_role: "accounts_executive",
-        action_key: isCorrectionRequest ? "fd_correction_requested" : isApproved ? "fd_approved" : "fd_rejected",
+        action_key: isCorrectionRequest ? "fd_returned_to_accounts" : isApproved ? "fd_approved" : "fd_rejected",
         from_status: "pending_accounts_fd_review",
         to_status: finalStatus,
-        note: [adjustmentMemo, review_decision || (isCorrectionRequest ? "FD returned to Accounts Office for correction" : isApproved ? "FD approved by Accounts Executive" : "FD rejected by Accounts Executive")].filter(Boolean).join(" | "),
+        note: [adjustmentMemo, review_decision || (isCorrectionRequest ? "FD returned to Accounts Office for full recalculation" : isApproved ? "FD approved by Accounts Executive" : "FD rejected by Accounts Executive")].filter(Boolean).join(" | "),
         metadata: scoreChanged
           ? {
               fd_original_score: normalizedOriginalScore,

@@ -4314,9 +4314,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                         </td>
                         {p?.loanOffice && (
                           <td className="px-4 py-3 whitespace-nowrap">
-                            {(row.status === "hod_approved" || row.status === "fd_correction_required") ? (
+                            {row.status === "hod_approved" ? (
                               <Button size="sm" className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800" onClick={() => openActionModal(row, "loan_office")}>
-{row.status === "fd_correction_required" ? "Correct & Forward" : "Review & Forward"}
+{"Review & Forward"}
                       </Button>
                             ) : row.status === "pending_hr_loan_office" ? (
                               <Button size="sm" className="h-7 bg-blue-600 text-xs text-white hover:bg-blue-700" onClick={() => openActionModal(row, "push_to_hr_executive")}>
@@ -4336,8 +4336,8 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3">
                 {pagedLoanOfficeStage.map((row) => (
                   <StageCard key={row.id} row={row}>
-                    {(row.status === "hod_approved" || row.status === "fd_correction_required") && p?.loanOffice
-                      ? <Button size="sm" className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800" onClick={() => openActionModal(row, "loan_office")}>{row.status === "fd_correction_required" ? "Correct & Forward" : "Review & Forward"}</Button>
+                    {row.status === "hod_approved" && p?.loanOffice
+                      ? <Button size="sm" className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800" onClick={() => openActionModal(row, "loan_office")}>{"Review & Forward"}</Button>
                       : row.status === "pending_hr_loan_office" && p?.loanOffice
                       ? <Button size="sm" className="h-7 bg-blue-600 text-xs text-white hover:bg-blue-700" onClick={() => openActionModal(row, "push_to_hr_executive")}>Push to HR Exec</Button>
                       : <span className="text-xs text-slate-500">{statusText(row.status)}</span>
