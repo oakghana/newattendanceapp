@@ -7609,9 +7609,12 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {actionModal.row && (
               <DialogDescription>
                 <span className="font-semibold">{actionModal.row.request_number}</span> — {actionModal.row.loan_type_label} | {actionModal.row.staff_full_name || actionModal.row.staff_number || "Staff"}
-                {actionModal.row.staff_rank ? ` | ${actionModal.row.staff_rank}` : ""}
-                {" | "}{isSalaryAdvanceLoan(actionModal.row) && !actionModal.row.salary_advance_amount ? displayLoanAmount(actionModal.row) : `GHc ${displayLoanAmount(actionModal.row)}`}
-              </DialogDescription>
+  {actionModal.row.staff_rank ? ` | ${actionModal.row.staff_rank}` : ""}
+  {" | "}{isSalaryAdvanceLoan(actionModal.row) && !actionModal.row.salary_advance_amount ? displayLoanAmount(actionModal.row) : `GHc ${displayLoanAmount(actionModal.row)}`}
+  <span className="block mt-1 text-xs font-medium text-slate-600">
+  Submitted for audit: {fmtDateTime(actionModal.row.submitted_at || actionModal.row.created_at)}
+  </span>
+  </DialogDescription>
             )}
           </DialogHeader>
 
