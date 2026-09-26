@@ -26,6 +26,7 @@ interface FDReview {
   loan_type?: string
   request_number?: string
   requested_amount?: number
+  repayment_duration_months?: number
   monthly_salary?: number
   salary_advance_months?: number
   monthly_deduction?: number
@@ -263,6 +264,7 @@ export function AccountsExecutiveFDDashboard({
   const [basicSalary, setBasicSalary] = useState('')
   const [monthlyAllowances, setMonthlyAllowances] = useState('')
   const [monthlyDeductions, setMonthlyDeductions] = useState('')
+  const [repaymentMonths, setRepaymentMonths] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const { toast } = useToast()
 
@@ -424,8 +426,9 @@ export function AccountsExecutiveFDDashboard({
           review_status: 'information_provided',
           basic_salary: Number(basicSalary),
           monthly_allowances: Number(monthlyAllowances || 0),
-          monthly_deductions: Number(monthlyDeductions || 0),
-        }),
+  monthly_deductions: Number(monthlyDeductions || 0),
+  repayment_duration_months: Number(repaymentMonths),
+  }),
       })
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || 'Failed to provide request information')
@@ -870,8 +873,12 @@ export function AccountsExecutiveFDDashboard({
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <div><label className="text-xs font-semibold text-slate-700">Basic salary / month</label><Input type="number" min="0" value={basicSalary} onChange={(event) => setBasicSalary(event.target.value)} className="mt-1" /></div>
                 <div><label className="text-xs font-semibold text-slate-700">Allowances / month</label><Input type="number" min="0" value={monthlyAllowances} onChange={(event) => setMonthlyAllowances(event.target.value)} className="mt-1" /></div>
-                <div><label className="text-xs font-semibold text-slate-700">Deductions / month</label><Input type="number" min="0" value={monthlyDeductions} onChange={(event) => setMonthlyDeductions(event.target.value)} className="mt-1" /></div>
-              </div>
+  <div><label className="text-xs font-semibold text-slate-700">Deductions / month</label><Input type="number" min="0" value={monthlyDeductions} onChange={(event) => setMonthlyDeductions(event.target.value)} className="mt-1" /></div>
+  <div><label className="text-xs font-semibold text-slate-700">Requested months</label><Input type="number" min="1" max="60" value={repaymentMonths} onChange={(event) => setRepaymentMonths(event.target.value)} className="mt-1" /></div>
+  </div>
+  {Number(basicSalary) > 0 && Number(repaymentMonths) > 0 && (
+    <p className="mt-2 text-xs font-semibold text-blue-800">Auto-calculated request: GHS {(Number(basicSalary) * Number(repaymentMonths)).toLocaleString('en-GH', { minimumFractionDigits: 2 })} ({Number(basicSalary).toLocaleString('en-GH')} × {repaymentMonths} months)</p>
+  )}
               <Button type="button" onClick={handleProvideInformation} disabled={submitting} className="mt-3 bg-blue-600 hover:bg-blue-700" size="sm">Save FD Information</Button>
             </div>
           )}
@@ -903,8 +910,9 @@ export function AccountsExecutiveFDDashboard({
   onClick={() => {
     setBasicSalary(String(selectedReview?.monthly_salary || ''))
     setMonthlyAllowances('')
-    setMonthlyDeductions(String(selectedReview?.monthly_deduction || ''))
-    setShowInformationForm((value) => !value)
+  setMonthlyDeductions(String(selectedReview?.monthly_deduction || ''))
+  setRepaymentMonths(String(selectedReview?.repayment_duration_months || ''))
+  setShowInformationForm((value) => !value)
   }}
   disabled={submitting}
   size="sm"

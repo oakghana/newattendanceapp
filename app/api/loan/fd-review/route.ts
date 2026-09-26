@@ -310,7 +310,7 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json()
-    const { review_id, review_status, fd_verification_memo, review_decision, adjusted_fd_score, adjustment_reason, basic_salary, monthly_allowances, monthly_deductions } = body
+    const { review_id, review_status, fd_verification_memo, review_decision, adjusted_fd_score, adjustment_reason, basic_salary, monthly_allowances, monthly_deductions, repayment_duration_months } = body
 
     if (!review_id || !review_status) {
       return NextResponse.json({ error: "Missing required fields: review_id, review_status" }, { status: 400 })
@@ -337,15 +337,30 @@ export async function PATCH(request: Request) {
 
     if (review_status === 'information_provided') {
       const salary = Number(basic_salary)
+      const months = Number(repayment_duration_months)
       if (!Number.isFinite(salary) || salary <= 0) {
         return NextResponse.json({ error: 'A valid basic salary is required.' }, { status: 400 })
       }
+      if (!Number.isInteger(months) || months < 1 || months > 60) {
+        return NextResponse.json({ error: 'A valid repayment period in months is required.' }, { status: 400 })
+      }
+      const calculatedAmount = Math.round(salary * months * 100) / 100
+      const informationNote = [
+        currentLoan.fd_note,
+        `HR FD correction completed by Accounts Executive: basic salary GHS ${salary.toFixed(2)} x ${months} month(s) = requested amount GHS ${calculatedAmount.toFixed(2)}.`,
+      ].filter(Boolean).join('\n')
       const { data: updatedLoan, error: informationError } = await admin
         .from('loan_requests')
         .update({
           basic_salary: salary,
           monthly_allowances: Number(monthly_allowances || 0),
           monthly_deduction: Number(monthly_deductions || 0),
+          repayment_duration_months: months,
+          recovery_months: months,
+          requested_amount: calculatedAmount,
+          fixed_amount: calculatedAmount,
+          salary_advance_amount: calculatedAmount,
+          fd_note: informationNote,
           updated_at: new Date().toISOString(),
         })
         .eq('id', review_id)
