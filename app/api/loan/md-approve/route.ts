@@ -60,6 +60,9 @@ export async function POST(req: NextRequest) {
       md_approved_at: now,
       md_approved_by: profile.id,
       md_approved_by_name: mdName,
+      status: "approved_director",
+      workflow_stage: "md_approved",
+      updated_at: now,
     })
     .in("id", eligibleIds)
 
@@ -146,11 +149,12 @@ export async function GET(req: NextRequest) {
     .order("created_at", { ascending: false })
 
   if (view === "pending") {
-    query = query
-      .in("status", ["awaiting_director_hr", "approved_director"])
-      .is("md_approved_at", null)
+  query = query
+  .in("status", ["awaiting_director_hr", "approved_director"])
+  .neq("status", "archived")
+  .is("md_approved_at", null)
   } else {
-    query = query.not("md_approved_at", "is", null).order("md_approved_at", { ascending: false })
+    query = query.not("md_approved_at", "is", null).neq("status", "archived").order("md_approved_at", { ascending: false })
   }
 
   const { data, error } = await query.limit(200)

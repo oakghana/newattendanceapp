@@ -1735,6 +1735,18 @@ export default function LoanAppPage() {
 const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loanOfficeStageBuckets] || []
   const rows = filterAndSortRows(bucketRows, loanOfficeSearch, loanOfficeStatus, loanOfficeSort, loanOfficeLocation, loanOfficeDept)
   return rows.sort((a, b) => {
+    if (loanOfficeStageTab === "good-fd") {
+      const aStatus = String(a.status || "")
+      const bStatus = String(b.status || "")
+      const aPriority = aStatus === "pending_hr_loan_office" ? 0 : 1
+      const bPriority = bStatus === "pending_hr_loan_office" ? 0 : 1
+      if (aPriority !== bPriority) return aPriority - bPriority
+
+      const aSubmitted = new Date(a.submitted_at || a.created_at || 0).getTime()
+      const bSubmitted = new Date(b.submitted_at || b.created_at || 0).getTime()
+      return aSubmitted - bSubmitted
+    }
+
     const priority = (status: string) => status === "hod_approved" ? 0 : status === "pending_hod" ? 1 : 2
     return priority(String(a.status || "")) - priority(String(b.status || ""))
   })
@@ -4119,12 +4131,12 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {/* stage pills */}
             <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-5 py-2.5">
               {([ 
+  { key: "fd-approved-accounts-exec", label: "✓ FD Approved by Accounts" },
   { key: "good-fd",                    label: "Good FD" },
   { key: "sent-for-approval",         label: "Sent for Approval" },
   { key: "pending",                    label: "Pending FD" },
   { key: "poor-fd",                    label: "Poor FD" },
   { key: "good-fd-not-pushed",        label: "Not Pushed" },
-                { key: "fd-approved-accounts-exec", label: "✓ FD Approved by Accounts" },
                 { key: "archivable",                label: "Archivable" },
                 { key: "archived",                  label: "Archived" },
               ] as const).map(({ key, label }) => {

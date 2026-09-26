@@ -29,6 +29,23 @@ function fmtAmount(value?: number | null) {
   })
 }
 
+function amountInWords(value?: number | null) {
+  const number = Math.round(Number(value || 0) * 100) / 100
+  const units = ["zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"]
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
+  const underThousand = (n: number): string => {
+    if (n < 20) return units[n]
+    if (n < 100) return `${tens[Math.floor(n / 10)]}${n % 10 ? ` ${units[n % 10].toLowerCase()}` : ""}`
+    return `${units[Math.floor(n / 100)]} Hundred${n % 100 ? ` ${underThousand(n % 100).toLowerCase()}` : ""}`
+  }
+  const whole = Math.floor(number)
+  if (!Number.isFinite(number) || whole < 0) return ""
+  const wholeWords = whole >= 1000
+    ? `${underThousand(Math.floor(whole / 1000))} Thousand${whole % 1000 ? ` ${underThousand(whole % 1000).toLowerCase()}` : ""}`
+    : underThousand(whole)
+  return `${wholeWords} Ghana Cedis`
+}
+
 function fmtName(profile?: any) {
   const direct = String(profile?.full_name || profile?.display_name || profile?.name || "").trim()
   if (direct) return direct.toUpperCase()
@@ -172,7 +189,8 @@ async function resolveThroRecipient(admin: any, loan: any, applicantId: string) 
 function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
   const parsedHrNote = splitThroTelephoneFromNote(loan.hr_note)
   const cleanedHrNote = parsedHrNote.cleanedNote
-  const amount = `GHc ${fmtAmount(loan.salary_advance_amount || loan.fixed_amount || loan.requested_amount)}`
+  const salaryAdvanceAmount = Number(loan.salary_advance_amount || loan.fixed_amount || loan.requested_amount || 0)
+  const amount = `GHc ${fmtAmount(salaryAdvanceAmount)}`
   const isFuneralLoan = isFuneralLoanType(loan.loan_type_key, loan.loan_type_label)
 
   if (loan.status === "rejected_fd") {
@@ -215,27 +233,37 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
   }
 
   if (loan.status === "awaiting_director_hr") {
+    const isSalaryAdvance = isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label)
+    const recoveryMonths = Number(loan.recovery_months ?? loan.deduction_period_months ?? loan.repayment_duration_months)
+    const recoveryLabel = Number.isFinite(recoveryMonths) && recoveryMonths > 0
+      ? `${Math.trunc(recoveryMonths)} month${Math.trunc(recoveryMonths) === 1 ? "" : "s"}`
+      : "the approved recovery period"
     return {
-      subject: `APPLICATION FOR ${String(loan.loan_type_label || "LOAN").toUpperCase()} (TERMS SET)`,
-      paragraphs: [
-        `We refer to your loan application dated ${fmtDate(loan.hr_forwarded_at)} on the above subject and wish to inform you that HR has prepared your loan terms and forwarded your request to Director HR for final decision.`,
-        `Proposed Disbursement Date: ${fmtMemoMonth(loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || loan.md_approved_at)}`,
-        ...(isFuneralLoan
-          ? ["Repayment: Not required. No monthly salary deduction applies."]
-          : [
-              `Proposed Recovery Start Date: ${fmtMemoMonth(loan.recovery_start_date || loan.next_payment_due || loan.repayment_start_date)}`,
-              `Proposed Recovery Duration: ${loan.recovery_months || loan.recovery_period_months || loan.recovery_duration_months || "TBD"} month(s)`,
-            ]),
-        ...(isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label) && loan.basic_salary
-          ? [
-              `Verified Monthly Salary: GHc ${fmtAmount(loan.basic_salary)}`,
-              ...((loan.recovery_months || loan.deduction_period_months) ? [`Number of Months for Recovery: ${loan.recovery_months || loan.deduction_period_months}`] : []),
-            ]
-          : []),
-        ...(cleanedHrNote ? [`HR Note: ${cleanedHrNote}`] : []),
-        "You will receive a final memo once Director HR concludes review.",
-        "You can count on our co-operation.",
-      ],
+      subject: `APPLICATION FOR ${isSalaryAdvance ? "SALARY ADVANCE" : String(loan.loan_type_label || "LOAN").toUpperCase()}${isSalaryAdvance ? "" : " (TERMS SET)"}`,
+      paragraphs: isSalaryAdvance
+        ? [
+            `We refer to your loan application dated ${fmtDate(loan.hr_forwarded_at || loan.created_at)} regarding the above subject. HR has prepared the proposed terms and forwarded your request to the Director of Human Resource for final consideration.`,
+            `Proposed disbursement month: ${fmtMemoMonth(loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || loan.md_approved_at)}.`,
+            `Proposed recovery start month: ${fmtMemoMonth(loan.recovery_start_date || loan.next_payment_due || loan.repayment_start_date)}.`,
+            Number(loan.basic_salary) > 0 ? `Verified monthly salary: GHc ${fmtAmount(loan.basic_salary)}.` : "",
+            `Number of months for recovery: ${recoveryLabel}.`,
+            ...(cleanedHrNote ? [`HR note: ${cleanedHrNote}.`] : []),
+            "A final memo will be issued once the Director of Human Resource concludes the review.",
+            "We count on your usual co-operation.",
+          ].filter(Boolean)
+        : [
+            `We refer to your loan application dated ${fmtDate(loan.hr_forwarded_at)} on the above subject. HR has prepared the proposed terms and forwarded your request to the Director of Human Resource for final consideration.`,
+            `Proposed disbursement month: ${fmtMemoMonth(loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || loan.md_approved_at)}.`,
+            ...(isFuneralLoan
+              ? ["Repayment is not required and no monthly salary deduction applies."]
+              : [
+                  `Proposed recovery start month: ${fmtMemoMonth(loan.recovery_start_date || loan.next_payment_due || loan.repayment_start_date)}.`,
+                  `Proposed recovery duration: ${loan.recovery_months || loan.recovery_period_months || loan.recovery_duration_months || "TBD"} month(s).`,
+                ]),
+            ...(cleanedHrNote ? [`HR note: ${cleanedHrNote}.`] : []),
+            "A final memo will be issued once the Director of Human Resource concludes the review.",
+            "We count on your usual co-operation.",
+          ],
     }
   }
 
@@ -244,26 +272,36 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
   // schedule dates before displaying TBD.
   const maintainedDisbursementDate = loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || loan.md_approved_at
   const maintainedRecoveryStartDate = loan.recovery_start_date || loan.next_payment_due || loan.repayment_start_date
-  const maintainedRecoveryMonths = loan.recovery_months || loan.recovery_period_months || loan.recovery_duration_months
+  const maintainedRecoveryMonths = loan.recovery_months || loan.deduction_period_months || loan.repayment_duration_months || loan.recovery_period_months || loan.recovery_duration_months
   const disbMonth = fmtMemoMonth(maintainedDisbursementDate)
   const recovStart = fmtMemoMonth(maintainedRecoveryStartDate)
   const memoCopyRecipient =
     extractMemoCopyRecipient(loan.hr_note) ||
     extractMemoCopyRecipient(loan.loan_office_note) ||
     "Deputy Director, Finance"
+  const isSalaryAdvance = isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label)
+  const salaryAdvanceRecoveryMonths = Number(loan.recovery_months ?? loan.deduction_period_months ?? loan.repayment_duration_months)
+  const salaryAdvanceRecoveryLabel = Number.isFinite(salaryAdvanceRecoveryMonths) && salaryAdvanceRecoveryMonths > 0
+    ? String(Math.trunc(salaryAdvanceRecoveryMonths))
+    : "the approved recovery period"
+  const salaryAdvanceParagraphs = isSalaryAdvance
+    ? [
+        `We refer to your loan application dated ${fmtDate(loan.created_at)} on the above subject and wish to inform you that, Management has given approval for you to be granted a Salary Advance of ${amountInWords(salaryAdvanceAmount)} (GHc${fmtAmount(salaryAdvanceAmount)}).`,
+        `The loan would be recovered in ${salaryAdvanceRecoveryLabel} Equal Monthly Instalment from your salary effective, ${recovStart}.`,
+        `By a copy of this letter, the ${memoCopyRecipient} has been advised to release the said amount to you effective, ${disbMonth}.`,
+        "You can count on our co-operation.",
+      ]
+    : [
+        `We refer to your loan application dated ${fmtDate(loan.created_at)} on the above subject and wish to inform you that Management has approved your application for a ${loan.loan_type_label || "Loan"} of ${amount}.`,
+        ...(isFuneralLoan
+          ? ["This funeral support does not require repayment or monthly salary deductions."]
+          : [`The loan will be recovered in ${maintainedRecoveryMonths || "the approved recovery period"} equal monthly instalments from your salary, commencing in ${recovStart}.`]),
+        `By a copy of this letter, the ${memoCopyRecipient} has been advised to release the approved amount to you effective ${disbMonth}.`,
+        "You can count on our co-operation.",
+      ]
   return {
-    subject: `APPLICATION FOR ${String(loan.loan_type_label || "LOAN").toUpperCase()}`,
-    paragraphs: [
-      `We refer to your loan application dated ${fmtDate(loan.created_at)} on the above subject and wish to inform you that, Management has given approval for you to be granted a ${loan.loan_type_label || "Loan"} of ${amount}.`,
-      ...(isFuneralLoan
-        ? ["This funeral support does not require repayment or monthly salary deductions."]
-        : [`The loan would be recovered in ${maintainedRecoveryMonths || "TBD"} Equal Monthly Instalment from your salary effective, ${recovStart}.`]),
-      ...(isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label) && loan.basic_salary
-        ? [`Verified Basic Salary: GHc ${fmtAmount(loan.basic_salary)}.`]
-        : []),
-      `By a copy of this letter, the ${memoCopyRecipient} has been advised to release the said amount to you effective, ${disbMonth}.`,
-      "You can count on our co-operation.",
-    ],
+    subject: `APPLICATION FOR ${isSalaryAdvance ? "SALARY ADVANCE" : String(loan.loan_type_label || "LOAN").toUpperCase()}`,
+    paragraphs: salaryAdvanceParagraphs,
   }
 }
 
@@ -318,8 +356,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     .eq("loan_request_id", loanId)
     .maybeSingle()
   if (operationalOverride) Object.assign(loan, Object.fromEntries(Object.entries(operationalOverride).filter(([, value]) => value !== null && value !== "")))
-  const postManagingDirectorStatuses = new Set(["approved_director", "md_approved", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
-  if (!postManagingDirectorStatuses.has(String((loan as any).status || "")) || !(loan as any).md_approved_at) {
+  const postManagingDirectorStatuses = new Set(["approved_director", "md_approved", "pending_hr_records_reference", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
+  const hasManagingDirectorApproval = Boolean((loan as any).md_approved_at || (loan as any).md_approved_by_name)
+  if (!postManagingDirectorStatuses.has(String((loan as any).status || "")) || !hasManagingDirectorApproval) {
     return NextResponse.json({ error: "This loan cannot be downloaded until it has been approved by the Managing Director." }, { status: 409 })
   }
   if (!String((loan as any).reference_number || "").trim()) {
@@ -355,8 +394,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     // Include all active workflow stages so download works end-to-end
     const memoEligibleStatuses = [
-      "approved_director", "md_approved", "director_rejected", "rejected_fd",
-      "awaiting_director_hr", "pending_hr_executive_review", "awaiting_hr_executives",
+"approved_director", "md_approved", "director_rejected", "rejected_fd",
+  "pending_hr_executive_review", "awaiting_hr_executives",
       "pending_hr_records_reference", "referenced",
       "staff_receiving_funds", "partially_recovered", "fully_recovered",
     ]
@@ -561,7 +600,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     let y = 46
 
-    // ─── Our Ref No + Date ────────────────────────────────────────────
+    // ─── Our Ref No + Date ─���──────────────────────────────────────────
     doc.setTextColor(0, 0, 0)
     doc.setFont("times", "normal")
     doc.setFontSize(9)
@@ -615,7 +654,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       y += 10
     }
 
-    // ─── RE: Subject ──────────────────────────────────────────────────
+    // ─── RE: Subject ────────────────────────────────���─────────────────
     doc.setFont("times", "bold")
     doc.setFontSize(9.5)
     const reText = `RE:  ${subject}`
@@ -778,7 +817,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     // ─── MD Approval Stamp — Professional Square Stamp with MD Signature ─
     // Only show if MD has ACTUALLY approved (md_approved_at is populated)
     // Don't show at awaiting_director_hr stage — that means HR signed but MD hasn't approved yet
-    const isMdApproved = Boolean(loan.md_approved_at) && ["approved_director", "md_approved", "pending_hr_records_reference", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"].includes(String(loan.status || ""))
+    const isMdApproved = Boolean(loan.md_approved_at) && ["approved_director", "md_approved", "awaiting_director_hr", "pending_hr_records_reference", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"].includes(String(loan.status || ""))
     if (isMdApproved) {
       // ── QCC physical rubber-stamp replica ──────────────────────────────────
       // Rounded rectangle, all QCC blue ink, "QUALITY CONTROL CO. LTD. (COCOBOD)"

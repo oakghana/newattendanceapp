@@ -81,7 +81,7 @@ const ALL_STAFF_ROLES = [
   "admin", "it-admin", "driver", "chief_driver", "regional_chief_driver", "transport_manager", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "department_head",
   "staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr",
   "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern",
-  "contract", "managing_director", "secretary", "hr_records", "hr_records_officer", "hr_records_manager",
+  "contract", "managing_director", "secretary", "hr_records", "hr_records_officer", "hr_records_manager", "administrator",
 ]
 
 const navigationItems = [
@@ -159,7 +159,7 @@ const navigationItems = [
     title: "HR Records",
     href: "/dashboard/hr-records",
     icon: ScrollText,
-    roles: ["admin", "hr_records", "hr_records_officer", "hr_records_manager"],
+    roles: ["admin", "administrator", "hr_records", "hr_records_officer", "hr_records_manager"],
     category: "admin",
     executive: true,
   },
@@ -167,7 +167,7 @@ const navigationItems = [
     title: "Memo Console",
     href: "/dashboard/secretary-memos",
     icon: ScrollText,
-    roles: ["secretary", "hr_records", "hr_records_officer", "hr_records_manager", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "admin", "hr_executive", "hr", "manager_hr", "director_hr", "hr_executive_officer"],
+    roles: ["secretary", "hr_records", "hr_records_officer", "hr_records_manager", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "admin", "administrator", "hr_executive", "hr", "manager_hr", "director_hr", "hr_executive_officer"],
     category: "main",
     executive: true,
   },
