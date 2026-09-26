@@ -5,7 +5,7 @@ import { calculateSalaryAdvance } from '@/lib/salary-advance'
 
 export async function POST(request: NextRequest) {
   try {
-    const { loan_request_id, hr_loan_office_memo, reference_number, action } = await request.json()
+    const { loan_request_id, hr_loan_office_memo, reference_number, action, recovery_months } = await request.json()
 
     if (!loan_request_id) {
       return NextResponse.json({ error: 'loan_request_id is required' }, { status: 400 })
@@ -92,9 +92,12 @@ export async function POST(request: NextRequest) {
 
     // Recompute Salary Advance from verified annual salary and requested months.
     const loanType = String(loanRequest.loan_type_key || loanRequest.loan_type || loanRequest.loan_type_label || '').toLowerCase()
-    const multiplier = Number(
-      loanRequest.salary_advance_multiplier ?? loanRequest.deduction_period_months ?? loanRequest.repayment_duration_months ?? loanRequest.recovery_months,
-    )
+    const enteredRecoveryMonths = Number(recovery_months)
+    const multiplier = Number.isInteger(enteredRecoveryMonths) && enteredRecoveryMonths > 0
+      ? enteredRecoveryMonths
+      : Number(
+          loanRequest.salary_advance_multiplier ?? loanRequest.deduction_period_months ?? loanRequest.repayment_duration_months ?? loanRequest.recovery_months,
+        )
     const isSalaryAdvance = loanType.includes('salary') && loanType.includes('advance')
     const noteText = String(loanRequest.fd_note || '')
     const salaryFromNote = noteText.match(/salary(?: per annum| per year| annually)?[^0-9]*([0-9][0-9,]*(?:\\.[0-9]+)?)/i)?.[1]
@@ -123,6 +126,9 @@ export async function POST(request: NextRequest) {
         ...(calculatedSalaryAdvance == null ? {} : {
           basic_salary: calculatedSalaryAdvance.monthlySalary,
           salary_advance_multiplier: calculatedSalaryAdvance.requestedMonths,
+          deduction_period_months: calculatedSalaryAdvance.requestedMonths,
+          repayment_duration_months: calculatedSalaryAdvance.requestedMonths,
+          recovery_months: calculatedSalaryAdvance.requestedMonths,
           salary_advance_amount: calculatedSalaryAdvance.amount,
           requested_amount: calculatedSalaryAdvance.amount,
           fixed_amount: calculatedSalaryAdvance.amount,
