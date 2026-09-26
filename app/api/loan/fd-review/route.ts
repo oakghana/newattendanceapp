@@ -304,7 +304,7 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json()
-    const { review_id, review_status, fd_verification_memo, review_decision, adjusted_fd_score, adjustment_reason } = body
+    const { review_id, review_status, fd_verification_memo, review_decision, adjusted_fd_score, adjustment_reason, basic_salary, monthly_allowances, monthly_deductions } = body
 
     if (!review_id || !review_status) {
       return NextResponse.json({ error: "Missing required fields: review_id, review_status" }, { status: 400 })
@@ -327,6 +327,38 @@ export async function PATCH(request: Request) {
 
     if (!["pending_accounts_fd_review", "fd_review_pending", "sent_to_accounts"].includes(String(currentLoan.status || ""))) {
       return NextResponse.json({ error: "This FD is no longer pending Accounts Executive review." }, { status: 400 })
+    }
+
+    if (review_status === 'information_provided') {
+      const salary = Number(basic_salary)
+      if (!Number.isFinite(salary) || salary <= 0) {
+        return NextResponse.json({ error: 'A valid basic salary is required.' }, { status: 400 })
+      }
+      const { data: updatedLoan, error: informationError } = await admin
+        .from('loan_requests')
+        .update({
+          basic_salary: salary,
+          monthly_allowances: Number(monthly_allowances || 0),
+          monthly_deduction: Number(monthly_deductions || 0),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', review_id)
+        .eq('status', 'pending_accounts_fd_review')
+        .select('id, status, request_number, staff_full_name')
+        .single()
+      if (informationError || !updatedLoan) {
+        return NextResponse.json({ error: informationError?.message || 'This FD is no longer pending Accounts review.' }, { status: 409 })
+      }
+      await admin.from('loan_request_timeline').insert({
+        loan_request_id: review_id,
+        actor_id: user.id,
+        actor_role: 'accounts_executive',
+        action_key: 'fd_information_provided',
+        from_status: currentLoan.status,
+        to_status: currentLoan.status,
+        note: `Accounts provided basic salary and FD information: ${salary}`,
+      })
+      return NextResponse.json({ success: true, loan: updatedLoan })
     }
 
     const originalScore = Number(currentLoan.fd_score)
