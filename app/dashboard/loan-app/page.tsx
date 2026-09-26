@@ -7828,7 +7828,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             )}
           </div>
 
-          <DialogFooter className="gap-2 flex-wrap">
+          <DialogFooter className="flex-nowrap gap-2">
             <Button variant="outline" onClick={() => setActionModal((s) => ({ ...s, open: false }))}>Cancel</Button>
             {actionModal.actionType === "hod" && actionModal.row && (
               <>
@@ -7950,7 +7950,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               <Button
                 type="button"
                 variant="outline"
-                className="border-amber-500 bg-amber-50 font-semibold text-amber-800 hover:bg-amber-100"
+                className="whitespace-nowrap border-amber-500 bg-amber-50 px-3 text-sm font-semibold text-amber-800 hover:bg-amber-100"
                 disabled={!modalNote.trim()}
                 onClick={async () => {
                   if (!actionModal.row || !modalNote.trim()) {
@@ -7976,7 +7976,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   await loadData()
                 }}
               >
-                Return FD to Accounts for Correction
+                Return to Accounts
               </Button>
             )}
             {actionModal.actionType === "push_to_hr_executive" && actionModal.row && (
