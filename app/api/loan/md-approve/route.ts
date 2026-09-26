@@ -26,12 +26,12 @@ export async function POST(req: NextRequest) {
   const mdName = `${profile.first_name} ${profile.last_name}`.trim()
   const now = new Date().toISOString()
 
-  // Verify all provided loans are in 'approved_director' status before approving
+  // Verify all provided loans are in the post-HR-Records MD approval stage
   const { data: loans, error: fetchErr } = await admin
     .from("loan_requests")
     .select("id, status, request_number, loan_type_label, staff_full_name")
     .in("id", loanIds)
-    .eq("status", "approved_director")
+    .eq("status", "awaiting_director_hr")
 
   if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })
   if (!loans || loans.length === 0) {
@@ -131,7 +131,7 @@ export async function GET(req: NextRequest) {
     .order("created_at", { ascending: false })
 
   if (view === "pending") {
-    query = query.eq("status", "approved_director").is("md_approved_at", null)
+    query = query    .eq("status", "awaiting_director_hr").is("md_approved_at", null)
   } else {
     query = query.not("md_approved_at", "is", null).order("md_approved_at", { ascending: false })
   }

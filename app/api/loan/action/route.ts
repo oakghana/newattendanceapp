@@ -781,14 +781,14 @@ export async function POST(request: NextRequest) {
 
       // ─── STAGE-AWARE status transition ───────────────────────────────
       // Stage 1: HR Executive signs at "awaiting_hr_executives" or "pending_hr_executive_review"
-      //          → approve pushes to "awaiting_director_hr" (MD queue)
+      //          → approve sends the memo to HR Records for the official reference
       //          → reject closes as "director_rejected"
       // Stage 2: Director HR / MD stamps at "awaiting_director_hr"
       //          → approve = "approved_director"  |  reject = "director_rejected"
       const isHrExecutiveStage = req.status === "awaiting_hr_executives" || req.status === "pending_hr_executive_review"
 
       if (isHrExecutiveStage) {
-        toStatus = decision === "approve" ? "awaiting_director_hr" : "director_rejected"
+        toStatus = decision === "approve" ? "pending_hr_records_reference" : "director_rejected"
       } else {
         toStatus = decision === "approve" ? "approved_director" : "director_rejected"
       }
@@ -820,17 +820,17 @@ export async function POST(request: NextRequest) {
       const dirStaffName = String(req.staff_full_name || "").trim() || "Staff Member"
 
       if (isHrExecutiveStage && decision === "approve") {
-        // HR Executive signed — notify the MD that a memo is ready for their stamp
+        // HR Executive signed — route the memo through HR Records before MD approval.
         const { data: mdUsers } = await admin
           .from("user_profiles")
           .select("id")
-          .in("role", ["managing_director", "director_hr", "admin"])
+          .in("role", ["hr_records", "hr_records_officer", "hr_records_manager", "admin"])
           .eq("is_active", true)
         await notifyUsers(
           admin,
           (mdUsers || []).map((r: any) => r.id),
-          "Loan Memo Ready for MD Approval",
-          `${req.request_number} has been signed by HR Executive ${directorName} and is awaiting your approval stamp.`,
+          "Loan Memo Awaiting HR Records Reference",
+          `${req.request_number} was approved by HR Executive ${directorName} and is now awaiting its official HR Records reference before MD approval.`,
           "loan_awaiting_md",
           { request_id: req.id },
         )
@@ -839,7 +839,7 @@ export async function POST(request: NextRequest) {
           admin,
           [req.user_id],
           "Loan Signed by HR Executive",
-          `Your loan request ${req.request_number} has been signed by the HR Executive and is now with the Managing Director for final approval.`,
+          `Your loan request ${req.request_number} was approved by the HR Executive and is now with HR Records for its official memo reference before final MD approval.`,
           "loan_hr_executive_signed",
           { request_id: req.id },
         )

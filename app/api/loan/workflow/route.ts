@@ -668,14 +668,14 @@ export async function GET() {
         : Promise.resolve({ data: [], error: null } as any),
       hrOfficeQ,
       showDirectorHr
-        ? admin.from("loan_requests").select("*").in("status", ["awaiting_hr_executives", "awaiting_director_hr", "pending_hr_executive_review"]).order("created_at", { ascending: false })
+        ? admin.from("loan_requests").select("*").in("status", ["awaiting_hr_executives", "pending_hr_executive_review"]).is("director_decision_at", null).order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null } as any),
       showDirectorHr
         ? admin
             .from("loan_requests")
             .select("*")
             .eq("fd_good", true)
-            .in("status", ["awaiting_hr_terms", "awaiting_director_hr", "pending_hr_executive_review"])
+            .in("status", ["awaiting_hr_terms", "awaiting_director_hr"])
             .order("updated_at", { ascending: false })
         : Promise.resolve({ data: [], error: null } as any),
       (viewAllTabs || permissions.allLoans)

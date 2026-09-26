@@ -426,10 +426,9 @@ export async function resolveRegionalManager(
  *    accepted once HR Executive has approved the request ("hr_approved"), or
  *    the request has landed directly on the dedicated HR Records stage
  *    ("pending_hr_records_reference").
- *  - Loan: Loan Office -> HR Executive signs -> Director HR / Managing
- *    Director approves ("approved_director") -> HR Records reference. That
- *    Director/MD approval is the loan's final decision stage, so it is the
- *    only status HR Records may reference against for loans.
+  *  - Loan: Loan Office -> HR Executive signs -> HR Records reference ->
+  *    Director HR / Managing Director approves ("approved_director"). HR
+  *    Records only receives the dedicated pending-reference status first.
  * Corrections to an already-locked reference bypass this check entirely (see
  * save-reference/route.ts), so this only gates the first-time assignment.
  */
