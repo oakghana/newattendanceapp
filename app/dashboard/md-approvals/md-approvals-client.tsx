@@ -263,8 +263,10 @@ function PeriodSection({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   if (loans.length === 0) return null
-  const pendingLoans = loans.filter((l) => !approvedIds.has(l.id) && Boolean(l.reference_number?.trim()) && l.memo_reference_locked === true)
-  const blockedLoans = loans.filter((l) => !approvedIds.has(l.id) && !pendingLoans.some((pending) => pending.id === l.id))
+  const isPersistedApproved = (loan: Loan) => Boolean(loan.md_approved_at) || ["approved_director", "md_approved", "approved"].includes(String(loan.status || "").toLowerCase())
+  const isExcludedFromApprovalQueue = (loan: Loan) => approvedIds.has(loan.id) || isPersistedApproved(loan)
+  const pendingLoans = loans.filter((l) => !isExcludedFromApprovalQueue(l) && Boolean(l.reference_number?.trim()) && l.memo_reference_locked === true)
+  const blockedLoans = loans.filter((l) => !isExcludedFromApprovalQueue(l) && !pendingLoans.some((pending) => pending.id === l.id))
   const allSelected = pendingLoans.length > 0 && pendingLoans.every((l) => selected.has(l.id))
 
   return (
@@ -303,7 +305,7 @@ function PeriodSection({
       </button>
   {open && (
   <div className="border-t border-slate-100 divide-y divide-slate-100">
-  {loans.filter((loan) => !approvedIds.has(loan.id)).map((loan) => (
+  {loans.filter((loan) => !isExcludedFromApprovalQueue(loan)).map((loan) => (
   <LoanRow key={loan.id} loan={loan} selected={selected.has(loan.id)} onToggle={() => onToggle(loan.id)} approved={false} />
   ))}
         </div>
