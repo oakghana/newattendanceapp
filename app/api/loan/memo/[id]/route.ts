@@ -267,6 +267,25 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
     }
   }
 
+  // Once HR Executive edits and saves the memo, the saved wording is the source
+  // of truth for the final memo. Do not rebuild the final output from the original
+  // staff-requested terms, otherwise edited amounts and recovery periods are lost.
+  const savedExecutiveMemo = String(loan.director_letter || "").trim()
+  const savedMemoIsSalaryAdvance = isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label)
+  const finalMemoStatuses = new Set(["approved", "approved_director", "hr_approved", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
+  if (savedExecutiveMemo && finalMemoStatuses.has(String(loan.status || "").toLowerCase())) {
+    const paragraphs = savedExecutiveMemo
+      .split(/\n\s*\n|\r?\n(?=\S)/)
+      .map((paragraph: string) => paragraph.trim())
+      .filter(Boolean)
+    if (paragraphs.length) {
+      return {
+        subject: `APPLICATION FOR ${savedMemoIsSalaryAdvance ? "SALARY ADVANCE" : String(loan.loan_type_label || "LOAN").toUpperCase()}`,
+        paragraphs,
+      }
+    }
+  }
+
   // Use the administrator-maintained Running Loans values first. For older records
   // that predate the override table, use the confirmed disbursement and repayment
   // schedule dates before displaying TBD.
