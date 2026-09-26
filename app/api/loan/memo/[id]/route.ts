@@ -319,7 +319,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     .maybeSingle()
   if (operationalOverride) Object.assign(loan, Object.fromEntries(Object.entries(operationalOverride).filter(([, value]) => value !== null && value !== "")))
   const postManagingDirectorStatuses = new Set(["approved_director", "md_approved", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
-  if (!postManagingDirectorStatuses.has(String((loan as any).status || "")) || !(loan as any).md_approved_at) {
+  const hasManagingDirectorApproval = Boolean((loan as any).md_approved_at || (loan as any).md_approved_by_name)
+  if (!postManagingDirectorStatuses.has(String((loan as any).status || "")) || !hasManagingDirectorApproval) {
     return NextResponse.json({ error: "This loan cannot be downloaded until it has been approved by the Managing Director." }, { status: 409 })
   }
   if (!String((loan as any).reference_number || "").trim()) {

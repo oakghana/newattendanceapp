@@ -31,14 +31,15 @@ export async function POST(request: NextRequest) {
         .select("id, role, assigned_location_id, departments(name, code)")
         .eq("id", user.id)
         .single(),
-      admin.from("loan_requests").select("id, user_id, status, reference_number, md_approved_at, staff_location_id, hod_reviewer_id, committee_reviewer_id, hr_officer_id, director_hr_id").eq("id", loanId).single(),
+      admin.from("loan_requests").select("id, user_id, status, workflow_stage, reference_number, md_approved_at, md_approved_by_name, staff_location_id, hod_reviewer_id, committee_reviewer_id, hr_officer_id, director_hr_id").eq("id", loanId).single(),
     ])
 
     if (profileError || !profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     if (loanError || !loan) return NextResponse.json({ error: "Loan not found" }, { status: 404 })
 
     const postManagingDirectorStatuses = new Set(["approved_director", "md_approved", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
-    if (!postManagingDirectorStatuses.has(String((loan as any).status || "")) || !(loan as any).md_approved_at) {
+    const hasManagingDirectorApproval = Boolean((loan as any).md_approved_at || (loan as any).md_approved_by_name)
+    if (!postManagingDirectorStatuses.has(String((loan as any).status || "")) || !hasManagingDirectorApproval) {
       return NextResponse.json({ error: "This loan cannot be downloaded until it has been approved by the Managing Director." }, { status: 409 })
     }
     if (!String((loan as any).reference_number || "").trim()) {
