@@ -1238,7 +1238,7 @@ export default function LoanAppPage() {
   const [loanOfficePage, setLoanOfficePage] = useState(1)
   const [loanOfficePageSize, setLoanOfficePageSize] = useState(10)
   const [loanOfficeTypeTab, setLoanOfficeTypeTab] = useState("all")
-  const [loanOfficeStageTab, setLoanOfficeStageTab] = useState("pending")
+  const [loanOfficeStageTab, setLoanOfficeStageTab] = useState("hod-approved")
   const [loanOfficeViewMode, setLoanOfficeViewMode] = useState<"table" | "card">("table")
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     paymentCompletion: true,
@@ -1676,8 +1676,11 @@ export default function LoanAppPage() {
       row.fd_good === null && row.fd_score === null && !isArchivableStatus(row.status) && !isArchivedStatus(row.status)
     const isFdApprovedByAccounts = (row: LoanRequest) =>
       row.status === "pending_hr_loan_office"
+    const isHodApproved = (row: LoanRequest) =>
+      row.status === "hod_approved"
 
     return {
+      "hod-approved": loanOfficeRowsForSelectedType.filter((row) => isHodApproved(row)),
       pending: loanOfficeRowsForSelectedType.filter((row) => isPending(row)),
       "good-fd": loanOfficeRowsForSelectedType.filter((row) => isGoodFd(row)),
       "poor-fd": loanOfficeRowsForSelectedType.filter((row) => isPoorFd(row)),
@@ -4114,7 +4117,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     Processing Queue
                     <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">{filteredLoanOfficeStageRows.length}</span>
                   </p>
-                  <p className="text-xs text-slate-500">Review HOD-approved requests, score FD, and forward for approval</p>
+                  <p className="text-xs text-slate-500">Review HOD-approved requests first, then process FD-approved requests from Accounts</p>
                 </div>
               </button>
               <div className="flex items-center gap-2">
@@ -4131,6 +4134,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {/* stage pills */}
             <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-5 py-2.5">
               {([ 
+  { key: "hod-approved",               label: "HOD Approved" },
   { key: "fd-approved-accounts-exec", label: "✓ FD Approved by Accounts" },
   { key: "good-fd",                    label: "Good FD" },
   { key: "sent-for-approval",         label: "Sent for Approval" },
