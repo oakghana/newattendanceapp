@@ -136,7 +136,6 @@ type LoanRequest = {
   annual_salary?: number | null
   salary_advance_multiplier?: number | null
   salary_advance_amount?: number | null
-  salary_advance_days?: number | null
   deduction_period_months?: number | null
   director_letter: string | null
   director_letter_original?: string | null
@@ -868,9 +867,9 @@ function buildDirectorAutoMemoDraft(
   const salaryAdvanceLine = isSalaryAdvance && row.basic_salary && row.salary_advance_multiplier
     ? `Monthly Salary: GHc ${fmtAmount(row.basic_salary)} × ${row.salary_advance_multiplier} month(s) = GHc ${fmtAmount(amount)}`
     : null
-  const salaryAdvanceDaysLine = isSalaryAdvance && row.salary_advance_days
-    ? `Number of Months for Recovery: ${row.salary_advance_days}`
-    : null
+  const salaryAdvanceDaysLine = isSalaryAdvance && (row.recovery_months || row.deduction_period_months)
+  ? `Number of Months for Recovery: ${row.recovery_months || row.deduction_period_months}`
+  : null
   const signerName = String(signer?.name || "HR EXECUTIVE").trim().toUpperCase()
   const signerPosition = String(signer?.position || "HR EXECUTIVE").trim().toUpperCase()
 
@@ -1150,7 +1149,6 @@ export default function LoanAppPage() {
   const [modalRecovery, setModalRecovery] = useState("")
   const [modalMonths, setModalMonths] = useState("")
   const [modalBasicSalary, setModalBasicSalary] = useState("")
-  const [modalSalaryAdvanceDays, setModalSalaryAdvanceDays] = useState("")
   const [modalHodName, setModalHodName] = useState("")
   const [modalHodRank, setModalHodRank] = useState("")
   const [modalHodLocation, setModalHodLocation] = useState("")
@@ -3002,8 +3000,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
         setModalRecovery("")
         setModalMonths("")
         setModalBasicSalary("")
-        setModalSalaryAdvanceDays("")
-        setModalHodName("")
+              setModalHodName("")
         setModalHodRank("")
         setModalHodLocation("")
         setModalHodTelephone("")
@@ -7924,16 +7921,13 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {actionModal.actionType === "push_to_hr_executive" && actionModal.row && (
               <Button 
                 className="bg-blue-600 hover:bg-blue-700"
-                disabled={!modalDisbursement || !modalRecovery || (isSalaryAdvanceLoan(actionModal.row) && Number(modalSalaryAdvanceDays) < 1)}
+                disabled={!modalDisbursement || !modalRecovery || (isSalaryAdvanceLoan(actionModal.row) && Number(modalMonths) < 1)}
                 onClick={async () => {
 if (!modalDisbursement || !modalRecovery) {
   toast({ title: "Missing Required Fields", description: "Please fill in all required fields (Disbursement Date and Recovery Start Date) before pushing to HR Executive.", variant: "destructive" })
                     return
                   }
-                  if (isSalaryAdvanceLoan(actionModal.row!) && Number(modalSalaryAdvanceDays) < 1) {
-                    toast({ title: "Number of days required", description: "Enter the number of days on the salary advice before forwarding.", variant: "destructive" })
-                    return
-                  }
+
                   await runAction({
                     action: "push_to_hr_executive",
                     id: actionModal.row!.id,
@@ -7945,8 +7939,7 @@ if (!modalDisbursement || !modalRecovery) {
                     memo_cc: modalCcRecipients,
                     accounts_signatory: modalAccountSignatory,
                     hr_executive_signatory: modalHrSignatory,
-                    salary_advance_days: Number(modalSalaryAdvanceDays) || null,
-                  })
+                                    })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}
               >
@@ -8036,8 +8029,8 @@ if (!modalDisbursement || !modalRecovery) {
                       type="number"
                       min="1"
                       step="1"
-                      value={modalSalaryAdvanceDays}
-                      onChange={(e) => setModalSalaryAdvanceDays(e.target.value)}
+                      value={modalMonths}
+                      onChange={(e) => setModalMonths(e.target.value)}
                       placeholder="Enter number of months"
                       className="h-8 text-xs"
                     />

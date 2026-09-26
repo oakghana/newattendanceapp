@@ -5,7 +5,7 @@ import { calculateSalaryAdvance } from '@/lib/salary-advance'
 
 export async function POST(request: NextRequest) {
   try {
-    const { loan_request_id, hr_loan_office_memo, reference_number, salary_advance_days } = await request.json()
+    const { loan_request_id, hr_loan_office_memo, reference_number } = await request.json()
 
     if (!loan_request_id) {
       return NextResponse.json({ error: 'loan_request_id is required' }, { status: 400 })
@@ -67,11 +67,6 @@ export async function POST(request: NextRequest) {
           multiplier,
         )
       : null
-    const salaryAdvanceDays = Math.trunc(Number(salary_advance_days))
-
-    if (isSalaryAdvance && (!Number.isFinite(salaryAdvanceDays) || salaryAdvanceDays < 1)) {
-      return NextResponse.json({ error: 'Number of days is required on the salary advice before forwarding to HR Executive.' }, { status: 400 })
-    }
     if (isSalaryAdvance && !calculatedSalaryAdvance) {
       return NextResponse.json({ error: 'Accounts must provide a valid annual salary before this salary advance can be forwarded.' }, { status: 400 })
     }
@@ -84,11 +79,9 @@ export async function POST(request: NextRequest) {
       .update({
         ...(String(reference_number || '').trim() ? { reference_number: String(reference_number).trim() } : {}),
         ...(calculatedSalaryAdvance == null ? {} : {
-          annual_salary: calculatedSalaryAdvance.annualSalary,
           basic_salary: calculatedSalaryAdvance.monthlySalary,
           salary_advance_multiplier: calculatedSalaryAdvance.requestedMonths,
           salary_advance_amount: calculatedSalaryAdvance.amount,
-          salary_advance_days: salaryAdvanceDays,
           requested_amount: calculatedSalaryAdvance.amount,
           fixed_amount: calculatedSalaryAdvance.amount,
         }),
