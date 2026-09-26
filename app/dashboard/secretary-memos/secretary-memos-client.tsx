@@ -145,6 +145,8 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
   const [statusFilter, setStatusFilter] = useState("all")
   const [deptFilter, setDeptFilter] = useState("all")
   const [locationFilter, setLocationFilter] = useState("all")
+  const [loanTypeFilter, setLoanTypeFilter] = useState("all")
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "name_asc" | "amount_desc">("newest")
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   const fullName = `${profile.first_name} ${profile.last_name}`.trim().toUpperCase()
@@ -257,6 +259,8 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
     return Array.from(s).sort()
   }, [loanMemos])
 
+  const uniqueLoanTypes = useMemo(() => Array.from(new Set(loanMemos.map((m) => m.loan_type_label).filter(Boolean))).sort(), [loanMemos])
+
   const uniqueLocations = useMemo(() => {
     const s = new Set<string>()
   loanMemos.forEach((m) => {
@@ -274,10 +278,16 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
   const deptName = Array.isArray(m.user_profiles?.departments) ? m.user_profiles?.departments[0]?.name : m.user_profiles?.departments?.name
   const locationName = Array.isArray(m.user_profiles?.geofence_locations) ? m.user_profiles?.geofence_locations[0]?.name : m.user_profiles?.geofence_locations?.name
   const matchesDept = deptFilter === "all" || deptName === deptFilter
-  const matchesLocation = locationFilter === "all" || locationName === locationFilter
-      return matchesSearch && matchesStatus && matchesDept && matchesLocation
+      const matchesLocation = locationFilter === "all" || locationName === locationFilter
+      const matchesLoanType = loanTypeFilter === "all" || m.loan_type_label === loanTypeFilter
+      return matchesSearch && matchesStatus && matchesDept && matchesLocation && matchesLoanType
+    }).sort((a, b) => {
+      if (sortOrder === "name_asc") return (a.staff_full_name || "").localeCompare(b.staff_full_name || "")
+      if (sortOrder === "amount_desc") return (b.fixed_amount || b.requested_amount || 0) - (a.fixed_amount || a.requested_amount || 0)
+      const dateDifference = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      return sortOrder === "oldest" ? dateDifference : -dateDifference
     })
-  }, [loanMemos, search, statusFilter, deptFilter, locationFilter])
+  }, [loanMemos, search, statusFilter, deptFilter, locationFilter, loanTypeFilter, sortOrder])
 
   const filteredLeaveMemos = useMemo(() => {
     const q = search.toLowerCase()
@@ -342,7 +352,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
             <button
-              onClick={() => { setTab("loans"); setStatusFilter("all"); setDeptFilter("all"); setLocationFilter("all") }}
+              onClick={() => { setTab("loans"); setStatusFilter("all"); setDeptFilter("all"); setLocationFilter("all"); setLoanTypeFilter("all"); setSortOrder("newest") }}
               className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all",
                 tab === "loans"
@@ -434,6 +444,18 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
             </select>
           )}
 
+          {/* Loan type filter */}
+          {tab === "loans" && uniqueLoanTypes.length > 0 && (
+            <select
+              value={loanTypeFilter}
+              onChange={(e) => setLoanTypeFilter(e.target.value)}
+              className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-300"
+            >
+              <option value="all">All Loan Types</option>
+              {uniqueLoanTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
+          )}
+
           {/* Status filter */}
           <select
             value={statusFilter}
@@ -457,6 +479,20 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
               </>
             )}
           </select>
+
+          {tab === "loans" && (
+            <select
+              aria-label="Sort loan records"
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as typeof sortOrder)}
+              className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-300"
+            >
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="name_asc">Staff name A–Z</option>
+              <option value="amount_desc">Amount highest first</option>
+            </select>
+          )}
         </div>
 
         {/* Loan Memos Table */}
@@ -515,7 +551,6 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                           disabled={downloadingId === memo.id || !isMdApproved}
                           title={memo.md_approved_at || memo.md_approved_by_name ? "Download MD-approved loan memo PDF" : "Unavailable until the Managing Director approves this loan"}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold transition-colors disabled:opacity-50"
-                          title="Download loan memo PDF"
                         >
                           {downloadingId === memo.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
                           Download
@@ -525,7 +560,6 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                           disabled={downloadingId === memo.id || !isMdApproved}
                           title={memo.md_approved_at || memo.md_approved_by_name ? "Print MD-approved loan memo" : "Unavailable until the Managing Director approves this loan"}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors disabled:opacity-50"
-                          title="Print loan memo"
                         >
                           <Printer className="h-3.5 w-3.5" />
                           Print

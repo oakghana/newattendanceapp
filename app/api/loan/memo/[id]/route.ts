@@ -114,8 +114,10 @@ function extractEditedMemoBody(value: string): string[] {
   const lines = normalized.split(/\n+/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean)
   const bodyStart = lines.findIndex((line) => /^(we refer|we wish to inform|the loan would be recovered|management has given approval)/i.test(line))
   const bodyLines = bodyStart >= 0 ? lines.slice(bodyStart) : lines
+  const closingStart = bodyLines.findIndex((line) => /^(mr\.?\s+kwaku appiah ohemeng|kwaku appiah ohemeng|yours faithfully|yours sincerely|you can count on our co-operation|cc\s*:)/i.test(line))
+  const contentLines = closingStart >= 0 ? bodyLines.slice(0, closingStart) : bodyLines
   const seen = new Set<string>()
-  return bodyLines.filter((line) => {
+  return contentLines.filter((line) => {
     const key = line.toLowerCase()
     if (seen.has(key)) return false
     seen.add(key)
@@ -814,23 +816,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     doc.setFont("times", "normal")
     doc.setFontSize(8.5)
     doc.setTextColor(60, 60, 60)
-    const defaultCcList = [
-      "Managing Director",
-      "Deputy Managing Director",
-      "Deputy Director Finance",
-      "Deputy Director Human Resource",
-      "Audit Manager",
-      "Registry Unit",
-      "Records Unit",
-    ]
-    const ccList = loan.memo_cc
-      ? loan.memo_cc.split('\n').filter((line: string) => line.trim())
-      : defaultCcList
-    doc.text("cc:", marginLeft, y)
-    ccList.forEach((entry: string, i: number) => {
-      doc.text(entry, marginLeft + 10, y + (i + 1) * 4.5)
-    })
-    y += (ccList.length + 1) * 4.5 + 4
+  // Distribution lists belong to the workflow record, not the edited memo body.
+  // Do not append them here because the edited source may already contain a closing block.
+
 
     // Imported approvals are retained for record purposes and must be clearly distinguished
     // from loans approved through the current portal workflow.
