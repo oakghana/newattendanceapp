@@ -642,12 +642,12 @@ export function AccountsExecutiveFDDashboard({
                   </div>
                 </div>
 
-                {review.return_reason && review.status === 'pending_accounts_fd_review' && (
-                  <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm">
-                    <p className="mb-1 text-xs font-semibold text-amber-900">Returned by HR Loan Office — correction required:</p>
-                    <p className="whitespace-pre-wrap text-amber-800">{review.return_reason}</p>
-                  </div>
-                )}
+  {review.return_reason?.startsWith("FD_CORRECTION_REQUIRED:") && review.status === 'pending_accounts_fd_review' && (
+  <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm">
+  <p className="mb-1 text-xs font-semibold text-amber-900">Returned by HR Loan Office — correction required:</p>
+  <p className="whitespace-pre-wrap text-amber-800">{review.return_reason.replace(/^FD_CORRECTION_REQUIRED:\s*/, "")}</p>
+  </div>
+  )}
 
                 {review.submission_memo && (
                   <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm">

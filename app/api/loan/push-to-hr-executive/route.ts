@@ -62,7 +62,8 @@ export async function POST(request: NextRequest) {
           fd_good: null,
           fd_checked_at: null,
           fd_note: null,
-          hr_note: memo,
+          // Keep ordinary HR loan terms separate from an explicit FD correction reason.
+          hr_note: `FD_CORRECTION_REQUIRED: ${memo}`,
           updated_at: now,
         })
         .eq('id', loan_request_id)
