@@ -259,6 +259,10 @@ export function AccountsExecutiveFDDashboard({
   const [reviewDecision, setReviewDecision] = useState('')
   const [adjustedFdScore, setAdjustedFdScore] = useState('')
   const [adjustmentReason, setAdjustmentReason] = useState('')
+  const [showInformationForm, setShowInformationForm] = useState(false)
+  const [basicSalary, setBasicSalary] = useState('')
+  const [monthlyAllowances, setMonthlyAllowances] = useState('')
+  const [monthlyDeductions, setMonthlyDeductions] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const { toast } = useToast()
 
@@ -399,6 +403,38 @@ export function AccountsExecutiveFDDashboard({
       const errorMsg = error instanceof Error ? error.message : 'Failed to approve FD request'
       console.error('[v0] Error approving FD:', errorMsg)
       toast({ title: 'Error', description: errorMsg, variant: 'destructive' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleProvideInformation = async () => {
+    if (!selectedReview) return
+    if (!basicSalary.trim()) {
+      toast({ title: 'Basic salary required', description: 'Provide the staff member\'s basic salary before submitting the information.', variant: 'destructive' })
+      return
+    }
+    try {
+      setSubmitting(true)
+      const res = await fetch('/api/loan/fd-review', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          review_id: selectedReview.id,
+          review_status: 'information_provided',
+          basic_salary: Number(basicSalary),
+          monthly_allowances: Number(monthlyAllowances || 0),
+          monthly_deductions: Number(monthlyDeductions || 0),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to provide request information')
+      toast({ title: 'Information provided', description: 'The staff salary information has been saved for FD processing.' })
+      setSelectedReview(null)
+      setShowInformationForm(false)
+      fetchPendingReviews()
+    } catch (error) {
+      toast({ title: 'Information submission failed', description: error instanceof Error ? error.message : 'Try again', variant: 'destructive' })
     } finally {
       setSubmitting(false)
     }
@@ -736,7 +772,7 @@ export function AccountsExecutiveFDDashboard({
                 <details className="group border rounded-lg cursor-pointer">
                   <summary className="px-4 py-3 bg-blue-50 hover:bg-blue-100 font-semibold text-sm flex items-center justify-between select-none">
                     <span>Supporting Documents</span>
-                    <span className="text-xs group-open:rotate-180 transition-transform">▼</span>
+                    <span className="text-xs group-open:rotate-180 transition-transform">��</span>
                   </summary>
                   <div className="p-4 bg-white border-t space-y-3 text-sm">
                     {selectedReview.submission_memo && (
@@ -827,6 +863,19 @@ export function AccountsExecutiveFDDashboard({
             </div>
           )}
 
+          {showInformationForm && (
+            <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <p className="text-sm font-semibold text-blue-900">Provide request information</p>
+              <p className="mt-1 text-xs text-blue-700">Enter verified salary details for the FD calculation. This does not send the request back for correction.</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <div><label className="text-xs font-semibold text-slate-700">Basic salary / month</label><Input type="number" min="0" value={basicSalary} onChange={(event) => setBasicSalary(event.target.value)} className="mt-1" /></div>
+                <div><label className="text-xs font-semibold text-slate-700">Allowances / month</label><Input type="number" min="0" value={monthlyAllowances} onChange={(event) => setMonthlyAllowances(event.target.value)} className="mt-1" /></div>
+                <div><label className="text-xs font-semibold text-slate-700">Deductions / month</label><Input type="number" min="0" value={monthlyDeductions} onChange={(event) => setMonthlyDeductions(event.target.value)} className="mt-1" /></div>
+              </div>
+              <Button type="button" onClick={handleProvideInformation} disabled={submitting} className="mt-3 bg-blue-600 hover:bg-blue-700" size="sm">Save FD Information</Button>
+            </div>
+          )}
+
           <DialogFooter className="flex-col-reverse gap-2 pt-4 border-t sm:flex-row">
             <Button
               variant="outline"
@@ -851,12 +900,18 @@ export function AccountsExecutiveFDDashboard({
   <>
   <Button
   variant="outline"
-  onClick={handleSendBackForCorrection}
+  onClick={() => {
+    setBasicSalary(String(selectedReview?.monthly_salary || ''))
+    setMonthlyAllowances('')
+    setMonthlyDeductions(String(selectedReview?.monthly_deduction || ''))
+    setShowInformationForm((value) => !value)
+  }}
   disabled={submitting}
   size="sm"
-  className="border-amber-500 text-amber-700 hover:bg-amber-50"
+  className="border-blue-500 text-blue-700 hover:bg-blue-50"
   >
-  Send Back for Correction
+  <FileText className="mr-1 h-4 w-4" />
+  Provide FD Information
   </Button>
   <Button
   variant="destructive"
