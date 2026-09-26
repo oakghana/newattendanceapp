@@ -869,7 +869,7 @@ function buildDirectorAutoMemoDraft(
     ? `Monthly Salary: GHc ${fmtAmount(row.basic_salary)} × ${row.salary_advance_multiplier} month(s) = GHc ${fmtAmount(amount)}`
     : null
   const salaryAdvanceDaysLine = isSalaryAdvance && row.salary_advance_days
-    ? `Number of Days on Salary Advice: ${row.salary_advance_days}`
+    ? `Number of Months for Recovery: ${row.salary_advance_days}`
     : null
   const signerName = String(signer?.name || "HR EXECUTIVE").trim().toUpperCase()
   const signerPosition = String(signer?.position || "HR EXECUTIVE").trim().toUpperCase()
@@ -8031,7 +8031,7 @@ if (!modalDisbursement || !modalRecovery) {
                 />
                 {actionModal.row && isSalaryAdvanceLoan(actionModal.row) && (
                   <>
-                    <Label className="text-sm font-semibold">Number of Days on Salary Advice *</Label>
+                    <Label className="text-sm font-semibold">Number of Months for Recovery *</Label>
                     <Input
                       type="number"
                       min="1"

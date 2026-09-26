@@ -544,14 +544,14 @@ export function HRLoanOfficeFDApproved() {
 
               {String(selectedForPush.loan_type || '').toLowerCase().includes('salary') && (
                 <div>
-                  <label className="text-sm font-semibold text-slate-900">Number of Days on Salary Advice *</label>
+                  <label className="text-sm font-semibold text-slate-900">Number of Months for Recovery *</label>
                   <Input
                     type="number"
                     min="1"
                     step="1"
                     value={salaryAdvanceDays}
                     onChange={(event) => setSalaryAdvanceDays(event.target.value)}
-                    placeholder="Enter number of days"
+                    placeholder="Enter recovery months"
                     className="mt-2"
                   />
                 </div>

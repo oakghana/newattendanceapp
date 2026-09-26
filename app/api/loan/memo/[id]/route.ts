@@ -229,7 +229,7 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
         ...(isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label) && loan.basic_salary
           ? [
               `Verified Monthly Salary: GHc ${fmtAmount(loan.basic_salary)}`,
-              ...(loan.salary_advance_days ? [`Number of Days on Salary Advice: ${loan.salary_advance_days}`] : []),
+              ...(loan.salary_advance_days ? [`Number of Months for Recovery: ${loan.salary_advance_days}`] : []),
             ]
           : []),
         ...(cleanedHrNote ? [`HR Note: ${cleanedHrNote}`] : []),

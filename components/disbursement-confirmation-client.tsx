@@ -81,6 +81,8 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
                 status: "partially_recovered",
                 staff_receiving_funds_confirmed_at: confirmedAt,
                 staff_receiving_funds_confirmed_by: confirmedByName,
+                repayment_plan_generated_at: confirmedAt,
+                repayment_duration_months: data.loan?.repayment_duration_months || loan.recovery_months || loan.repayment_duration_months || 12,
               }
             : loan
         )
