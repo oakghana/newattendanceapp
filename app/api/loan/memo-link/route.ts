@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     if (profileError || !profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     if (loanError || !loan) return NextResponse.json({ error: "Loan not found" }, { status: 404 })
 
-    const postManagingDirectorStatuses = new Set(["approved_director", "md_approved", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
+    const postManagingDirectorStatuses = new Set(["approved_director", "md_approved", "pending_hr_records_reference", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
     const hasManagingDirectorApproval = Boolean((loan as any).md_approved_at || (loan as any).md_approved_by_name)
     if (!postManagingDirectorStatuses.has(String((loan as any).status || "")) || !hasManagingDirectorApproval) {
       return NextResponse.json({ error: "This loan cannot be downloaded until it has been approved by the Managing Director." }, { status: 409 })

@@ -511,7 +511,8 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                         )}
                         <button
                           onClick={() => void openLoanMemo(memo)}
-                          disabled={downloadingId === memo.id}
+                          disabled={downloadingId === memo.id || (!memo.md_approved_at && !memo.md_approved_by_name)}
+                          title={memo.md_approved_at || memo.md_approved_by_name ? "Download MD-approved loan memo PDF" : "Unavailable until the Managing Director approves this loan"}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold transition-colors disabled:opacity-50"
                           title="Download loan memo PDF"
                         >
@@ -520,7 +521,8 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                         </button>
                         <button
                           onClick={() => void openLoanMemo(memo, true)}
-                          disabled={downloadingId === memo.id}
+                          disabled={downloadingId === memo.id || (!memo.md_approved_at && !memo.md_approved_by_name)}
+                          title={memo.md_approved_at || memo.md_approved_by_name ? "Print MD-approved loan memo" : "Unavailable until the Managing Director approves this loan"}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors disabled:opacity-50"
                           title="Print loan memo"
                         >
