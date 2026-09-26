@@ -672,7 +672,7 @@ export async function GET() {
         ? admin
     .from("loan_requests")
     .select("*")
-    .or("status.eq.sent_to_accounts,and(status.eq.pending_accounts_fd_review,hr_note.ilike.*Returned by HR Loan Office*)")
+    .or("status.eq.sent_to_accounts,and(status.eq.pending_accounts_fd_review,hr_note.ilike.*FD_CORRECTION_REQUIRED:*)")
     .order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null } as any),
       showAccounts

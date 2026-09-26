@@ -166,7 +166,7 @@ export async function GET(request: Request) {
       if (statusParam === "pending_review") {
         // Older requests may still carry the former status, but the HR return note
         // identifies them as Accounts Office recalculation work, not AE approvals.
-        query = query.not("hr_note", "ilike", "%Returned by HR Loan Office%")
+        query = query.not("hr_note", "ilike", "%FD_CORRECTION_REQUIRED:%")
       }
     }
 
