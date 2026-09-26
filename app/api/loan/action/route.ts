@@ -289,8 +289,17 @@ export async function POST(request: NextRequest) {
       }
 
       const decision = body.decision === "reject" ? "reject" : "approve"
-      toStatus = decision === "approve" ? "hod_approved" : "hod_rejected"
+      const isCarLoan = String(req.loan_type_key || "").toLowerCase().includes("car") ||
+        String(req.loan_type_label || "").toLowerCase().includes("car")
+      // Car loans go directly to the Committee after HOD endorsement. The
+      // Committee can then send them to Accounts/FD for eligibility review;
+      // they must not enter the running-loans/payment flow before approval.
+      const nextStatus = decision === "approve"
+        ? (isCarLoan ? "awaiting_committee" : "hod_approved")
+        : "hod_rejected"
+      toStatus = nextStatus
       update.status = toStatus
+      update.committee_required = decision === "approve" && isCarLoan ? true : req.committee_required
       update.hod_reviewer_id = user.id
       update.hod_review_note = note
       update.hod_decision_at = new Date().toISOString()
@@ -302,7 +311,9 @@ export async function POST(request: NextRequest) {
           admin,
           [req.user_id],
           "Loan Request Approved by HOD",
-          `Your request ${req.request_number} has been approved by HOD and sent to Loan Office.`,
+          isCarLoan
+            ? `Your request ${req.request_number} has been approved by HOD and sent to the Loan Committee for review.`
+            : `Your request ${req.request_number} has been approved by HOD and sent to Loan Office.`,
           "loan_hod_approved",
           { request_id: req.id },
         )
