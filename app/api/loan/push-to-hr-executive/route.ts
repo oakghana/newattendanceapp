@@ -87,11 +87,18 @@ export async function POST(request: NextRequest) {
       loanRequest.salary_advance_multiplier ?? loanRequest.deduction_period_months ?? loanRequest.repayment_duration_months ?? loanRequest.recovery_months,
     )
     const isSalaryAdvance = loanType.includes('salary') && loanType.includes('advance')
+    const noteText = String(loanRequest.fd_note || '')
+    const salaryFromNote = noteText.match(/salary(?: per annum| per year| annually)?[^0-9]*([0-9][0-9,]*(?:\\.[0-9]+)?)/i)?.[1]
+    const monthlySalary = Number(loanRequest.basic_salary)
+    const annualSalary = Number(loanRequest.annual_salary) > 0
+      ? Number(loanRequest.annual_salary)
+      : monthlySalary > 0
+        ? monthlySalary * 12
+        : salaryFromNote
+          ? Number(salaryFromNote.replace(/,/g, ''))
+          : null
     const calculatedSalaryAdvance = isSalaryAdvance
-      ? calculateSalaryAdvance(
-          loanRequest.annual_salary ?? (Number(loanRequest.basic_salary) > 0 ? Number(loanRequest.basic_salary) * 12 : null),
-          multiplier,
-        )
+      ? calculateSalaryAdvance(annualSalary, multiplier)
       : null
     if (isSalaryAdvance && !calculatedSalaryAdvance) {
       return NextResponse.json({ error: 'Accounts must provide a valid annual salary before this salary advance can be forwarded.' }, { status: 400 })

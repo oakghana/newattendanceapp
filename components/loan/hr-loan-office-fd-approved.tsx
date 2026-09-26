@@ -572,19 +572,21 @@ export function HRLoanOfficeFDApproved() {
             </div>
           )}
 
-          <DialogFooter>
+              <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
             <Button variant="outline" onClick={() => setSelectedForPush(null)} disabled={pushing}>
               Cancel
             </Button>
-  <Button
-  variant="outline"
-  onClick={handleReturnToAccounts}
-  disabled={pushing || !pushMemo.trim()}
-  className="border-amber-500 text-amber-700 hover:bg-amber-50"
-  >
-  Return to Accounts
-  </Button>
-  <Button
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleReturnToAccounts}
+                disabled={pushing || !pushMemo.trim()}
+                className="border-amber-500 bg-amber-50 font-semibold text-amber-800 hover:bg-amber-100"
+              >
+                Return FD to Accounts for Correction
+              </Button>
+              <Button
   onClick={handlePushToHRExecutive}
   disabled={pushing || !pushMemo.trim() || (String(selectedForPush?.loan_type || '').toLowerCase().includes('salary') && Number(salaryAdvanceDays) < 1)}
               className="bg-blue-600 hover:bg-blue-700"
@@ -592,6 +594,7 @@ export function HRLoanOfficeFDApproved() {
               <Send className="h-4 w-4 mr-2" />
               {pushing ? 'Pushing...' : 'Push to HR Executive'}
             </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
