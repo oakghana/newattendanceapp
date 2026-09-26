@@ -29,6 +29,23 @@ function fmtAmount(value?: number | null) {
   })
 }
 
+function amountInWords(value?: number | null) {
+  const number = Math.round(Number(value || 0) * 100) / 100
+  const units = ["zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"]
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
+  const underThousand = (n: number): string => {
+    if (n < 20) return units[n]
+    if (n < 100) return `${tens[Math.floor(n / 10)]}${n % 10 ? ` ${units[n % 10].toLowerCase()}` : ""}`
+    return `${units[Math.floor(n / 100)]} Hundred${n % 100 ? ` ${underThousand(n % 100).toLowerCase()}` : ""}`
+  }
+  const whole = Math.floor(number)
+  if (!Number.isFinite(number) || whole < 0) return ""
+  const wholeWords = whole >= 1000
+    ? `${underThousand(Math.floor(whole / 1000))} Thousand${whole % 1000 ? ` ${underThousand(whole % 1000).toLowerCase()}` : ""}`
+    : underThousand(whole)
+  return `${wholeWords} Ghana Cedis`
+}
+
 function fmtName(profile?: any) {
   const direct = String(profile?.full_name || profile?.display_name || profile?.name || "").trim()
   if (direct) return direct.toUpperCase()
@@ -172,7 +189,8 @@ async function resolveThroRecipient(admin: any, loan: any, applicantId: string) 
 function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
   const parsedHrNote = splitThroTelephoneFromNote(loan.hr_note)
   const cleanedHrNote = parsedHrNote.cleanedNote
-  const amount = `GHc ${fmtAmount(loan.salary_advance_amount || loan.fixed_amount || loan.requested_amount)}`
+  const salaryAdvanceAmount = Number(loan.salary_advance_amount || loan.fixed_amount || loan.requested_amount || 0)
+  const amount = `GHc ${fmtAmount(salaryAdvanceAmount)}`
   const isFuneralLoan = isFuneralLoanType(loan.loan_type_key, loan.loan_type_label)
 
   if (loan.status === "rejected_fd") {
@@ -221,7 +239,7 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
       ? `${Math.trunc(recoveryMonths)} month${Math.trunc(recoveryMonths) === 1 ? "" : "s"}`
       : "the approved recovery period"
     return {
-      subject: `APPLICATION FOR ${isSalaryAdvance ? "SALARY ADVANCE" : String(loan.loan_type_label || "LOAN").toUpperCase()} (TERMS SET)`,
+      subject: `APPLICATION FOR ${isSalaryAdvance ? "SALARY ADVANCE" : String(loan.loan_type_label || "LOAN").toUpperCase()}${isSalaryAdvance ? "" : " (TERMS SET)"}`,
       paragraphs: isSalaryAdvance
         ? [
             `We refer to your loan application dated ${fmtDate(loan.hr_forwarded_at || loan.created_at)} regarding the above subject. HR has prepared the proposed terms and forwarded your request to the Director of Human Resource for final consideration.`,
@@ -263,22 +281,15 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
     "Deputy Director, Finance"
   const isSalaryAdvance = isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label)
   const salaryAdvanceRecoveryMonths = Number(loan.recovery_months ?? loan.deduction_period_months ?? loan.repayment_duration_months)
-  const salaryAdvanceMultiplier = Number(loan.salary_advance_multiplier)
-  const salaryAdvanceMonthlySalary = Number(loan.basic_salary)
   const salaryAdvanceRecoveryLabel = Number.isFinite(salaryAdvanceRecoveryMonths) && salaryAdvanceRecoveryMonths > 0
-    ? `${Math.trunc(salaryAdvanceRecoveryMonths)} month${Math.trunc(salaryAdvanceRecoveryMonths) === 1 ? "" : "s"}`
+    ? String(Math.trunc(salaryAdvanceRecoveryMonths))
     : "the approved recovery period"
   const salaryAdvanceParagraphs = isSalaryAdvance
     ? [
-        `We refer to your loan application dated ${fmtDate(loan.created_at)} regarding the above subject. Management has approved your application for a Salary Advance of ${amount}.`,
-        ...(Number.isFinite(salaryAdvanceMonthlySalary) && salaryAdvanceMonthlySalary > 0
-          ? [`Monthly Salary: GHc ${fmtAmount(salaryAdvanceMonthlySalary)}${Number.isFinite(salaryAdvanceMultiplier) && salaryAdvanceMultiplier > 0 ? ` × ${Math.trunc(salaryAdvanceMultiplier)} month${Math.trunc(salaryAdvanceMultiplier) === 1 ? "" : "s"} = ${amount}` : ""}.`]
-          : []),
-        `Number of Months for Recovery: ${salaryAdvanceRecoveryLabel}.`,
-        `The loan would be recovered in ${salaryAdvanceRecoveryLabel} equal monthly instalments from your salary effective, ${recovStart}.`,
-        `By a copy of this letter, the ${memoCopyRecipient} is authorised to release the approved amount to you effective ${disbMonth}.`,
-        "Please take note of these terms and make the necessary arrangements for the applicable salary deductions.",
-        "We count on your usual co-operation.",
+        `We refer to your loan application dated ${fmtDate(loan.created_at)} on the above subject and wish to inform you that, Management has given approval for you to be granted a Salary Advance of ${amountInWords(salaryAdvanceAmount)} (GHc${fmtAmount(salaryAdvanceAmount)}).`,
+        `The loan would be recovered in ${salaryAdvanceRecoveryLabel} Equal Monthly Instalment from your salary effective, ${recovStart}.`,
+        `By a copy of this letter, the ${memoCopyRecipient} has been advised to release the said amount to you effective, ${disbMonth}.`,
+        "You can count on our co-operation.",
       ]
     : [
         `We refer to your loan application dated ${fmtDate(loan.created_at)} on the above subject and wish to inform you that Management has approved your application for a ${loan.loan_type_label || "Loan"} of ${amount}.`,
