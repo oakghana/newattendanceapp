@@ -478,8 +478,9 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                 {filteredLoanMemos.map((memo) => {
                   const staffName = (memo.staff_full_name || `${memo.user_profiles?.first_name ?? ""} ${memo.user_profiles?.last_name ?? ""}`.trim()).toUpperCase()
                   const initials2 = staffName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
-                  const statusInfo = LOAN_STATUS_MAP[memo.status] || { label: memo.status, color: "bg-slate-100 text-slate-600 border-slate-200" }
-                  const amount = memo.fixed_amount || memo.requested_amount
+  const statusInfo = LOAN_STATUS_MAP[memo.status] || { label: memo.status, color: "bg-slate-100 text-slate-600 border-slate-200" }
+  const isMdApproved = memo.status !== "awaiting_director_hr" && Boolean(memo.md_approved_at)
+  const amount = memo.fixed_amount || memo.requested_amount
                   return (
                     <div key={memo.id} className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 transition-colors">
                       <Avatar className="h-9 w-9 flex-shrink-0">
@@ -504,14 +505,14 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                         <Badge className={cn("text-xs border font-medium", statusInfo.color)}>
                           {statusInfo.label}
                         </Badge>
-                        {memo.md_approved_at && (
+                        {isMdApproved && (
                           <Badge className="text-xs border bg-amber-100 text-amber-800 border-amber-200 font-medium">
                             MD Approved
                           </Badge>
                         )}
                         <button
                           onClick={() => void openLoanMemo(memo)}
-                          disabled={downloadingId === memo.id || (!memo.md_approved_at && !memo.md_approved_by_name)}
+                          disabled={downloadingId === memo.id || !isMdApproved}
                           title={memo.md_approved_at || memo.md_approved_by_name ? "Download MD-approved loan memo PDF" : "Unavailable until the Managing Director approves this loan"}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold transition-colors disabled:opacity-50"
                           title="Download loan memo PDF"
@@ -521,7 +522,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                         </button>
                         <button
                           onClick={() => void openLoanMemo(memo, true)}
-                          disabled={downloadingId === memo.id || (!memo.md_approved_at && !memo.md_approved_by_name)}
+                          disabled={downloadingId === memo.id || !isMdApproved}
                           title={memo.md_approved_at || memo.md_approved_by_name ? "Print MD-approved loan memo" : "Unavailable until the Managing Director approves this loan"}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors disabled:opacity-50"
                           title="Print loan memo"

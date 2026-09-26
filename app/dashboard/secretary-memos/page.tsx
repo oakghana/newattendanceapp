@@ -62,7 +62,6 @@ export default async function SecretaryMemosPage() {
       )
     `)
     .in("status", [
-    "awaiting_director_hr",
     "approved_director",
     "pending_hr_records_reference",
     "referenced",
