@@ -301,11 +301,11 @@ function PeriodSection({
           {open ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
         </div>
       </button>
-      {open && (
-        <div className="border-t border-slate-100 divide-y divide-slate-100">
-          {loans.map((loan) => (
-            <LoanRow key={loan.id} loan={loan} selected={selected.has(loan.id)} onToggle={() => onToggle(loan.id)} approved={approvedIds.has(loan.id)} />
-          ))}
+  {open && (
+  <div className="border-t border-slate-100 divide-y divide-slate-100">
+  {loans.filter((loan) => !approvedIds.has(loan.id)).map((loan) => (
+  <LoanRow key={loan.id} loan={loan} selected={selected.has(loan.id)} onToggle={() => onToggle(loan.id)} approved={false} />
+  ))}
         </div>
       )}
     </div>
@@ -944,8 +944,8 @@ export function MdApprovalsClient({ profile }: Props) {
       })
 
       setTimeout(() => {
-        setLoans((prev) => prev.filter((l) => !approvedIds.has(l.id) && !justApproved.includes(l.id)))
-        setApprovedIds(new Set())
+  setLoans((prev) => prev.filter((l) => !justApproved.includes(l.id)))
+  setApprovedIds(new Set())
         setJustApproved([])
       }, 2200)
     } catch (err) {

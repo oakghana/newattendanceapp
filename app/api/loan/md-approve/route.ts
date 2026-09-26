@@ -60,6 +60,9 @@ export async function POST(req: NextRequest) {
       md_approved_at: now,
       md_approved_by: profile.id,
       md_approved_by_name: mdName,
+      status: "approved_director",
+      workflow_stage: "md_approved",
+      updated_at: now,
     })
     .in("id", eligibleIds)
 
