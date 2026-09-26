@@ -272,9 +272,10 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
     ? [
         `We refer to your loan application dated ${fmtDate(loan.created_at)} regarding the above subject. Management has approved your application for a Salary Advance of ${amount}.`,
         ...(Number.isFinite(salaryAdvanceMonthlySalary) && salaryAdvanceMonthlySalary > 0
-          ? [`Your verified monthly salary is GHc ${fmtAmount(salaryAdvanceMonthlySalary)}${Number.isFinite(salaryAdvanceMultiplier) && salaryAdvanceMultiplier > 0 ? `, and the approved advance was calculated using ${Math.trunc(salaryAdvanceMultiplier)} month${Math.trunc(salaryAdvanceMultiplier) === 1 ? "" : "s"} of salary.` : "."}`]
+          ? [`Monthly Salary: GHc ${fmtAmount(salaryAdvanceMonthlySalary)}${Number.isFinite(salaryAdvanceMultiplier) && salaryAdvanceMultiplier > 0 ? ` × ${Math.trunc(salaryAdvanceMultiplier)} month${Math.trunc(salaryAdvanceMultiplier) === 1 ? "" : "s"} = ${amount}` : ""}.`]
           : []),
-        `The approved amount will be recovered from your salary in ${salaryAdvanceRecoveryLabel} by equal monthly instalments, commencing in ${recovStart}.`,
+        `Number of Months for Recovery: ${salaryAdvanceRecoveryLabel}.`,
+        `The loan would be recovered in ${salaryAdvanceRecoveryLabel} equal monthly instalments from your salary effective, ${recovStart}.`,
         `By a copy of this letter, the ${memoCopyRecipient} is authorised to release the approved amount to you effective ${disbMonth}.`,
         "Please take note of these terms and make the necessary arrangements for the applicable salary deductions.",
         "We count on your usual co-operation.",
@@ -642,7 +643,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       y += 10
     }
 
-    // ─── RE: Subject ──────────────────────────────────────────────────
+    // ─── RE: Subject ────────────────────────────────���─────────────────
     doc.setFont("times", "bold")
     doc.setFontSize(9.5)
     const reText = `RE:  ${subject}`
@@ -805,7 +806,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     // ─── MD Approval Stamp — Professional Square Stamp with MD Signature ─
     // Only show if MD has ACTUALLY approved (md_approved_at is populated)
     // Don't show at awaiting_director_hr stage — that means HR signed but MD hasn't approved yet
-    const isMdApproved = Boolean(loan.md_approved_at) && ["approved_director", "md_approved", "pending_hr_records_reference", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"].includes(String(loan.status || ""))
+    const isMdApproved = Boolean(loan.md_approved_at) && ["approved_director", "md_approved", "awaiting_director_hr", "pending_hr_records_reference", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"].includes(String(loan.status || ""))
     if (isMdApproved) {
       // ── QCC physical rubber-stamp replica ──────────────────────────────────
       // Rounded rectangle, all QCC blue ink, "QUALITY CONTROL CO. LTD. (COCOBOD)"
