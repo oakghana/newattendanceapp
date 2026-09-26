@@ -136,7 +136,6 @@ type LoanRequest = {
   annual_salary?: number | null
   salary_advance_multiplier?: number | null
   salary_advance_amount?: number | null
-  salary_advance_days?: number | null
   deduction_period_months?: number | null
   director_letter: string | null
   director_letter_original?: string | null
@@ -344,6 +343,8 @@ const STATUS_COLORS: Record<string, string> = {
   director_rejected: "bg-red-100 text-red-800",
   archived: "bg-slate-200 text-slate-700",
 }
+
+const HOD_OVERDUE_WARNING_DAYS = 3
 
 const STATUS_LABELS: Record<string, string> = {
   pending_hod: "Pending HOD",
@@ -868,9 +869,9 @@ function buildDirectorAutoMemoDraft(
   const salaryAdvanceLine = isSalaryAdvance && row.basic_salary && row.salary_advance_multiplier
     ? `Monthly Salary: GHc ${fmtAmount(row.basic_salary)} × ${row.salary_advance_multiplier} month(s) = GHc ${fmtAmount(amount)}`
     : null
-  const salaryAdvanceDaysLine = isSalaryAdvance && row.salary_advance_days
-    ? `Number of Days on Salary Advice: ${row.salary_advance_days}`
-    : null
+  const salaryAdvanceDaysLine = isSalaryAdvance && (row.recovery_months || row.deduction_period_months)
+  ? `Number of Months for Recovery: ${row.recovery_months || row.deduction_period_months}`
+  : null
   const signerName = String(signer?.name || "HR EXECUTIVE").trim().toUpperCase()
   const signerPosition = String(signer?.position || "HR EXECUTIVE").trim().toUpperCase()
 
@@ -1150,7 +1151,6 @@ export default function LoanAppPage() {
   const [modalRecovery, setModalRecovery] = useState("")
   const [modalMonths, setModalMonths] = useState("")
   const [modalBasicSalary, setModalBasicSalary] = useState("")
-  const [modalSalaryAdvanceDays, setModalSalaryAdvanceDays] = useState("")
   const [modalHodName, setModalHodName] = useState("")
   const [modalHodRank, setModalHodRank] = useState("")
   const [modalHodLocation, setModalHodLocation] = useState("")
@@ -1669,8 +1669,9 @@ export default function LoanAppPage() {
       !isPoorFdScore(row.fd_score, row.fd_good) && row.fd_score != null
     const isPoorFd = (row: LoanRequest) =>
       row.status === "rejected_fd" || isPoorFdScore(row.fd_score, row.fd_good)
-    const isGoodFdNotPushed = (row: LoanRequest) =>
-      isGoodFd(row) && !["awaiting_director_hr", "approved_director", "director_rejected"].includes(row.status)
+  const sentForApprovalStatuses = ["awaiting_director_hr", "pending_hr_executive_review", "awaiting_hr_executives"]
+  const isGoodFdNotPushed = (row: LoanRequest) =>
+  isGoodFd(row) && ![...sentForApprovalStatuses, "approved_director", "director_rejected"].includes(row.status)
     const isPending = (row: LoanRequest) =>
       row.fd_good === null && row.fd_score === null && !isArchivableStatus(row.status) && !isArchivedStatus(row.status)
     const isFdApprovedByAccounts = (row: LoanRequest) =>
@@ -1681,7 +1682,7 @@ export default function LoanAppPage() {
       "good-fd": loanOfficeRowsForSelectedType.filter((row) => isGoodFd(row)),
       "poor-fd": loanOfficeRowsForSelectedType.filter((row) => isPoorFd(row)),
       "good-fd-not-pushed": loanOfficeRowsForSelectedType.filter((row) => isGoodFdNotPushed(row)),
-      "sent-for-approval": loanOfficeRowsForSelectedType.filter((row) => row.status === "awaiting_director_hr"),
+      "sent-for-approval": loanOfficeRowsForSelectedType.filter((row) => sentForApprovalStatuses.includes(String(row.status))),
       "fd-approved-accounts-exec": loanOfficeRowsForSelectedType.filter((row) => isFdApprovedByAccounts(row)),
       archivable: loanOfficeRowsForSelectedType.filter((row) => isArchivableStatus(row.status)),
       archived: loanOfficeRowsForSelectedType.filter((row) => isArchivedStatus(row.status)),
@@ -1694,8 +1695,9 @@ export default function LoanAppPage() {
       !isPoorFdScore(row.fd_score, row.fd_good) && row.fd_score != null
     const isPoorFd = (row: LoanRequest) =>
       row.status === "rejected_fd" || isPoorFdScore(row.fd_score, row.fd_good)
-    const isGoodFdNotPushed = (row: LoanRequest) =>
-      isGoodFd(row) && !["awaiting_director_hr", "approved_director", "director_rejected"].includes(row.status)
+  const sentForApprovalStatuses = ["awaiting_director_hr", "pending_hr_executive_review", "awaiting_hr_executives"]
+  const isGoodFdNotPushed = (row: LoanRequest) =>
+  isGoodFd(row) && ![...sentForApprovalStatuses, "approved_director", "director_rejected"].includes(row.status)
 
     return loanOfficeTypeOptions.map((opt) => {
       const rows = loanOfficeWorkspaceRows.filter((row) => row.loan_type_key === opt.loanKey)
@@ -1711,7 +1713,7 @@ export default function LoanAppPage() {
               isGoodFd(row) ||
               isPoorFd(row) ||
               isGoodFdNotPushed(row) ||
-              row.status === "awaiting_director_hr" ||
+              sentForApprovalStatuses.includes(String(row.status)) ||
               isArchivableStatus(row.status),
           )
           .map((row) => row.id),
@@ -3002,8 +3004,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
         setModalRecovery("")
         setModalMonths("")
         setModalBasicSalary("")
-        setModalSalaryAdvanceDays("")
-        setModalHodName("")
+              setModalHodName("")
         setModalHodRank("")
         setModalHodLocation("")
         setModalHodTelephone("")
@@ -3980,8 +3981,15 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-  {pagedHod.map((row) => (
-  <TableRow key={row.id} className="align-top">
+  {pagedHod.map((row) => {
+    const pendingSince = new Date(row.submitted_at || row.created_at).getTime()
+    const overdueDays = Number.isFinite(pendingSince)
+      ? Math.floor((Date.now() - pendingSince) / (24 * 60 * 60 * 1000))
+      : 0
+    const isOverdueForReviewer = row.status === "pending_hod" && overdueDays > HOD_OVERDUE_WARNING_DAYS
+    return (
+  <TableRow key={row.id} className={`align-top ${isOverdueForReviewer ? "bg-red-50 text-red-950 hover:bg-red-100" : ""}`}>
+
   <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
   <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
   <TableCell className="whitespace-nowrap text-xs">{row.staff_location_name || row.staff_district_name || "—"}</TableCell>
@@ -3992,7 +4000,11 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                         <TableCell className="whitespace-nowrap text-xs">{displayLoanAmount(row)}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
                         {canSeeFdReviewerName && <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>}
-                        <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          <Badge className={isOverdueForReviewer ? "bg-red-700 text-white" : statusBadgeClass(row.status, "solid")}>
+                            {isOverdueForReviewer ? `Overdue HOD/RM (${overdueDays} days)` : statusText(row.status)}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                         {p?.hod && (
                           <TableCell>
@@ -4000,7 +4012,8 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           </TableCell>
                         )}
                       </TableRow>
-                    ))}
+    )
+  })}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -4106,11 +4119,11 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {/* stage pills */}
             <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-5 py-2.5">
               {([ 
-                { key: "pending",                    label: "Pending FD" },
-                { key: "good-fd",                    label: "Good FD" },
-                { key: "poor-fd",                    label: "Poor FD" },
-                { key: "good-fd-not-pushed",        label: "Not Pushed" },
-                { key: "sent-for-approval",         label: "Sent for Approval" },
+  { key: "good-fd",                    label: "Good FD" },
+  { key: "sent-for-approval",         label: "Sent for Approval" },
+  { key: "pending",                    label: "Pending FD" },
+  { key: "poor-fd",                    label: "Poor FD" },
+  { key: "good-fd-not-pushed",        label: "Not Pushed" },
                 { key: "fd-approved-accounts-exec", label: "✓ FD Approved by Accounts" },
                 { key: "archivable",                label: "Archivable" },
                 { key: "archived",                  label: "Archived" },
@@ -7924,16 +7937,13 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {actionModal.actionType === "push_to_hr_executive" && actionModal.row && (
               <Button 
                 className="bg-blue-600 hover:bg-blue-700"
-                disabled={!modalDisbursement || !modalRecovery || !modalMemoRef || (actionModal.row.loan_type_key === "salary_advance" && Number(modalSalaryAdvanceDays) < 1)}
+                disabled={!modalDisbursement || !modalRecovery || (isSalaryAdvanceLoan(actionModal.row) && Number(modalMonths) < 1)}
                 onClick={async () => {
-                  if (!modalDisbursement || !modalRecovery || !modalMemoRef) {
-                    toast({ title: "Missing Required Fields", description: "Please fill in all required fields (Disbursement Date, Recovery Start Date, Reference Number) before pushing to HR Executive.", variant: "destructive" })
+if (!modalDisbursement || !modalRecovery) {
+  toast({ title: "Missing Required Fields", description: "Please fill in all required fields (Disbursement Date and Recovery Start Date) before pushing to HR Executive.", variant: "destructive" })
                     return
                   }
-                  if (actionModal.row!.loan_type_key === "salary_advance" && Number(modalSalaryAdvanceDays) < 1) {
-                    toast({ title: "Number of days required", description: "Enter the number of days on the salary advice before forwarding.", variant: "destructive" })
-                    return
-                  }
+
                   await runAction({
                     action: "push_to_hr_executive",
                     id: actionModal.row!.id,
@@ -7945,8 +7955,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     memo_cc: modalCcRecipients,
                     accounts_signatory: modalAccountSignatory,
                     hr_executive_signatory: modalHrSignatory,
-                    salary_advance_days: Number(modalSalaryAdvanceDays) || null,
-                  })
+                                    })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}
               >
@@ -8029,36 +8038,29 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   onChange={(e) => setModalRecovery(e.target.value)} 
                   className="h-8 text-xs"
                 />
-                {actionModal.row?.loan_type_key === "salary_advance" && (
+                {actionModal.row && isSalaryAdvanceLoan(actionModal.row) && (
                   <>
-                    <Label className="text-sm font-semibold">Number of Days on Salary Advice *</Label>
+                    <Label className="text-sm font-semibold">Number of Months for Recovery *</Label>
                     <Input
                       type="number"
                       min="1"
                       step="1"
-                      value={modalSalaryAdvanceDays}
-                      onChange={(e) => setModalSalaryAdvanceDays(e.target.value)}
-                      placeholder="Enter number of days"
+                      value={modalMonths}
+                      onChange={(e) => setModalMonths(e.target.value)}
+                      placeholder="Enter number of months"
                       className="h-8 text-xs"
                     />
                   </>
                 )}
-                <Label className="text-sm font-semibold">Reference Number *</Label>
-                <Input 
-                  value={modalMemoRef} 
-                  onChange={(e) => setModalMemoRef(e.target.value)} 
-                  placeholder="e.g. QCC/HRD/SWL/V.2/81/oak" 
-                  className="h-8 text-xs"
-                />
 
-                <div className="border-t border-slate-200 pt-4 mt-4">
+                <div className="col-span-2 w-full border-t border-slate-200 pt-4 mt-4">
                   <Label className="text-sm font-semibold mb-3 block">Memo CC Recipients</Label>
                   <Textarea 
                     value={modalCcRecipients} 
                     onChange={(e) => setModalCcRecipients(e.target.value)} 
                     placeholder="Names and titles of CC recipients (one per line)" 
                     rows={3} 
-                    className="text-xs"
+                    className="w-full text-xs"
                   />
                 </div>
 

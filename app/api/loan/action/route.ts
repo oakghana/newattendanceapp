@@ -955,10 +955,6 @@ export async function POST(request: NextRequest) {
       }
 
       if (isSalaryAdvanceLoanType(req.loan_type_key, req.loan_type_label)) {
-        const salaryAdvanceDays = Math.trunc(Number(body.salary_advance_days))
-        if (!Number.isFinite(salaryAdvanceDays) || salaryAdvanceDays < 1) {
-          return NextResponse.json({ error: "Number of days is required on the salary advice before forwarding to HR Executive." }, { status: 400 })
-        }
 
         const salaryAdvance = calculateSalaryAdvance(
           req.annual_salary ?? (Number(req.basic_salary) > 0 ? Number(req.basic_salary) * 12 : null),
@@ -968,7 +964,6 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: "Accounts must provide a valid annual salary before this salary advance can be forwarded." }, { status: 400 })
         }
 
-        update.salary_advance_days = salaryAdvanceDays
         update.basic_salary = salaryAdvance.monthlySalary
         update.salary_advance_multiplier = salaryAdvance.requestedMonths
         update.salary_advance_amount = salaryAdvance.amount

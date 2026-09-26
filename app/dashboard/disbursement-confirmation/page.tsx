@@ -132,6 +132,7 @@ export default async function DisbursementConfirmationPage() {
   // manual confirmation or regeneration step.
   const legacyLoans = rawLoans.filter((loan: any) =>
     String(loan.hod_review_note || "").toLowerCase().startsWith("bulk imported by administrator") &&
+    loan.status !== "awaiting_committee" &&
     !loan.repayment_plan_generated_at
   )
   if (legacyLoans.length > 0) {
@@ -248,6 +249,12 @@ export default async function DisbursementConfirmationPage() {
       staff_receiving_funds_confirmed_by: confirmedBy,
       created_at: loan.created_at,
       department_name: resolvedDept,
+      recovery_start_date: loan.recovery_start_date,
+      recovery_months: loan.recovery_months,
+      repayment_duration_months: loan.repayment_duration_months,
+      disbursement_date: loan.disbursement_date,
+      disbursement_confirmed_at: loan.staff_receiving_funds_confirmed_at,
+      repayment_plan_generated_at: loan.repayment_plan_generated_at,
     }
   })
 

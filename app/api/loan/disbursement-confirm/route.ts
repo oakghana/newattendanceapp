@@ -121,6 +121,24 @@ export async function POST(req: NextRequest) {
       console.warn("[v0] Non-critical timeline insertion warning:", timelineErr)
     }
 
+    // Every Accounts-confirmed disbursement, including Funeral Loans, receives a monthly repayment schedule.
+    const durationMonths = Math.max(1, Math.trunc(Number(loan.recovery_months || loan.repayment_duration_months || 12)))
+    const scheduleStartDate = loan.recovery_start_date || loan.disbursement_date || nowIso.slice(0, 10)
+    const { error: scheduleError } = await admin.rpc("generate_repayment_schedule", {
+      p_loan_request_id: loan.id,
+      p_start_date: scheduleStartDate,
+      p_duration_months: durationMonths,
+    })
+    if (scheduleError) {
+      console.error("[v0] Repayment schedule generation failed after disbursement confirmation:", scheduleError)
+      return NextResponse.json({ error: "Disbursement was confirmed, but the monthly repayment schedule could not be generated." }, { status: 500 })
+    }
+    await admin.from("loan_requests").update({
+      repayment_plan_generated_at: nowIso,
+      repayment_duration_months: durationMonths,
+      repayment_status: "active",
+    }).eq("id", loan.id)
+
     // Notify staff member in staff_notifications
     if (loan.user_id) {
       try {
@@ -149,7 +167,7 @@ export async function POST(req: NextRequest) {
       message: "Loan disbursement confirmed successfully",
       confirmedByName,
       confirmedAt: nowIso,
-      loan: updatedLoan,
+      loan: { ...updatedLoan, repayment_plan_generated_at: nowIso, repayment_duration_months: durationMonths },
     })
   } catch (error: any) {
     console.error("[v0] Error in disbursement confirmation API:", error)

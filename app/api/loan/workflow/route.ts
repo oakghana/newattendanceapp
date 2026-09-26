@@ -14,7 +14,7 @@ import {
 import { deriveStaffCategoryFromPosition } from "@/lib/annual-leave-entitlement"
 import { isRegionalManagerScopeMatch, resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
-const HOD_AUTO_ADVANCE_DAYS = 3
+const HOD_AUTO_ADVANCE_DAYS = 7
 const POST_LOAN_OFFICE_DELAY_DAYS = 5
 const ADMIN_DB_ROLE_ALIASES = ["admin", "super_admin", "god"]
 // Note: it_admin is NOT included - IT Admin users should only see My Loans and My Tasks tabs

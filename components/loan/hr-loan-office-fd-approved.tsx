@@ -182,12 +182,6 @@ export function HRLoanOfficeFDApproved() {
       toast({ title: 'Error', description: 'Please enter a memo before pushing to HR Executive', variant: 'destructive' })
       return
     }
-    const isSalaryAdvance = String(selectedForPush.loan_type || '').toLowerCase().includes('salary')
-    if (isSalaryAdvance && Number(salaryAdvanceDays) < 1) {
-      toast({ title: 'Error', description: 'Enter the number of days on the salary advice', variant: 'destructive' })
-      return
-    }
-
     try {
       setPushing(true)
       const res = await fetch('/api/loan/push-to-hr-executive', {
@@ -196,7 +190,6 @@ export function HRLoanOfficeFDApproved() {
         body: JSON.stringify({
           loan_request_id: selectedForPush.id,
           hr_loan_office_memo: pushMemo,
-          salary_advance_days: Number(salaryAdvanceDays) || null,
           action: 'push_to_hr_executive',
         }),
       })
@@ -528,14 +521,14 @@ export function HRLoanOfficeFDApproved() {
 
               {String(selectedForPush.loan_type || '').toLowerCase().includes('salary') && (
                 <div>
-                  <label className="text-sm font-semibold text-slate-900">Number of Days on Salary Advice *</label>
+                  <label className="text-sm font-semibold text-slate-900">Number of Months for Recovery *</label>
                   <Input
                     type="number"
                     min="1"
                     step="1"
                     value={salaryAdvanceDays}
                     onChange={(event) => setSalaryAdvanceDays(event.target.value)}
-                    placeholder="Enter number of days"
+                    placeholder="Enter number of months"
                     className="mt-2"
                   />
                 </div>
