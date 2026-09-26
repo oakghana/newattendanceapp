@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -92,6 +93,10 @@ export function HRLoanOfficeFDApproved() {
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState<'newest' | 'oldest'>('newest')
   const [selectedForPush, setSelectedForPush] = useState<FDApprovedLoan | null>(null)
+  const [selectedForBulkPush, setSelectedForBulkPush] = useState<string[]>([])
+  const [bulkPushOpen, setBulkPushOpen] = useState(false)
+  const [bulkPushMemo, setBulkPushMemo] = useState('')
+  const [bulkPushing, setBulkPushing] = useState(false)
   const [selectedDetailLoan, setSelectedDetailLoan] = useState<FDApprovedLoan | null>(null)
   const [pushMemo, setPushMemo] = useState('')
   const [salaryAdvanceDays, setSalaryAdvanceDays] = useState('')
@@ -243,6 +248,27 @@ export function HRLoanOfficeFDApproved() {
     }
   }
 
+  const pendingLoans = filteredLoans.filter((loan) => loan.status === 'pending_hr_loan_office')
+  const allPendingSelected = pendingLoans.length > 0 && pendingLoans.every((loan) => selectedForBulkPush.includes(loan.id))
+
+  const handleBulkPush = async () => {
+    if (!bulkPushMemo.trim() || selectedForBulkPush.length === 0) return
+    try {
+      setBulkPushing(true)
+      const res = await fetch('/api/loan/push-to-hr-executive', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loan_request_ids: selectedForBulkPush, hr_loan_office_memo: bulkPushMemo, action: 'push_to_hr_executive' }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Bulk forwarding failed')
+      toast({ title: 'Loans forwarded', description: `${data.count} selected loan(s) were sent to HR Executive.` })
+      setSelectedForBulkPush([]); setBulkPushMemo(''); setBulkPushOpen(false)
+      await fetchFdApprovedLoans()
+    } catch (error) {
+      toast({ title: 'Bulk forwarding failed', description: error instanceof Error ? error.message : 'Try again', variant: 'destructive' })
+    } finally { setBulkPushing(false) }
+  }
+
   const getFDStatusColor = (score?: number) => {
     if (!score && score !== 0) return 'bg-slate-100 text-slate-700'
     return score >= GOOD_FD_THRESHOLD ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
@@ -307,7 +333,11 @@ export function HRLoanOfficeFDApproved() {
       </Card>
 
       {/* Loans Table/Cards */}
-      {filteredLoans.length === 0 ? (
+      {loading ? (
+        <Card>
+          <CardContent className="py-8 text-center text-sm text-slate-500">Loading FD-approved loans...</CardContent>
+        </Card>
+      ) : filteredLoans.length === 0 ? (
         <Card>
           <CardContent className="pt-8">
             <div className="text-center text-slate-500">
@@ -320,10 +350,25 @@ export function HRLoanOfficeFDApproved() {
       ) : (
         <Card>
           <CardContent className="p-0">
+            <div className="flex items-center justify-between border-b bg-slate-50 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  aria-label="Select all pending loans"
+                  checked={allPendingSelected}
+                  onCheckedChange={(checked) => setSelectedForBulkPush(checked ? pendingLoans.map((loan) => loan.id) : [])}
+                />
+                <span className="text-sm text-slate-600">Select pending loans</span>
+                {selectedForBulkPush.length > 0 && <Badge variant="secondary">{selectedForBulkPush.length} selected</Badge>}
+              </div>
+              <Button size="sm" disabled={selectedForBulkPush.length === 0} onClick={() => setBulkPushOpen(true)}>
+                <Send data-icon="inline-start" /> Forward selected to HR Executive
+              </Button>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="border-b bg-slate-50">
                   <tr>
+                    <th className="px-4 py-3 text-left font-medium text-slate-600">Select</th>
                     <th className="px-4 py-3 text-left font-medium text-slate-600">Staff</th>
                     <th className="px-4 py-3 text-left font-medium text-slate-600">Loan Type</th>
                     <th className="px-4 py-3 text-right font-medium text-slate-600">Amount</th>
@@ -337,6 +382,14 @@ export function HRLoanOfficeFDApproved() {
                 <tbody className="divide-y">
                   {filteredLoans.map((loan) => (
                     <tr key={loan.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <Checkbox
+                          aria-label={`Select ${loan.staff_name}`}
+                          disabled={loan.status !== 'pending_hr_loan_office'}
+                          checked={selectedForBulkPush.includes(loan.id)}
+                          onCheckedChange={(checked) => setSelectedForBulkPush((current) => checked ? [...new Set([...current, loan.id])] : current.filter((id) => id !== loan.id))}
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <div>
                           <p className="font-medium text-slate-900">{loan.staff_name}</p>
@@ -596,6 +649,27 @@ export function HRLoanOfficeFDApproved() {
               {pushing ? 'Pushing...' : 'Push to HR Executive'}
             </Button>
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkPushOpen} onOpenChange={setBulkPushOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Forward selected loans</DialogTitle>
+            <DialogDescription>Send {selectedForBulkPush.length} selected FD-approved loan(s) to the HR Executive queue in one action.</DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Enter one processing memo for the selected loans..."
+            value={bulkPushMemo}
+            onChange={(event) => setBulkPushMemo(event.target.value)}
+            className="min-h-24"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkPushOpen(false)} disabled={bulkPushing}>Cancel</Button>
+            <Button onClick={handleBulkPush} disabled={bulkPushing || !bulkPushMemo.trim()}>
+              <Send data-icon="inline-start" /> {bulkPushing ? 'Forwarding...' : 'Forward selected loans'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
