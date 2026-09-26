@@ -565,28 +565,32 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Only car loan entries can be edited here" }, { status: 400 })
       }
 
-      const requestedAmount = Number(body.requested_amount)
-      if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) {
-        return NextResponse.json({ error: "Enter a valid requested amount" }, { status: 400 })
-      }
-      const staffNumber = String(body.staff_number || "").trim()
+  const submittedAmount = Number(body.requested_amount)
+  if (!Number.isFinite(submittedAmount) || submittedAmount <= 0) {
+  return NextResponse.json({ error: "Enter a valid requested amount" }, { status: 400 })
+  }
+  const staffNumber = String(body.staff_number || "").trim()
       const staffRank = String(body.staff_rank || "").trim()
       const reason = String(body.reason || "").trim()
       const loanTypeKey = String(body.loan_type_key || "").trim()
       const { data: correctedLoanType } = loanTypeKey
         ? await admin.from("loan_types").select("loan_key, loan_label, fixed_amount, max_amount, is_active").eq("loan_key", loanTypeKey).maybeSingle()
         : { data: null }
-      if (!correctedLoanType || correctedLoanType.is_active === false || !/car/i.test(`${correctedLoanType.loan_key} ${correctedLoanType.loan_label}`) || !/junior|senior/i.test(`${correctedLoanType.loan_key} ${correctedLoanType.loan_label}`)) {
-        return NextResponse.json({ error: "Select an active Junior or Senior car loan type" }, { status: 400 })
-      }
-      if (staffNumber.length > 50 || staffRank.length > 120 || reason.length > 4000) {
+  if (!correctedLoanType || correctedLoanType.is_active === false || !/car/i.test(`${correctedLoanType.loan_key} ${correctedLoanType.loan_label}`) || !/junior|senior/i.test(`${correctedLoanType.loan_key} ${correctedLoanType.loan_label}`)) {
+  return NextResponse.json({ error: "Select an active Junior or Senior car loan type" }, { status: 400 })
+  }
+  const correctedAmount = Number(correctedLoanType.fixed_amount)
+  if (!Number.isFinite(correctedAmount) || correctedAmount <= 0) {
+  return NextResponse.json({ error: "The selected car loan type has no configured fixed amount" }, { status: 400 })
+  }
+  if (staffNumber.length > 50 || staffRank.length > 120 || reason.length > 4000) {
         return NextResponse.json({ error: "One or more edited fields are too long" }, { status: 400 })
       }
 
-      update.requested_amount = requestedAmount
-      update.loan_type_key = correctedLoanType.loan_key
-      update.loan_type_label = correctedLoanType.loan_label
-      update.fixed_amount = correctedLoanType.fixed_amount ?? null
+  update.requested_amount = correctedAmount
+  update.loan_type_key = correctedLoanType.loan_key
+  update.loan_type_label = correctedLoanType.loan_label
+  update.fixed_amount = correctedAmount
       update.staff_number = staffNumber || null
       update.staff_rank = staffRank || null
       update.reason = reason || null
@@ -602,8 +606,8 @@ export async function POST(request: NextRequest) {
         to_status: req.status,
         note: note || "Administrator edited car loan entry at committee stage.",
         metadata: {
-          requested_amount: { from: req.requested_amount, to: requestedAmount },
-          loan_type_key: { from: req.loan_type_key, to: correctedLoanType.loan_key },
+  requested_amount: { from: req.requested_amount, to: correctedAmount },
+  loan_type_key: { from: req.loan_type_key, to: correctedLoanType.loan_key },
           loan_type_label: { from: req.loan_type_label, to: correctedLoanType.loan_label },
           fixed_amount: { from: req.fixed_amount, to: correctedLoanType.fixed_amount ?? null },
           staff_number: { from: req.staff_number, to: staffNumber || null },
