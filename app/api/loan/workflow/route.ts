@@ -647,7 +647,9 @@ export async function GET() {
     const showHod = permissions.hod || viewAllTabs
     const showLoanOffice = permissions.loanOffice || viewAllTabs
     const showAccounts = permissions.accounts || viewAllTabs
-    const showCommittee = permissions.committee || viewAllTabs
+    // HR Loan Office can monitor committee-stage requests, while action rights remain
+  // restricted to users with the committee permission.
+  const showCommittee = permissions.committee || viewAllTabs || role === "hr_loan_office"
     const showHrOffice = permissions.hrOffice || viewAllTabs
     const showDirectorHr = permissions.directorHr || viewAllTabs
 

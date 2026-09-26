@@ -1554,7 +1554,9 @@ export default function LoanAppPage() {
     // Leave Payment: Accounts executives, viewAllTabs, and HR Loan Office
     if (p?.accounts || p?.viewAllTabs || isHRLoanOffice) tabs.push({ key: "leave-payment", label: "Leave Payment" })
     if (canAccessLoanOfficeWorkspace && !p?.accounts && !p?.viewAllTabs) tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
-    if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
+    // HR Loan Office users need visibility of the committee queue for end-to-end tracking,
+  // but the Committee page remains read-only unless the user has committee permission.
+  if (p?.committee || p?.viewAllTabs || isHRLoanOffice) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
     // Payment Approvals: single tab only (HR/Accounts executives). Avoid second push for HR Loan Office alone.
     if (isHrExecutive || isAccountsExecutive || isAccountsOffice || isAdminUser) {
