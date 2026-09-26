@@ -8038,18 +8038,11 @@ if (!modalDisbursement || !modalRecovery) {
                       step="1"
                       value={modalSalaryAdvanceDays}
                       onChange={(e) => setModalSalaryAdvanceDays(e.target.value)}
-                      placeholder="Enter number of days"
+                      placeholder="Enter number of months"
                       className="h-8 text-xs"
                     />
                   </>
                 )}
-                <Label className="text-sm font-semibold">Reference Number</Label>
-                <Input 
-                  value={modalMemoRef} 
-                  onChange={(e) => setModalMemoRef(e.target.value)} 
-                  placeholder="e.g. QCC/HRD/SWL/V.2/81/oak" 
-                  className="h-8 text-xs"
-                />
 
                 <div className="border-t border-slate-200 pt-4 mt-4">
                   <Label className="text-sm font-semibold mb-3 block">Memo CC Recipients</Label>
