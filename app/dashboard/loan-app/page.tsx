@@ -344,6 +344,8 @@ const STATUS_COLORS: Record<string, string> = {
   archived: "bg-slate-200 text-slate-700",
 }
 
+const HOD_OVERDUE_WARNING_DAYS = 3
+
 const STATUS_LABELS: Record<string, string> = {
   pending_hod: "Pending HOD",
   hod_approved: "HOD Approved",
@@ -3977,8 +3979,15 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-  {pagedHod.map((row) => (
-  <TableRow key={row.id} className="align-top">
+  {pagedHod.map((row) => {
+    const pendingSince = new Date(row.submitted_at || row.created_at).getTime()
+    const overdueDays = Number.isFinite(pendingSince)
+      ? Math.floor((Date.now() - pendingSince) / (24 * 60 * 60 * 1000))
+      : 0
+    const isOverdueForReviewer = row.status === "pending_hod" && overdueDays > HOD_OVERDUE_WARNING_DAYS
+    return (
+  <TableRow key={row.id} className={`align-top ${isOverdueForReviewer ? "bg-red-50 text-red-950 hover:bg-red-100" : ""}`}>
+
   <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
   <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
   <TableCell className="whitespace-nowrap text-xs">{row.staff_location_name || row.staff_district_name || "—"}</TableCell>
@@ -3989,7 +3998,11 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                         <TableCell className="whitespace-nowrap text-xs">{displayLoanAmount(row)}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
                         {canSeeFdReviewerName && <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>}
-                        <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          <Badge className={isOverdueForReviewer ? "bg-red-700 text-white" : statusBadgeClass(row.status, "solid")}>
+                            {isOverdueForReviewer ? `Overdue HOD/RM (${overdueDays} days)` : statusText(row.status)}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                         {p?.hod && (
                           <TableCell>
@@ -3997,7 +4010,8 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           </TableCell>
                         )}
                       </TableRow>
-                    ))}
+    )
+  })}
                   </TableBody>
                 </Table>
               </CardContent>
