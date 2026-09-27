@@ -27,6 +27,26 @@ export function getEffectiveItAdminScope(admin: AdminProfile): ItAdminScope | nu
   return admin.assigned_location_id ? "regional_it_admin" : null
 }
 
+export async function resolveItAdminRegionId(
+  adminDb: AdminClient,
+  admin: AdminProfile,
+): Promise<string | null> {
+  if (admin.region_id) return String(admin.region_id)
+  if (!admin.assigned_location_id) return null
+  const { data: location } = await adminDb
+    .from("geofence_locations")
+    .select("district_id")
+    .eq("id", admin.assigned_location_id)
+    .maybeSingle()
+  if (!location?.district_id) return null
+  const { data: district } = await adminDb
+    .from("districts")
+    .select("region_id")
+    .eq("id", location.district_id)
+    .maybeSingle()
+  return district?.region_id ? String(district.region_id) : null
+}
+
 export function canItAdminCreateRole(role?: string | null): boolean {
   const normalized = normalizeAppRole(role)
   return IT_ADMIN_CREATABLE_ROLES.includes(normalized as (typeof IT_ADMIN_CREATABLE_ROLES)[number])
@@ -71,22 +91,7 @@ export async function canUpdateStaffByITAdmin(
 
   if (scope === "head_office_it_admin") return { allowed: true, scope }
 
-  let adminRegionId = admin.region_id
-  if (!adminRegionId && admin.assigned_location_id) {
-    const { data: location } = await adminDb
-      .from("geofence_locations")
-      .select("district_id")
-      .eq("id", admin.assigned_location_id)
-      .maybeSingle()
-    if (location?.district_id) {
-      const { data: district } = await adminDb
-        .from("districts")
-        .select("region_id")
-        .eq("id", location.district_id)
-        .maybeSingle()
-      adminRegionId = district?.region_id || null
-    }
-  }
+  const adminRegionId = await resolveItAdminRegionId(adminDb, admin)
   if (!adminRegionId) return { allowed: false, reason: "Regional IT Admin is missing an assigned region." }
 
   const locationIds = [staff.assigned_location_id, nextAssignedLocationId].filter(

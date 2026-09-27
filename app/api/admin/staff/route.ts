@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
-import { canItAdminCreateRole, getEffectiveItAdminScope, canUpdateStaffByITAdmin } from "@/lib/it-admin-policy"
+import { canItAdminCreateRole, canUpdateStaffByITAdmin, getEffectiveItAdminScope, resolveItAdminRegionId } from "@/lib/it-admin-policy"
 
 function createJsonResponse(data: any, status = 200) {
   return new NextResponse(JSON.stringify(data), {
@@ -145,11 +145,14 @@ export async function GET(request: NextRequest) {
     if (isRegionalStaffAdministrator) {
       let scopeLocationIds: string[] = []
       try {
-        scopeLocationIds = await resolveOwnedLocationIdsForRegionalOffice(
-          adminDb,
-          requestingProfile.assigned_location_id,
-          requestingProfile.region_id,
-        )
+        const requestingRegionId = await resolveItAdminRegionId(adminDb, requestingProfile)
+        scopeLocationIds = requestingRegionId
+          ? await resolveOwnedLocationIdsForRegionalOffice(
+              adminDb,
+              requestingProfile.assigned_location_id,
+              requestingRegionId,
+            )
+          : []
       } catch {
         scopeLocationIds = requestingProfile.assigned_location_id ? [requestingProfile.assigned_location_id] : []
       }

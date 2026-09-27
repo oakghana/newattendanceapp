@@ -3,7 +3,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
-import { canUpdateStaffByITAdmin, canViewStaffByITAdmin, getEffectiveItAdminScope, normalizeItAdminScope } from "@/lib/it-admin-policy"
+import { canUpdateStaffByITAdmin, canViewStaffByITAdmin, getEffectiveItAdminScope, normalizeItAdminScope, resolveItAdminRegionId } from "@/lib/it-admin-policy"
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -205,8 +205,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       )
       if (!authorization.allowed) return NextResponse.json({ error: authorization.reason }, { status: 403 })
     }
-    const regionalOwnedLocationIds = isRegionalItAdmin
-      ? await resolveOwnedLocationIdsForRegionalOffice(adminSupabase, profile.assigned_location_id, profile.region_id)
+    const regionalAdminRegionId = isRegionalItAdmin
+      ? await resolveItAdminRegionId(adminSupabase, profile)
+      : null
+    const regionalOwnedLocationIds = isRegionalItAdmin && regionalAdminRegionId
+      ? await resolveOwnedLocationIdsForRegionalOffice(adminSupabase, profile.assigned_location_id, regionalAdminRegionId)
       : []
     const currentTargetInScope = Boolean(
       targetProfile.assigned_location_id && regionalOwnedLocationIds.includes(String(targetProfile.assigned_location_id)),
