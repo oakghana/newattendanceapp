@@ -8,6 +8,7 @@ import { getAssignmentGuidance, resolveStaffAssignments } from "@/lib/hr-workflo
 import { isLoanRepaymentOutstanding } from "@/lib/loan-clearance"
 import { hasAssignedReviewer, REVIEWER_LINKAGE_REQUIRED_MESSAGE } from "@/lib/reviewer-linkage"
 import { validateLoanApplicationEligibility } from "@/lib/loan-eligibility"
+import { sendWebPushToUsers } from "@/lib/web-push"
 
 const LOAN_REQUEST_SUBMISSION_ENABLED = true
 
@@ -236,6 +237,18 @@ async function notifyUsers(admin: any, userIds: string[], title: string, message
     is_read: false,
   }))
   await admin.from("staff_notifications").insert(rows)
+
+  const loanRequestId = data?.request_id ? String(data.request_id) : undefined
+  await sendWebPushToUsers(
+    userIds,
+    {
+      title,
+      body: message,
+      url: loanRequestId ? `/dashboard/loan-administration?request=${loanRequestId}` : "/dashboard/loan-administration",
+      tag: type,
+    },
+    loanRequestId,
+  )
 }
 
 export async function POST(request: NextRequest) {
