@@ -9,6 +9,7 @@ import { isLoanRepaymentOutstanding } from "@/lib/loan-clearance"
 import { hasAssignedReviewer, REVIEWER_LINKAGE_REQUIRED_MESSAGE } from "@/lib/reviewer-linkage"
 import { validateLoanApplicationEligibility } from "@/lib/loan-eligibility"
 import { sendWebPushToUsers } from "@/lib/web-push"
+import { toSafeErrorMessage } from "@/lib/safe-error"
 
 const LOAN_REQUEST_SUBMISSION_ENABLED = true
 
@@ -579,8 +580,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: inserted })
   } catch (error: any) {
-    console.error("loan request post error", error)
-    return NextResponse.json({ error: error?.message || "Failed to submit loan request" }, { status: 500 })
+    return NextResponse.json(
+      { error: toSafeErrorMessage(error, "Failed to submit loan request", "loan request post error") },
+      { status: 500 },
+    )
   }
 }
 
@@ -744,8 +747,10 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: updated })
   } catch (error: any) {
-    console.error("loan request put error", error)
-    return NextResponse.json({ error: error?.message || "Failed to update request" }, { status: 500 })
+    return NextResponse.json(
+      { error: toSafeErrorMessage(error, "Failed to update request", "loan request put error") },
+      { status: 500 },
+    )
   }
 }
 
@@ -834,7 +839,9 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true, deletedId: id })
   } catch (error: any) {
-    console.error("loan request delete error", error)
-    return NextResponse.json({ error: error?.message || "Failed to delete request" }, { status: 500 })
+    return NextResponse.json(
+      { error: toSafeErrorMessage(error, "Failed to delete request", "loan request delete error") },
+      { status: 500 },
+    )
   }
 }
