@@ -42,8 +42,8 @@ export async function validateLoanApplicationEligibility(
   const year = input.applicationYear || new Date().getFullYear()
   const { data: requests, error } = await admin
     .from("loan_requests")
-    .select("id, user_id, staff_id, status, loan_type_key, loan_type_label, repayment_status, created_at, md_approved_at, disbursement_date, fixed_amount, outstanding_balance")
-    .or(`user_id.eq.${input.userId},staff_id.eq.${input.userId}`)
+    .select("id, user_id, status, loan_type_key, loan_type_label, repayment_status, created_at, md_approved_at, disbursement_date, fixed_amount")
+    .eq("user_id", input.userId)
     .neq("id", input.excludeId || "00000000-0000-0000-0000-000000000000")
     .not("status", "in", `(${[...REJECTED_STATUSES].join(",")})`)
     .order("created_at", { ascending: false })
@@ -61,7 +61,7 @@ export async function validateLoanApplicationEligibility(
   ])
   if (typesError) throw typesError
 
-  const typeByKey = new Map((types || []).map((type: any) => [type.loan_key, type]))
+  const typeByKey = new Map<string, any>((types || []).map((type: any) => [type.loan_key, type]))
   const targetType = typeByKey.get(input.loanType.loan_key) || input.loanType
   const targetGroup = normalized(targetType.category || targetType.loan_key)
   const paymentsByLoan = new Map<string, any[]>()
