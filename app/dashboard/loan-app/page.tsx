@@ -6263,9 +6263,10 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           className={row.status === "pending_hod" ? "cursor-pointer hover:bg-emerald-50 transition-colors" : ""}
                         >
                           <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
-                          <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
+  <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
+  <TableCell className="whitespace-nowrap text-xs">{row.staff_region_name || "—"}</TableCell>
+  <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
+  <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>

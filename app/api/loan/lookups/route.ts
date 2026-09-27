@@ -30,9 +30,10 @@ function canManageLookups(role: string, deptName?: string | null, deptCode?: str
     role === "manager_hr" ||
     role === "director_hr" ||
   role === "accounts" ||
-  role === "accounts_executive" ||
-  role === "regional_manager" ||
+    role === "accounts_executive" ||
+    role === "regional_manager" ||
     role === "department_head" ||
+    role === "managing_director" ||
     role === "transport_manager" ||
     canDoHrOffice(role, deptName, deptCode) ||
     canDoLoanOffice(role, deptName, deptCode)
