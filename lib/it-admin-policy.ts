@@ -24,7 +24,7 @@ export function getEffectiveItAdminScope(admin: AdminProfile): ItAdminScope | nu
   // Legacy regional IT Admins may not have the new scope column populated yet.
   // A region plus assigned office is sufficient to preserve regional access; head-office
   // access must remain explicitly assigned by an Administrator.
-  return admin.region_id && admin.assigned_location_id ? "regional_it_admin" : null
+  return admin.assigned_location_id ? "regional_it_admin" : null
 }
 
 export function canItAdminCreateRole(role?: string | null): boolean {

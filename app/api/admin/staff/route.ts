@@ -133,13 +133,6 @@ export async function GET(request: NextRequest) {
 
     const requestingRole = String(requestingProfile?.role || "").trim().toLowerCase().replace(/[\s-]+/g, "_")
     const requestingLocationName = String((requestingProfile as any)?.geofence_locations?.name || "")
-    if (requestingRole === "it_admin" && !requestingProfile?.region_id && requestingProfile?.assigned_location_id) {
-      const { data: location } = await adminDb.from("geofence_locations").select("district_id").eq("id", requestingProfile.assigned_location_id).maybeSingle()
-      if (location?.district_id) {
-        const { data: district } = await adminDb.from("districts").select("region_id").eq("id", location.district_id).maybeSingle()
-        if (district?.region_id) requestingProfile.region_id = district.region_id
-      }
-    }
     const itAdminScope = requestingRole === "it_admin" ? getEffectiveItAdminScope(requestingProfile || {}) : null
     if (requestingRole === "it_admin" && !itAdminScope) {
       return createJsonResponse({ success: false, error: "An Administrator must assign an explicit IT Admin scope before staff access is granted." }, 403)
@@ -150,11 +143,16 @@ export async function GET(request: NextRequest) {
     )
 
     if (isRegionalStaffAdministrator) {
-      const scopeLocationIds = await resolveOwnedLocationIdsForRegionalOffice(
-        adminDb,
-        requestingProfile.assigned_location_id,
-        requestingProfile.region_id,
-      )
+      let scopeLocationIds: string[] = []
+      try {
+        scopeLocationIds = await resolveOwnedLocationIdsForRegionalOffice(
+          adminDb,
+          requestingProfile.assigned_location_id,
+          requestingProfile.region_id,
+        )
+      } catch {
+        scopeLocationIds = requestingProfile.assigned_location_id ? [requestingProfile.assigned_location_id] : []
+      }
       if (scopeLocationIds.length === 0) {
         return createJsonResponse({ success: false, error: "No regional staff locations are assigned to this account." }, 403)
       }
