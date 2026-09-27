@@ -268,7 +268,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const allowedRolesForItAdmin = ["staff", "contract", "intern", "nsp", "regional_manager", "driver", "chief_driver"]
-    if (isItAdmin && role && !allowedRolesForItAdmin.includes(role)) {
+    const normalizedIncomingRole = String(role || "").trim().toLowerCase().replace(/[-\s]+/g, "_")
+    const normalizedExistingRole = String(targetProfile.role || "").trim().toLowerCase().replace(/[-\s]+/g, "_")
+    const isUnchangedRole = Boolean(role) && normalizedIncomingRole === normalizedExistingRole
+    if (isItAdmin && role && !allowedRolesForItAdmin.includes(normalizedIncomingRole) && !isUnchangedRole) {
       console.error("[v0] Staff API PUT - IT-Admin tried to assign restricted role:", role)
       return NextResponse.json(
         {
