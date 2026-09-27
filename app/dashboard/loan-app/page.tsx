@@ -28,6 +28,7 @@ import { HRLoanOfficeFDApproved } from "@/components/loan/hr-loan-office-fd-appr
 import { RepaymentTrackingPanel } from "@/components/loan/repayment-tracking-panel"
 import { RunningLoansReport } from "@/components/loan/running-loans-report"
 import { SettlementInitiationPanel } from "@/components/loan/settlement-initiation-panel"
+import { StaffLoanHistory } from "@/components/loan/staff-loan-history"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { GOOD_FD_THRESHOLD, canEnterFdScore as canEnterFdScoreForRole, isPoorFdScore } from "@/lib/loan-workflow"
@@ -7636,6 +7637,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           </DialogHeader>
 
           <div className="space-y-2 py-1 max-h-[70vh] overflow-y-auto">
+            {actionModal.row?.user_id && ["hod", "loan_office", "committee", "hr_terms", "director"].includes(actionModal.actionType || "") && (
+              <StaffLoanHistory userId={actionModal.row.user_id} staffName={actionModal.row.staff_full_name || actionModal.row.staff_number || "Staff"} />
+            )}
             {/* HOD */}
             {actionModal.actionType === "hod" && (
               <>
