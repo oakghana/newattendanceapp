@@ -7,6 +7,7 @@ import { getNextQccReference } from "@/lib/reference-number"
 import { getAssignmentGuidance, resolveStaffAssignments } from "@/lib/hr-workflow"
 import { isLoanRepaymentOutstanding } from "@/lib/loan-clearance"
 import { hasAssignedReviewer, REVIEWER_LINKAGE_REQUIRED_MESSAGE } from "@/lib/reviewer-linkage"
+import { validateLoanApplicationEligibility } from "@/lib/loan-eligibility"
 
 const LOAN_REQUEST_SUBMISSION_ENABLED = true
 
@@ -316,7 +317,15 @@ export async function POST(request: NextRequest) {
   }
 
   if (role !== "admin") {
-      // Check for active loan of the SAME type (allow different loan types while one is active)
+      const eligibility = await validateLoanApplicationEligibility(admin, {
+        userId: user.id,
+        loanType,
+      })
+      if (!eligibility.eligible) {
+        return NextResponse.json({ error: eligibility.reason, code: "LOAN_NOT_ELIGIBLE", conflict: eligibility.conflict }, { status: 409 })
+      }
+
+      // Legacy same-type checks remain as a defensive compatibility layer.
       const activeLoanCheck = await checkForActiveLoanOfSameType(admin, user.id, loanType.loan_key)
       if (activeLoanCheck) {
         return NextResponse.json({ error: activeLoanCheck.error }, { status: 409 })
