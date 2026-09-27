@@ -1101,7 +1101,7 @@ function HrExecRejectForm({
   )
 }
 
-// ─── Main Component ──────────���───────────────────────────────────────────────��
+// ─── Main Component ──────────���───────────────────────────────────────────────���
 // SINGLE SOURCE OF TRUTH for the annual leave End Date shown/saved anywhere in the
 // HR Office review panel. Uses the exact same formula as the printed memo
 // (lib/annual-leave-calculator): granted = entitlement - enjoyed + outstanding + travel,
@@ -3223,6 +3223,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                           history={staffHistoryByUser[String(req.user?.id || "")] || []}
                           currentRequestId={req.id}
                         />
+                        {canAct ? (
                         <div className="space-y-3">
                           <div className="flex gap-2 flex-wrap">
                             {(["approve", "recommend_change", "reject"] as const).map((act) => (
@@ -3270,6 +3271,11 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                             </Button>
                           )}
                         </div>
+                        ) : (
+                          <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                            Read-only view: only the assigned Regional Manager may approve, reject, return, or modify this regional request.
+                          </p>
+                        )}
                       </CardContent>
                     </Card>
                   )
