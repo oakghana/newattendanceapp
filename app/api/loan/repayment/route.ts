@@ -21,8 +21,10 @@ export async function POST(request: NextRequest) {
 
       const { data: loans, error: loansError } = await admin
         .from("loan_requests")
-        .select("id, recovery_start_date, recovery_months, repayment_duration_months, disbursement_date, disbursement_confirmed_at, staff_receiving_funds_confirmed_at, md_approved_at, repayment_plan_generated_at")
+        .select("id, recovery_start_date, recovery_months, repayment_duration_months, disbursement_date, disbursement_confirmed_at, staff_receiving_funds_confirmed_at, md_approved_at, repayment_plan_generated_at, status, hod_review_note")
         .not("md_approved_at", "is", null)
+        .is("repayment_plan_generated_at", null)
+        .in("status", ["approved_director", "md_final_approved", "approved", "active", "partially_recovered", "payment_completed"])
         .or("disbursement_date.not.is.null,disbursement_confirmed_at.not.is.null,staff_receiving_funds_confirmed_at.not.is.null")
       if (loansError) return NextResponse.json({ error: loansError.message }, { status: 500 })
 
@@ -32,7 +34,7 @@ export async function POST(request: NextRequest) {
         : { data: [], error: null }
       if (schedulesError) return NextResponse.json({ error: schedulesError.message }, { status: 500 })
       const scheduledIds = new Set((existing || []).map((row) => row.loan_request_id))
-      const missing = (loans || []).filter((loan) => !scheduledIds.has(loan.id))
+      const missing = (loans || []).filter((loan) => !loan.repayment_plan_generated_at && !scheduledIds.has(loan.id))
       const failures: Array<{ loanRequestId: string; error: string }> = []
       let generated = 0
       for (const loan of missing) {
@@ -77,7 +79,7 @@ export async function POST(request: NextRequest) {
     const { data: loan, error: loanError } = await admin.from("loan_requests").select("id, status, md_approved_at, disbursement_date, recovery_start_date, recovery_months, repayment_duration_months, hod_review_note").eq("id", loanRequestId).maybeSingle()
     if (loanError || !loan) return NextResponse.json({ error: "Loan request not found" }, { status: 404 })
     const isLegacyImported = String(loan.hod_review_note || "").toLowerCase().startsWith("bulk imported by administrator")
-    if (!isLegacyImported && (!loan.md_approved_at || !loan.disbursement_date || !["partially_recovered", "payment_completed"].includes(String(loan.status)))) {
+    if (!isLegacyImported && (!loan.md_approved_at || !loan.disbursement_date || !["approved_director", "md_final_approved", "approved", "active", "partially_recovered", "payment_completed"].includes(String(loan.status)))) {
       return NextResponse.json({ error: "Repayment schedules are available only for MD-approved loans confirmed as disbursed by Accounts." }, { status: 409 })
     }
 
@@ -146,7 +148,7 @@ export async function GET(request: NextRequest) {
         updated_at,
         loan_requests!inner(staff_full_name, request_number, md_approved_at, disbursement_date, status)
       `)
-      .eq("loan_requests.status", "partially_recovered")
+      .in("loan_requests.status", ["approved_director", "md_final_approved", "approved", "active", "partially_recovered", "payment_completed"])
       .not("loan_requests.md_approved_at", "is", null)
       .not("loan_requests.disbursement_date", "is", null)
 
