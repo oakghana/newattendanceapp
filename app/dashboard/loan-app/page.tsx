@@ -3515,6 +3515,12 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               <CardDescription>{isSalaryAdvanceRequest ? "Accounts calculates the amount from verified annual salary and your requested months." : "Loan amount is fixed by selected loan type and auto-populated in GHc."}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {data?.myRequests?.length > 0 && !editingId && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  <p className="font-semibold">Check your existing loan requests before applying</p>
+                  <p className="mt-1">You have {data.myRequests.length} request(s) on record. Review My Loans first to avoid repeating a request that is already pending, approved, or being repaid.</p>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label>Loan Type</Label>
