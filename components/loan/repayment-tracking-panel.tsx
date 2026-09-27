@@ -24,6 +24,7 @@ type LoanLite = {
   staff_receiving_funds_confirmed_at?: string | null
   md_approved_at?: string | null
   repayment_status?: string | null
+  repayment_plan_generated_at?: string | null
 }
 
 type ScheduleRow = {
@@ -37,7 +38,7 @@ type ScheduleRow = {
   status?: string
 }
 
-const TRACKABLE = new Set(['partially_recovered', 'payment_completed'])
+const TRACKABLE = new Set(['approved_director', 'md_final_approved', 'approved', 'active', 'partially_recovered', 'payment_completed'])
 
 export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
   const [loading, setLoading] = useState(false)
@@ -56,7 +57,7 @@ export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
     for (const loan of loans || []) {
       if (!loan?.id || unique.has(loan.id)) continue
       const hasDisbursementEvidence = loan.disbursement_date || loan.staff_receiving_funds_confirmed_at || loan.disbursement_confirmed_at || loan.md_approved_at
-      if (!TRACKABLE.has(String(loan.status || '')) || !loan.md_approved_at || !hasDisbursementEvidence) continue
+      if (!TRACKABLE.has(String(loan.status || '')) || !loan.md_approved_at || !hasDisbursementEvidence || loan.repayment_plan_generated_at) continue
       unique.set(loan.id, loan)
     }
     return Array.from(unique.values()).filter((l) => {
@@ -188,7 +189,7 @@ export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
             </Button>
             <Button size="sm" onClick={() => void regenerateAllMissing()} disabled={bulkGenerating}>
               {bulkGenerating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
-              Generate all missing schedules
+              Regenerate All Pending Schedules
             </Button>
           </div>
 

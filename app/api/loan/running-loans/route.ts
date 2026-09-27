@@ -28,15 +28,10 @@ const ALLOWED_ROLES = new Set([
 ])
 
 const RUNNING_LOAN_STATUSES = [
-  "hod_approved",
-  "sent_to_accounts",
   "approved_director",
   "md_final_approved",
   "approved",
   "active",
-  "awaiting_committee",
-  "awaiting_hr_terms",
-  "awaiting_director_hr",
   "staff_receiving_funds",
   "partially_recovered",
   "payment_completed",
