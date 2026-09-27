@@ -19,6 +19,7 @@ import {
 } from "@/lib/annual-leave-entitlement"
 import { resolveRegionalHrOffice, resolveSelfLeaveRoute, routeLeave } from "@/lib/hr-workflow"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
+import { hasAssignedReviewer, REVIEWER_LINKAGE_REQUIRED_MESSAGE } from "@/lib/reviewer-linkage"
 
 function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
   const year = referenceDate.getFullYear()
@@ -1405,8 +1406,20 @@ export async function POST(request: NextRequest) {
   "id, role, department_id, region_id, assigned_location_id, staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id, position, geofence_locations!user_profiles_assigned_location_id_fkey(name)"
   )
 
-    // Every authenticated profile may submit leave. The profile role and
-    // assigned location still determine the review route after submission.
+  if (normalizeRoleValue((profile as any)?.role) !== "admin") {
+    try {
+      if (!(await hasAssignedReviewer(admin, user.id))) {
+        return NextResponse.json({ error: REVIEWER_LINKAGE_REQUIRED_MESSAGE, code: "REVIEWER_LINKAGE_REQUIRED" }, { status: 403 })
+      }
+    } catch (linkageError: any) {
+      console.error("[v0] Unable to verify leave reviewer linkage:", linkageError?.message)
+      return NextResponse.json({ error: "Reviewer assignment could not be verified. Please try again later." }, { status: 503 })
+    }
+  }
+
+  // The request is accepted only after an HOD or Regional Manager linkage
+  // has been verified. The profile and location then determine the route.
+
     const body = await request.json()
     const {
       leave_year_period,

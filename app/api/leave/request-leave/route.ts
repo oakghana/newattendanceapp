@@ -5,6 +5,7 @@ import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { getNextQccReference } from "@/lib/reference-number"
 import { calculateAnnualLeaveBreakdown } from "@/lib/annual-leave-calculator"
 import { getAssignmentGuidance, isRegionalHrLeaveOfficeRole, resolveRegionalHrOffice, resolveSelfLeaveRoute, resolveStaffAssignments, routeLeave } from "@/lib/hr-workflow"
+import { hasAssignedReviewer, REVIEWER_LINKAGE_REQUIRED_MESSAGE } from "@/lib/reviewer-linkage"
 
 const NON_ANNUAL_REQUIRES_APPROVED_ANNUAL = new Set([
   "sick",
@@ -138,8 +139,21 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     const normalizedRole = String((roleProfile as any)?.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-    const admin = await createAdminClient()
-    const referenceNumber = await getNextQccReference(admin)
+  const admin = await createAdminClient()
+
+  if (normalizedRole !== "admin") {
+    try {
+      if (!(await hasAssignedReviewer(admin, user.id))) {
+        return NextResponse.json({ error: REVIEWER_LINKAGE_REQUIRED_MESSAGE, code: "REVIEWER_LINKAGE_REQUIRED" }, { status: 403 })
+      }
+    } catch (linkageError: any) {
+      console.error("[v0] Unable to verify legacy leave reviewer linkage:", linkageError?.message)
+      return NextResponse.json({ error: "Reviewer assignment could not be verified. Please try again later." }, { status: 503 })
+    }
+  }
+
+  const referenceNumber = await getNextQccReference(admin)
+
 
     const canSubmitBeyondEntitlementForHrAdjustment =
       normalizedRole === "admin" ||

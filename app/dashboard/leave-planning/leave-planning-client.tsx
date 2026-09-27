@@ -1101,7 +1101,7 @@ function HrExecRejectForm({
   )
 }
 
-// ─── Main Component ──────────���────────────────────────────────────────────────
+// ─── Main Component ──────────���───────────────────────────────────────────────���
 // SINGLE SOURCE OF TRUTH for the annual leave End Date shown/saved anywhere in the
 // HR Office review panel. Uses the exact same formula as the printed memo
 // (lib/annual-leave-calculator): granted = entitlement - enjoyed + outstanding + travel,
@@ -2882,8 +2882,15 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                 </CardTitle>
                 <p className="text-xs text-slate-500 hidden">Leave Year: {leaveYearPeriod}</p>
               </CardHeader>
-              <CardContent className="p-5 space-y-5">
-                {/* How to Request Leave Guide */}
+  <CardContent className="p-5 space-y-5">
+  {myRequests.length > 0 && !editingId && (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      <p className="font-semibold">Check your existing leave requests before applying</p>
+      <p className="mt-1">You have {myRequests.length} leave request(s) on record. Review My Leaves first to avoid repeating a request that is already pending, approved, or recently decided.</p>
+    </div>
+  )}
+  {/* How to Request Leave Guide */}
+
                 <div className="border-2 border-blue-300 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg px-4 py-3.5">
                   <div className="flex gap-3">
                     <div className="flex-shrink-0 mt-0.5">
@@ -3216,6 +3223,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                           history={staffHistoryByUser[String(req.user?.id || "")] || []}
                           currentRequestId={req.id}
                         />
+                        {canAct ? (
                         <div className="space-y-3">
                           <div className="flex gap-2 flex-wrap">
                             {(["approve", "recommend_change", "reject"] as const).map((act) => (
@@ -3263,6 +3271,11 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                             </Button>
                           )}
                         </div>
+                        ) : (
+                          <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                            Read-only view: only the assigned Regional Manager may approve, reject, return, or modify this regional request.
+                          </p>
+                        )}
                       </CardContent>
                     </Card>
                   )

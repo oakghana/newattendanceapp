@@ -28,6 +28,7 @@ import { HRLoanOfficeFDApproved } from "@/components/loan/hr-loan-office-fd-appr
 import { RepaymentTrackingPanel } from "@/components/loan/repayment-tracking-panel"
 import { RunningLoansReport } from "@/components/loan/running-loans-report"
 import { SettlementInitiationPanel } from "@/components/loan/settlement-initiation-panel"
+import { StaffLoanHistory } from "@/components/loan/staff-loan-history"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { GOOD_FD_THRESHOLD, canEnterFdScore as canEnterFdScoreForRole, isPoorFdScore } from "@/lib/loan-workflow"
@@ -3515,6 +3516,12 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               <CardDescription>{isSalaryAdvanceRequest ? "Accounts calculates the amount from verified annual salary and your requested months." : "Loan amount is fixed by selected loan type and auto-populated in GHc."}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {data?.myRequests?.length > 0 && !editingId && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  <p className="font-semibold">Check your existing loan requests before applying</p>
+                  <p className="mt-1">You have {data.myRequests.length} request(s) on record. Review My Loans first to avoid repeating a request that is already pending, approved, or being repaid.</p>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label>Loan Type</Label>
@@ -7630,6 +7637,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           </DialogHeader>
 
           <div className="space-y-2 py-1 max-h-[70vh] overflow-y-auto">
+            {actionModal.row?.user_id && ["hod", "loan_office", "committee", "hr_terms", "director"].includes(actionModal.actionType || "") && (
+              <StaffLoanHistory userId={actionModal.row.user_id} staffName={actionModal.row.staff_full_name || actionModal.row.staff_number || "Staff"} />
+            )}
             {/* HOD */}
             {actionModal.actionType === "hod" && (
               <>

@@ -6,6 +6,8 @@ import { isSchemaIssue, normalizeRole, requestIsEditable } from "@/lib/loan-work
 import { getNextQccReference } from "@/lib/reference-number"
 import { getAssignmentGuidance, resolveStaffAssignments } from "@/lib/hr-workflow"
 import { isLoanRepaymentOutstanding } from "@/lib/loan-clearance"
+import { hasAssignedReviewer, REVIEWER_LINKAGE_REQUIRED_MESSAGE } from "@/lib/reviewer-linkage"
+import { validateLoanApplicationEligibility } from "@/lib/loan-eligibility"
 
 const LOAN_REQUEST_SUBMISSION_ENABLED = true
 
@@ -280,6 +282,17 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ error: "Profile not found" }, { status: 404 })
   }
 
+  if (normalizeRole((profile as any).role) !== "admin") {
+    try {
+      if (!(await hasAssignedReviewer(admin, user.id))) {
+        return NextResponse.json({ error: REVIEWER_LINKAGE_REQUIRED_MESSAGE, code: "REVIEWER_LINKAGE_REQUIRED" }, { status: 403 })
+      }
+    } catch (linkageError: any) {
+      console.error("[v0] Unable to verify loan reviewer linkage:", linkageError?.message)
+      return NextResponse.json({ error: "Reviewer assignment could not be verified. Please try again later." }, { status: 503 })
+    }
+  }
+
   const role = normalizeRole((profile as any).role)
   const assignment = await resolveStaffAssignments(admin, user.id)
 
@@ -304,7 +317,15 @@ export async function POST(request: NextRequest) {
   }
 
   if (role !== "admin") {
-      // Check for active loan of the SAME type (allow different loan types while one is active)
+      const eligibility = await validateLoanApplicationEligibility(admin, {
+        userId: user.id,
+        loanType,
+      })
+      if (!eligibility.eligible) {
+        return NextResponse.json({ error: eligibility.reason, code: "LOAN_NOT_ELIGIBLE", conflict: eligibility.conflict }, { status: 409 })
+      }
+
+      // Legacy same-type checks remain as a defensive compatibility layer.
       const activeLoanCheck = await checkForActiveLoanOfSameType(admin, user.id, loanType.loan_key)
       if (activeLoanCheck) {
         return NextResponse.json({ error: activeLoanCheck.error }, { status: 409 })
