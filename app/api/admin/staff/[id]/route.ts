@@ -196,12 +196,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       : { data: null }
     const isRegionalItAdmin = normalizedRequesterRole === "it_admin" && Boolean(profile?.assigned_location_id) && !isNonRegionalLocation(requesterLocation?.name)
     const isSelfUpdate = user.id === id
-    if (normalizedRequesterRole === "it_admin" && !isSelfUpdate) {
+    if (normalizedRequesterRole === "it_admin") {
       const authorization = await canUpdateStaffByITAdmin(
         adminSupabase,
         profile,
         targetProfile,
-        mergedAssignedLocationId,
+        isSelfUpdate ? targetProfile.assigned_location_id : mergedAssignedLocationId,
       )
       if (!authorization.allowed) return NextResponse.json({ error: authorization.reason }, { status: 403 })
     }

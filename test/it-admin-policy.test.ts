@@ -32,6 +32,26 @@ describe("IT Admin staff-management policy", () => {
     ).resolves.toMatchObject({ allowed: false })
   })
 
+  it("allows a regional IT Admin to update their own unrestricted profile when scoped", async () => {
+    const client = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({ data: { id: "ashanti", location_type: "region" }, error: null }),
+          }),
+        }),
+      }),
+    }
+    await expect(
+      canUpdateStaffByITAdmin(
+        client,
+        { role: "it-admin", it_admin_scope: "regional_it_admin", assigned_location_id: "ashanti", region_id: "ashanti" },
+        { id: "self", role: "it-admin", assigned_location_id: "ashanti" },
+        "ashanti",
+      ),
+    ).resolves.toMatchObject({ allowed: true, scope: "regional_it_admin" })
+  })
+
   it("blocks legacy or unscoped IT Admins before any location-based authorization", async () => {
     await expect(
       canUpdateStaffByITAdmin(noQueryClient, { role: "it-admin" }, { role: "staff" }),
