@@ -21,6 +21,12 @@ export function normalizeLocationName(value: unknown): string {
 
 export function isNonRegionalLocation(value: unknown): boolean {
   const normalized = normalizeLocationName(value)
+  if (!normalized) return false
+
+  // Database records use several labels for the same non-regional office.
+  // Treat Head Office variants as non-regional without requiring an exact label match.
+  if (normalized.includes("head office") || normalized.includes("swanzy arcade")) return true
+
   return NON_REGIONAL_LOCATION_NAMES.some((name) => normalizeLocationName(name) === normalized)
 }
 
