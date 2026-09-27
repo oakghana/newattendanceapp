@@ -8,6 +8,7 @@ import {
   isTransportManagerRole,
 } from "@/lib/role-capabilities"
 import { isAssignableRegionalStage, isCompletableTransportStage, transportStageLabel } from "@/lib/transport-workflow"
+import { sendWebPushToUsers } from "@/lib/web-push"
 
 /** Best-effort in-app notice; never fails the transport action. */
 async function notifyTransportActors(entries: { user_id: string; message: string; type: string; reference_id: string }[]) {
@@ -27,6 +28,32 @@ async function notifyTransportActors(entries: { user_id: string; message: string
     if (!payload.length) return
     const { error } = await admin.from("staff_notifications").insert(payload)
     if (error) console.warn("[transport] staff_notifications insert skipped:", error.message)
+
+    // Push alerts are grouped per reference_id + type so a reviewer only gets one
+    // popup per distinct transport event, even when several actors are notified.
+    const byTypeAndRequest = new Map<string, { userIds: string[]; message: string; referenceId: string }>()
+    for (const entry of payload) {
+      const key = `${entry.type}:${entry.reference_id}`
+      const group = byTypeAndRequest.get(key)
+      if (group) {
+        group.userIds.push(entry.user_id)
+      } else {
+        byTypeAndRequest.set(key, { userIds: [entry.user_id], message: entry.message, referenceId: entry.reference_id })
+      }
+    }
+    for (const [key, group] of byTypeAndRequest) {
+      const type = key.split(":")[0]
+      await sendWebPushToUsers(
+        group.userIds,
+        {
+          title: "Transport Request",
+          body: group.message,
+          url: `/dashboard/transport-management?request=${group.referenceId}`,
+          tag: type,
+        },
+        group.referenceId,
+      )
+    }
   } catch (error) {
     console.warn("[transport] notification skipped (non-fatal):", error)
   }

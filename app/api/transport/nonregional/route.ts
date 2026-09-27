@@ -9,6 +9,32 @@ import {
   normalizeAppRole,
   NON_REGIONAL_TRANSPORT_LOCATIONS,
 } from "@/lib/role-capabilities"
+import { sendWebPushToUsers } from "@/lib/web-push"
+
+/** Best-effort push alert; never fails the requisition submission. */
+async function notifyNonRegionalTransportReviewers(
+  admin: any,
+  userIds: string[],
+  message: string,
+  requisitionId: string,
+) {
+  const ids = Array.from(new Set(userIds.filter(Boolean)))
+  if (!ids.length) return
+  try {
+    await sendWebPushToUsers(
+      ids,
+      {
+        title: "Transport Requisition",
+        body: message,
+        url: `/dashboard/transport-management?requisition=${requisitionId}`,
+        tag: "nonregional_transport",
+      },
+      requisitionId,
+    )
+  } catch (error) {
+    console.warn("[nonregional-transport] push notification skipped (non-fatal):", error)
+  }
+}
 
 const locations = new Set<string>(NON_REGIONAL_TRANSPORT_LOCATIONS)
 
@@ -327,6 +353,13 @@ export async function POST(request: Request) {
     }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     if (!data) return NextResponse.json({ error: "Unable to create requisition." }, { status: 500 })
+    const requesterName = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() || "A staff member"
+    void notifyNonRegionalTransportReviewers(
+      adminSupabase,
+      [hodId],
+      `${requesterName} submitted a non-regional transport requisition awaiting your authorization.`,
+      data.id,
+    )
     return NextResponse.json(
       { id: data.id, status: data.status, next: "awaiting_hod_approval", message: "Submitted for Head of Department authorization." },
       { status: 201 },
@@ -393,6 +426,22 @@ export async function POST(request: Request) {
   }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!data) return NextResponse.json({ error: "Unable to create requisition." }, { status: 500 })
+  if (data.status === "awaiting_md_approval") {
+    const requesterName = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() || "A staff member"
+    const { data: mdHolders } = await adminSupabase
+      .from("user_profiles")
+      .select("id")
+      .eq("role", "managing_director")
+      .eq("is_active", true)
+      .limit(5)
+    const mdIds = (mdHolders ?? []).map((row) => row.id as string).filter(Boolean)
+    void notifyNonRegionalTransportReviewers(
+      adminSupabase,
+      mdIds,
+      `${requesterName} submitted a non-regional transport requisition awaiting Managing Director approval.`,
+      data.id,
+    )
+  }
   return NextResponse.json(
     { id: data.id, status: data.status, next: "awaiting_md_approval", message: "Submitted for Managing Director approval." },
     { status: 201 },
