@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
+import { canItAdminCreateRole, canUpdateStaffByITAdmin, normalizeItAdminScope } from "@/lib/it-admin-policy"
 
 function createJsonResponse(data: any, status = 200) {
   return new NextResponse(JSON.stringify(data), {
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest) {
     // Fetch the requesting user's profile to check role and location (use admin client)
     const { data: requestingProfile } = await adminDb
       .from("user_profiles")
-      .select("role, assigned_location_id, region_id, geofence_locations!assigned_location_id(name)")
+      .select("role, it_admin_scope, assigned_location_id, region_id, geofence_locations!assigned_location_id(name)")
       .eq("id", user.id)
       .single()
 
@@ -111,6 +112,8 @@ export async function GET(request: NextRequest) {
         department_id,
         position,
         role,
+        it_admin_scope,
+        it_admin_update_restricted,
         staff_category,
         hire_date,
         is_active,
@@ -130,9 +133,13 @@ export async function GET(request: NextRequest) {
 
     const requestingRole = String(requestingProfile?.role || "").trim().toLowerCase().replace(/[\s-]+/g, "_")
     const requestingLocationName = String((requestingProfile as any)?.geofence_locations?.name || "")
+    const itAdminScope = requestingRole === "it_admin" ? normalizeItAdminScope(requestingProfile?.it_admin_scope) : null
+    if (requestingRole === "it_admin" && !itAdminScope) {
+      return createJsonResponse({ success: false, error: "An Administrator must assign an explicit IT Admin scope before staff access is granted." }, 403)
+    }
     const isRegionalStaffAdministrator = requestingProfile?.assigned_location_id && (
       requestingRole === "regional_manager" ||
-      (requestingRole === "it_admin" && !isNonRegionalLocation(requestingLocationName))
+      (requestingRole === "it_admin" && itAdminScope === "regional_it_admin")
     )
 
     if (isRegionalStaffAdministrator) {
@@ -149,6 +156,10 @@ export async function GET(request: NextRequest) {
 
     if (departmentFilter && departmentFilter !== "all") {
       query = query.eq("department_id", departmentFilter)
+    }
+
+    if (requestingRole === "it_admin" && roleFilter && roleFilter !== "all" && !canItAdminCreateRole(roleFilter)) {
+      return createJsonResponse({ success: false, error: "IT Admins may filter only roles they are permitted to create." }, 403)
     }
 
     if (roleFilter && roleFilter !== "all") {
@@ -370,7 +381,7 @@ export async function POST(request: NextRequest) {
       return createJsonResponse({ success: false, error: "Authentication required" }, 401)
     }
 
-    const { data: profile } = await adminSupabase.from("user_profiles").select("role").eq("id", user.id).single()
+    const { data: profile } = await adminSupabase.from("user_profiles").select("role, it_admin_scope, assigned_location_id, region_id").eq("id", user.id).single()
     const normalizedProfileRole = String(profile?.role || "")
       .trim()
       .toLowerCase()
@@ -408,7 +419,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (isItAdmin) {
-      const allowedForItAdmin = ["staff", "nsp", "contract", "department_head", "regional_manager", "driver", "chief_driver"]
+      const allowedForItAdmin = ["staff", "contract", "intern", "nsp", "regional_manager", "driver", "chief_driver"]
       if (!allowedForItAdmin.includes(role)) {
         console.error("[v0] Staff API - IT-Admin attempted to create disallowed role:", role)
         return createJsonResponse(
@@ -420,6 +431,13 @@ export async function POST(request: NextRequest) {
           403,
         )
       }
+    }
+
+    if (isItAdmin) {
+      const scope = normalizeItAdminScope(profile?.it_admin_scope)
+      if (!scope) return createJsonResponse({ success: false, error: "An Administrator must assign an explicit IT Admin scope before this account can create staff." }, 403)
+      const authorization = await canUpdateStaffByITAdmin(adminSupabase, profile, { assigned_location_id }, assigned_location_id)
+      if (!authorization.allowed) return createJsonResponse({ success: false, error: authorization.reason }, 403)
     }
 
     if (role === "admin" && !isAdministrator) {

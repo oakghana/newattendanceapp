@@ -3,6 +3,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
+import { canUpdateStaffByITAdmin, canViewStaffByITAdmin, normalizeItAdminScope } from "@/lib/it-admin-policy"
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -18,9 +19,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: requester } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
-    const allowedRoles = ["admin", "it-admin", "regional_manager", "department_head", "god"]
-    const canView = user.id === id || allowedRoles.includes(requester?.role || "")
+    const { data: requester } = await supabase.from("user_profiles").select("role, it_admin_scope, assigned_location_id, region_id").eq("id", user.id).single()
+    const allowedRoles = ["admin", "it-admin", "it_admin", "regional_manager", "department_head", "god"]
+    const canView = user.id === id || allowedRoles.includes(String(requester?.role || "").trim().toLowerCase())
+
+    const normalizedRequesterRoleForView = String(requester?.role || "").trim().toLowerCase().replace(/[\s-]+/g, "_")
+    if (canView && normalizedRequesterRoleForView === "it_admin") {
+      const { data: target } = await supabase.from("user_profiles").select("id, role, it_admin_update_restricted, assigned_location_id, region_id").eq("id", id).single()
+      const authorization = await canViewStaffByITAdmin(supabase, requester || {}, target || { id })
+      if (!authorization.allowed) return NextResponse.json({ error: authorization.reason }, { status: 403 })
+    }
 
     if (!canView) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
@@ -89,7 +97,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     // Use adminSupabase to bypass RLS and read the user's role. Role values have
     // historically been stored with either hyphens or underscores, so normalize
     // before checking authorization (especially for regional IT Admin profiles).
-    const { data: profile } = await adminSupabase.from("user_profiles").select("role, assigned_location_id, region_id").eq("id", user.id).single()
+    const { data: profile } = await adminSupabase.from("user_profiles").select("role, it_admin_scope, assigned_location_id, region_id").eq("id", user.id).single()
     const normalizedRequesterRole = String(profile?.role || "")
       .trim()
       .toLowerCase()
@@ -116,6 +124,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       date_of_appointment,
       years_of_service,
       contact_number,
+      it_admin_update_restricted,
+      it_admin_scope,
     } = body
     let { role } = body
 
@@ -186,6 +196,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       : { data: null }
     const isRegionalItAdmin = normalizedRequesterRole === "it_admin" && Boolean(profile?.assigned_location_id) && !isNonRegionalLocation(requesterLocation?.name)
     const isSelfUpdate = user.id === id
+    if (normalizedRequesterRole === "it_admin") {
+      const authorization = await canUpdateStaffByITAdmin(
+        adminSupabase,
+        profile,
+        targetProfile,
+        isSelfUpdate ? targetProfile.assigned_location_id : mergedAssignedLocationId,
+      )
+      if (!authorization.allowed) return NextResponse.json({ error: authorization.reason }, { status: 403 })
+    }
     const regionalOwnedLocationIds = isRegionalItAdmin
       ? await resolveOwnedLocationIdsForRegionalOffice(adminSupabase, profile.assigned_location_id, profile.region_id)
       : []
@@ -245,7 +264,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Only administrators can assign the Regional HR Leave Office role" }, { status: 403 })
     }
 
-    const allowedRolesForItAdmin = ["staff", "nsp", "contract", "department_head", "driver", "chief_driver", "it-admin", "intern"]
+    const allowedRolesForItAdmin = ["staff", "contract", "intern", "nsp", "regional_manager", "driver", "chief_driver"]
     if (isItAdmin && role && !allowedRolesForItAdmin.includes(role)) {
       console.error("[v0] Staff API PUT - IT-Admin tried to assign restricted role:", role)
       return NextResponse.json(
@@ -314,6 +333,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       years_of_service: mergedYearsOfService !== undefined && mergedYearsOfService !== "" && mergedYearsOfService !== null ? parseInt(String(mergedYearsOfService), 10) : null,
       contact_number: mergedContactNumber || null,
       updated_at: new Date().toISOString(),
+    }
+
+    if (isAdministrator) {
+      if (it_admin_update_restricted !== undefined) updateData.it_admin_update_restricted = Boolean(it_admin_update_restricted)
+      if (it_admin_scope !== undefined) updateData.it_admin_scope = normalizeItAdminScope(it_admin_scope)
     }
 
     if (email) {
