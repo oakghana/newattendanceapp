@@ -133,7 +133,9 @@ export async function GET(request: NextRequest) {
 
     const requestingRole = String(requestingProfile?.role || "").trim().toLowerCase().replace(/[\s-]+/g, "_")
     const requestingLocationName = String((requestingProfile as any)?.geofence_locations?.name || "")
-    const itAdminScope = requestingRole === "it_admin" ? getEffectiveItAdminScope(requestingProfile || {}) : null
+    const itAdminScope = requestingRole === "it_admin"
+      ? (isNonRegionalLocation(requestingLocationName) ? "head_office_it_admin" : getEffectiveItAdminScope(requestingProfile || {}))
+      : null
     if (requestingRole === "it_admin" && !itAdminScope) {
       return createJsonResponse({ success: false, error: "An Administrator must assign an explicit IT Admin scope before staff access is granted." }, 403)
     }

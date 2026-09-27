@@ -1,5 +1,6 @@
 import { normalizeAppRole } from "./role-capabilities"
 import { resolveOwnedLocationIdsForRegionalOffice } from "./regional-manager-scope"
+import { isNonRegionalLocation } from "./location-mappings"
 
 export const IT_ADMIN_CREATABLE_ROLES = [
   "staff",
@@ -86,7 +87,15 @@ export async function canUpdateStaffByITAdmin(
   if (normalizedRole !== "it-admin") return { allowed: false, reason: "Only an IT Admin can use this policy." }
   if (staff.it_admin_update_restricted) return { allowed: false, reason: "This staff profile is restricted from IT Admin updates." }
 
-  const scope = getEffectiveItAdminScope(admin)
+  let scope = getEffectiveItAdminScope(admin)
+  if (admin.assigned_location_id) {
+    const { data: location } = await adminDb
+      .from("geofence_locations")
+      .select("name")
+      .eq("id", admin.assigned_location_id)
+      .maybeSingle()
+    if (isNonRegionalLocation(location?.name)) scope = "head_office_it_admin"
+  }
   if (!scope) return { allowed: false, reason: "An Administrator must assign an explicit IT Admin scope before this account can update staff." }
 
   if (scope === "head_office_it_admin") return { allowed: true, scope }
