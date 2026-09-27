@@ -6,6 +6,7 @@ import { NotificationProvider } from "@/components/ui/notification-system"
 import { TimeBasedThemeProvider } from "@/components/theme/time-based-theme-provider"
 import { Toaster as AppToaster } from "@/components/ui/toaster"
 import { Toaster as SonnerToaster } from "sonner"
+import { PushNotificationSetup } from "@/components/notifications/push-notification-setup"
 
 export default function RootLayoutClient({
   children,
@@ -137,6 +138,7 @@ export default function RootLayoutClient({
       <NotificationProvider>{children}</NotificationProvider>
       <AppToaster />
       <SonnerToaster richColors closeButton position="top-right" />
+      <PushNotificationSetup />
     </TimeBasedThemeProvider>
   )
 }

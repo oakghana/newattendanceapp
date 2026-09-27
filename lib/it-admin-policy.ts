@@ -1,5 +1,6 @@
 import { normalizeAppRole } from "./role-capabilities"
 import { resolveOwnedLocationIdsForRegionalOffice } from "./regional-manager-scope"
+import { isNonRegionalLocation } from "./location-mappings"
 
 export const IT_ADMIN_CREATABLE_ROLES = [
   "staff",
@@ -25,6 +26,26 @@ export function getEffectiveItAdminScope(admin: AdminProfile): ItAdminScope | nu
   // A region plus assigned office is sufficient to preserve regional access; head-office
   // access must remain explicitly assigned by an Administrator.
   return admin.assigned_location_id ? "regional_it_admin" : null
+}
+
+export async function resolveItAdminRegionId(
+  adminDb: AdminClient,
+  admin: AdminProfile,
+): Promise<string | null> {
+  if (admin.region_id) return String(admin.region_id)
+  if (!admin.assigned_location_id) return null
+  const { data: location } = await adminDb
+    .from("geofence_locations")
+    .select("district_id")
+    .eq("id", admin.assigned_location_id)
+    .maybeSingle()
+  if (!location?.district_id) return null
+  const { data: district } = await adminDb
+    .from("districts")
+    .select("region_id")
+    .eq("id", location.district_id)
+    .maybeSingle()
+  return district?.region_id ? String(district.region_id) : null
 }
 
 export function canItAdminCreateRole(role?: string | null): boolean {
@@ -66,27 +87,20 @@ export async function canUpdateStaffByITAdmin(
   if (normalizedRole !== "it-admin") return { allowed: false, reason: "Only an IT Admin can use this policy." }
   if (staff.it_admin_update_restricted) return { allowed: false, reason: "This staff profile is restricted from IT Admin updates." }
 
-  const scope = getEffectiveItAdminScope(admin)
+  let scope = getEffectiveItAdminScope(admin)
+  if (admin.assigned_location_id) {
+    const { data: location } = await adminDb
+      .from("geofence_locations")
+      .select("name")
+      .eq("id", admin.assigned_location_id)
+      .maybeSingle()
+    if (isNonRegionalLocation(location?.name)) scope = "head_office_it_admin"
+  }
   if (!scope) return { allowed: false, reason: "An Administrator must assign an explicit IT Admin scope before this account can update staff." }
 
   if (scope === "head_office_it_admin") return { allowed: true, scope }
 
-  let adminRegionId = admin.region_id
-  if (!adminRegionId && admin.assigned_location_id) {
-    const { data: location } = await adminDb
-      .from("geofence_locations")
-      .select("district_id")
-      .eq("id", admin.assigned_location_id)
-      .maybeSingle()
-    if (location?.district_id) {
-      const { data: district } = await adminDb
-        .from("districts")
-        .select("region_id")
-        .eq("id", location.district_id)
-        .maybeSingle()
-      adminRegionId = district?.region_id || null
-    }
-  }
+  const adminRegionId = await resolveItAdminRegionId(adminDb, admin)
   if (!adminRegionId) return { allowed: false, reason: "Regional IT Admin is missing an assigned region." }
 
   const locationIds = [staff.assigned_location_id, nextAssignedLocationId].filter(
