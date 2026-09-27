@@ -3,7 +3,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
-import { canUpdateStaffByITAdmin, canViewStaffByITAdmin, normalizeItAdminScope } from "@/lib/it-admin-policy"
+import { canUpdateStaffByITAdmin, canViewStaffByITAdmin, getEffectiveItAdminScope, normalizeItAdminScope } from "@/lib/it-admin-policy"
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -190,7 +190,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const normalizedTargetRole = String(targetProfile.role || "").trim().toLowerCase().replace(/[-\s]+/g, "_")
-    const protectedItAdminTarget = ["admin", "administrator", "it_admin", "itadmin"].includes(normalizedTargetRole)
+    const protectedItAdminTarget = ["admin", "administrator", "it_admin", "itadmin"].includes(normalizedTargetRole) && user.id !== id
     const { data: requesterLocation } = profile?.assigned_location_id
       ? await adminSupabase.from("geofence_locations").select("name, location_type").eq("id", profile.assigned_location_id).maybeSingle()
       : { data: null }
@@ -290,7 +290,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       }
     }
 
-    if (role && (role === "admin" || role === "regional_manager") && !isAdministrator) {
+    const roleIsChanging = role !== undefined && String(role).trim().toLowerCase() !== String(targetProfile.role || "").trim().toLowerCase()
+    if (roleIsChanging && (role === "admin" || role === "regional_manager") && !isAdministrator) {
       console.error("[v0] Staff API PUT - Non-admin tried to assign admin or regional_manager role")
       return NextResponse.json(
         {

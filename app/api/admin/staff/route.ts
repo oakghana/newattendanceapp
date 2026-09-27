@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
-import { canItAdminCreateRole, canUpdateStaffByITAdmin, normalizeItAdminScope } from "@/lib/it-admin-policy"
+import { canItAdminCreateRole, getEffectiveItAdminScope, canUpdateStaffByITAdmin } from "@/lib/it-admin-policy"
 
 function createJsonResponse(data: any, status = 200) {
   return new NextResponse(JSON.stringify(data), {
@@ -133,7 +133,14 @@ export async function GET(request: NextRequest) {
 
     const requestingRole = String(requestingProfile?.role || "").trim().toLowerCase().replace(/[\s-]+/g, "_")
     const requestingLocationName = String((requestingProfile as any)?.geofence_locations?.name || "")
-    const itAdminScope = requestingRole === "it_admin" ? normalizeItAdminScope(requestingProfile?.it_admin_scope) : null
+    if (requestingRole === "it_admin" && !requestingProfile?.region_id && requestingProfile?.assigned_location_id) {
+      const { data: location } = await adminDb.from("geofence_locations").select("district_id").eq("id", requestingProfile.assigned_location_id).maybeSingle()
+      if (location?.district_id) {
+        const { data: district } = await adminDb.from("districts").select("region_id").eq("id", location.district_id).maybeSingle()
+        if (district?.region_id) requestingProfile.region_id = district.region_id
+      }
+    }
+    const itAdminScope = requestingRole === "it_admin" ? getEffectiveItAdminScope(requestingProfile || {}) : null
     if (requestingRole === "it_admin" && !itAdminScope) {
       return createJsonResponse({ success: false, error: "An Administrator must assign an explicit IT Admin scope before staff access is granted." }, 403)
     }
@@ -434,7 +441,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (isItAdmin) {
-      const scope = normalizeItAdminScope(profile?.it_admin_scope)
+      const scope = getEffectiveItAdminScope(profile || {})
       if (!scope) return createJsonResponse({ success: false, error: "An Administrator must assign an explicit IT Admin scope before this account can create staff." }, 403)
       const authorization = await canUpdateStaffByITAdmin(adminSupabase, profile, { assigned_location_id }, assigned_location_id)
       if (!authorization.allowed) return createJsonResponse({ success: false, error: authorization.reason }, 403)
