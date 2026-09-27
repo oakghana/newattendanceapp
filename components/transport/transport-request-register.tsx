@@ -320,8 +320,17 @@ export function TransportRequestRegister({
           year: "numeric",
         })
       : "the approved date";
+    const memoPurpose = row.purpose
+      .trim()
+      .replace(/^for\s+(the\s+)?/i, "")
+      .replace(/\ba\s+staff\b/gi, "a staff member")
+      .replace(/\bstatistic\s+unit\b/gi, "Statistics Unit")
+      .replace(/\s+/g, " ")
+      .replace(/\.$/, "")
+      .trim()
+      .toLowerCase();
     const body = [
-      `Management has approved transportation support for the ${row.purpose.toLowerCase()} in the ${row.destination} District Office.`,
+      `Management has approved transportation support for ${memoPurpose} in the ${row.destination} District Office.`,
       `The approved vehicle support is for the transportation of ${row.passenger_count} passengers from ${row.origin} to ${row.destination} on ${eventDate}.`,
       hrAmendments ? `Regional HR Office remarks: ${hrAmendments}` : "",
       regionalManagerComment
@@ -334,7 +343,9 @@ export function TransportRequestRegister({
       .join("\n\n");
     const cleanSubject = (row.memo_subject || row.purpose || "").replace(/^\s*(re:\s*)+/i, "").trim();
     const currentSubject = `RE: ${cleanSubject}`;
-    const currentBody = String(row.memo_body || "").trim() || body;
+    const currentBody = (String(row.memo_body || "").trim() || body)
+      .replace(/for the for a staff/gi, "for a staff member")
+      .replace(/\bstatistic unit\b/gi, "Statistics Unit");
     let originalSubject = currentSubject;
     let originalBody = currentBody;
     let amendmentNote = "";

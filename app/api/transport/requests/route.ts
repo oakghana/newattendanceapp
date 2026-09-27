@@ -127,10 +127,19 @@ function buildHrExecutiveRejoinderMemo(row: {
     .trim()
     .replace(/^\s*(re:\s*)+/i, "")
   const memoSubject = `RE: ${cleanSubject || purpose}`
-  const memoBody =
+  const memoPurpose = purpose
+    .trim()
+    .replace(/^for\s+(the\s+)?/i, "")
+    .replace(/\ba\s+staff\b/gi, "a staff member")
+    .replace(/\bstatistic\s+unit\b/gi, "Statistics Unit")
+    .replace(/\s+/g, " ")
+    .replace(/\.$/, "")
+    .trim()
+    .toLowerCase()
+  const memoBody = (
     String(row.memo_body ?? "").trim() ||
     [
-      `Management has approved transportation support for the ${purpose.toLowerCase()} in the ${destination} District Office.`,
+      `Management has approved transportation support for ${memoPurpose} in the ${destination} District Office.`,
       `The approved vehicle support is for the transportation of ${passengerCount} passengers from ${origin} to ${destination} on ${eventDate}.`,
       hrAmendments ? `Regional HR Office remarks: ${hrAmendments}` : "",
       regionalManagerComment
@@ -141,6 +150,7 @@ function buildHrExecutiveRejoinderMemo(row: {
     ]
       .filter(Boolean)
       .join("\n\n")
+  ).replace(/for the for a staff/gi, "for a staff member").replace(/\bstatistic unit\b/gi, "Statistics Unit")
   const memoReference =
     String(row.memo_reference ?? "").trim() ||
     `HR/TR/${new Date().getFullYear()}/${String(Date.now()).slice(-6)}`
