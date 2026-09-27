@@ -6,6 +6,7 @@ import { getNextQccReference } from "@/lib/reference-number"
 import { calculateAnnualLeaveBreakdown } from "@/lib/annual-leave-calculator"
 import { getAssignmentGuidance, isRegionalHrLeaveOfficeRole, resolveRegionalHrOffice, resolveSelfLeaveRoute, resolveStaffAssignments, routeLeave } from "@/lib/hr-workflow"
 import { hasAssignedReviewer, REVIEWER_LINKAGE_REQUIRED_MESSAGE } from "@/lib/reviewer-linkage"
+import { sendWebPushToUsers } from "@/lib/web-push"
 
 const NON_ANNUAL_REQUIRES_APPROVED_ANNUAL = new Set([
   "sick",
@@ -592,6 +593,12 @@ export async function POST(request: NextRequest) {
             is_read: false,
           }))
           await admin.from("staff_notifications").insert(notifRows)
+          await sendWebPushToUsers(hodIds, {
+            title: "New Leave Request",
+            body: `${staffName} submitted leave from ${start_date} to ${end_date}.`,
+            url: `/dashboard/leave-management?request=${leaveRequest.id}`,
+            tag: "leave-request-hod",
+          }, leaveRequest.id)
 
           // Send email notifications to HODs for prompt review
           try {
@@ -644,6 +651,14 @@ export async function POST(request: NextRequest) {
       }
     }
     if (!shouldAutoApprove && !isHrLeaveOffice && isRegionalWorkflow && regionalOffice?.user_id) {
+      if (assignment.regionalManagerId) {
+        await sendWebPushToUsers([assignment.regionalManagerId], {
+          title: "New Regional Leave Request",
+          body: `A staff member submitted leave from ${start_date} to ${end_date}.`,
+          url: `/dashboard/leave-management?request=${leaveRequest.id}`,
+          tag: "leave-request-regional-manager",
+        }, leaveRequest.id)
+      }
       const regionalHrId = regionalOffice.user_id
       const message = `Regional leave request requires HR Office adjustment (${start_date} to ${end_date}).`
       await admin.from("leave_notifications").insert({
