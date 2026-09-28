@@ -208,7 +208,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const regionalAdminRegionId = isRegionalItAdmin
       ? await resolveItAdminRegionId(adminSupabase, profile)
       : null
-    const regionalOwnedLocationIds = isRegionalItAdmin && regionalAdminRegionId
+    // A null regionalAdminRegionId is expected for top-level regional-office rows without a
+    // district_id (e.g. Ashanti Regional Office). resolveOwnedLocationIdsForRegionalOffice can
+    // still resolve every district office linked via parent_location_id in that case, so it
+    // must still be called using the assigned_location_id alone.
+    const regionalOwnedLocationIds = isRegionalItAdmin
       ? await resolveOwnedLocationIdsForRegionalOffice(adminSupabase, profile.assigned_location_id, regionalAdminRegionId)
       : []
     const currentTargetInScope = Boolean(

@@ -100,8 +100,11 @@ export async function canUpdateStaffByITAdmin(
 
   if (scope === "head_office_it_admin") return { allowed: true, scope }
 
+  if (!admin.assigned_location_id) return { allowed: false, reason: "Regional IT Admin is missing an assigned location." }
+  // A null region is expected for top-level regional-office rows without a district_id
+  // (e.g. Ashanti Regional Office). resolveOwnedLocationIdsForRegionalOffice can still
+  // resolve every district office linked via parent_location_id in that case.
   const adminRegionId = await resolveItAdminRegionId(adminDb, admin)
-  if (!adminRegionId) return { allowed: false, reason: "Regional IT Admin is missing an assigned region." }
 
   const locationIds = [staff.assigned_location_id, nextAssignedLocationId].filter(
     (value): value is string => Boolean(value && value !== "none"),
