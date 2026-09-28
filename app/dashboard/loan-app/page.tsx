@@ -3538,7 +3538,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   />
                   {selectedType && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      {isSalaryAdvanceRequest ? "Amount: Calculated by Accounts" : `Fixed amount: GHc ${fmtAmount(selectedType.fixed_amount)}`} | FD check: {selectedType.requires_fd_check ? "Required" : "Not required"} | Committee: {selectedType.requires_committee ? "Required" : "Not required"} | Qualification: {selectedType.min_qualification_note || "By staff grade"}
+                      {isSalaryAdvanceRequest ? "Amount: Calculated by Accounts" : `Fixed amount: GHc ${fmtAmount(selectedType.fixed_amount)}`} | FD check: {selectedType.requires_fd_check ? "Required" : "Not required"} | Committee: {(selectedType.requires_committee || /motor\s*bike/i.test(`${selectedType.loan_key} ${selectedType.loan_label}`)) ? "Required" : "Not required"} | Qualification: {selectedType.min_qualification_note || "By staff grade"}
                     </p>
                   )}
                 </div>

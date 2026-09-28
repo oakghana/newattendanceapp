@@ -480,6 +480,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const requiresCommittee = Boolean(
+      loanType.requires_committee ||
+        /motor\s*bike/i.test(`${loanType.loan_key} ${loanType.loan_label}`),
+    )
+
     const payload = {
       request_number: genRequestNumber(),
       reference_number: referenceNumber,
@@ -498,7 +503,7 @@ export async function POST(request: NextRequest) {
       repayment_duration_months: initialDurationMonths,
       reason: normalizedReason || null,
       supporting_document_url: supporting_document_url || null,
-      committee_required: Boolean(loanType.requires_committee),
+      committee_required: requiresCommittee,
       requires_fd_check: loanType.requires_fd_check !== false,
       status: "pending_hod",
       hod_reviewer_id: assignedHodId,
@@ -686,7 +691,10 @@ export async function PUT(request: NextRequest) {
         }
         updatePayload.loan_type_key = loanType.loan_key
         updatePayload.loan_type_label = loanType.loan_label
-        updatePayload.committee_required = Boolean(loanType.requires_committee)
+        updatePayload.committee_required = Boolean(
+  loanType.requires_committee ||
+  /motor\s*bike/i.test(`${loanType.loan_key} ${loanType.loan_label}`),
+  )
         updatePayload.requires_fd_check = loanType.requires_fd_check !== false
         updatePayload.fixed_amount = loanType.loan_key === "salary_advance" ? null : (loanType as any).fixed_amount || null
         updatePayload.requested_amount = loanType.loan_key === "salary_advance" ? null : (loanType as any).fixed_amount || null
