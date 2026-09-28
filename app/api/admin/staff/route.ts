@@ -149,13 +149,15 @@ export async function GET(request: NextRequest) {
       let requestingRegionId: string | null = null
       try {
         requestingRegionId = await resolveItAdminRegionId(adminDb, requestingProfile)
-        scopeLocationIds = requestingRegionId
-          ? await resolveOwnedLocationIdsForRegionalOffice(
-              adminDb,
-              requestingProfile.assigned_location_id,
-              requestingRegionId,
-            )
-          : []
+        // Resolve owned locations from the assigned regional-office location even when no
+        // region could be derived (e.g. the regional-office row has no district_id, which is
+        // normal for top-level regional offices). resolveOwnedLocationIdsForRegionalOffice can
+        // still find every district office linked via parent_location_id in that case.
+        scopeLocationIds = await resolveOwnedLocationIdsForRegionalOffice(
+          adminDb,
+          requestingProfile.assigned_location_id,
+          requestingRegionId,
+        )
       } catch {
         scopeLocationIds = requestingProfile.assigned_location_id ? [requestingProfile.assigned_location_id] : []
       }
