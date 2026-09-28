@@ -46,7 +46,7 @@ import { Label } from "@/components/ui/label"
 import { ToastAction } from "@/components/ui/toast"
 import { clearAttendanceCache, shouldClearCache, setCachedDate } from "@/lib/utils/attendance-cache"
 import { cn } from "@/lib/utils"
-import { requiresLatenessReason, requiresEarlyCheckoutReason, isExemptFromAttendanceReasons, canCheckInAtTime, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckInDeadline, getCheckOutDeadline } from "@/lib/attendance-utils"
+import { requiresLatenessReason, requiresEarlyCheckoutReason, isExemptFromAttendanceReasons, canCheckInAtTime, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckInDeadline, getCheckOutDeadline, isSecurityDept } from "@/lib/attendance-utils"
 import { validateAttendanceReason, countMeaningfulWords, hasExcessiveConsecutiveWhitespace, hasRepeatedConsecutiveCharacters } from "@/lib/meaningful-text"
 import { DeviceActivityHistory } from "@/components/attendance/device-activity-history"
 import { ActiveSessionTimer } from "@/components/attendance/active-session-timer"
@@ -225,6 +225,8 @@ export function AttendanceRecorder({
   const [offPremisesReason, setOffPremisesReason] = useState("")
   const [pendingOffPremisesLocation, setPendingOffPremisesLocation] = useState<LocationData | null>(null)
   const [hasPendingOffPremisesRequest, setHasPendingOffPremisesRequest] = useState(false)
+  const [overnightOpenAttendance, setOvernightOpenAttendance] = useState<any | null>(null)
+  const [overnightAttendanceConfirmed, setOvernightAttendanceConfirmed] = useState(false)
   // 'checkin' | 'checkout' - reused by the off-premises reason dialog
   // off-premises request mode is no longer needed; only check-in requests are supported
 
@@ -498,6 +500,30 @@ export function AttendanceRecorder({
   }
 
 
+
+  useEffect(() => {
+    if (!userProfile || !isSecurityDept(userProfile.departments)) return
+
+    let active = true
+    const loadOvernightAttendance = async () => {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("attendance_records")
+        .select("id, check_in_time, check_out_time, check_in_location_name")
+        .eq("user_id", userProfile.id)
+        .is("check_out_time", null)
+        .order("check_in_time", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (active && !error) setOvernightOpenAttendance(data || null)
+    }
+
+    void loadOvernightAttendance()
+    return () => {
+      active = false
+    }
+  }, [userProfile])
 
   // SMART LEAVE HANDLING: query leave_plan_requests directly because
   // user_profiles.leave_status is not reliably updated on HR approval.
@@ -2321,7 +2347,7 @@ export function AttendanceRecorder({
     // Never prompt for off-premises work until today's attendance record is known.
     if (!attendanceStateResolved) return
 
-    if (localTodayAttendance?.check_in_time || hasPendingOffPremisesRequest || isOnLeave) {
+    if (localTodayAttendance?.check_in_time || hasPendingOffPremisesRequest || isOnLeave || (overnightOpenAttendance && !overnightAttendanceConfirmed)) {
       autoCheckInAttemptedRef.current = false
       autoTriggeredOffPremisesRef.current = false
       setAutoCheckInFailureCount((prev) => (prev === 0 ? prev : 0))
@@ -2502,6 +2528,8 @@ export function AttendanceRecorder({
     deviceRadiusSettings,
     deviceInfo.device_type,
     effectiveCanCheckIn,
+    overnightOpenAttendance,
+    overnightAttendanceConfirmed,
   ])
 
   // Extracted check-in API call for lateness dialog flow
@@ -3303,7 +3331,40 @@ export function AttendanceRecorder({
         </Card>
       )}
 
-      {showOffPremisesReasonDialog && !hasPendingOffPremisesRequest && !localTodayAttendance?.check_in_time && (
+      {overnightOpenAttendance && !overnightAttendanceConfirmed && !localTodayAttendance?.check_in_time && (
+  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <Card className="w-full max-w-md shadow-2xl">
+      <CardHeader>
+        <CardTitle>Overnight attendance check</CardTitle>
+        <CardDescription>
+          You still have an open Security attendance session from {new Date(overnightOpenAttendance.check_in_time).toLocaleString()}. Security staff are not automatically checked out at midnight.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+        <Button
+          variant="outline"
+          onClick={() => {
+            setLocalTodayAttendance(overnightOpenAttendance)
+            setOvernightAttendanceConfirmed(false)
+            setFlashMessage({ message: "Your open attendance session is ready. Please check out first.", type: "info" })
+          }}
+        >
+          I am still checked in
+        </Button>
+        <Button
+          onClick={() => {
+            setOvernightAttendanceConfirmed(true)
+            setOvernightOpenAttendance(null)
+          }}
+        >
+          I already checked out
+        </Button>
+      </CardContent>
+    </Card>
+  </div>
+  )}
+
+  {showOffPremisesReasonDialog && !hasPendingOffPremisesRequest && !localTodayAttendance?.check_in_time && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-md">
             <CardHeader>
