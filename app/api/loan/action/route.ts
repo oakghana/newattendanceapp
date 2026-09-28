@@ -313,7 +313,7 @@ export async function POST(request: NextRequest) {
           admin,
           [req.user_id],
           "Loan Request Approved by HOD",
-          isCarLoan
+          requiresCommitteeAfterHod
             ? `Your request ${req.request_number} has been approved by HOD and sent to the Loan Committee for review.`
             : `Your request ${req.request_number} has been approved by HOD and sent to Loan Office.`,
           "loan_hod_approved",

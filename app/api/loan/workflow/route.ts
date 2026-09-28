@@ -64,24 +64,38 @@ async function autoAdvanceStaleHodRequests(admin: any) {
   const cutoff = new Date(Date.now() - HOD_AUTO_ADVANCE_DAYS * 24 * 60 * 60 * 1000).toISOString()
   const { data: stale, error } = await admin
     .from("loan_requests")
-    .select("id, user_id, request_number, submitted_at")
+    .select("id, user_id, request_number, submitted_at, loan_type_key, loan_type_label")
     .eq("status", "pending_hod")
     .lte("submitted_at", cutoff)
 
   if (error || !stale || stale.length === 0) return
 
-  const ids = stale.map((r: any) => r.id)
   const nowIso = new Date().toISOString()
+  const committeeRows = stale.filter((row: any) => {
+    const loanTypeText = `${String(row.loan_type_key || "")} ${String(row.loan_type_label || "")}`.toLowerCase()
+    return loanTypeText.includes("car") || loanTypeText.includes("motor")
+  })
+  const standardRows = stale.filter((row: any) => !committeeRows.includes(row))
 
-  await admin
-    .from("loan_requests")
-    .update({
-      status: "hod_approved",
-      hod_review_note: `Auto-approved after ${HOD_AUTO_ADVANCE_DAYS} days with no HOD action.`,
-      hod_decision_at: nowIso,
-      updated_at: nowIso,
-    })
-    .in("id", ids)
+  await Promise.all([
+    committeeRows.length > 0
+      ? admin.from("loan_requests").update({
+          status: "awaiting_committee",
+          committee_required: true,
+          hod_review_note: `Auto-approved after ${HOD_AUTO_ADVANCE_DAYS} days with no HOD action.`,
+          hod_decision_at: nowIso,
+          updated_at: nowIso,
+        }).in("id", committeeRows.map((row: any) => row.id))
+      : Promise.resolve(),
+    standardRows.length > 0
+      ? admin.from("loan_requests").update({
+          status: "hod_approved",
+          hod_review_note: `Auto-approved after ${HOD_AUTO_ADVANCE_DAYS} days with no HOD action.`,
+          hod_decision_at: nowIso,
+          updated_at: nowIso,
+        }).in("id", standardRows.map((row: any) => row.id))
+      : Promise.resolve(),
+  ])
 
   await admin.from("loan_request_timeline").insert(
     stale.map((row: any) => ({
@@ -90,7 +104,10 @@ async function autoAdvanceStaleHodRequests(admin: any) {
       actor_role: "system",
       action_key: "hod_auto_approved",
       from_status: "pending_hod",
-      to_status: "hod_approved",
+      to_status: (() => {
+        const loanTypeText = `${String(row.loan_type_key || "")} ${String(row.loan_type_label || "")}`.toLowerCase()
+        return loanTypeText.includes("car") || loanTypeText.includes("motor") ? "awaiting_committee" : "hod_approved"
+      })(),
       note: `Auto-approved after ${HOD_AUTO_ADVANCE_DAYS} days with no HOD action.`,
       metadata: { sla_days: HOD_AUTO_ADVANCE_DAYS },
       created_at: nowIso,
