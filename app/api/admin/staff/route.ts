@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
     // Fetch the requesting user's profile to check role and location (use admin client)
     const { data: requestingProfile } = await adminDb
       .from("user_profiles")
-      .select("role, it_admin_scope, assigned_location_id, region_id, geofence_locations!assigned_location_id(name)")
+      .select("role, it_admin_scope, assigned_location_id, region_id, geofence_locations!user_profiles_assigned_location_id_fkey(name)")
       .eq("id", user.id)
       .single()
 
@@ -146,8 +146,9 @@ export async function GET(request: NextRequest) {
 
     if (isRegionalStaffAdministrator) {
       let scopeLocationIds: string[] = []
+      let requestingRegionId: string | null = null
       try {
-        const requestingRegionId = await resolveItAdminRegionId(adminDb, requestingProfile)
+        requestingRegionId = await resolveItAdminRegionId(adminDb, requestingProfile)
         scopeLocationIds = requestingRegionId
           ? await resolveOwnedLocationIdsForRegionalOffice(
               adminDb,
@@ -161,7 +162,16 @@ export async function GET(request: NextRequest) {
       if (scopeLocationIds.length === 0) {
         return createJsonResponse({ success: false, error: "No regional staff locations are assigned to this account." }, 403)
       }
-      query = query.in("assigned_location_id", scopeLocationIds)
+      // Regional IT Admins may be assigned directly to a region rather than to
+      // the regional-office location row. Include both representations so the
+      // directory does not incorrectly report an empty scope.
+      if (requestingRegionId) {
+        query = query.or(
+          `assigned_location_id.in.(${scopeLocationIds.join(",")}),region_id.eq.${requestingRegionId}`,
+        )
+      } else {
+        query = query.in("assigned_location_id", scopeLocationIds)
+      }
     }
 
     if (departmentFilter && departmentFilter !== "all") {
