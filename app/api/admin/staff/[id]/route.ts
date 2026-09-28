@@ -265,8 +265,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const isAdministrator = ["admin", "administrator"].includes(normalizedActorRole)
     const isItAdmin = ["it_admin", "itadmin"].includes(normalizedActorRole)
     const regionalHrRoles = ["hr_leave_office", "hr_records", "hr_records_office", "regional_hr", "regional_hr_leave_office", "regional_hr_office", "regional_hr_officer"]
+    const normalizedIncomingHrRole = String(role || "").trim().toLowerCase().replace(/[-\s]+/g, "_")
+    const normalizedExistingHrRole = String(targetProfile.role || "").trim().toLowerCase().replace(/[-\s]+/g, "_")
+    const isHrRoleActuallyChanging = Boolean(role) && normalizedIncomingHrRole !== normalizedExistingHrRole
 
-    if (role && regionalHrRoles.includes(String(role).trim().toLowerCase()) && !isAdministrator) {
+    if (role && regionalHrRoles.includes(String(role).trim().toLowerCase()) && !isAdministrator && isHrRoleActuallyChanging) {
       console.error("[v0] Staff API PUT - Non-administrator tried to assign Regional HR Leave Office role")
       return NextResponse.json({ error: "Only administrators can assign the Regional HR Leave Office role" }, { status: 403 })
     }
