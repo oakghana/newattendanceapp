@@ -290,17 +290,18 @@ export async function POST(request: NextRequest) {
       }
 
       const decision = body.decision === "reject" ? "reject" : "approve"
-      const isCarLoan = String(req.loan_type_key || "").toLowerCase().includes("car") ||
-        String(req.loan_type_label || "").toLowerCase().includes("car")
-      // Car loans go directly to the Committee after HOD endorsement. The
-      // Committee can then send them to Accounts/FD for eligibility review;
-      // they must not enter the running-loans/payment flow before approval.
+      const loanTypeText = `${String(req.loan_type_key || "")} ${String(req.loan_type_label || "")}`.toLowerCase()
+      const requiresCommitteeAfterHod = loanTypeText.includes("car") || loanTypeText.includes("motor")
+      // Car and motor bike loans go directly to the Committee after HOD
+      // endorsement. The Committee can then send them to Accounts/FD for
+      // eligibility review; they must not enter the running-loans/payment
+      // flow before Committee approval.
       const nextStatus = decision === "approve"
-        ? (isCarLoan ? "awaiting_committee" : "hod_approved")
+        ? (requiresCommitteeAfterHod ? "awaiting_committee" : "hod_approved")
         : "hod_rejected"
       toStatus = nextStatus
       update.status = toStatus
-      update.committee_required = decision === "approve" && isCarLoan ? true : req.committee_required
+      update.committee_required = decision === "approve" && requiresCommitteeAfterHod ? true : req.committee_required
       update.hod_reviewer_id = user.id
       update.hod_review_note = note
       update.hod_decision_at = new Date().toISOString()

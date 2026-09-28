@@ -148,17 +148,17 @@ function stageOwnerForDelay(row: any) {
   return { ownerId: null, ownerRole: "unknown", stage: status || "Unknown" }
 }
 
-async function normalizeImportedCarLoansForCommittee(admin: any) {
-  const { data: importedCars, error } = await admin
+async function normalizeImportedCommitteeLoans(admin: any) {
+  const { data: importedLoans, error } = await admin
     .from("loan_requests")
-    .select("id, status, loan_type_key, loan_type_label, hod_review_note")
-    .ilike("hod_review_note", "Bulk imported by Administrator%")
-    .or("loan_type_key.ilike.%car%,loan_type_label.ilike.%car%")
+    .select("id, status, loan_type_key, loan_type_label, hod_review_note, is_imported")
+    .or("is_imported.eq.true,hod_review_note.ilike.Bulk imported by Administrator%")
+    .or("loan_type_key.ilike.%car%,loan_type_label.ilike.%car%,loan_type_key.ilike.%motor%,loan_type_label.ilike.%motor%")
     .neq("status", "awaiting_committee")
 
-  if (error || !importedCars?.length) return
+  if (error || !importedLoans?.length) return
 
-  const ids = importedCars.map((loan: any) => loan.id)
+  const ids = importedLoans.map((loan: any) => loan.id)
   const nowIso = new Date().toISOString()
   await admin
     .from("loan_requests")
@@ -578,7 +578,7 @@ export async function GET() {
     // exactly what a staff member needs to see even when something else is degraded.
     try {
   await autoAdvanceStaleHodRequests(admin)
-  await normalizeImportedCarLoansForCommittee(admin)
+  await normalizeImportedCommitteeLoans(admin)
   await broadcastDelayedPostLoanOfficeRequests(admin)
 
     const viewAllTabs = isAdminRole(role)
