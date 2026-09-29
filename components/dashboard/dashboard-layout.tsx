@@ -13,7 +13,8 @@ import { toast } from "@/hooks/use-toast"
 import { ToastAction } from "@/components/ui/toast"
 
 const POLL_INTERVAL_MS = 120_000
-const IDLE_TIMEOUT_MS = 2 * 60 * 1000
+const IDLE_WARNING_MS = 2 * 60 * 1000
+const IDLE_TIMEOUT_MS = 4 * 60 * 1000
 const IDLE_EVENTS: Array<keyof WindowEventMap> = [
   "mousemove",
   "mousedown",
@@ -47,6 +48,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
     const supabase = createClient()
     let signedOut = false
+    let inactivityWarningShown = false
     let lastActivityAt = Date.now()
     let idleCheckTimer: ReturnType<typeof setInterval> | null = null
 
@@ -62,11 +64,26 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     }
 
     const markActive = () => {
-      if (!signedOut) lastActivityAt = Date.now()
+      if (!signedOut) {
+        lastActivityAt = Date.now()
+        inactivityWarningShown = false
+      }
     }
 
     const checkIdleState = () => {
-      if (!signedOut && !document.hidden && Date.now() - lastActivityAt >= IDLE_TIMEOUT_MS) {
+      if (signedOut || document.hidden) return
+
+      const idleDuration = Date.now() - lastActivityAt
+      if (idleDuration >= IDLE_WARNING_MS && !inactivityWarningShown) {
+        inactivityWarningShown = true
+        toast({
+          title: "Are you still there?",
+          description: "You will be signed out after 4 minutes of inactivity. Move your mouse or interact with the app to stay signed in.",
+          duration: 12000,
+        })
+      }
+
+      if (idleDuration >= IDLE_TIMEOUT_MS) {
         void signOutForInactivity()
       }
     }

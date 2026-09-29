@@ -21,11 +21,11 @@ export async function POST(request: NextRequest) {
 
       const { data: loans, error: loansError } = await admin
         .from("loan_requests")
-        .select("id, recovery_start_date, recovery_months, repayment_duration_months, disbursement_date, disbursement_confirmed_at, staff_receiving_funds_confirmed_at, md_approved_at, repayment_plan_generated_at, status, hod_review_note")
-        .not("md_approved_at", "is", null)
+        .select("id, recovery_start_date, recovery_months, repayment_duration_months, disbursement_date, disbursement_confirmed_at, staff_receiving_funds_confirmed_at, md_approved_at, repayment_plan_generated_at, status, hod_review_note, is_imported")
         .is("repayment_plan_generated_at", null)
-        .in("status", ["approved_director", "md_final_approved", "approved", "active", "partially_recovered", "payment_completed"])
-        .or("disbursement_date.not.is.null,disbursement_confirmed_at.not.is.null,staff_receiving_funds_confirmed_at.not.is.null")
+        .in("status", ["approved_director", "md_final_approved", "approved", "active", "partially_recovered", "payment_completed", "fully_recovered", "disbursed", "completed"])
+        .or("md_approved_at.not.is.null,is_imported.eq.true,hod_review_note.ilike.%bulk imported by administrator%")
+        .or("disbursement_date.not.is.null,disbursement_confirmed_at.not.is.null,staff_receiving_funds_confirmed_at.not.is.null,is_imported.eq.true,hod_review_note.ilike.%bulk imported by administrator%")
       if (loansError) return NextResponse.json({ error: loansError.message }, { status: 500 })
 
       const ids = (loans || []).map((loan) => loan.id)
