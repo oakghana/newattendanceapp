@@ -63,6 +63,9 @@ describe("attendance-utils", () => {
     for (const code of ["it_audit", "research", "estate", "accounts", "legal", "monitoring_and_evaluation", "hr"]) {
       expect(canCheckInAtTime(lateWeekday, { code })).toBe(true)
     }
+    for (const role of ["NSP", "contract", "contract_role"]) {
+      expect(canCheckInAtTime(lateWeekday, undefined, role)).toBe(true)
+    }
   })
 
   it("bypasses lateness and early-checkout reasons for shift departments", () => {

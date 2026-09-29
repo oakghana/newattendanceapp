@@ -56,6 +56,11 @@ export function isTransportDept(dept?: DeptInfo): boolean {
   return code === "transport" || name.includes("transport")
 }
 
+export function isStandardAutoAttendanceRole(role?: string | null): boolean {
+  const normalizedRole = normalizeRole(role)
+  return ["nsp", "contract", "contract_role", "contract_staff", "contract_worker"].includes(normalizedRole) || normalizedRole.includes("contract")
+}
+
 export function isStandardAutoAttendanceDept(dept?: DeptInfo): boolean {
   if (!dept) return false
   const code = (dept.code || "").toString().toLowerCase()
@@ -65,7 +70,7 @@ export function isStandardAutoAttendanceDept(dept?: DeptInfo): boolean {
 }
 
 export function isExemptFromTimeRestrictions(dept?: DeptInfo, role?: string | null): boolean {
-  return isManagerOrAdminRole(role) || isSecurityDept(dept) || isOperationalDept(dept) || isTransportDept(dept) || isStandardAutoAttendanceDept(dept)
+  return isManagerOrAdminRole(role) || isStandardAutoAttendanceRole(role) || isSecurityDept(dept) || isOperationalDept(dept) || isTransportDept(dept) || isStandardAutoAttendanceDept(dept)
 }
 
 /**
