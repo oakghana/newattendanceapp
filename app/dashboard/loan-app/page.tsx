@@ -7642,10 +7642,30 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           </DialogHeader>
 
           <div className="space-y-2 py-1 max-h-[70vh] overflow-y-auto">
-            {actionModal.row?.user_id && ["hod", "loan_office", "committee", "hr_terms", "director"].includes(actionModal.actionType || "") && (
-              <StaffLoanHistory userId={actionModal.row.user_id} staffName={actionModal.row.staff_full_name || actionModal.row.staff_number || "Staff"} />
-            )}
-            {/* HOD */}
+  {actionModal.row?.user_id && ["hod", "loan_office", "committee", "hr_terms", "director"].includes(actionModal.actionType || "") && (
+  <StaffLoanHistory userId={actionModal.row.user_id} staffName={actionModal.row.staff_full_name || actionModal.row.staff_number || "Staff"} />
+  )}
+  {actionModal.actionType === "loan_office" && actionModal.row && (
+  <Card className="border-emerald-200 bg-emerald-50/60">
+  <CardHeader className="pb-2">
+  <CardTitle className="flex items-center gap-2 text-sm text-emerald-950">
+  <BadgeCheck className="h-4 w-4 text-emerald-700" /> HOD/RM endorsement brief
+  </CardTitle>
+  <CardDescription className="text-xs text-emerald-900/80">
+  Review the originating supervisor&apos;s decision and supporting context before forwarding this request.
+  </CardDescription>
+  </CardHeader>
+  <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
+  <div><p className="text-xs font-medium text-muted-foreground">Endorsing HOD/RM</p><p className="font-medium">{actionModal.row.hod_name || "Not recorded"}</p></div>
+  <div><p className="text-xs font-medium text-muted-foreground">Location / scope</p><p className="font-medium">{actionModal.row.hod_location || actionModal.row.staff_location_name || "Not recorded"}</p></div>
+  <div className="sm:col-span-2"><p className="text-xs font-medium text-muted-foreground">Endorsement note</p><p className="whitespace-pre-wrap rounded-md border border-emerald-200 bg-background p-3">{actionModal.row.hod_review_note || "No endorsement note was recorded."}</p></div>
+  <div className="sm:col-span-2 rounded-md border border-emerald-200 bg-background p-3 text-xs text-muted-foreground">
+  Meaningful decision check: verify the staff member&apos;s stated reason, requested amount, repayment affordability, previous loan history, and all supporting documents before forwarding.
+  </div>
+  </CardContent>
+  </Card>
+  )}
+  {/* HOD */}
             {actionModal.actionType === "hod" && (
               <>
                 <Label className="text-sm">Decision</Label>
