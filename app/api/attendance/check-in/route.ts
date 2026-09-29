@@ -111,6 +111,38 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Guard against creating a duplicate check-in while an OLDER open (un-checked-out) session
+    // still exists. This happens for overnight-shift staff (security/transport) who are not
+    // auto-checked-out at midnight — without this guard, checking in the next day silently
+    // creates a second open record while the previous session is still "at post".
+    if (!existingRecord) {
+      const { data: openPriorRecord, error: openPriorError } = await supabase
+        .from("attendance_records")
+        .select("id, check_in_time, check_in_location_name")
+        .eq("user_id", user.id)
+        .is("check_out_time", null)
+        .lt("check_in_time", `${today}T00:00:00`)
+        .order("check_in_time", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (openPriorError) {
+        console.error("[v0] Error checking prior open attendance session:", openPriorError)
+      }
+
+      if (openPriorRecord) {
+        const priorCheckIn = new Date(openPriorRecord.check_in_time)
+        return NextResponse.json(
+          {
+            error: `You still have an open attendance session from ${priorCheckIn.toLocaleString()} at ${openPriorRecord.check_in_location_name || "your post"} that has not been checked out. Please check out from that session first.`,
+            openSessionCheckIn: openPriorRecord.check_in_time,
+            openSessionRecordId: openPriorRecord.id,
+          },
+          { status: 409 },
+        )
+      }
+    }
+
     const { data: userProfile } = await supabase
       .from("user_profiles")
       .select(`

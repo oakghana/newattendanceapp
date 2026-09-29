@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/server"
 import { isExemptFromAttendanceReasons } from "@/lib/attendance-utils"
 import { validateAttendanceReason } from "@/lib/meaningful-text"
 import { parseRuntimeFlags } from "@/lib/runtime-flags"
+import { findRegionalManagersForLocation } from "@/lib/regional-manager-scope"
 import { type NextRequest, NextResponse } from "next/server"
 
 console.log("[v0] check-in-outside-request route module loaded")
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
     // Get user's direct manager (department head or regional manager they report to)
     const { data: userProfile, error: userProfileError } = await supabase
       .from("user_profiles")
-      .select("id, department_id, role, first_name, last_name, email")
+      .select("id, department_id, role, first_name, last_name, email, assigned_location_id")
       .eq("id", user_id)
       .maybeSingle()
 
@@ -191,35 +192,38 @@ export async function POST(request: NextRequest) {
     }
 
     // 3) Regional manager for the location's district (attempt to infer district)
+    // NOTE: user_profiles has no `district_id` column — regional manager scope is derived
+    // from geofence_locations hierarchy via assigned_location_id. Resolve using the staff
+    // member's own assigned location first (this is what determines their reporting line),
+    // falling back to the nearest geofence location to their current GPS position only if
+    // they have no assigned location on file.
     let regionalManagers: any[] = []
-    let districtId: any = current_location?.district_id || null
-    if (!districtId && current_location?.latitude && current_location?.longitude) {
-      // Try to find a nearby geofence location and use its district
+    let scopeLocationId: string | null = userProfile.assigned_location_id || null
+
+    if (!scopeLocationId && current_location?.latitude && current_location?.longitude) {
       const lat = Number(current_location.latitude)
       const lng = Number(current_location.longitude)
       const latDelta = 0.02
       const lngDelta = 0.02
       const { data: nearby } = await supabase
         .from('geofence_locations')
-        .select('id, district_id')
+        .select('id')
         .gte('latitude', lat - latDelta)
         .lte('latitude', lat + latDelta)
         .gte('longitude', lng - lngDelta)
         .lte('longitude', lng + lngDelta)
         .limit(1)
       if (nearby && nearby.length > 0) {
-        districtId = nearby[0].district_id
+        scopeLocationId = nearby[0].id
       }
     }
 
-    if (districtId) {
-      const { data: regional } = await supabase
-        .from('user_profiles')
-        .select('id, email, first_name, last_name, role')
-        .eq('role', 'regional_manager')
-        .eq('district_id', districtId)
-        .eq('is_active', true)
-      regionalManagers = regional || []
+    if (scopeLocationId) {
+      try {
+        regionalManagers = await findRegionalManagersForLocation(supabase, scopeLocationId)
+      } catch (regionalManagerErr) {
+        console.error('[v0] Failed to resolve regional managers for location:', regionalManagerErr)
+      }
     }
 
     // Merge unique managers: admins + departmentHeads + regionalManagers

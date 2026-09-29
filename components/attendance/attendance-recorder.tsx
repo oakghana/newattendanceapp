@@ -46,7 +46,7 @@ import { Label } from "@/components/ui/label"
 import { ToastAction } from "@/components/ui/toast"
 import { clearAttendanceCache, shouldClearCache, setCachedDate } from "@/lib/utils/attendance-cache"
 import { cn } from "@/lib/utils"
-import { requiresLatenessReason, requiresEarlyCheckoutReason, isExemptFromAttendanceReasons, canCheckInAtTime, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckInDeadline, getCheckOutDeadline, isSecurityDept } from "@/lib/attendance-utils"
+import { requiresLatenessReason, requiresEarlyCheckoutReason, isExemptFromAttendanceReasons, canCheckInAtTime, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckInDeadline, getCheckOutDeadline, isSecurityDept, isOvernightShiftDept } from "@/lib/attendance-utils"
 import { validateAttendanceReason, countMeaningfulWords, hasExcessiveConsecutiveWhitespace, hasRepeatedConsecutiveCharacters } from "@/lib/meaningful-text"
 import { DeviceActivityHistory } from "@/components/attendance/device-activity-history"
 import { ActiveSessionTimer } from "@/components/attendance/active-session-timer"
@@ -227,6 +227,10 @@ export function AttendanceRecorder({
   const [hasPendingOffPremisesRequest, setHasPendingOffPremisesRequest] = useState(false)
   const [overnightOpenAttendance, setOvernightOpenAttendance] = useState<any | null>(null)
   const [overnightAttendanceConfirmed, setOvernightAttendanceConfirmed] = useState(false)
+  // Tracks whether the overnight open-session lookup has finished. Auto check-in MUST wait
+  // for this to resolve — otherwise it can race ahead and create a duplicate check-in while
+  // an overnight (security/transport) session is still open from a previous day.
+  const [overnightCheckLoading, setOvernightCheckLoading] = useState(false)
   // 'checkin' | 'checkout' - reused by the off-premises reason dialog
   // off-premises request mode is no longer needed; only check-in requests are supported
 
@@ -502,9 +506,17 @@ export function AttendanceRecorder({
 
 
   useEffect(() => {
-    if (!userProfile || !isSecurityDept(userProfile.departments)) return
+    // Overnight/at-post staff (security AND transport, who both work overnight shifts and
+    // are not auto-checked-out at midnight) must be checked for an open prior-day session
+    // BEFORE auto check-in is allowed to run. Without this, a staff member still genuinely
+    // at post can get auto-checked-in again the next day, creating a duplicate open session.
+    if (!userProfile || !isOvernightShiftDept(userProfile.departments)) {
+      setOvernightCheckLoading(false)
+      return
+    }
 
     let active = true
+    setOvernightCheckLoading(true)
     const loadOvernightAttendance = async () => {
       const supabase = createClient()
       const { data, error } = await supabase
@@ -516,7 +528,10 @@ export function AttendanceRecorder({
         .limit(1)
         .maybeSingle()
 
-      if (active && !error) setOvernightOpenAttendance(data || null)
+      if (active) {
+        if (!error) setOvernightOpenAttendance(data || null)
+        setOvernightCheckLoading(false)
+      }
     }
 
     void loadOvernightAttendance()
@@ -2346,6 +2361,11 @@ export function AttendanceRecorder({
 
     // Never prompt for off-premises work until today's attendance record is known.
     if (!attendanceStateResolved) return
+
+    // Never fire auto check-in before we know whether an overnight (security/transport)
+    // session is still open — otherwise this can race ahead of that lookup and create a
+    // duplicate check-in while the staff member is still genuinely at post.
+    if (overnightCheckLoading) return
 
     if (localTodayAttendance?.check_in_time || hasPendingOffPremisesRequest || isOnLeave || (overnightOpenAttendance && !overnightAttendanceConfirmed)) {
       autoCheckInAttemptedRef.current = false
