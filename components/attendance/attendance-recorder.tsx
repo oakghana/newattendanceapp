@@ -2425,14 +2425,13 @@ export function AttendanceRecorder({
       }
 
       try {
-        let locationData = userLocation
-
-        if (!locationData) {
-          const { location } = await safeGetCurrentLocation(true)
-          if (!location) return
-          locationData = location
-          setUserLocation(location)
-        }
+        // Automatic check-in must use a fresh GPS reading. Reusing the page's cached
+        // location can exceed the server's five-minute freshness limit and causes a
+        // generic automatic failure even when the user is currently at work.
+        const { location } = await safeGetCurrentLocation(false)
+        if (!location) return
+        const locationData = location
+        setUserLocation(location)
 
         let checkInRadius: number | undefined
         if (deviceRadiusSettings) {
@@ -2499,7 +2498,7 @@ export function AttendanceRecorder({
         } else {
           toast({
             title: "Automatic Check-In Failed",
-            description: "We couldn't check you in automatically. Switching to manual check-in — please use the button below.",
+            description: `${errorMessage} Switching to manual check-in — please use the button below.`,
             variant: "destructive",
             duration: 8000,
           })
