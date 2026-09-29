@@ -315,7 +315,7 @@ export async function POST(request: NextRequest) {
     const provisionalWorkHours = (now.getTime() - checkInTimeForPolicy.getTime()) / (1000 * 60 * 60)
     const serverTimeMinutes = now.getHours() * 60 + now.getMinutes()
     const isAfter530PmServerTime = serverTimeMinutes >= 17 * 60 + 30
-    const hasWorkedAtLeast7Hours = provisionalWorkHours >= 7
+    const hasWorkedAtLeast8Hours = provisionalWorkHours >= 8
     const isPrivilegedRole = isExemptFromAttendanceReasons(userProfile?.role)
 
     // Staff policy: minimum 2 hours required for regular checkout.
@@ -331,7 +331,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const allowCheckoutPolicyBypass = hasWorkedAtLeast7Hours
+    const allowCheckoutPolicyBypass = hasWorkedAtLeast8Hours
 
     // CHECK TIME RESTRICTION: Check if check-out is after 6 PM (18:00)
     const timeRestrictCheckData = { 
@@ -868,13 +868,13 @@ export async function POST(request: NextRequest) {
     const checkInTimeForHours = new Date(attendanceRecord.check_in_time)
     const hoursWorked = (checkOutTime.getTime() - checkInTimeForHours.getTime()) / (1000 * 60 * 60)
 
-    if (isEarlyCheckout && effectiveRequireEarlyCheckoutReason && !isWeekend && hoursWorked < 9 && !isAfter530PmServerTime && !hasWorkedAtLeast7Hours) {
+    if (isEarlyCheckout && effectiveRequireEarlyCheckoutReason && !isWeekend && hoursWorked < 8 && !isAfter530PmServerTime && !hasWorkedAtLeast8Hours) {
       earlyCheckoutWarning = {
         message: `Early checkout detected at ${checkOutTime.toLocaleTimeString()}. Standard work hours end at ${checkOutEndTime}.`,
         checkoutTime: checkOutTime.toISOString(),
         standardEndTime: checkOutEndTime,
       }
-      // Require early checkout reason with more than 20 alphabetic characters.
+      // Require a meaningful reason for early checkout before eight hours.
       {
         const reasonValidation = validateAttendanceReason(early_checkout_reason, "Early checkout reason")
         if (!reasonValidation.ok) {
@@ -932,7 +932,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (policyLocationBypassUsed) {
-      const policyNote = hasWorkedAtLeast7Hours
+      const policyNote = hasWorkedAtLeast8Hours
         ? "Checkout location bypass applied: staff has worked at least 7 hours."
         : "Checkout location bypass applied: checkout requested after 5:30 PM server time."
       checkoutData.notes = checkoutData.notes ? `${checkoutData.notes}\n${policyNote}` : policyNote

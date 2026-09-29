@@ -529,7 +529,14 @@ export function AttendanceRecorder({
         .maybeSingle()
 
       if (active) {
-        if (!error) setOvernightOpenAttendance(data || null)
+        const openRecord = data
+        const recordAgeHours = openRecord?.check_in_time
+          ? (Date.now() - new Date(openRecord.check_in_time).getTime()) / (1000 * 60 * 60)
+          : 0
+        // Only a recent open overnight session represents a live shift. Very old
+        // abandoned records are handled by the check-in route and must not block
+        // a user who is currently within range.
+        if (!error) setOvernightOpenAttendance(recordAgeHours <= 36 ? openRecord : null)
         setOvernightCheckLoading(false)
       }
     }
@@ -1947,10 +1954,10 @@ export function AttendanceRecorder({
       const hoursWorkedSoFar = checkInTimeDate
         ? (now.getTime() - checkInTimeDate.getTime()) / (1000 * 60 * 60)
         : 0
-      const workedSevenPlusHoursForReason = hoursWorkedSoFar >= 7
-      // Persist effective requirement into state so the modal can relax validation on weekends / 7h rule
-      setEarlyCheckoutReasonRequired(Boolean(effectiveRequireEarlyCheckoutReason) && !workedSevenPlusHoursForReason)
-      const workedSevenPlusHours = hoursWorkedSoFar >= 7
+  const workedEightPlusHoursForReason = hoursWorkedSoFar >= 8
+  // Eight hours completes the standard workday; shorter shifts need one meaningful reason.
+  setEarlyCheckoutReasonRequired(Boolean(effectiveRequireEarlyCheckoutReason) && !workedEightPlusHoursForReason)
+  const workedEightPlusHours = hoursWorkedSoFar >= 8
       const isApprovedOffPremisesStarter = Boolean(
         localTodayAttendance?.on_official_duty_outside_premises || localTodayAttendance?.is_remote_location,
       )
@@ -2030,7 +2037,7 @@ export function AttendanceRecorder({
               return
           } else {
               console.log("[v0] CHECKOUT_ROUTING_DECISION", {
-                decision: isApprovedOffPremisesStarter && workedSevenPlusHours ? "DIRECT_OFFPREMISES_CHECKOUT" : "OFFPREMISES_DIALOG",
+                decision: isApprovedOffPremisesStarter && workedEightPlusHours ? "DIRECT_OFFPREMISES_CHECKOUT" : "OFFPREMISES_DIALOG",
                 hoursWorked: hoursWorkedSoFar.toFixed(2),
                 outOfRange: true,
                 device: deviceInfo?.type,
@@ -2048,7 +2055,7 @@ export function AttendanceRecorder({
                 nearestLocForDialog = locationDistances2[0]?.location ?? null
               }
               setPendingOffPremisesCheckoutData({ location: locationData, nearestLocation: nearestLocForDialog })
-              setPendingOffPremisesIsDirectCheckout(isApprovedOffPremisesStarter && workedSevenPlusHours)
+              setPendingOffPremisesIsDirectCheckout(isApprovedOffPremisesStarter && workedEightPlusHours)
               setOffPremisesCheckoutReason("")
               setShowOffPremisesCheckoutDialog(true)
               setIsLoading(false)
@@ -2089,8 +2096,8 @@ export function AttendanceRecorder({
       const checkInTimeForHours = localTodayAttendance && localTodayAttendance.check_in_time ? new Date(localTodayAttendance.check_in_time) : null
       const hoursSinceCheckIn = checkInTimeForHours ? (now.getTime() - checkInTimeForHours.getTime()) / (1000 * 60 * 60) : 0
 
-      if (!isBeforeCheckoutTime || !effectiveRequireEarlyCheckoutReason || hoursSinceCheckIn >= 9 || workedSevenPlusHours) {
-        console.log("[v0] SMART CHECKOUT: Checkout time passed or no reason needed or Security staff or worked >=9 hours - immediate checkout", { hoursSinceCheckIn })
+  if (!isBeforeCheckoutTime || !effectiveRequireEarlyCheckoutReason || hoursSinceCheckIn >= 8 || workedEightPlusHours) {
+  console.log("[v0] SMART CHECKOUT: Checkout time passed, exempt, or worked at least 8 hours - immediate checkout", { hoursSinceCheckIn })
         await performCheckoutAPI(locationData, nearestLocation, "", null, false, loginIssueRecoveryCheckout)
         return
       }
@@ -2716,8 +2723,8 @@ export function AttendanceRecorder({
     if (hasRepeatedConsecutiveCharacters(safeValue)) {
       return { ok: false, text: "Please write a clear reason." }
     }
-    const letters = safeValue.replace(/[^a-z]/gi, "").length
-    if (letters >= 21) return { ok: true, text: "Ready to submit." }
+  const letters = safeValue.replace(/[^a-z]/gi, "").length
+  if (letters >= 8) return { ok: true, text: "Ready to submit." }
     return { ok: false, text: safeValue.trim() ? "Please add a little more detail." : "Please enter a reason." }
   }
 
