@@ -140,7 +140,7 @@ export const AttendanceRecorderOptimized = memo(function AttendanceRecorderOptim
 
     if (result?.success) {
       setSuccess("Successfully checked in!")
-      setAttendance(result.attendance)
+      setAttendance(result.data ?? result.attendance ?? null)
       setTimeout(() => setSuccess(null), 5000)
     }
   }, [makeRequest])
@@ -154,7 +154,7 @@ export const AttendanceRecorderOptimized = memo(function AttendanceRecorderOptim
 
     if (result?.success) {
       setSuccess("Successfully checked out!")
-      setAttendance(result.attendance)
+      setAttendance(result.data ?? result.attendance ?? null)
       setTimeout(() => setSuccess(null), 5000)
     }
   }, [makeRequest])

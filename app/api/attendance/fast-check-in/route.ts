@@ -251,7 +251,7 @@ export async function POST(request: NextRequest) {
 
     // Check if user has overdue leave (10+ days)
     try {
-      const overdueCheck = await checkLeaveOverdueBlock(supabaseUser.id)
+      const overdueCheck = await checkLeaveOverdueBlock(user.id)
       if (overdueCheck.isBlocked) {
         return NextResponse.json(
           {
@@ -270,7 +270,7 @@ export async function POST(request: NextRequest) {
     // Track leave resumption (0-9 day window) and trigger confirmation workflow
     try {
       const todayStr = new Date().toISOString().split('T')[0]
-      await processStaffResumptionCheckIn(supabaseUser.id, todayStr)
+      await processStaffResumptionCheckIn(user.id, todayStr)
     } catch (resumptionError) {
       console.error("[v0] Error processing fast check-in resumption confirmation:", resumptionError)
     }
