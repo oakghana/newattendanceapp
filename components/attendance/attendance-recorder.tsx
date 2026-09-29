@@ -530,13 +530,13 @@ export function AttendanceRecorder({
 
       if (active) {
         const openRecord = data
-        const recordAgeHours = openRecord?.check_in_time
-          ? (Date.now() - new Date(openRecord.check_in_time).getTime()) / (1000 * 60 * 60)
-          : 0
-        // Only a recent open overnight session represents a live shift. Very old
-        // abandoned records are handled by the check-in route and must not block
-        // a user who is currently within range.
-        if (!error) setOvernightOpenAttendance(recordAgeHours <= 36 ? openRecord : null)
+        const today = new Date().toISOString().slice(0, 10)
+        const openRecordDate = openRecord?.check_in_time
+          ? new Date(openRecord.check_in_time).toISOString().slice(0, 10)
+          : null
+        // Only an open record from today represents a live session. Prior-day
+        // sessions are stale for today's check-in and are closed by the server.
+        if (!error) setOvernightOpenAttendance(openRecordDate === today ? openRecord : null)
         setOvernightCheckLoading(false)
       }
     }
