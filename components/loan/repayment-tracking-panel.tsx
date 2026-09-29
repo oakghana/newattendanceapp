@@ -25,6 +25,8 @@ type LoanLite = {
   md_approved_at?: string | null
   repayment_status?: string | null
   repayment_plan_generated_at?: string | null
+  is_imported?: boolean | null
+  hod_review_note?: string | null
 }
 
 type ScheduleRow = {
@@ -38,7 +40,11 @@ type ScheduleRow = {
   status?: string
 }
 
-const TRACKABLE = new Set(['approved_director', 'md_final_approved', 'approved', 'active', 'partially_recovered', 'payment_completed'])
+const TRACKABLE = new Set(['approved_director', 'md_final_approved', 'approved', 'active', 'partially_recovered', 'payment_completed', 'fully_recovered', 'disbursed', 'completed'])
+
+function isHistoricLoan(loan: LoanLite) {
+  return Boolean(loan.is_imported) || String(loan.hod_review_note || '').toLowerCase().includes('bulk imported by administrator')
+}
 
 export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
   const [loading, setLoading] = useState(false)
@@ -57,7 +63,8 @@ export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
     for (const loan of loans || []) {
       if (!loan?.id || unique.has(loan.id)) continue
       const hasDisbursementEvidence = loan.disbursement_date || loan.staff_receiving_funds_confirmed_at || loan.disbursement_confirmed_at || loan.md_approved_at
-      if (!TRACKABLE.has(String(loan.status || '')) || !loan.md_approved_at || !hasDisbursementEvidence || loan.repayment_plan_generated_at) continue
+      const historic = isHistoricLoan(loan)
+      if (!TRACKABLE.has(String(loan.status || '')) || (!loan.md_approved_at && !historic) || (!hasDisbursementEvidence && !historic) || loan.repayment_plan_generated_at) continue
       unique.set(loan.id, loan)
     }
     return Array.from(unique.values()).filter((l) => {

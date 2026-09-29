@@ -50,6 +50,8 @@ export default async function SecretaryMemosPage() {
       md_approved_at,
       md_approved_by_name,
       director_hr_id,
+      is_imported,
+      hod_review_note,
       staff_full_name,
       staff_number,
       user_id,
@@ -73,11 +75,12 @@ export default async function SecretaryMemosPage() {
   .order("created_at", { ascending: false })
     .limit(300)
 
+  const historicLoan = (memo: any) => Boolean(memo.is_imported) || String(memo.hod_review_note || "").toLowerCase().includes("bulk imported by administrator")
   const visibleLoanMemos = isHrExecutive
-    ? (loanMemos || []).filter((memo: any) => memo.director_hr_id === user.id)
+    ? (loanMemos || []).filter((memo: any) => !historicLoan(memo) && memo.director_hr_id === user.id)
     : scopedStaffIds
-    ? (loanMemos || []).filter((memo: any) => memo.user_id && scopedStaffIds.includes(memo.user_id))
-    : (loanMemos || []).filter((memo: any) => isAdministrator || memo.status !== "archived")
+    ? (loanMemos || []).filter((memo: any) => !historicLoan(memo) && memo.user_id && scopedStaffIds.includes(memo.user_id))
+    : (loanMemos || []).filter((memo: any) => !historicLoan(memo) && (isAdministrator || memo.status !== "archived"))
 
   // Fetch approved leave memos from leave_plan_requests (the correct table)
   const { data: rawLeaveMemos } = await admin
@@ -136,6 +139,8 @@ export default async function SecretaryMemosPage() {
       md_approved_at,
       md_approved_by_name,
       director_hr_id,
+      is_imported,
+      hod_review_note,
       staff_full_name,
       staff_number,
       user_id,
@@ -154,7 +159,7 @@ export default async function SecretaryMemosPage() {
       "partially_recovered",
       "fully_recovered",
     ])
-    .not("md_approved_at", "is", null)
+    .or("md_approved_at.not.is.null,is_imported.eq.true,hod_review_note.ilike.%bulk imported by administrator%")
     .neq("status", "archived")
     .order("md_approved_at", { ascending: false })
     .limit(300)

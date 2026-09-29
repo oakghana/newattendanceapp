@@ -32,6 +32,10 @@ function isReferenceLocked(row: any) {
   return row.entity === "transport" ? row.workflow_stage === "referenced" : Boolean(row.memo_reference_locked)
 }
 
+function isHistoricLoan(row: any) {
+  return row.entity === "loan" && (Boolean(row.is_imported) || String(row.hod_review_note || "").toLowerCase().includes("bulk imported by administrator"))
+}
+
 export default function HrRecordsPage() {
   const [data, setData] = useState<{ leave: any[]; loans: any[]; transport: any[] }>({ leave: [], loans: [], transport: [] })
   const [error, setError] = useState("")
@@ -110,11 +114,11 @@ export default function HrRecordsPage() {
     // moment it's created. The only thing that actually means HR Records has
     // finalized and forwarded a request is `memo_reference_locked`.
     const locked = isReferenceLocked(row)
-    if (view === "pending") return editable && !locked
-    if (view === "referenced") return locked && !FINAL_APPROVED_STATUSES.has(status)
+    if (view === "pending") return editable && !locked && !isHistoricLoan(row)
+    if (view === "referenced") return locked && !FINAL_APPROVED_STATUSES.has(status) && !isHistoricLoan(row)
     // "Approved memos" is the truly final stage: the reference must actually be
     // recorded (locked), not merely eligible for HR Records to act on.
-    return (locked && (FINAL_APPROVED_STATUSES.has(status) || row.entity === "transport")) || (isRegionalLeave(row) && Boolean(row.memo_reference || row.reference_number))
+    return isHistoricLoan(row) || (locked && (FINAL_APPROVED_STATUSES.has(status) || row.entity === "transport")) || (isRegionalLeave(row) && Boolean(row.memo_reference || row.reference_number))
   }), [data, view])
 
 const overdueRows = useMemo(() => [...data.leave, ...data.loans, ...data.transport].filter((row) => {
