@@ -4299,6 +4299,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       <th className="px-4 py-2.5 whitespace-nowrap">Type</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Amount (GHc)</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">FD Score</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">HOD/RM Endorsed By</th>
                       {canSeeFdReviewerName && <th className="px-4 py-2.5 whitespace-nowrap">FD Reviewer</th>}
                       <th className="px-4 py-2.5 whitespace-nowrap">Status</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Attachment</th>
@@ -4328,6 +4329,10 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           {row.fd_score != null ? (
                             <span className={`font-semibold ${Number(row.fd_score) >= 60 ? "text-emerald-700" : "text-rose-600"}`}>{row.fd_score}</span>
                           ) : <span className="text-slate-400">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap">
+                          <p className="font-medium text-slate-700">{row.hod_name || "Not recorded"}</p>
+                          <p className="text-[11px] text-slate-400">{row.hod_rank || "HOD/RM"}{row.hod_location ? ` · ${row.hod_location}` : ""}</p>
                         </td>
                         {canSeeFdReviewerName && <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{row.accounts_reviewer_name || "—"}</td>}
                         <td className="px-4 py-3 whitespace-nowrap">
