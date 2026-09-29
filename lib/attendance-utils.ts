@@ -61,7 +61,7 @@ export function isStandardAutoAttendanceDept(dept?: DeptInfo): boolean {
   const code = (dept.code || "").toString().toLowerCase()
   const name = (dept.name || "").toString().toLowerCase()
   const value = `${code} ${name}`.replace(/[_-]+/g, " ")
-  return ["it audit", "research", "estate", "accounts", "legal", "monitoring", "evaluation"].some((term) => value.includes(term))
+  return ["it audit", "research", "estate", "accounts", "legal", "monitoring", "evaluation", "human resources", "hr"].some((term) => value.includes(term))
 }
 
 export function isExemptFromTimeRestrictions(dept?: DeptInfo, role?: string | null): boolean {
