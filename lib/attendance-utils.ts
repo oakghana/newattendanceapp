@@ -56,13 +56,21 @@ export function isTransportDept(dept?: DeptInfo): boolean {
   return code === "transport" || name.includes("transport")
 }
 
+export function isStandardAutoAttendanceDept(dept?: DeptInfo): boolean {
+  if (!dept) return false
+  const code = (dept.code || "").toString().toLowerCase()
+  const name = (dept.name || "").toString().toLowerCase()
+  const value = `${code} ${name}`.replace(/[_-]+/g, " ")
+  return ["it audit", "research", "estate", "accounts", "legal", "monitoring", "evaluation"].some((term) => value.includes(term))
+}
+
 export function isExemptFromTimeRestrictions(dept?: DeptInfo, role?: string | null): boolean {
-  return isManagerOrAdminRole(role) || isSecurityDept(dept) || isOperationalDept(dept) || isTransportDept(dept)
+  return isManagerOrAdminRole(role) || isSecurityDept(dept) || isOperationalDept(dept) || isTransportDept(dept) || isStandardAutoAttendanceDept(dept)
 }
 
 /**
  * Security and Transport often work overnight past midnight.
- * Never auto-close their open sessions at 23:59 / end-of-day — they must self check-out.
+ * Standard departments use the system 23:59:59 auto-checkout; only overnight shift departments are exempt.
  */
 export function isOvernightShiftDept(dept?: DeptInfo): boolean {
   return isSecurityDept(dept) || isTransportDept(dept)

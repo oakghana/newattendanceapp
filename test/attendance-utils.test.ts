@@ -5,6 +5,7 @@ import {
   requiresLatenessReason,
   requiresEarlyCheckoutReason,
   canAutoCheckoutOutOfRange,
+  canCheckInAtTime,
 } from "../lib/attendance-utils"
 
 describe("attendance-utils", () => {
@@ -55,6 +56,13 @@ describe("attendance-utils", () => {
     expect(requiresEarlyCheckoutReason(weekday, true)).toBe(true)
     expect(requiresEarlyCheckoutReason(weekday, false)).toBe(false)
     expect(requiresEarlyCheckoutReason(saturday, true)).toBe(false)
+  })
+
+  it("allows standard departments to check in at any time", () => {
+    const lateWeekday = new Date("2026-02-12T16:30:00")
+    for (const code of ["it_audit", "research", "estate", "accounts", "legal", "monitoring_and_evaluation"]) {
+      expect(canCheckInAtTime(lateWeekday, { code })).toBe(true)
+    }
   })
 
   it("bypasses lateness and early-checkout reasons for shift departments", () => {
