@@ -4295,6 +4295,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     <tr className="border-b border-slate-100 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                       <th className="px-5 py-2.5 whitespace-nowrap">Request No.</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Staff</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">Location</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Type</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Amount (GHc)</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">FD Score</th>
@@ -4318,6 +4319,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           <p className="font-medium text-slate-900 text-xs">{row.staff_full_name || "—"}</p>
                           <p className="text-[11px] text-slate-400">{row.staff_number || ""} {row.staff_rank ? `· ${row.staff_rank}` : ""}</p>
                         </td>
+                        <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">{row.staff_location_name || row.staff_district_name || "—"}</td>
                         <td className="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">{row.loan_type_label || row.loan_type_key}</td>
                         <td className="px-4 py-3 text-xs font-semibold text-slate-800 whitespace-nowrap tabular-nums">
                           {displayLoanAmount(row)}
@@ -4451,6 +4453,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     <tr className="border-b border-slate-100 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                       <th className="px-5 py-2.5 whitespace-nowrap">Request No.</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Staff</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">Location</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Loan Type</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Amount (GHc)</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">FD Score</th>
@@ -4469,6 +4472,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           <p className="font-medium text-slate-900 text-xs">{row.staff_full_name || "—"}</p>
                           <p className="text-[11px] text-slate-400">{row.staff_number || ""}{row.staff_rank ? ` · ${row.staff_rank}` : ""}</p>
                         </td>
+                        <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">{row.staff_location_name || row.staff_district_name || "—"}</td>
                         <td className="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">{row.loan_type_label || row.loan_type_key}</td>
                         <td className="px-4 py-3 text-xs font-semibold text-slate-800 whitespace-nowrap tabular-nums">
                           {row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}
