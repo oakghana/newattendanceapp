@@ -46,7 +46,7 @@ export function isOperationalDept(dept?: DeptInfo): boolean {
   if (!dept) return false
   const code = (dept.code || "").toString().toLowerCase()
   const name = (dept.name || "").toString().toLowerCase()
-  return code === "operations" || code === "operational" || name.includes("operations") || name.includes("operational")
+  return code === "operation" || code === "operations" || code === "operational" || name.includes("operation") || name.includes("operational")
 }
 
 export function isTransportDept(dept?: DeptInfo): boolean {
@@ -88,8 +88,7 @@ export function requiresLatenessReason(
   config?: AttendanceTimeConfig,
 ): boolean {
   if (isWeekend(date)) return false
-  if (isExemptFromAttendanceReasons(role)) return false
-  void dept
+  if (isExemptFromAttendanceReasons(role) || isExemptFromTimeRestrictions(dept, role)) return false
   void config
   // Check if current time is past the configured lateness deadline
   const deadlineStr = config?.latenessReasonDeadline ?? "09:00"
@@ -102,13 +101,13 @@ export function requiresLatenessReason(
 /**
  * Returns true when an early-checkout reason should be enforced.
  * - Enforced only when location-level flag is true and it's not a weekend
- * - Role and department do not bypass this requirement
+ * - Security, Transport, and Operations staff never need an early-checkout reason
+ * - Privileged roles also bypass this requirement
  */
 export function requiresEarlyCheckoutReason(date: Date = new Date(), locationRequires: boolean = true, role?: string | null, dept?: DeptInfo): boolean {
   if (!locationRequires) return false
   if (isWeekend(date)) return false
-  if (isExemptFromAttendanceReasons(role)) return false
-  void dept
+  if (isExemptFromAttendanceReasons(role) || isExemptFromTimeRestrictions(dept, role)) return false
   return true
 }
 
