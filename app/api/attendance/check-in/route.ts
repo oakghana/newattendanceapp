@@ -464,8 +464,10 @@ export async function POST(request: NextRequest) {
       }
     } // close device_info?.device_id outer block
 
-    // --- Server-side proximity validation to prevent client-side spoofing ---
-    if (!qr_code_used && latitude && longitude) {
+  // --- Server-side proximity validation to prevent client-side spoofing ---
+  // This remains available for the attendance insert after geofence validation.
+  let acceptedLocationId = location_id
+  if (!qr_code_used && latitude && longitude) {
       // Fetch active QCC locations and device radius settings
       const [{ data: qccLocations }, { data: deviceRadiusSettings }] = await Promise.all([
         supabase.from("geofence_locations").select("id, name, latitude, longitude, radius_meters, is_active").eq("is_active", true),
@@ -476,15 +478,17 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "No active QCC locations found" }, { status: 400 })
       }
 
-      // Determine device type and radius
-      const deviceType = device_info?.device_type || "desktop"
-      let deviceCheckInRadius = 400 // safe default
-      if (deviceRadiusSettings && deviceRadiusSettings.length > 0) {
-        const s = deviceRadiusSettings.find((r: any) => r.device_type === deviceType)
-        if (s) deviceCheckInRadius = s.check_in_radius_meters
-      }
-
-      // Haversine distance calculation (meters)
+  // Keep the server decision aligned with the client and the location configuration.
+  // Device-wide radii caused false failures when a user was inside a location's
+  // configured geofence but outside the device default radius.
+  const deviceType = device_info?.device_type || "desktop"
+  let deviceCheckInRadius = 400
+  if (deviceRadiusSettings && deviceRadiusSettings.length > 0) {
+  const s = deviceRadiusSettings.find((r: any) => r.device_type === deviceType)
+  if (s && Number.isFinite(Number(s.check_in_radius_meters))) deviceCheckInRadius = Number(s.check_in_radius_meters)
+  }
+  
+  // Haversine distance calculation (meters)
       const toRad = (deg: number) => (deg * Math.PI) / 180
       const distanceMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
         const R = 6371e3
@@ -497,46 +501,63 @@ export async function POST(request: NextRequest) {
         return Math.round(R * c)
       }
 
-      // Find nearest location and distance
-      const distances = qccLocations.map((loc: any) => ({ loc, distance: distanceMeters(latitude, longitude, loc.latitude, loc.longitude) }))
-      distances.sort((a: any, b: any) => a.distance - b.distance)
-      const nearest = distances[0]
+  // Find the nearest configured geofence. A small bounded GPS uncertainty buffer
+  // prevents accurate users near an edge from being rejected by noisy mobile GPS.
+  const accuracyBuffer = Math.min(Math.max(Number(accuracy) || 0, 0), 100)
+  const distances = qccLocations.map((loc: any) => {
+    const locationRadius = Number(loc.radius_meters) > 0 ? Number(loc.radius_meters) : deviceCheckInRadius
+    return {
+      loc,
+      distance: distanceMeters(latitude, longitude, loc.latitude, loc.longitude),
+      allowedRadius: locationRadius + accuracyBuffer,
+    }
+  })
+  distances.sort((a: any, b: any) => a.distance - b.distance)
+  const nearest = distances[0]
+  const nearestIsValid = Boolean(nearest && nearest.distance <= nearest.allowedRadius)
+  const providedLoc = location_id ? qccLocations.find((l: any) => l.id === location_id) : null
+  const providedDistance = providedLoc
+    ? distanceMeters(latitude, longitude, providedLoc.latitude, providedLoc.longitude)
+    : Number.POSITIVE_INFINITY
+  const providedRadius = providedLoc && Number(providedLoc.radius_meters) > 0
+    ? Number(providedLoc.radius_meters) + accuracyBuffer
+    : deviceCheckInRadius + accuracyBuffer
+  // The nearest active geofence is authoritative. Do not reject a valid user
+  // merely because the client sent a stale/different location_id.
+  if (!nearestIsValid) {
+    try {
+      await supabase.from("device_security_violations").insert({
+        device_id: device_info?.device_id || null,
+        ip_address: getClientIp() || null,
+        attempted_user_id: user.id,
+        bound_user_id: user.id,
+        violation_type: "geofence_mismatch",
+        device_info: device_info || null,
+        details: {
+          provided_location: location_id,
+          computed_distance_m: nearest?.distance ?? null,
+          allowed_radius_m: nearest?.allowedRadius ?? null,
+          provided_distance_m: Number.isFinite(providedDistance) ? providedDistance : null,
+          provided_radius_m: providedRadius,
+        },
+      })
+    } catch {
+      // Security logging must not change the check-in result.
+    }
 
-      // If user provided a location_id ensure it matches the computed nearest and is within radius
-      if (location_id) {
-        const providedLoc = qccLocations.find((l: any) => l.id === location_id)
-        if (providedLoc) {
-          const providedDistance = distanceMeters(latitude, longitude, providedLoc.latitude, providedLoc.longitude)
-          // Cap any client-reported accuracy buffer on server - inaccurate data should not expand radius
-          const MAX_ACCURACY_BUFFER = 500
+    return NextResponse.json(
+      {
+        error: "You are outside every active attendance location geofence. Please move closer or use manual/off-premises check-in.",
+        type: "out_of_range",
+        distance_meters: nearest?.distance ?? null,
+        allowed_radius_meters: nearest?.allowedRadius ?? null,
+      },
+      { status: 400 },
+    )
+  }
 
-          if (providedDistance > deviceCheckInRadius + MAX_ACCURACY_BUFFER) {
-            // Log suspicious attempt
-            try {
-              await supabase.from("device_security_violations").insert({
-                device_id: device_info?.device_id || null,
-                ip_address: getClientIp() || null,
-                attempted_user_id: user.id,
-                bound_user_id: user.id,
-                violation_type: "geofence_mismatch",
-                device_info: device_info || null,
-                details: {
-                  provided_location: location_id,
-                  computed_distance_m: providedDistance,
-                  allowed_radius_m: deviceCheckInRadius,
-                },
-              })
-            } catch (err) {
-              // ignore logging failure
-            }
-
-            return NextResponse.json({ error: "Your device appears to be outside the allowed proximity for the selected location. Please move closer or use the QR code option." }, { status: 400 })
-          }
-        }
-      } else if (nearest && nearest.distance > deviceCheckInRadius + 500) {
-        // If no location_id was provided, ensure the nearest location is within the allowed radius
-        return NextResponse.json({ error: "You are too far from any registered QCC location to check in. Please move closer or use the QR code." }, { status: 400 })
-      }
+  // Persist the same location that passed the server-side geofence check.
+  acceptedLocationId = nearest.loc.id
 
       // Check for suspicious location changes (potential cached location spoofing)
       if (!qr_code_used && latitude && longitude) {
@@ -660,8 +681,8 @@ export async function POST(request: NextRequest) {
     const { data: locationData, error: locationError } = await supabase
       .from("geofence_locations")
       .select("name, address, district_id")
-      .eq("id", location_id)
-      .single()
+.eq("id", acceptedLocationId)
+  .single()
 
     if (locationError) {
       console.error("Location lookup error:", locationError)
@@ -807,7 +828,7 @@ export async function POST(request: NextRequest) {
     const attendanceData = {
       user_id: user.id,
       check_in_time: checkInTime.toISOString(),
-      check_in_location_id: location_id,
+      check_in_location_id: acceptedLocationId,
       device_session_id: deviceSessionId,
       status: isLateArrival ? "late" : "present",
       check_in_method: qr_code_used ? "qr_code" : "gps",
@@ -833,7 +854,7 @@ export async function POST(request: NextRequest) {
       if (lateness_proved_by_id) attendanceData.lateness_proved_by_id = lateness_proved_by_id
     }
 
-    if (userProfile?.assigned_location_id && userProfile.assigned_location_id !== location_id) {
+    if (userProfile?.assigned_location_id && userProfile.assigned_location_id !== acceptedLocationId) {
       attendanceData.is_remote_location = true
     }
 
@@ -845,11 +866,11 @@ export async function POST(request: NextRequest) {
 
     // Calculate check-in position for the location today
     let checkInPosition = null
-    if (attendanceRecord && location_id) {
-      const { count } = await supabase
-        .from("attendance_records")
-        .select("id", { count: "exact", head: true })
-        .eq("check_in_location_id", location_id)
+if (attendanceRecord && acceptedLocationId) {
+  const { count } = await supabase
+  .from("attendance_records")
+  .select("id", { count: "exact", head: true })
+  .eq("check_in_location_id", acceptedLocationId)
         .gte("check_in_time", `${today}T00:00:00`)
         .lte("check_in_time", attendanceRecord.check_in_time)
 
