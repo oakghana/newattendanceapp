@@ -88,17 +88,37 @@ export async function POST(request: NextRequest) {
         console.error("[v0] Error checking prior open attendance session:", openPriorError)
       }
 
-      if (openPriorRecord) {
-        const priorCheckIn = new Date(openPriorRecord.check_in_time)
-        return NextResponse.json(
-          {
-            error: `You still have an open attendance session from ${priorCheckIn.toLocaleString()} at ${openPriorRecord.check_in_location_name || "your post"} that has not been checked out. Please check out from that session first.`,
-            openSessionCheckIn: openPriorRecord.check_in_time,
-            openSessionRecordId: openPriorRecord.id,
-          },
-          { status: 409 },
-        )
-      }
+  if (openPriorRecord) {
+  const priorCheckIn = new Date(openPriorRecord.check_in_time)
+  const ageHours = (Date.now() - priorCheckIn.getTime()) / (1000 * 60 * 60)
+
+  // An open session from a previous shift must not block a new valid check-in
+  // indefinitely. This covers abandoned/stale records while still protecting
+  // a genuine overnight shift that is less than 36 hours old.
+  if (ageHours > 36) {
+    const closeAt = new Date(priorCheckIn.getTime() + 24 * 60 * 60 * 1000)
+    await supabase
+      .from("attendance_records")
+      .update({
+        check_out_time: closeAt.toISOString(),
+        work_hours: Math.max(0, Math.min(24, (closeAt.getTime() - priorCheckIn.getTime()) / (1000 * 60 * 60))),
+        auto_checkout: true,
+        notes: "Automatically closed stale open attendance session before a new check-in.",
+      })
+      .eq("id", openPriorRecord.id)
+      .is("check_out_time", null)
+  } else {
+    return NextResponse.json(
+      {
+        error: `You still have an open attendance session from ${priorCheckIn.toLocaleString()} at ${openPriorRecord.check_in_location_name || "your post"} that has not been checked out. Please check out from that session first.`,
+        openSessionCheckIn: openPriorRecord.check_in_time,
+        openSessionRecordId: openPriorRecord.id,
+        type: "open_session",
+      },
+      { status: 409 },
+    )
+  }
+  }
     }
 
     // Check if user is on leave (per-day leave_status table)
