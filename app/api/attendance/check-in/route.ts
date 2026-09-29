@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
         const priorDate = priorCheckIn.toISOString().slice(0, 10)
         const sessionHours = (Date.now() - priorCheckIn.getTime()) / (1000 * 60 * 60)
 
-        if (priorDate < today || sessionHours >= 22) {
+        if (sessionHours >= 22) {
           const closeAt = new Date(priorCheckIn.getTime() + 22 * 60 * 60 * 1000)
           await supabase
             .from("attendance_records")

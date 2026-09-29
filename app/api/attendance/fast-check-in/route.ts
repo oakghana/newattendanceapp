@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
 
   // Shift staff may work overnight, but an open session must never exceed
   // 22 hours. Close the prior session automatically before today's check-in.
-  if (priorDate < today || sessionHours >= 22) {
+  if (sessionHours >= 22) {
     const closeAt = new Date(priorCheckIn.getTime() + 22 * 60 * 60 * 1000)
     await supabase
       .from("attendance_records")
