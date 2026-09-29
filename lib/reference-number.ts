@@ -19,3 +19,31 @@ export async function getNextQccReference(admin: any): Promise<string> {
   const fallback = Date.now()
   return `QCC/HRD/SWL/V.2/${fallback}`
 }
+
+export async function ensureImportedLoanReferences(admin: any): Promise<number> {
+  const { data: loans, error } = await admin
+    .from("loan_requests")
+    .select("id, reference_number, memo_reference_locked, is_imported, hod_review_note")
+    .or("is_imported.eq.true,hod_review_note.ilike.Bulk imported by Administrator%")
+    .or("reference_number.is.null,reference_number.eq.")
+    .limit(2000)
+  if (error || !loans?.length) return 0
+
+  let updated = 0
+  for (const loan of loans) {
+    const reference = await getNextQccReference(admin)
+    const { error: updateError } = await admin
+      .from("loan_requests")
+      .update({
+        reference_number: reference,
+        memo_reference_locked: true,
+        memo_reference_locked_at: new Date().toISOString(),
+        memo_reference_locked_by: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", loan.id)
+      .or("reference_number.is.null,reference_number.eq.")
+    if (!updateError) updated += 1
+  }
+  return updated
+}

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
+import { ensureImportedLoanReferences } from "@/lib/reference-number"
 import {
   canDoAccounts,
   canDoCommittee,
@@ -279,6 +280,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    await ensureImportedLoanReferences(admin)
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
       .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id, departments(name, code), geofence_locations!assigned_location_id(name, address, districts(name))")
@@ -897,7 +899,7 @@ export async function GET() {
       ...(directorGoodFdRes.data || []),
     ]
     const uniqueHodReviewerIds = Array.from(
-      new Set(hrAndDirectorRows.map((r: any) => r.hod_reviewer_id).filter(Boolean)),
+      new Set(allInboxRows.map((r: any) => r.hod_reviewer_id).filter(Boolean)),
     ) as string[]
     let hodInfoMap: Map<string, { name: string; rank: string; location: string }> = new Map()
     if (uniqueHodReviewerIds.length > 0) {
@@ -1066,14 +1068,14 @@ export async function GET() {
       })) || [],
       inbox: {
         hod: attachAccountsReviewerName(attachName(hodRes.data || [])),
-        loanOffice: attachAccountsReviewerName(attachName(loanOfficeRes.data || [])),
+        loanOffice: attachAccountsReviewerName(attachHodInfo(attachName(loanOfficeRes.data || []))),
         accounts: attachAccountsReviewerName(attachName(accountsRes.data || [])),
         accountsSigned: attachAccountsReviewerName(attachName(accountsSignedRes.data || [])),
         committee: attachAccountsReviewerName(attachName(committeeRes.data || [])),
         hrOffice: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(hrRes.data || [])))),
         directorHr: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(directorRes.data || [])))),
         directorGoodFd: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(directorGoodFdRes.data || [])))),
-        allLoans: attachDirectorName(attachAccountsReviewerName(attachName(allLoansRes.data || []))),
+        allLoans: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(allLoansRes.data || [])))),
       },
     })
     } catch (secondaryError: any) {

@@ -4299,6 +4299,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       <th className="px-4 py-2.5 whitespace-nowrap">Type</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Amount (GHc)</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">FD Score</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">HOD/RM Endorsed By</th>
                       {canSeeFdReviewerName && <th className="px-4 py-2.5 whitespace-nowrap">FD Reviewer</th>}
                       <th className="px-4 py-2.5 whitespace-nowrap">Status</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Attachment</th>
@@ -4328,6 +4329,10 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           {row.fd_score != null ? (
                             <span className={`font-semibold ${Number(row.fd_score) >= 60 ? "text-emerald-700" : "text-rose-600"}`}>{row.fd_score}</span>
                           ) : <span className="text-slate-400">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap">
+                          <p className="font-medium text-slate-700">{row.hod_name || "Not recorded"}</p>
+                          <p className="text-[11px] text-slate-400">{row.hod_rank || "HOD/RM"}{row.hod_location ? ` · ${row.hod_location}` : ""}</p>
                         </td>
                         {canSeeFdReviewerName && <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{row.accounts_reviewer_name || "—"}</td>}
                         <td className="px-4 py-3 whitespace-nowrap">
@@ -7642,10 +7647,30 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           </DialogHeader>
 
           <div className="space-y-2 py-1 max-h-[70vh] overflow-y-auto">
-            {actionModal.row?.user_id && ["hod", "loan_office", "committee", "hr_terms", "director"].includes(actionModal.actionType || "") && (
-              <StaffLoanHistory userId={actionModal.row.user_id} staffName={actionModal.row.staff_full_name || actionModal.row.staff_number || "Staff"} />
-            )}
-            {/* HOD */}
+  {actionModal.row?.user_id && ["hod", "loan_office", "committee", "hr_terms", "director"].includes(actionModal.actionType || "") && (
+  <StaffLoanHistory userId={actionModal.row.user_id} staffName={actionModal.row.staff_full_name || actionModal.row.staff_number || "Staff"} />
+  )}
+  {actionModal.actionType === "loan_office" && actionModal.row && (
+  <Card className="border-emerald-200 bg-emerald-50/60">
+  <CardHeader className="pb-2">
+  <CardTitle className="flex items-center gap-2 text-sm text-emerald-950">
+  <BadgeCheck className="h-4 w-4 text-emerald-700" /> HOD/RM endorsement brief
+  </CardTitle>
+  <CardDescription className="text-xs text-emerald-900/80">
+  Review the originating supervisor&apos;s decision and supporting context before forwarding this request.
+  </CardDescription>
+  </CardHeader>
+  <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
+  <div><p className="text-xs font-medium text-muted-foreground">Endorsing HOD/RM</p><p className="font-medium">{actionModal.row.hod_name || "Not recorded"}</p></div>
+  <div><p className="text-xs font-medium text-muted-foreground">Location / scope</p><p className="font-medium">{actionModal.row.hod_location || actionModal.row.staff_location_name || "Not recorded"}</p></div>
+  <div className="sm:col-span-2"><p className="text-xs font-medium text-muted-foreground">Endorsement note</p><p className="whitespace-pre-wrap rounded-md border border-emerald-200 bg-background p-3">{actionModal.row.hod_review_note || "No endorsement note was recorded."}</p></div>
+  <div className="sm:col-span-2 rounded-md border border-emerald-200 bg-background p-3 text-xs text-muted-foreground">
+  Meaningful decision check: verify the staff member&apos;s stated reason, requested amount, repayment affordability, previous loan history, and all supporting documents before forwarding.
+  </div>
+  </CardContent>
+  </Card>
+  )}
+  {/* HOD */}
             {actionModal.actionType === "hod" && (
               <>
                 <Label className="text-sm">Decision</Label>
