@@ -90,13 +90,13 @@ export async function POST(request: NextRequest) {
 
   if (openPriorRecord) {
   const priorCheckIn = new Date(openPriorRecord.check_in_time)
-  const ageHours = (Date.now() - priorCheckIn.getTime()) / (1000 * 60 * 60)
+  const priorDate = priorCheckIn.toISOString().slice(0, 10)
+  const sessionHours = (Date.now() - priorCheckIn.getTime()) / (1000 * 60 * 60)
 
-  // An open session from a previous shift must not block a new valid check-in
-  // indefinitely. This covers abandoned/stale records while still protecting
-  // a genuine overnight shift that is less than 36 hours old.
-  if (ageHours > 36) {
-    const closeAt = new Date(priorCheckIn.getTime() + 24 * 60 * 60 * 1000)
+  // Shift staff may work overnight, but an open session must never exceed
+  // 22 hours. Close the prior session automatically before today's check-in.
+  if (sessionHours >= 22) {
+    const closeAt = new Date(priorCheckIn.getTime() + 22 * 60 * 60 * 1000)
     await supabase
       .from("attendance_records")
       .update({

@@ -530,13 +530,13 @@ export function AttendanceRecorder({
 
       if (active) {
         const openRecord = data
-        const recordAgeHours = openRecord?.check_in_time
-          ? (Date.now() - new Date(openRecord.check_in_time).getTime()) / (1000 * 60 * 60)
-          : 0
-        // Only a recent open overnight session represents a live shift. Very old
-        // abandoned records are handled by the check-in route and must not block
-        // a user who is currently within range.
-        if (!error) setOvernightOpenAttendance(recordAgeHours <= 36 ? openRecord : null)
+        const today = new Date().toISOString().slice(0, 10)
+        const openRecordDate = openRecord?.check_in_time
+          ? new Date(openRecord.check_in_time).toISOString().slice(0, 10)
+          : null
+        // Only an open record from today represents a live session. Prior-day
+        // sessions are stale for today's check-in and are closed by the server.
+        if (!error) setOvernightOpenAttendance(openRecordDate === today ? openRecord : null)
         setOvernightCheckLoading(false)
       }
     }
@@ -3387,10 +3387,10 @@ export function AttendanceRecorder({
   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <Card className="w-full max-w-md shadow-2xl">
       <CardHeader>
-        <CardTitle>Overnight attendance check</CardTitle>
-        <CardDescription>
-          You still have an open Security attendance session from {new Date(overnightOpenAttendance.check_in_time).toLocaleString()}. Security staff are not automatically checked out at midnight.
-        </CardDescription>
+          <CardTitle>Continue previous attendance session?</CardTitle>
+          <CardDescription>
+            You have an open {overnightOpenAttendance.department_name || "shift"} attendance session from {new Date(overnightOpenAttendance.check_in_time).toLocaleString()}. If you are still working that session, continue it and check out normally. Sessions automatically close after 22 hours; after that, the system starts the next day&apos;s session without asking for a reason.
+          </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 sm:flex-row sm:justify-end">
         <Button
@@ -3401,7 +3401,7 @@ export function AttendanceRecorder({
             setFlashMessage({ message: "Your open attendance session is ready. Please check out first.", type: "info" })
           }}
         >
-          I am still checked in
+          Continue previous session
         </Button>
         <Button
           onClick={() => {
@@ -3409,7 +3409,7 @@ export function AttendanceRecorder({
             setOvernightOpenAttendance(null)
           }}
         >
-          I already checked out
+          Start today&apos;s session
         </Button>
       </CardContent>
     </Card>

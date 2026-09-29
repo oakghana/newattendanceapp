@@ -132,14 +132,32 @@ export async function POST(request: NextRequest) {
 
       if (openPriorRecord) {
         const priorCheckIn = new Date(openPriorRecord.check_in_time)
-        return NextResponse.json(
-          {
-            error: `You still have an open attendance session from ${priorCheckIn.toLocaleString()} at ${openPriorRecord.check_in_location_name || "your post"} that has not been checked out. Please check out from that session first.`,
-            openSessionCheckIn: openPriorRecord.check_in_time,
-            openSessionRecordId: openPriorRecord.id,
-          },
-          { status: 409 },
-        )
+        const priorDate = priorCheckIn.toISOString().slice(0, 10)
+        const sessionHours = (Date.now() - priorCheckIn.getTime()) / (1000 * 60 * 60)
+
+        if (sessionHours >= 22) {
+          const closeAt = new Date(priorCheckIn.getTime() + 22 * 60 * 60 * 1000)
+          await supabase
+            .from("attendance_records")
+            .update({
+              check_out_time: closeAt.toISOString(),
+              work_hours: Math.max(0, Math.min(24, (closeAt.getTime() - priorCheckIn.getTime()) / (1000 * 60 * 60))),
+              auto_checkout: true,
+              notes: "Automatically closed prior-day open attendance session before a new check-in.",
+            })
+            .eq("id", openPriorRecord.id)
+            .is("check_out_time", null)
+        } else {
+          return NextResponse.json(
+            {
+              error: `You still have an open attendance session from ${priorCheckIn.toLocaleString()} at ${openPriorRecord.check_in_location_name || "your post"} that has not been checked out. Please check out from that session first.`,
+              openSessionCheckIn: openPriorRecord.check_in_time,
+              openSessionRecordId: openPriorRecord.id,
+              type: "open_session",
+            },
+            { status: 409 },
+          )
+        }
       }
     }
 

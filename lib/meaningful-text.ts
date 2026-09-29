@@ -330,7 +330,7 @@ export function validateMeaningfulText(
 
 /**
  * Convenience preset for attendance reasons (lateness, early checkout, off-premises, etc.).
- * Enforces: no 4+ continuous spaces, more than 20 alphabetic characters, real wording.
+  * Enforces: no 4+ continuous spaces, at least 21 alphabetic characters, real wording.
  */
 export function validateAttendanceReason(
   value: string | null | undefined,
