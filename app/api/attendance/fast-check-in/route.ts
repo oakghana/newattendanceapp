@@ -91,12 +91,12 @@ export async function POST(request: NextRequest) {
   if (openPriorRecord) {
   const priorCheckIn = new Date(openPriorRecord.check_in_time)
   const priorDate = priorCheckIn.toISOString().slice(0, 10)
+  const sessionHours = (Date.now() - priorCheckIn.getTime()) / (1000 * 60 * 60)
 
-  // A record from an earlier calendar day is a closed/stale prior shift for
-  // purposes of today's automatic check-in. Do not let overnight staffing rules
-  // block a valid new-day check-in indefinitely.
-  if (priorDate < today) {
-    const closeAt = new Date(priorCheckIn.getTime() + 24 * 60 * 60 * 1000)
+  // Shift staff may work overnight, but an open session must never exceed
+  // 22 hours. Close the prior session automatically before today's check-in.
+  if (priorDate < today || sessionHours >= 22) {
+    const closeAt = new Date(priorCheckIn.getTime() + 22 * 60 * 60 * 1000)
     await supabase
       .from("attendance_records")
       .update({
