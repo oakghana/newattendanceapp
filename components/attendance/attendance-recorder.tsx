@@ -2407,9 +2407,7 @@ export function AttendanceRecorder({
       })
       const [dlHour2, dlMin2] = (runtimeFlags.latenessReasonDeadline ?? "09:00").split(":").map(Number)
       const isLateArrival = now.getHours() > dlHour2 || (now.getHours() === dlHour2 && now.getMinutes() >= dlMin2)
-      if (isLateArrival && latenessRequiredAuto) {
-        return
-      }
+      const needsAutomaticLatenessReason = isLateArrival && latenessRequiredAuto
 
       // If UI/location preview has already resolved user is out-of-range, auto-open off-premises first.
       if (effectiveCanCheckIn === false && !autoTriggeredOffPremisesRef.current) {
@@ -2428,8 +2426,18 @@ export function AttendanceRecorder({
         // Automatic check-in must use a fresh GPS reading. Reusing the page's cached
         // location can exceed the server's five-minute freshness limit and causes a
         // generic automatic failure even when the user is currently at work.
-        const { location } = await safeGetCurrentLocation(false)
-        if (!location) return
+        const { location, error: locationError } = await safeGetCurrentLocation(false)
+        if (!location) {
+          const message = locationError?.message || "Unable to get your current location. Please allow location access and try again."
+          autoCheckInAttemptedRef.current = false
+          toast({
+            title: "Automatic check-in needs your location",
+            description: message.split("\n")[0],
+            variant: "destructive",
+            duration: 9000,
+          })
+          return
+        }
         const locationData = location
         setUserLocation(location)
 
@@ -2465,6 +2473,23 @@ export function AttendanceRecorder({
 
         const nearestForCheckIn = validation.nearestLocation
         if (!nearestForCheckIn) return
+
+        if (needsAutomaticLatenessReason) {
+          autoCheckInAttemptedRef.current = false
+          setPendingCheckInData({
+            location: locationData,
+            nearestLocation: nearestForCheckIn,
+            qrCodeUsed: false,
+            qrTimestamp: null,
+          })
+          setShowLatenessDialog(true)
+          toast({
+            title: "Reason required for late check-in",
+            description: "Your location was verified. Enter a lateness reason to complete check-in.",
+            duration: 8000,
+          })
+          return
+        }
 
         autoCheckInAttemptedRef.current = true
         setRecentCheckIn(true)
@@ -2623,10 +2648,11 @@ export function AttendanceRecorder({
 
       console.log("[v0] ✓ Check-in successful")
 
-      if (result.attendance) {
+      const savedAttendance = result.attendance ?? result.data
+      if (savedAttendance) {
         // Add device sharing warning to the attendance data if present
         const attendanceWithWarning = {
-          ...result.attendance,
+          ...savedAttendance,
           device_sharing_warning: result.deviceSharingWarning?.message || null
         }
         setLocalTodayAttendance(attendanceWithWarning)
