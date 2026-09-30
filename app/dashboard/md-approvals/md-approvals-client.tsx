@@ -371,7 +371,7 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
     setFilterPosition("")
   }
 
-  // ── Apply filters to base dataset ───────────────────────────────────��────
+  // ── Apply filters to base dataset ───────────────────────────────────���────
   const filteredLoans = useMemo(() => {
     return loans.filter((l) => {
       if (filterLocation && l.staff_location_name !== filterLocation) return false
@@ -381,6 +381,10 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
       if (filterPosition) {
         const pos = l.user_profiles?.position || l.staff_rank || ""
         if (pos !== filterPosition) return false
+      }
+      if (l.md_approved_at) {
+        const approvalDate = new Date(l.md_approved_at)
+        if (Number.isNaN(approvalDate.getTime()) || approvalDate > new Date()) return false
       }
       return true
     })
@@ -392,8 +396,11 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
   // By month
   const byMonth = useMemo(() => {
     const map = new Map<string, { count: number; amount: number }>()
+    const now = new Date()
     filteredLoans.forEach((l) => {
       if (!l.md_approved_at) return
+      const approvalDate = new Date(l.md_approved_at)
+      if (Number.isNaN(approvalDate.getTime()) || approvalDate > now) return
       const key = getMonthKey(l.md_approved_at)
       const existing = map.get(key) || { count: 0, amount: 0 }
       map.set(key, { count: existing.count + 1, amount: existing.amount + (l.fixed_amount || l.requested_amount || 0) })
@@ -406,8 +413,11 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
   // By quarter
   const byQuarter = useMemo(() => {
     const map = new Map<string, { count: number; amount: number }>()
+    const now = new Date()
     filteredLoans.forEach((l) => {
       if (!l.md_approved_at) return
+      const approvalDate = new Date(l.md_approved_at)
+      if (Number.isNaN(approvalDate.getTime()) || approvalDate > now) return
       const key = getQuarter(l.md_approved_at)
       const existing = map.get(key) || { count: 0, amount: 0 }
       map.set(key, { count: existing.count + 1, amount: existing.amount + (l.fixed_amount || l.requested_amount || 0) })
