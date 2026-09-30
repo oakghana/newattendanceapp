@@ -155,7 +155,7 @@ const authenticatedFetch = async (input: RequestInfo | URL, init: RequestInit = 
 
 interface AttendanceReportsProps {
   /** Server-resolved role so the component knows immediately which filters to lock */
-  scopeRole?: "admin" | "regional_manager" | "regional_hr" | "department_head" | "transport_manager"
+  scopeRole?: "admin" | "regional_manager" | "regional_hr" | "department_head" | "transport_manager" | "managing_director"
   /** For department_head: their own department_id (all other depts hidden) */
   scopeDepartmentId?: string | null
   /** For regional_manager: their own location_id (all other locations hidden) */
@@ -182,7 +182,7 @@ export function AttendanceReports({
   const isDeptHead = scopeRole === "department_head" || scopeRole === "transport_manager"
   const isRegionalManager = scopeRole === "regional_manager"
   const isRegionalHr = scopeRole === "regional_hr"
-  const isAdmin = scopeRole === "admin" || (!scopeRole)
+  const isAdmin = scopeRole === "admin" || scopeRole === "managing_director" || (!scopeRole)
   
   // Auto-enable compact mode on small screens for denser layout
   useEffect(() => {
