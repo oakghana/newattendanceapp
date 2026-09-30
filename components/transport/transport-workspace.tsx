@@ -546,29 +546,43 @@ export function TransportWorkspace({
           { label: "Coverage", value: scopeLabel || "Assigned", note: "Location, district, or region only", icon: MapPin, tone: "slate" as const },
         ]
       : isRegionalOnlyWorkspace
-  ? [
-  {
-  title: "Regional transport request",
-  description: "Create a complete regional transport request for Regional Manager endorsement, Managing Director approval, and HR Executive rejoinder.",
-  icon: Bus,
-  href: "/dashboard/transport/requests",
-  cta: "Create regional request",
-  badge: "Regional",
-  onClick: () => setRequestOpen(true),
-  },
-  ]
-  : isActingHod
-  ? [
-  {
-  title: "Head Office requests",
-  description: "Submit Head Office trips and track driver assignment.",
-  icon: Route,
-  href: "/dashboard/transport/nonregional",
-  cta: "Open my trips",
-  badge: "HOD",
-  },
-  ]
-  : isRegionalDriver
+        ? [
+            { label: isChiefDriver ? "Ready to dispatch" : "Regional queue", value: pendingCount, note: isChiefDriver ? "Regional Manager-approved local trips" : "Items needing attention in your region", icon: Clock3, tone: "amber" as const },
+            { label: "Region register", value: totalCount, note: "Requests limited to your regional or district scope", icon: Bus, tone: "primary" as const },
+            { label: isChiefDriver ? "Trips assigned" : "Approved / referenced", value: isChiefDriver ? assignedCount : approvedCount, note: isChiefDriver ? "Vehicle and driver allocated locally" : "Approved regional requests", icon: CheckCircle2, tone: "emerald" as const },
+            { label: "Coverage", value: scopeLabel || "Assigned", note: "Location, district, or region only", icon: MapPin, tone: "slate" as const },
+          ]
+      : [
+          { label: "Requests", value: totalCount, note: "Transport requests in your workspace", icon: Inbox, tone: "primary" as const },
+          { label: "Pending", value: pendingCount, note: "Requests awaiting the next action", icon: Clock3, tone: "amber" as const },
+          { label: "Approved", value: approvedCount, note: "Requests cleared for fulfilment", icon: CheckCircle2, tone: "emerald" as const },
+          { label: "Assigned", value: assignedCount, note: "Trips with transport allocated", icon: Route, tone: "slate" as const },
+        ]
+
+  const modules = isRegionalOnlyWorkspace
+    ? [
+        {
+          title: "Regional transport request",
+          description: "Create a complete regional or district transport request for location-based review and approval.",
+          icon: Bus,
+          href: "/dashboard/transport/requests",
+          cta: "Create regional request",
+          badge: "Regional / District",
+          onClick: () => setRequestOpen(true),
+        },
+      ]
+    : isActingHod
+      ? [
+          {
+            title: "Head Office requests",
+            description: "Submit Head Office trips and track driver assignment.",
+            icon: Route,
+            href: "/dashboard/transport/nonregional",
+            cta: "Open my trips",
+            badge: "HOD",
+          },
+        ]
+      : isRegionalDriver
         ? [
             {
               title: "My regional trips",
@@ -591,19 +605,17 @@ export function TransportWorkspace({
               },
             ]
           : [
-          {
-            title: isTransportManager ? "Nationwide request board" : isChiefDriver ? "Local dispatch register" : "Regional request register",
-            description: isTransportManager
-              ? "See all regional and Head Office requests."
-              : isChiefDriver
-                ? "Submit local trips for Regional Manager approval and dispatch approved work to regional vehicles and drivers."
-              : "View only your regional transport requests. Download approved regional memos from the register.",
-            icon: Bus,
-            href: "/dashboard/transport/requests",
-            cta: isTransportManager ? "Open national board" : isChiefDriver ? "Open dispatch desk" : "Open regional register",
-            badge: isTransportManager ? "National" : isChiefDriver ? "Local fleet" : "Regional",
+              {
+                title: isTransportManager ? "Nationwide request board" : "Regional request register",
+                description: isTransportManager
+                  ? "See all regional and Head Office requests."
+                  : "View transport requests within your assigned regional or district scope.",
+                icon: Bus,
+                href: "/dashboard/transport/requests",
+                cta: isTransportManager ? "Open national board" : "Open regional register",
+                badge: isTransportManager ? "National" : "Regional",
               },
-        ]
+            ]
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
