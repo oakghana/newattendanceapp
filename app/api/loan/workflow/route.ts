@@ -618,7 +618,7 @@ export async function GET() {
     // HOD query: include requests explicitly assigned to this HOD, plus linked-staff fallback for legacy data.
     const hodPromise: Promise<any> = (async () => {
       if (!(permissions.hod || viewAllTabs)) return { data: [], error: null }
-      if (viewAllTabs || (!isDepartmentHead && !isRegionalManager && !isLinkedHod)) {
+      if ((viewAllTabs && !isManagingDirector) || (!isDepartmentHead && !isRegionalManager && !isLinkedHod)) {
         return admin
           .from("loan_requests")
           .select("*")

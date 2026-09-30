@@ -4065,7 +4065,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           </Badge>
                         </TableCell>
                         <TableCell className="text-xs whitespace-nowrap"><span className="font-medium">{fmtDateTime(row.submitted_at || row.created_at)}</span></TableCell>
-                        {p?.hod && row.can_endorse !== false && (
+                        {p?.hod && row.can_endorse === true && (
                           <TableCell>
                             <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "hod")}>Review &amp; Decide</Button>
                           </TableCell>
