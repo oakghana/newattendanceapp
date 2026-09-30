@@ -143,7 +143,10 @@ export async function POST(request: NextRequest) {
       if (openPriorRecord) {
         const priorCheckIn = new Date(openPriorRecord.check_in_time)
 
-        if (shouldSkipSystemAutoCheckout(userProfile?.departments as any)) {
+        const overnightDepartment = isOvernightShiftDept(userProfile?.departments as any)
+        const sessionAgeHours = (Date.now() - priorCheckIn.getTime()) / (1000 * 60 * 60)
+
+        if (overnightDepartment && sessionAgeHours < 24) {
           return NextResponse.json(
             {
               error: `You still have an open attendance session from ${priorCheckIn.toLocaleString()} at ${openPriorRecord.check_in_location_name || "your post"} that has not been checked out. Please check out from that session first.`,

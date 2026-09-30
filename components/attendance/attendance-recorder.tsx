@@ -2176,6 +2176,9 @@ export function AttendanceRecorder({
         console.log("[v0] Checkout successful:", result.data)
 
         setLocalTodayAttendance(result.data)
+        setOvernightOpenAttendance(null)
+        setOvernightAttendanceConfirmed(false)
+        setAutoCheckInFailureCount(0)
         clearAttendanceCache()
         clearGeolocationCache()
         clearFastLocationCache()
