@@ -371,7 +371,7 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
     setFilterPosition("")
   }
 
-  // ── Apply filters to base dataset ────────────────────────────────────────
+  // ── Apply filters to base dataset ───────────────────────────────────��────
   const filteredLoans = useMemo(() => {
     return loans.filter((l) => {
       if (filterLocation && l.staff_location_name !== filterLocation) return false
@@ -590,7 +590,7 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: "Total Approved", value: totalApproved.toString(), sub: "All time", icon: CheckCircle2, color: "emerald" },
-          { label: "Total Value", value: `GHc ${(totalAmount / 1000).toFixed(0)}k`, sub: "All approvals", icon: TrendingUp, color: "blue" },
+          { label: "Total Value", value: `GHc ${totalAmount.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: "All approvals", icon: TrendingUp, color: "blue" },
           { label: "This Month", value: thisMonthCount.toString(), sub: "Loans approved", icon: Calendar, color: "amber" },
           { label: "Top Location", value: topLocation, sub: byLocation[0]?.count ? `${byLocation[0].count} loans` : "", icon: MapPin, color: "violet" },
         ].map(({ label, value, sub, icon: Icon, color }) => (
@@ -666,7 +666,7 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
               {analyticsView === "location" && "Approved Loans — By Location"}
               {analyticsView === "type" && "Approved Loans — By Loan Type"}
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">Count of MD-approved loans</p>
+            <p className="text-xs text-slate-500 mt-0.5">Loan count and total approved amount (GHc 000s)</p>
           </div>
         </div>
         {chartData.length === 0 ? (
@@ -676,12 +676,17 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
             <BarChart data={chartData} margin={{ top: 0, right: 0, left: -15, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} tickLine={false} axisLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickLine={false} axisLine={false} />
+              <YAxis yAxisId="count" tick={{ fontSize: 11, fill: "#64748b" }} tickLine={false} axisLine={false} />
+              <YAxis yAxisId="amount" orientation="right" tick={{ fontSize: 11, fill: "#64748b" }} tickLine={false} axisLine={false} />
               <Tooltip
                 contentStyle={{ borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: 12 }}
-                formatter={(value: any, name: string) => [value, name === "count" ? "Loans Approved" : "Amount (GHc 000s)"]}
+                formatter={(value: any, name: string) => [
+                  name === "count" ? value : `GHc ${Number(value).toLocaleString("en-GH", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}k`,
+                  name === "count" ? "Loans Approved" : "Total Approved Amount",
+                ]}
               />
-              <Bar dataKey="count" fill="#10b981" radius={[6, 6, 0, 0]} name="count" />
+              <Bar yAxisId="count" dataKey="count" fill="#10b981" radius={[6, 6, 0, 0]} name="count" />
+              <Bar yAxisId="amount" dataKey="amount" fill="#3b82f6" radius={[6, 6, 0, 0]} name="amount" />
             </BarChart>
           </ResponsiveContainer>
         )}
