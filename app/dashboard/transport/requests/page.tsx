@@ -91,18 +91,28 @@ export default async function TransportRequestsPage() {
     .limit(200)
   if (canViewRegionalRegister && !ownRequestsError) {
     const scopedRequests = requests ?? []
-    const personalRows = (ownRequests ?? []).map((request: any) => ({ ...request, assigned_region: [] }))
+    const personalRows = (ownRequests ?? []).map((request: any) => {
+      const isPendingHod = ["submitted", "pending", "awaiting_hod", "hod_authorization", "awaiting_hod_approval"].includes(request.status ?? "") || ["submitted", "awaiting_hod", "hod_authorization", "awaiting_hod_approval"].includes(request.workflow_stage ?? "")
+      const regionalRequesterView = isRegionalRequester && isPendingHod
+      return {
+        ...request,
+        request_type: regionalRequesterView ? "regional_transport" : request.request_type,
+        status: regionalRequesterView ? "awaiting_do_regional_hr_endorsement" : request.status,
+        workflow_stage: regionalRequesterView ? "awaiting_do_regional_hr_endorsement" : request.workflow_stage,
+        assigned_region: [],
+      }
+    })
     const nonregionalRows = (ownNonregionalRequests ?? []).map((request: any) => ({
       id: request.id,
       requester_id: request.requester_id,
-      request_type: "nonregional_transport",
+      request_type: isRegionalRequester ? "regional_transport" : "nonregional_transport",
       purpose: request.purpose,
       origin: request.origin,
       destination: request.destination,
       event_date: request.required_at,
       passenger_count: request.persons_requiring_transport ?? 0,
-      status: request.status ?? "submitted",
-      workflow_stage: request.status ?? "submitted",
+      status: isRegionalRequester && !["approved", "rejected", "completed", "closed"].includes(request.status ?? "") ? "awaiting_do_regional_hr_endorsement" : request.status ?? "submitted",
+      workflow_stage: isRegionalRequester && !["approved", "rejected", "completed", "closed"].includes(request.status ?? "") ? "awaiting_do_regional_hr_endorsement" : request.status ?? "submitted",
       reference_number: request.reference_number,
       supporting_documents: [],
       created_at: request.created_at,

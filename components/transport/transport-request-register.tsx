@@ -108,7 +108,11 @@ export type TransportRequestRow = {
 };
 
 const label = (value: string | null) =>
-  (value === "district_officer_review" ? "District Officer review" : value ?? "submitted")
+  (value === "district_officer_review"
+    ? "District Officer review"
+    : value === "awaiting_do_regional_hr_endorsement"
+      ? "Awaiting DO/Regional HR Endorsement"
+      : value ?? "submitted")
     .replace(/_/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
 const displayStage = (row: TransportRequestRow) =>
