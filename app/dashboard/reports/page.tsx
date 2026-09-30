@@ -25,9 +25,11 @@ export default async function ReportsPage() {
   }
 
   const isHrRole = normalizedRole === "regional_hr" || normalizedRole === "director_hr" || normalizedRole === "manager_hr"
-  const scopeRole = (normalizedRole === "accounts_executive" ? "department_head" : normalizedRole) as "admin" | "regional_manager" | "regional_hr" | "department_head" | "transport_manager"
-  const scopeDepartmentId = profile.department_id ?? null
-  const scopeLocationId = profile.assigned_location_id ?? null
+  const scopeRole = (normalizedRole === "accounts_executive" ? "department_head" : normalizedRole) as "admin" | "regional_manager" | "regional_hr" | "department_head" | "transport_manager" | "managing_director"
+  // Managing Directors have company-wide visibility. Do not pass their own profile
+  // department or location as an implicit report scope.
+  const scopeDepartmentId = normalizedRole === "managing_director" ? null : profile.department_id ?? null
+  const scopeLocationId = normalizedRole === "managing_director" ? null : profile.assigned_location_id ?? null
 
   return (
     <div className={isHrRole ? "min-h-screen bg-background" : "min-h-screen bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.14),_transparent_35%),radial-gradient(circle_at_85%_10%,_rgba(236,72,153,0.12),_transparent_30%),linear-gradient(to_bottom_right,_#020617,_#0f172a,_#020617)]"}>

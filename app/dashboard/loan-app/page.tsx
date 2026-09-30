@@ -1434,6 +1434,7 @@ export default function LoanAppPage() {
   const p = data?.permissions
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
   const isAdmin = isAdminRoleValue(normalizedRole)
+  const isManagingDirector = normalizedRole === "managing_director"
   const isItAdmin = ["it_admin", "it-admin"].includes(normalizedRole.replace(/\s+/g, "_"))
   const canSeeFdReviewerName = isAdmin || p?.directorHr || p?.hrOffice || p?.viewAllTabs
     // Loan Office workspace: loan_office/manager_hr ONLY if in HR dept (not Accounts dept)
@@ -1484,6 +1485,7 @@ export default function LoanAppPage() {
     // Determine if this user is ONLY an HR Executive (director_hr) with no other elevated roles
     const isHrExecutive = !isAdminUser && !!p?.directorHr
     const isAccountsExecutive = !isAdminUser && (normalizedRole === "accounts_executive" || normalizedRole === "account_executive" || normalizedRole === "accounts_exec")
+    const isManagingDirectorUser = isManagingDirector
     const isHrExecutiveOnly = !isAdminUser && p?.directorHr && !p?.hod && !p?.loanOffice && !p?.accounts && !p?.hrOffice && !p?.viewAllTabs
 
     // IT Administrators may use the loan workspace only for their own loans and tracking.
@@ -1525,7 +1527,7 @@ export default function LoanAppPage() {
     // Loan Office tab: ONLY for HR department loan office staff to process HOD-approved loans and perform FD checks
     // Supports both new (hr_loan_office) and legacy (loan_office in HR dept) role names
     const isHRLoanOffice = (["hr_loan_office", "loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) || normalizedRole.includes("hr_loan") || /hr.*loan.*office/i.test(`${normalizedRole} ${userDeptName}`)) && !userDeptIsAccounts || (p?.loanOffice && !userDeptIsAccounts)
-    if (isHRLoanOffice) {
+    if (isHRLoanOffice || isManagingDirectorUser) {
       tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice})` })
     }
 
@@ -1545,7 +1547,7 @@ export default function LoanAppPage() {
     }
 
     // Repayment Tracking tab: for Loan Office, Accounts Office, executives, and HR Loan Office
-    if (canAccessLoanOfficeWorkspace || isAccountsOffice || isAccountsExecutive || isHRLoanOffice || isAdminUser) {
+    if (!isManagingDirectorUser && (canAccessLoanOfficeWorkspace || isAccountsOffice || isAccountsExecutive || isHRLoanOffice || isAdminUser)) {
       tabs.push({ key: "repayment-tracking", label: "Repayment Tracking" })
       tabs.push({ key: "running-loans", label: "Running Loans" })
     }
@@ -1553,11 +1555,11 @@ export default function LoanAppPage() {
     // Analytics tab for Loan Office, Accounts executives, and HR Loan Office (view only)
     if (canAccessLoanOfficeWorkspace || p?.accounts || isHRLoanOffice) tabs.push({ key: "analytics", label: "Analytics" })
     // Leave Payment: Accounts executives, viewAllTabs, and HR Loan Office
-    if (p?.accounts || p?.viewAllTabs || isHRLoanOffice) tabs.push({ key: "leave-payment", label: "Leave Payment" })
+    if (!isManagingDirectorUser && (p?.accounts || p?.viewAllTabs || isHRLoanOffice)) tabs.push({ key: "leave-payment", label: "Leave Payment" })
     if (canAccessLoanOfficeWorkspace && !p?.accounts && !p?.viewAllTabs) tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
     // HR Loan Office users need visibility of the committee queue for end-to-end tracking,
   // but the Committee page remains read-only unless the user has committee permission.
-  if (p?.committee || p?.viewAllTabs || isHRLoanOffice) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
+  if (p?.committee || p?.viewAllTabs || isHRLoanOffice || isManagingDirectorUser) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
     // Payment Approvals: single tab only (HR/Accounts executives). Avoid second push for HR Loan Office alone.
     if (isHrExecutive || isAccountsExecutive || isAccountsOffice || isAdminUser) {
@@ -1571,7 +1573,7 @@ export default function LoanAppPage() {
     // All Loans: admins, viewAllTabs, and HR Loan Office (read-only view with download access)
     if (p?.allLoans || p?.viewAllTabs || isHRLoanOffice) {
       tabs.push({ key: "overview", label: `All Loans (${c.all})` })
-      if (c.archived > 0) {
+      if (!isManagingDirectorUser && c.archived > 0) {
         tabs.push({ key: "archive", label: `Archive (${c.archived})` })
       }
     }
@@ -4063,7 +4065,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           </Badge>
                         </TableCell>
                         <TableCell className="text-xs whitespace-nowrap"><span className="font-medium">{fmtDateTime(row.submitted_at || row.created_at)}</span></TableCell>
-                        {p?.hod && (
+                        {p?.hod && row.can_endorse === true && (
                           <TableCell>
                             <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "hod")}>Review &amp; Decide</Button>
                           </TableCell>
@@ -4079,7 +4081,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
           {hodViewMode === "card" && pagedHod.map((row) => (
             <StageCard key={row.id} row={row}>
-              {p?.hod && <Button size="sm" onClick={() => openActionModal(row, "hod")}>Review &amp; Decide</Button>}
+              {p?.hod && row.can_endorse === true && <Button size="sm" onClick={() => openActionModal(row, "hod")}>Review &amp; Decide</Button>}
             </StageCard>
           ))}
           <div className="flex items-center justify-end gap-2">
@@ -4299,6 +4301,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       <th className="px-4 py-2.5 whitespace-nowrap">Type</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Amount (GHc)</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">FD Score</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">HOD/RM Endorsed By</th>
                       {canSeeFdReviewerName && <th className="px-4 py-2.5 whitespace-nowrap">FD Reviewer</th>}
                       <th className="px-4 py-2.5 whitespace-nowrap">Status</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Attachment</th>
@@ -4328,6 +4331,10 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           {row.fd_score != null ? (
                             <span className={`font-semibold ${Number(row.fd_score) >= 60 ? "text-emerald-700" : "text-rose-600"}`}>{row.fd_score}</span>
                           ) : <span className="text-slate-400">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap">
+                          <p className="font-medium text-slate-700">{row.hod_name || "Not recorded"}</p>
+                          <p className="text-[11px] text-slate-400">{row.hod_rank || "HOD/RM"}{row.hod_location ? ` · ${row.hod_location}` : ""}</p>
                         </td>
                         {canSeeFdReviewerName && <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{row.accounts_reviewer_name || "—"}</td>}
                         <td className="px-4 py-3 whitespace-nowrap">
@@ -4682,7 +4689,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             </button>
             {!collapsedSections.loanOfficeFdApproved && (
               <div className="p-5">
-                <HRLoanOfficeFDApproved />
+                <HRLoanOfficeFDApproved readOnly={isManagingDirector} />
               </div>
             )}
           </div>
@@ -6010,7 +6017,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
         {/* ── Repayment Tracking ── */}
 <TabsContent value="running-loans" className="space-y-4">
   {normalizedRole === "hr_loan_office" && <SettlementInitiationPanel />}
-  <RunningLoansReport />
+  <RunningLoansReport readOnly={isManagingDirector} />
   </TabsContent>
 
         <TabsContent value="repayment-tracking" className="space-y-4">
@@ -6262,7 +6269,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       {pagedMyTasks.map((row) => (
                         <TableRow 
                           key={`my-task-${row.id}`}
-                          onDoubleClick={() => row.status === "pending_hod" && row.can_endorse !== false && openActionModal(row, "hod")}
+                          onDoubleClick={() => row.status === "pending_hod" && row.can_endorse === true && openActionModal(row, "hod")}
                           title={row.status === "pending_hod" ? (row.can_endorse === false ? "Read-only: outside your department endorsement scope" : "Double-click or use buttons to Review / Endorse") : ""}
                           className={row.status === "pending_hod" ? "cursor-pointer hover:bg-emerald-50 transition-colors" : ""}
                         >
@@ -7642,10 +7649,30 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           </DialogHeader>
 
           <div className="space-y-2 py-1 max-h-[70vh] overflow-y-auto">
-            {actionModal.row?.user_id && ["hod", "loan_office", "committee", "hr_terms", "director"].includes(actionModal.actionType || "") && (
-              <StaffLoanHistory userId={actionModal.row.user_id} staffName={actionModal.row.staff_full_name || actionModal.row.staff_number || "Staff"} />
-            )}
-            {/* HOD */}
+  {actionModal.row?.user_id && ["hod", "loan_office", "committee", "hr_terms", "director"].includes(actionModal.actionType || "") && (
+  <StaffLoanHistory userId={actionModal.row.user_id} staffName={actionModal.row.staff_full_name || actionModal.row.staff_number || "Staff"} />
+  )}
+  {actionModal.actionType === "loan_office" && actionModal.row && (
+  <Card className="border-emerald-200 bg-emerald-50/60">
+  <CardHeader className="pb-2">
+  <CardTitle className="flex items-center gap-2 text-sm text-emerald-950">
+  <BadgeCheck className="h-4 w-4 text-emerald-700" /> HOD/RM endorsement brief
+  </CardTitle>
+  <CardDescription className="text-xs text-emerald-900/80">
+  Review the originating supervisor&apos;s decision and supporting context before forwarding this request.
+  </CardDescription>
+  </CardHeader>
+  <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
+  <div><p className="text-xs font-medium text-muted-foreground">Endorsing HOD/RM</p><p className="font-medium">{actionModal.row.hod_name || "Not recorded"}</p></div>
+  <div><p className="text-xs font-medium text-muted-foreground">Location / scope</p><p className="font-medium">{actionModal.row.hod_location || actionModal.row.staff_location_name || "Not recorded"}</p></div>
+  <div className="sm:col-span-2"><p className="text-xs font-medium text-muted-foreground">Endorsement note</p><p className="whitespace-pre-wrap rounded-md border border-emerald-200 bg-background p-3">{actionModal.row.hod_review_note || "No endorsement note was recorded."}</p></div>
+  <div className="sm:col-span-2 rounded-md border border-emerald-200 bg-background p-3 text-xs text-muted-foreground">
+  Meaningful decision check: verify the staff member&apos;s stated reason, requested amount, repayment affordability, previous loan history, and all supporting documents before forwarding.
+  </div>
+  </CardContent>
+  </Card>
+  )}
+  {/* HOD */}
             {actionModal.actionType === "hod" && (
               <>
                 <Label className="text-sm">Decision</Label>
@@ -8316,7 +8343,7 @@ if (!modalDisbursement || !modalRecovery) {
       }}>
         <DialogContent className="flex !w-[96vw] !max-w-[96vw] sm:!max-w-[96vw] h-[92vh] max-h-[92vh] flex-col p-0 gap-0 overflow-hidden" showCloseButton={false}>
 
-          {/* ── Header bar ─────────────────────────────────────────────── */}
+          {/* ── Header bar ────────────────���────────────────────────────── */}
           <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-3 shrink-0">
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-indigo-600" />

@@ -357,12 +357,13 @@ export async function POST(request: NextRequest) {
       const isLegacyCarCommitteeLoan = loanType.loan_key.toLowerCase().includes("car") || loanType.loan_label.toLowerCase().includes("car")
       const importStatus = isLegacyCarCommitteeLoan
         ? "awaiting_committee"
-        : (rowStatus || (disbursementDate ? "partially_recovered" : "approved_director"))
+        : "approved_director"
+      const historicalState = rowStatus || (disbursementDate ? "partially_recovered" : "approved_director")
       const effectiveRecoveryStartDate = isLegacyCarCommitteeLoan ? null : (recoveryStartDate || disbursementDate || null)
       const effectiveMdApprovedAt = isLegacyCarCommitteeLoan ? null : (mdApprovedAt || disbursementDate || nowIso)
       const effectiveRepaymentStatus = isLegacyCarCommitteeLoan
         ? null
-        : (requestedRepaymentStatus || (importStatus === "payment_completed" ? "completed" : ((importStatus === "partially_recovered" || importStatus === "staff_receiving_funds") ? "active" : null)))
+        : (requestedRepaymentStatus || (historicalState === "payment_completed" ? "completed" : ((historicalState === "partially_recovered" || historicalState === "staff_receiving_funds") ? "active" : null)))
 
       // Bulk-imported loans skip the pending_hod stage entirely: they are created
       // directly as a historical approved/disbursed record so they are visible
@@ -401,7 +402,7 @@ export async function POST(request: NextRequest) {
         // Legacy junior/senior car loans remain pending Committee review and must not look approved.
         hod_review_note: isLegacyCarCommitteeLoan
           ? "Bulk imported by Administrator — legacy car loan awaiting Committee review."
-          : (importStatus === "payment_completed"
+          : (historicalState === "payment_completed"
             ? "Bulk imported by Administrator — historical loan imported as fully cleared."
             : "Bulk imported by Administrator — historical approved/disbursed loan imported for repayment tracking."),
         hod_decision_at: isLegacyCarCommitteeLoan ? null : nowIso,
@@ -439,7 +440,7 @@ export async function POST(request: NextRequest) {
         // Timeline is best-effort; do not fail the import if it cannot be written.
       }
 
-      if ((importStatus === "partially_recovered" || importStatus === "staff_receiving_funds" || importStatus === "payment_completed") && finalRequestedAmount) {
+      if ((historicalState === "partially_recovered" || historicalState === "staff_receiving_funds" || historicalState === "payment_completed") && finalRequestedAmount) {
         const durationMonths = Number(recoveryMonths || loanType.default_recovery_months || 12)
         if (Number.isFinite(durationMonths) && durationMonths > 0) {
           try {

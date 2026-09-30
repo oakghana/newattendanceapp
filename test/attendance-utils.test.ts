@@ -5,6 +5,7 @@ import {
   requiresLatenessReason,
   requiresEarlyCheckoutReason,
   canAutoCheckoutOutOfRange,
+  canCheckInAtTime,
 } from "../lib/attendance-utils"
 
 describe("attendance-utils", () => {
@@ -29,7 +30,7 @@ describe("attendance-utils", () => {
     const weekday = new Date("2026-02-12T10:30:00Z") // Thursday
     const saturday = new Date("2026-02-14T10:30:00Z")
 
-    expect(requiresLatenessReason(weekday, { code: "HR" })).toBe(true)
+    expect(requiresLatenessReason(weekday, { code: "HR" })).toBe(false)
     expect(requiresLatenessReason(saturday, { code: "HR" })).toBe(false)
     expect(requiresLatenessReason(weekday, { code: "security" })).toBe(false)
     expect(requiresLatenessReason(weekday, { code: "transport" })).toBe(false)
@@ -57,6 +58,16 @@ describe("attendance-utils", () => {
     expect(requiresEarlyCheckoutReason(saturday, true)).toBe(false)
   })
 
+  it("allows standard departments to check in at any time", () => {
+    const lateWeekday = new Date("2026-02-12T16:30:00")
+    for (const code of ["it_audit", "research", "estate", "accounts", "legal", "monitoring_and_evaluation", "hr"]) {
+      expect(canCheckInAtTime(lateWeekday, { code })).toBe(true)
+    }
+    for (const role of ["NSP", "contract", "contract_role"]) {
+      expect(canCheckInAtTime(lateWeekday, undefined, role)).toBe(true)
+    }
+  })
+
   it("bypasses lateness and early-checkout reasons for shift departments", () => {
     const weekday = new Date("2026-02-12T10:30:00Z")
 
@@ -82,7 +93,7 @@ describe("attendance-utils", () => {
   it("allows automatic checkout handling for 22-hour departments", () => {
     const overnight = new Date("2026-02-12T23:59:00")
 
-    for (const dept of [{ code: "security" }, { code: "transport" }]) {
+    for (const dept of [{ code: "security" }, { code: "transport" }, { code: "operations" }]) {
       expect(canAutoCheckoutOutOfRange({
         now: overnight,
         hasCheckedIn: true,

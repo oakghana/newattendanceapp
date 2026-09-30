@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     let attendanceRecord = todayAttendanceRecord
 
-    // Security/Transport staff often work overnight shifts that cross midnight.
+    // Security, Transport, and Operations staff often work overnight shifts that cross midnight.
     // If they checked in yesterday and haven't been auto-closed (they are exempt
     // from the 11:59 PM auto-checkout), let them check out the next day too.
     if (!attendanceRecord && isOvernightShiftDept(userProfile?.departments)) {
@@ -620,7 +620,7 @@ export async function POST(request: NextRequest) {
     const checkInDate = new Date(attendanceRecord.check_in_time).toISOString().split("T")[0]
     const currentDate = now.toISOString().split("T")[0]
 
-    if (checkInDate !== currentDate) {
+    if (checkInDate !== currentDate && !isOvernightShiftDept(userProfile?.departments)) {
       return NextResponse.json(
         {
           error:
