@@ -165,8 +165,11 @@ export async function GET(request: Request) {
     // Chief Drivers only see requisitions for their own location.
     if (viewerLocation) query = query.eq("location", viewerLocation)
     else query = query.eq("location", "__no_assigned_location__")
-  } else if (isAdminRole(role) || role === "managing_director" || isTransportManagerRole(role) || role === "it-admin") {
-    // full queue
+  } else if (isAdminRole(role) || role === "managing_director" || isTransportManagerRole(role)) {
+    // Authorized transport reviewers can see the full queue.
+  } else if (role === "it-admin") {
+    // IT Admins may submit non-regional requests, but can only track their own.
+    query = query.eq("requester_id", user.id)
   } else if (isDepartmentHeadRole(role) || isLinkedHod) {
     const scopeClauses = [`requester_id.eq.${user.id}`, `hod_id.eq.${user.id}`]
     if (linkedStaffIds.length > 0) scopeClauses.push(`requester_id.in.(${linkedStaffIds.join(",")})`)

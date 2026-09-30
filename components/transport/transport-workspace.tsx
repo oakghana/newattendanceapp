@@ -264,6 +264,42 @@ export function TransportWorkspace({
     router.refresh()
   }
 
+  if (normalizedRole === "it_admin" || normalizedRole === "it-admin") {
+    return (
+      <div className="flex min-w-0 flex-col gap-6">
+        <header className="overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/[0.08] via-background to-background shadow-sm">
+          <div className="flex flex-col gap-5 border-b border-border/50 bg-background/60 p-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Bus className="size-6" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">IT Admin transport</p>
+                <h1 className="mt-1 text-3xl font-semibold tracking-tight text-balance">Request non-regional transport</h1>
+                <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">Submit a transport requisition for your work trip and track only requests submitted from your account.</p>
+              </div>
+            </div>
+            <Button size="lg" asChild>
+              <Link href="/dashboard/transport/nonregional/new">
+                <Plus data-icon="inline-start" /> New non-regional request
+              </Link>
+            </Button>
+          </div>
+          <div className="grid gap-px bg-border/50 sm:grid-cols-4">
+            <div className="flex items-center gap-3 bg-background/90 p-5"><Inbox className="size-5 text-primary" /><div><p className="text-2xl font-semibold tracking-tight">{totalCount}</p><p className="text-xs text-muted-foreground">My requests</p></div></div>
+            <div className="flex items-center gap-3 bg-background/90 p-5"><Clock3 className="size-5 text-amber-600" /><div><p className="text-2xl font-semibold tracking-tight">{pendingCount}</p><p className="text-xs text-muted-foreground">Awaiting approval</p></div></div>
+            <div className="flex items-center gap-3 bg-background/90 p-5"><CheckCircle2 className="size-5 text-emerald-600" /><div><p className="text-2xl font-semibold tracking-tight">{approvedCount}</p><p className="text-xs text-muted-foreground">Approved</p></div></div>
+            <div className="flex items-center gap-3 bg-background/90 p-5"><Truck className="size-5 text-muted-foreground" /><div><p className="text-2xl font-semibold tracking-tight">{assignedCount}</p><p className="text-xs text-muted-foreground">Transport assigned</p></div></div>
+          </div>
+        </header>
+        <section className="grid gap-5 lg:grid-cols-2">
+          <ModuleCard title="New non-regional request" description="Request transport for an official Head Office trip. Your request will follow the standard approval workflow." href="/dashboard/transport/nonregional/new" icon={Route} cta="Request transport" badge="Self-service" />
+          <ModuleCard title="My requests" description="View the status and approval progress of transport requests submitted by you." href="/dashboard/transport/nonregional" icon={Inbox} cta="Track my requests" badge="Private view" />
+        </section>
+      </div>
+    )
+  }
+
   if (isManagingDirector || isHrExecutive) {
     const accentClass = isManagingDirector ? "text-primary" : "text-accent"
     const accentBg = isManagingDirector ? "bg-primary/10" : "bg-accent/10"
