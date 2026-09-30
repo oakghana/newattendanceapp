@@ -26,11 +26,11 @@ describe("attendance-utils", () => {
     expect(isSecurityDept({ code: "HR" })).toBe(false)
   })
 
-  it("enforces lateness reason only on weekdays and non-exempt departments", () => {
+  it("enforces lateness reason only on weekdays and non-exempt staff", () => {
     const weekday = new Date("2026-02-12T10:30:00Z") // Thursday
     const saturday = new Date("2026-02-14T10:30:00Z")
 
-    expect(requiresLatenessReason(weekday, { code: "HR" })).toBe(false)
+    expect(requiresLatenessReason(weekday, { code: "HR" })).toBe(true)
     expect(requiresLatenessReason(saturday, { code: "HR" })).toBe(false)
     expect(requiresLatenessReason(weekday, { code: "security" })).toBe(false)
     expect(requiresLatenessReason(weekday, { code: "transport" })).toBe(false)
@@ -45,7 +45,10 @@ describe("attendance-utils", () => {
     expect(requiresLatenessReason(weekday, { code: "HR" }, "admin")).toBe(false)
     expect(requiresEarlyCheckoutReason(weekday, true, "admin", { code: "HR" })).toBe(false)
 
-    expect(requiresLatenessReason(weekday, { code: "HR" }, "regional_manager")).toBe(false)
+    expect(requiresLatenessReason(weekday, { code: "HR" }, "managing_director")).toBe(false)
+    expect(requiresLatenessReason(weekday, { code: "HR" }, "accounts_executive")).toBe(false)
+    expect(requiresLatenessReason(weekday, { code: "HR" }, "hr_executive")).toBe(false)
+    expect(requiresLatenessReason(weekday, { code: "HR" }, "regional_manager")).toBe(true)
     expect(requiresEarlyCheckoutReason(weekday, true, "department_head", { code: "HR" })).toBe(false)
   })
 
