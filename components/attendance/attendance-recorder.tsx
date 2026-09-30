@@ -506,8 +506,8 @@ export function AttendanceRecorder({
 
 
   useEffect(() => {
-    // Overnight/at-post staff (security AND transport, who both work overnight shifts and
-    // are not auto-checked-out at midnight) must be checked for an open prior-day session
+    // Overnight/at-post staff must be checked for any open session, including a
+    // prior-day session, before a new check-in is allowed.
     // BEFORE auto check-in is allowed to run. Without this, a staff member still genuinely
     // at post can get auto-checked-in again the next day, creating a duplicate open session.
     if (!userProfile || !isOvernightShiftDept(userProfile.departments)) {
@@ -530,13 +530,8 @@ export function AttendanceRecorder({
 
       if (active) {
         const openRecord = data
-        const today = new Date().toISOString().slice(0, 10)
-        const openRecordDate = openRecord?.check_in_time
-          ? new Date(openRecord.check_in_time).toISOString().slice(0, 10)
-          : null
-        // Only an open record from today represents a live session. Prior-day
-        // sessions are stale for today's check-in and are closed by the server.
-        if (!error) setOvernightOpenAttendance(openRecordDate === today ? openRecord : null)
+        // Any open record blocks a new check-in until the previous session is closed.
+        if (!error) setOvernightOpenAttendance(openRecord || null)
         setOvernightCheckLoading(false)
       }
     }
@@ -3389,7 +3384,7 @@ export function AttendanceRecorder({
       <CardHeader>
           <CardTitle>Continue previous attendance session?</CardTitle>
           <CardDescription>
-            You have an open {overnightOpenAttendance.department_name || "shift"} attendance session from {new Date(overnightOpenAttendance.check_in_time).toLocaleString()}. If you are still working that session, continue it and check out normally. Sessions automatically close after 22 hours; after that, the system starts the next day&apos;s session without asking for a reason.
+            You have an open {overnightOpenAttendance.department_name || "shift"} attendance session from {new Date(overnightOpenAttendance.check_in_time).toLocaleString()}. You must check out from that previous session before starting a new attendance session. The system will not auto-close it or create a new check-in.
           </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 sm:flex-row sm:justify-end">
@@ -3401,15 +3396,7 @@ export function AttendanceRecorder({
             setFlashMessage({ message: "Your open attendance session is ready. Please check out first.", type: "info" })
           }}
         >
-          Continue previous session
-        </Button>
-        <Button
-          onClick={() => {
-            setOvernightAttendanceConfirmed(true)
-            setOvernightOpenAttendance(null)
-          }}
-        >
-          Start today&apos;s session
+          Check out previous session first
         </Button>
       </CardContent>
     </Card>
