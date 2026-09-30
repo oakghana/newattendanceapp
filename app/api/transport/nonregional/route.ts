@@ -262,12 +262,13 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const { data: selectedLocation } = await supabase
+  const { data: selectedLocations } = await supabase
     .from("geofence_locations")
     .select("id, name, location_type, district_id, districts(region_id)")
-    .ilike("name", String(body.location ?? "").trim())
+    .in("name", [String(body.location ?? "").trim(), String(body.origin ?? "").trim()].filter(Boolean))
     .eq("is_active", true)
-    .maybeSingle()
+  const selectedLocation = (selectedLocations ?? []).find((location: any) => String(location.name).trim().toLowerCase() === String(body.origin ?? "").trim().toLowerCase())
+    ?? (selectedLocations ?? []).find((location: any) => String(location.name).trim().toLowerCase() === String(body.location ?? "").trim().toLowerCase())
   const selectedDistrict = Array.isArray(selectedLocation?.districts) ? selectedLocation?.districts[0] : selectedLocation?.districts
   const isRegionalLocation = Boolean(selectedLocation?.district_id || selectedDistrict?.region_id || String(selectedLocation?.location_type ?? "").toLowerCase().includes("district") || String(selectedLocation?.location_type ?? "").toLowerCase().includes("regional"))
   const required = ["department", "location", "origin", "destination", "purpose", "requiredAt", "personsRequiringTransport"]
