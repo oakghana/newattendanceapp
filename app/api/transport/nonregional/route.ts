@@ -235,7 +235,7 @@ export async function POST(request: Request) {
   let profileError: any = null
   ;({ data: profile, error: profileError } = await supabase
     .from("user_profiles")
-    .select("role, signature_data_url, hod_id, first_name, last_name, position, department_id")
+    .select("role, signature_data_url, hod_id, first_name, last_name, position, department_id, assigned_location_id, region_id")
     .eq("id", user.id)
     .single())
   if (profileError && /column .*does not exist|hod_id/i.test(profileError.message || "")) {
@@ -262,6 +262,14 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
+  const { data: selectedLocation } = await supabase
+    .from("geofence_locations")
+    .select("id, name, location_type, district_id, districts(region_id)")
+    .ilike("name", String(body.location ?? "").trim())
+    .eq("is_active", true)
+    .maybeSingle()
+  const selectedDistrict = Array.isArray(selectedLocation?.districts) ? selectedLocation?.districts[0] : selectedLocation?.districts
+  const isRegionalLocation = Boolean(selectedLocation?.district_id || selectedDistrict?.region_id || String(selectedLocation?.location_type ?? "").toLowerCase().includes("district") || String(selectedLocation?.location_type ?? "").toLowerCase().includes("regional"))
   const required = ["department", "location", "origin", "destination", "purpose", "requiredAt", "personsRequiringTransport"]
   const peopleCount = Number(body.personsCount)
   const personNames = String(body.personNames ?? body.personsRequiringTransport ?? "").trim()
@@ -279,6 +287,33 @@ export async function POST(request: Request) {
   // Some deployed databases use an integer for this legacy column. Keep the
   // count numeric and persist names separately when that column is available.
   const personsRequiringTransport = peopleCount
+
+  if (isRegionalLocation) {
+    const linkedDistrictId = selectedLocation?.district_id ?? null
+    const assignedRegionId = profile.region_id ?? selectedDistrict?.region_id ?? null
+    const { data: regionalRequest, error: regionalError } = await supabase
+      .from("transport_requests")
+      .insert({
+        requester_id: user.id,
+        request_type: "regional_transport",
+        purpose: String(body.purpose).trim(),
+        origin: String(body.origin).trim(),
+        destination: String(body.destination).trim(),
+        event_date: String(body.requiredAt),
+        passenger_count: peopleCount,
+        status: "submitted",
+        workflow_stage: linkedDistrictId ? "district_officer_review" : "regional_hr_review",
+        regional_route: "local_regional",
+        supporting_documents: Array.isArray(body.supportingDocuments) ? body.supportingDocuments.slice(0, 10) : [],
+        assigned_region_id: assignedRegionId,
+        linked_district_id: linkedDistrictId,
+        origin_location_id: selectedLocation?.id ?? profile.assigned_location_id ?? null,
+      })
+      .select("id, status, workflow_stage")
+      .single()
+    if (regionalError) return NextResponse.json({ error: regionalError.message }, { status: 500 })
+    return NextResponse.json({ id: regionalRequest.id, status: regionalRequest.status, workflow_stage: regionalRequest.workflow_stage, routedWorkflow: "regional" }, { status: 201 })
+  }
 
   // A linked HOD must approve first. Department Heads and HR Executives submit
   // their own departmental requisitions directly to the Managing Director.
