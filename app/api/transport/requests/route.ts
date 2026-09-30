@@ -228,10 +228,11 @@ export async function POST(request: Request) {
   const isRegionalHr = isRegionalHrRole(profile?.role)
   const isRegionalManager = isRegionalManagerRole(profile?.role)
   const isChiefDriver = isChiefDriverRole(profile?.role)
-  // Regional HR Office and Regional Managers can raise regional requests; the request follows the Regional Manager, MD, and HR Executive workflow.
-  if (!profile?.is_active || (!isRegionalHr && !isRegionalManager && !isDistrictOfficer && !isChiefDriver)) {
+  const isRegionalStaffRequester = profile?.role === "staff" && Boolean(profile.assigned_location_id)
+  // Active location-assigned regional staff can submit requests; Regional HR determines the route during review.
+  if (!profile?.is_active || (!isRegionalHr && !isRegionalManager && !isDistrictOfficer && !isChiefDriver && !isRegionalStaffRequester)) {
     return NextResponse.json(
-      { error: "Only active Regional HR Office, Regional Manager, District Officer, or Chief Driver users can create regional transport requests." },
+      { error: "Only active regional staff with an assigned location, Regional HR Office, Regional Manager, District Officer, or Chief Driver users can create regional transport requests." },
       { status: 403 },
     )
   }

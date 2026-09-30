@@ -3,7 +3,7 @@ import { ArrowLeft, Bus, Plus } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { TransportRequestRegister } from "@/components/transport/transport-request-register"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { canManageTransport, isChiefDriverRole, isDistrictOfficerRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 
 export default async function TransportRequestsPage() {
@@ -75,7 +75,8 @@ export default async function TransportRequestsPage() {
   }
   let { data: requests, error: requestsError } = await requestsQuery
   const ownRequestFields = "id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url"
-  let ownRequestsQuery: any = supabase
+  const ownRequestsClient = await createAdminClient()
+  let ownRequestsQuery: any = ownRequestsClient
     .from("transport_requests")
     .select(ownRequestFields)
     .eq("requester_id", user.id)
