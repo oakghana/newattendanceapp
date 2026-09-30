@@ -67,9 +67,9 @@ export default async function TransportRequestsPage() {
   let requestsQuery = (canRegionalHr ? regionalHrDataClient : supabase).from("transport_requests").select(requestFields).order("created_at", { ascending: false }).limit(200)
   if (isRegionalRequester) requestsQuery = requestsQuery.eq("id", "00000000-0000-0000-0000-000000000000")
   if (canHrExecutive) requestsQuery = requestsQuery.eq("request_type", "regional_transport")
-  if (canRegionalHr) {
-    requestsQuery = requestsQuery.in("workflow_stage", ["submitted", "district_officer_review", "regional_hr_review", "regional_hr_correction", "awaiting_do_regional_hr_endorsement"])
-    if (!regionalHrScopeLocationIds.length && !regionalHrScopeDistrictIds.length && !regionalHrRegionIds.length) requestsQuery = requestsQuery.eq("id", "00000000-0000-0000-0000-000000000000")
+  const regionalHrStages = ["submitted", "district_officer_review", "regional_hr_review", "regional_hr_correction", "awaiting_do_regional_hr_endorsement", "regional_manager_endorsement", "hr_records_review", "hr_executive_signing", "approved", "referenced", "completed", "closed"]
+  if (canRegionalHr && !regionalHrScopeLocationIds.length && !regionalHrScopeDistrictIds.length && !regionalHrRegionIds.length) {
+    requestsQuery = requestsQuery.eq("id", "00000000-0000-0000-0000-000000000000")
   }
   if (isDistrictOfficerRole(profile.role)) {
     if (districtId) requestsQuery = requestsQuery.eq("linked_district_id", districtId)
@@ -92,11 +92,55 @@ export default async function TransportRequestsPage() {
   }
   let { data: requests, error: requestsError } = await requestsQuery
   if (canRegionalHr && requests) {
-    requests = requests.filter((request: any) => (
-      regionalHrScopeLocationIds.includes(request.origin_location_id) ||
-      regionalHrScopeDistrictIds.includes(request.linked_district_id) ||
-      regionalHrRegionIds.includes(request.assigned_region_id)
-    ))
+    const { data: requesterProfiles } = await regionalHrDataClient
+      .from("user_profiles")
+      .select("id, assigned_location_id, region_id, geofence_locations!user_profiles_assigned_location_id_fkey(district_id, districts(region_id))")
+      .not("assigned_location_id", "is", null)
+      .limit(1000)
+    const requesterScope = new Map((requesterProfiles ?? []).map((profile: any) => {
+      const location = Array.isArray(profile.geofence_locations) ? profile.geofence_locations[0] : profile.geofence_locations
+      const district = Array.isArray(location?.districts) ? location.districts[0] : location?.districts
+      return [profile.id, { locationId: profile.assigned_location_id, districtId: location?.district_id, regionId: profile.region_id ?? district?.region_id }]
+    }))
+    requests = requests.filter((request: any) => {
+      if (!regionalHrStages.includes(request.workflow_stage)) return false
+      const requester = requesterScope.get(request.requester_id)
+      return (
+        regionalHrScopeLocationIds.includes(request.origin_location_id) ||
+        regionalHrScopeDistrictIds.includes(request.linked_district_id) ||
+        regionalHrRegionIds.includes(request.assigned_region_id) ||
+        (requester?.locationId && regionalHrScopeLocationIds.includes(requester.locationId)) ||
+        (requester?.districtId && regionalHrScopeDistrictIds.includes(requester.districtId)) ||
+        (requester?.regionId && regionalHrRegionIds.includes(requester.regionId))
+      )
+    })
+    const { data: legacyRegionalRequests } = await regionalHrDataClient
+      .from("nonregional_transport_requisitions")
+      .select("id, requester_id, purpose, origin, destination, required_at, persons_requiring_transport, status, created_at, reference_number")
+      .in("status", ["submitted", "pending", "awaiting_hod", "awaiting_hod_approval", "approved", "completed"])
+      .order("created_at", { ascending: false })
+      .limit(200)
+    const legacyRows = (legacyRegionalRequests ?? []).filter((request: any) => {
+      const requester = requesterScope.get(request.requester_id)
+      return requester?.locationId && regionalHrScopeLocationIds.includes(requester.locationId) || requester?.districtId && regionalHrScopeDistrictIds.includes(requester.districtId) || requester?.regionId && regionalHrRegionIds.includes(requester.regionId)
+    }).map((request: any) => ({
+      id: request.id,
+      requester_id: request.requester_id,
+      request_type: "regional_transport",
+      purpose: request.purpose,
+      origin: request.origin,
+      destination: request.destination,
+      event_date: request.required_at,
+      passenger_count: request.persons_requiring_transport ?? 0,
+      status: request.status ?? "submitted",
+      workflow_stage: ["approved", "completed"].includes(request.status) ? request.status : "awaiting_do_regional_hr_endorsement",
+      reference_number: request.reference_number,
+      supporting_documents: [],
+      created_at: request.created_at,
+      assigned_region: [],
+    }))
+    const existingRequests = requests ?? []
+    requests = [...existingRequests, ...legacyRows.filter((legacy: any) => !existingRequests.some((request: any) => request.id === legacy.id))] as any
   }
   const ownRequestFields = "id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url"
   const ownRequestsClient = await createAdminClient()
