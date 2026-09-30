@@ -78,7 +78,7 @@ export function isExemptFromTimeRestrictions(dept?: DeptInfo, role?: string | nu
  * Standard departments use the system 23:59:59 auto-checkout; only overnight shift departments are exempt.
  */
 export function isOvernightShiftDept(dept?: DeptInfo): boolean {
-  return isSecurityDept(dept) || isTransportDept(dept)
+  return isSecurityDept(dept) || isTransportDept(dept) || isOperationalDept(dept)
 }
 
 export function shouldSkipSystemAutoCheckout(dept?: DeptInfo): boolean {

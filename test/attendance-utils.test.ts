@@ -93,7 +93,7 @@ describe("attendance-utils", () => {
   it("never automatically checks out Security or Transport staff working overnight", () => {
     const overnight = new Date("2026-02-12T23:59:00")
 
-    for (const dept of [{ code: "security" }, { code: "transport" }]) {
+    for (const dept of [{ code: "security" }, { code: "transport" }, { code: "operations" }]) {
       expect(canAutoCheckoutOutOfRange({
         now: overnight,
         hasCheckedIn: true,
