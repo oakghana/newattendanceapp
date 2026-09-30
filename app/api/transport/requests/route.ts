@@ -206,9 +206,9 @@ export async function POST(request: Request) {
   const isRegionalManager = isRegionalManagerRole(profile?.role)
   const isChiefDriver = isChiefDriverRole(profile?.role)
   // Regional HR Office and Regional Managers can raise regional requests; the request follows the Regional Manager, MD, and HR Executive workflow.
-  if (!profile?.is_active || (!isRegionalHr && !isRegionalManager && !isChiefDriver)) {
+  if (!profile?.is_active || (!isRegionalHr && !isRegionalManager && !isDistrictOfficer && !isChiefDriver)) {
     return NextResponse.json(
-      { error: "Only active Regional HR Office users or Chief Drivers can create regional transport requests." },
+      { error: "Only active Regional HR Office, Regional Manager, District Officer, or Chief Driver users can create regional transport requests." },
       { status: 403 },
     )
   }
@@ -596,6 +596,9 @@ workflow_stage: row.request_type === "regional_transport"
     return NextResponse.json({ ok: true })
   }
   if (isDistrictOfficer) {
+    if (row.requester_id === user.id) {
+      return NextResponse.json({ error: "A District Officer cannot endorse or approve their own transport request." }, { status: 403 })
+    }
     const districtId = assignedLocation?.district_id ?? null
     if (!districtId || row.linked_district_id !== districtId) {
       return NextResponse.json({ error: "This request is outside your assigned district." }, { status: 403 })
