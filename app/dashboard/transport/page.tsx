@@ -141,6 +141,23 @@ export default async function TransportPage() {
           + nonRegionalRows.filter((row) => ["approved", "completed"].includes(String(row.status || "")) || row.md_decision === "approved").length
         assignedCount = regionalRows.filter((row) => row.status === "assigned" || row.workflow_stage === "assigned").length
           + nonRegionalRows.filter((row) => row.status === "assigned" || Boolean(row.recommended_driver_id)).length
+      } else if (isRegionalHr) {
+        const { data: hrAssignments } = await adminSupabase.from("regional_hr_office_locations").select("location_id, region_id").eq("regional_hr_user_id", user.id).eq("is_active", true)
+        const locationIds = (hrAssignments ?? []).map((row: any) => row.location_id).filter(Boolean)
+        const regionIds = [...new Set([regionId, ...(hrAssignments ?? []).map((row: any) => row.region_id)].filter(Boolean))]
+        const { data: allLocations } = await adminSupabase.from("geofence_locations").select("id, district_id, districts(region_id)")
+        const scopedLocations = (allLocations ?? []).filter((location: any) => {
+          const linkedRegionId = Array.isArray(location.districts) ? location.districts[0]?.region_id : location.districts?.region_id
+          return regionIds.includes(linkedRegionId)
+        })
+        const scopeLocationIds = [...new Set([...locationIds, ...scopedLocations.map((row: any) => row.id).filter(Boolean)])]
+        const scopeDistrictIds = scopedLocations.map((row: any) => row.district_id).filter(Boolean)
+        const { data: rows } = await adminSupabase.from("transport_requests").select("id, status, workflow_stage, assigned_region_id, linked_district_id, origin_location_id").in("workflow_stage", ["submitted", "district_officer_review", "regional_hr_review", "regional_hr_correction", "awaiting_do_regional_hr_endorsement"]).limit(500)
+        const scoped = (rows ?? []).filter((row: any) => scopeLocationIds.includes(row.origin_location_id) || scopeDistrictIds.includes(row.linked_district_id) || regionIds.includes(row.assigned_region_id))
+        totalCount = scoped.length
+        pendingCount = scoped.filter((row: any) => !["approved", "referenced", "completed", "rejected", "closed"].includes(String(row.status || ""))).length
+        approvedCount = scoped.filter((row: any) => ["approved", "referenced", "completed"].includes(String(row.status || "")) || ["approved", "referenced", "completed"].includes(String(row.workflow_stage || ""))).length
+        assignedCount = scoped.filter((row: any) => row.status === "assigned" || row.workflow_stage === "assigned").length
       } else {
       let query = supabase
         .from("transport_requests")

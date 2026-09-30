@@ -43,42 +43,32 @@ export default async function TransportRequestsPage() {
   const regionalOfficeName = rawRegionalName ? rawRegionalName.replace(/\s+Regional\s+Office$/i, "").replace(/\s+Region$/i, "").trim() + " Regional Office" : "Regional Office"
   const requestFields = "id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url, assigned_region:geofence_locations!transport_requests_assigned_region_id_fkey(name, districts(region_id, regions(name)))"
   const { data: regionalHrAssignments } = canRegionalHr
-    ? await supabase.from("regional_hr_office_locations").select("location_id").eq("regional_hr_user_id", user.id).eq("is_active", true)
-    : { data: [] as { location_id: string }[] }
+    ? await supabase.from("regional_hr_office_locations").select("location_id, region_id").eq("regional_hr_user_id", user.id).eq("is_active", true)
+    : { data: [] as { location_id: string; region_id?: string | null }[] }
   const regionalHrLocationIds = (regionalHrAssignments ?? []).map((assignment) => assignment.location_id).filter(Boolean)
   let regionalHrScopeLocationIds = regionalHrLocationIds
-  if (canRegionalHr && regionalHrLocationIds.length) {
-    const { data: assignedLocations } = await supabase
+  let regionalHrScopeDistrictIds: string[] = []
+  const regionalHrRegionIds = [...new Set([
+    ...(regionId ? [regionId] : []),
+    ...(regionalHrAssignments ?? []).map((assignment) => assignment.region_id).filter(Boolean),
+  ])]
+  if (canRegionalHr && regionalHrRegionIds.length) {
+    const { data: regionalLocations } = await supabase
       .from("geofence_locations")
       .select("id, district_id, districts(region_id)")
-      .in("id", regionalHrLocationIds)
-    const regionalIds = [...new Set([
-      ...(regionId ? [regionId] : []),
-      ...(assignedLocations ?? []).flatMap((location: any) => {
-        const districtRegionId = Array.isArray(location.districts) ? location.districts[0]?.region_id : location.districts?.region_id
-        return districtRegionId ? [districtRegionId] : []
-      }),
-    ])]
-    if (regionalIds.length) {
-      const { data: regionalLocations } = await supabase
-        .from("geofence_locations")
-        .select("id, district_id, districts(region_id)")
-      regionalHrScopeLocationIds = (regionalLocations ?? [])
-        .filter((location: any) => {
-          const districtRegionId = Array.isArray(location.districts) ? location.districts[0]?.region_id : location.districts?.region_id
-          return districtRegionId && regionalIds.includes(districtRegionId)
-        })
-        .map((location: any) => location.id)
-        .filter(Boolean)
-    }
+    const scopedLocations = (regionalLocations ?? []).filter((location: any) => {
+      const districtRegionId = Array.isArray(location.districts) ? location.districts[0]?.region_id : location.districts?.region_id
+      return districtRegionId && regionalHrRegionIds.includes(districtRegionId)
+    })
+    regionalHrScopeLocationIds = scopedLocations.map((location: any) => location.id).filter(Boolean)
+    regionalHrScopeDistrictIds = scopedLocations.map((location: any) => location.district_id).filter(Boolean)
   }
   let requestsQuery = supabase.from("transport_requests").select(requestFields).order("created_at", { ascending: false }).limit(200)
   if (isRegionalRequester) requestsQuery = requestsQuery.eq("id", "00000000-0000-0000-0000-000000000000")
   if (canHrExecutive) requestsQuery = requestsQuery.eq("request_type", "regional_transport")
   if (canRegionalHr) {
     requestsQuery = requestsQuery.in("workflow_stage", ["submitted", "district_officer_review", "regional_hr_review", "regional_hr_correction", "awaiting_do_regional_hr_endorsement"])
-    if (regionalHrScopeLocationIds.length) requestsQuery = requestsQuery.in("origin_location_id", regionalHrScopeLocationIds)
-    else requestsQuery = requestsQuery.eq("id", "00000000-0000-0000-0000-000000000000")
+    if (!regionalHrScopeLocationIds.length && !regionalHrScopeDistrictIds.length && !regionalHrRegionIds.length) requestsQuery = requestsQuery.eq("id", "00000000-0000-0000-0000-000000000000")
   }
   if (isDistrictOfficerRole(profile.role)) {
     if (districtId) requestsQuery = requestsQuery.eq("linked_district_id", districtId)
@@ -100,6 +90,13 @@ export default async function TransportRequestsPage() {
     requestsQuery = requestsQuery.eq("request_type", "regional_transport")
   }
   let { data: requests, error: requestsError } = await requestsQuery
+  if (canRegionalHr && requests) {
+    requests = requests.filter((request: any) => (
+      regionalHrScopeLocationIds.includes(request.origin_location_id) ||
+      regionalHrScopeDistrictIds.includes(request.linked_district_id) ||
+      regionalHrRegionIds.includes(request.assigned_region_id)
+    ))
+  }
   const ownRequestFields = "id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url"
   const ownRequestsClient = await createAdminClient()
   let ownRequestsQuery: any = ownRequestsClient
