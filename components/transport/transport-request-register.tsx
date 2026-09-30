@@ -933,9 +933,9 @@ export function TransportRequestRegister({
     isRegional &&
     stage === "regional_manager_endorsement";
   const regionalHrActions =
-    canRegionalHr &&
-    isRegional &&
-    stage === "regional_hr_review";
+  canRegionalHr &&
+  isRegional &&
+  ["regional_hr_review", "district_officer_review", "awaiting_do_regional_hr_endorsement"].includes(stage);
 
                   const hrActions =
                     canHrRecords &&
@@ -1042,19 +1042,30 @@ export function TransportRequestRegister({
                               </Button>
                             </>
                           )}
-                          {regionalHrActions && (
-                            <>
-                              <Button size="sm" disabled={busy === row.id} onClick={() => requestDecision(row.id, "approve_within_authority")}>
-                                Within Regional HR authority
-                              </Button>
-                              <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "forward_to_md")}>
-                                Forward to MD
-                              </Button>
-                              <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "reject")}>
-                                Reject
-                              </Button>
-                            </>
-                          )}
+                  {regionalHrActions && (
+                    row.workflow_stage === "district_officer_review" || row.workflow_stage === "awaiting_do_regional_hr_endorsement" ? (
+                      <>
+                        <Button size="sm" disabled={busy === row.id} onClick={() => requestDecision(row.id, "approve")}>
+                          Endorse for Regional Manager
+                        </Button>
+                        <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "reject")}>
+                          Reject
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button size="sm" disabled={busy === row.id} onClick={() => requestDecision(row.id, "approve_within_authority")}>
+                          Within Regional HR authority
+                        </Button>
+                        <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "forward_to_md")}>
+                          Forward to MD
+                        </Button>
+                        <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "reject")}>
+                          Reject
+                        </Button>
+                      </>
+                    )
+                  )}
                           {managerActions && (
                             <>
                               <Button
