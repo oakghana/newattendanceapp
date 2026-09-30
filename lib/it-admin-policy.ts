@@ -8,6 +8,7 @@ export const IT_ADMIN_CREATABLE_ROLES = [
   "intern",
   "nsp",
   "regional_manager",
+  "district_officer",
   "driver",
   "chief_driver",
 ] as const

@@ -104,6 +104,7 @@ const ROLE_OPTIONS = [
   ["chief_driver", "Chief Driver"],
   ["contract", "Contract"],
   ["department_head", "Department Head"],
+  ["district_officer", "District Officer (DO)"],
   ["director_hr", "Director HR"],
   ["driver", "Driver"],
   ["hr_executive", "HR Executive"],

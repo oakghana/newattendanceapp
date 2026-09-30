@@ -108,7 +108,7 @@ export type TransportRequestRow = {
 };
 
 const label = (value: string | null) =>
-  (value ?? "submitted")
+  (value === "district_officer_review" ? "District Officer review" : value ?? "submitted")
     .replace(/_/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
 const displayStage = (row: TransportRequestRow) =>
@@ -126,6 +126,7 @@ export function TransportRequestRegister({
   rows,
   canCreate,
   canAct,
+  canDistrictOfficer,
   canHrRecords,
   canManagingDirector,
   canHrExecutive,
@@ -135,6 +136,7 @@ export function TransportRequestRegister({
   rows: TransportRequestRow[];
   canCreate: boolean;
   canAct: boolean;
+  canDistrictOfficer: boolean;
   canHrRecords: boolean;
   canManagingDirector: boolean;
   canHrExecutive: boolean;
@@ -913,10 +915,15 @@ export function TransportRequestRegister({
                 {visibleRows.map((row) => {
                   const stage = row.workflow_stage ?? "";
                   const isRegional = row.request_type === "regional_transport";
-                  const managerActions =
-                    canAct &&
-                    isRegional &&
-                    stage === "regional_manager_endorsement";
+  const districtOfficerActions =
+    canDistrictOfficer &&
+    isRegional &&
+    stage === "district_officer_review";
+  const managerActions =
+    canAct &&
+    isRegional &&
+    stage === "regional_manager_endorsement";
+
                   const hrActions =
                     canHrRecords &&
                     isRegional &&
@@ -1011,6 +1018,16 @@ export function TransportRequestRegister({
                       </td>
                       <td className="min-w-[230px] px-4 py-4">
                         <div className="flex flex-wrap gap-2">
+                          {districtOfficerActions && (
+                            <>
+                              <Button size="sm" disabled={busy === row.id} onClick={() => requestDecision(row.id, "approve")}>
+                                Approve for Regional Manager
+                              </Button>
+                              <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "reject")}>
+                                Reject
+                              </Button>
+                            </>
+                          )}
                           {managerActions && (
                             <>
                               <Button
