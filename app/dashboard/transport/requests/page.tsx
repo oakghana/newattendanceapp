@@ -42,8 +42,9 @@ export default async function TransportRequestsPage() {
   const rawRegionalName = locationRegionName || (assignedLocationName && !/accra|head office/i.test(assignedLocationName) ? assignedLocationName : "") || profileRegion?.name?.trim() || ""
   const regionalOfficeName = rawRegionalName ? rawRegionalName.replace(/\s+Regional\s+Office$/i, "").replace(/\s+Region$/i, "").trim() + " Regional Office" : "Regional Office"
   const requestFields = "id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url, assigned_region:geofence_locations!transport_requests_assigned_region_id_fkey(name, districts(region_id, regions(name)))"
+  const regionalHrDataClient = canRegionalHr ? await createAdminClient() : supabase
   const { data: regionalHrAssignments } = canRegionalHr
-    ? await supabase.from("regional_hr_office_locations").select("location_id, region_id").eq("regional_hr_user_id", user.id).eq("is_active", true)
+    ? await regionalHrDataClient.from("regional_hr_office_locations").select("location_id, region_id").eq("regional_hr_user_id", user.id).eq("is_active", true)
     : { data: [] as { location_id: string; region_id?: string | null }[] }
   const regionalHrLocationIds = (regionalHrAssignments ?? []).map((assignment) => assignment.location_id).filter(Boolean)
   let regionalHrScopeLocationIds = regionalHrLocationIds
@@ -53,7 +54,7 @@ export default async function TransportRequestsPage() {
     ...(regionalHrAssignments ?? []).map((assignment) => assignment.region_id).filter(Boolean),
   ])]
   if (canRegionalHr && regionalHrRegionIds.length) {
-    const { data: regionalLocations } = await supabase
+    const { data: regionalLocations } = await regionalHrDataClient
       .from("geofence_locations")
       .select("id, district_id, districts(region_id)")
     const scopedLocations = (regionalLocations ?? []).filter((location: any) => {
@@ -63,7 +64,7 @@ export default async function TransportRequestsPage() {
     regionalHrScopeLocationIds = scopedLocations.map((location: any) => location.id).filter(Boolean)
     regionalHrScopeDistrictIds = scopedLocations.map((location: any) => location.district_id).filter(Boolean)
   }
-  let requestsQuery = supabase.from("transport_requests").select(requestFields).order("created_at", { ascending: false }).limit(200)
+  let requestsQuery = (canRegionalHr ? regionalHrDataClient : supabase).from("transport_requests").select(requestFields).order("created_at", { ascending: false }).limit(200)
   if (isRegionalRequester) requestsQuery = requestsQuery.eq("id", "00000000-0000-0000-0000-000000000000")
   if (canHrExecutive) requestsQuery = requestsQuery.eq("request_type", "regional_transport")
   if (canRegionalHr) {
