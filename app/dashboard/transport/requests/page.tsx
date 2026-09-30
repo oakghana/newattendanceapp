@@ -17,7 +17,9 @@ export default async function TransportRequestsPage() {
     .single()
   if (!profile || !profile.role) redirect("/dashboard")
   const normalizedRole = normalizeAppRole(profile.role)
-  const canViewRegionalRegister = normalizedRole === "admin" || isDistrictOfficerRole(profile.role) || isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role) || canManageTransport(profile.role) || normalizedRole === "managing_director" || ["hr_records", "hr_records_officer", "hr_records_manager", "hr_executive", "hr_executive_officer"].includes(normalizedRole)
+  const locationId = profile.assigned_location_id ?? null
+  const isRegionalRequester = normalizedRole === "staff" && Boolean(locationId)
+  const canViewRegionalRegister = normalizedRole === "admin" || isRegionalRequester || isDistrictOfficerRole(profile.role) || isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role) || canManageTransport(profile.role) || normalizedRole === "managing_director" || ["hr_records", "hr_records_officer", "hr_records_manager", "hr_executive", "hr_executive_officer"].includes(normalizedRole)
   if (!canViewRegionalRegister) redirect("/dashboard")
   const isRegionalDriver = isRegionalDriverRole(profile.role)
   // Non-regional drivers only ever see their nonregional trips; regional drivers stay here (scoped to their own assigned trips below).
@@ -30,7 +32,6 @@ export default async function TransportRequestsPage() {
   const canManagingDirector = normalizedRole === "managing_director"
   const canHrExecutive = ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
   const assignedLocation = profile.geofence_locations as { district_id?: string | null; districts?: { region_id?: string | null } | null } | null
-  const locationId = profile.assigned_location_id ?? null
   const districtId = assignedLocation?.district_id ?? null
   const regionId = profile.region_id ?? assignedLocation?.districts?.region_id ?? null
   const profileRegion = profile.regions as { name?: string | null } | null
@@ -46,6 +47,7 @@ export default async function TransportRequestsPage() {
     : { data: [] as { location_id: string }[] }
   const regionalHrLocationIds = (regionalHrAssignments ?? []).map((assignment) => assignment.location_id).filter(Boolean)
   let requestsQuery = supabase.from("transport_requests").select(requestFields).order("created_at", { ascending: false }).limit(200)
+  if (isRegionalRequester) requestsQuery = requestsQuery.eq("id", "00000000-0000-0000-0000-000000000000")
   if (canHrExecutive) requestsQuery = requestsQuery.eq("request_type", "regional_transport")
   if (canRegionalHr) {
     requestsQuery = requestsQuery.in("workflow_stage", ["regional_hr_review", "regional_hr_correction"])
@@ -72,15 +74,17 @@ export default async function TransportRequestsPage() {
     requestsQuery = requestsQuery.eq("request_type", "regional_transport")
   }
   let { data: requests, error: requestsError } = await requestsQuery
-  const { data: ownRequests, error: ownRequestsError } = await supabase
+  let ownRequestsQuery: any = supabase
     .from("transport_requests")
     .select(requestFields)
     .eq("requester_id", user.id)
     .order("created_at", { ascending: false })
     .limit(200)
+  if (isRegionalRequester) ownRequestsQuery = ownRequestsQuery.eq("request_type", "regional_transport")
+  const { data: ownRequests, error: ownRequestsError } = await ownRequestsQuery
   if (canViewRegionalRegister && !ownRequestsError && ownRequests) {
     const scopedRequests = requests ?? []
-    requests = [...scopedRequests, ...ownRequests.filter((request) => !scopedRequests.some((scopedRequest) => scopedRequest.id === request.id))]
+    requests = [...scopedRequests, ...ownRequests.filter((request: any) => !scopedRequests.some((scopedRequest) => scopedRequest.id === request.id))]
       .sort((left, right) => new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime())
   }
   if (requestsError) {
@@ -102,7 +106,7 @@ export default async function TransportRequestsPage() {
     const fallback = await fallbackQuery
     const fallbackRequests = fallback.data?.map((request) => ({ ...request, assigned_region: [], regional_manager_signer_id: null, regional_manager_signed_at: null, hr_executive_signer_id: null, hr_executive_signed_at: null, hr_executive_signature_data_url: null })) ?? []
     const fallbackOwnRequests = ownRequests ?? []
-    requests = [...fallbackRequests, ...fallbackOwnRequests.filter((request) => !fallbackRequests.some((scopedRequest) => scopedRequest.id === request.id))]
+    requests = [...fallbackRequests, ...fallbackOwnRequests.filter((request: any) => !fallbackRequests.some((scopedRequest) => scopedRequest.id === request.id))]
       .sort((left, right) => new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime())
     requestsError = fallback.error
   }
