@@ -127,6 +127,21 @@ export default async function TransportPage() {
     }
   } else if (isRegionalScoped) {
     try {
+      if (isRegionalStaff) {
+        const [{ data: ownRegionalRows }, { data: ownNonRegionalRows }] = await Promise.all([
+          adminSupabase.from("transport_requests").select("id, status, workflow_stage").eq("requester_id", user.id).limit(500),
+          adminSupabase.from("nonregional_transport_requisitions").select("id, status, md_decision, hod_decision, recommended_driver_id").eq("requester_id", user.id).limit(500),
+        ])
+        const regionalRows = ownRegionalRows ?? []
+        const nonRegionalRows = ownNonRegionalRows ?? []
+        totalCount = regionalRows.length + nonRegionalRows.length
+        pendingCount = regionalRows.filter((row) => !["approved", "referenced", "completed", "rejected", "closed"].includes(String(row.status || "")) && !["completed", "closed"].includes(String(row.workflow_stage || ""))).length
+          + nonRegionalRows.filter((row) => !["approved", "referenced", "completed", "rejected", "closed"].includes(String(row.status || "")) && !["approved", "completed", "rejected", "closed"].includes(String(row.md_decision || ""))).length
+        approvedCount = regionalRows.filter((row) => ["approved", "referenced", "completed"].includes(String(row.status || "")) || ["approved", "referenced", "completed"].includes(String(row.workflow_stage || ""))).length
+          + nonRegionalRows.filter((row) => ["approved", "completed"].includes(String(row.status || "")) || row.md_decision === "approved").length
+        assignedCount = regionalRows.filter((row) => row.status === "assigned" || row.workflow_stage === "assigned").length
+          + nonRegionalRows.filter((row) => row.status === "assigned" || Boolean(row.recommended_driver_id)).length
+      } else {
       let query = supabase
         .from("transport_requests")
         .select("id, status, workflow_stage, assigned_region_id, linked_district_id, origin_location_id")
@@ -154,6 +169,7 @@ export default async function TransportPage() {
       } else if (isChiefDriver) {
         pendingCount = scoped.filter((row) => row.workflow_stage === "chief_driver_assignment").length
         assignedCount = scoped.filter((row) => row.workflow_stage === "assigned" || row.status === "assigned").length
+      }
       }
     } catch (error) {
       console.error("[v0] Transport landing: regional metrics unavailable", error)
