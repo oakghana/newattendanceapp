@@ -74,7 +74,9 @@ export default async function TransportPage() {
   const isChiefDriver = isChiefDriverRole(profile.role)
   const isRegionalHr = isRegionalHrRole(profile.role)
   const isRegionalManager = isRegionalManagerRole(profile.role)
-  const isRegionalScoped = isChiefDriver || isRegionalHr || isRegionalManager
+  const isDistrictOfficer = normalizedRole === "district_officer"
+  const isRegionalStaff = isRegionalOrDistrictLinked && isBasicStaffRole
+  const isRegionalScoped = isChiefDriver || isRegionalHr || isRegionalManager || isDistrictOfficer || isRegionalStaff
   const isDriver = normalizedRole === "driver"
   const isRegionalDriver = isDriver && isRegionalDriverRole(profile.role)
   const isNonRegionalDriver = isDriver && !isRegionalDriver
@@ -274,8 +276,9 @@ export default async function TransportPage() {
       scopeLabel={scopeLabel}
       driverKind={isRegionalDriver ? "regional" : isNonRegionalDriver ? "nonregional" : undefined}
   isLinkedHod={isAssignedHod || isStaffLinkedToHod}
-  isNonRegionalLocation={isHeadOfficeLocation}
-  isChiefDriver={isChiefDriver}
+      isNonRegionalLocation={isHeadOfficeLocation}
+      isRegionalStaff={isRegionalStaff}
+      isChiefDriver={isChiefDriver}
     />
   )
 }

@@ -1271,7 +1271,8 @@ export function StaffManagement() {
                             <SelectItem value="contract">Contract</SelectItem>
   {!isRegionalItAdmin && <SelectItem value="department_head">Department Head</SelectItem>}
   <SelectItem value="regional_manager">Regional Manager</SelectItem>
-                            <SelectItem value="driver">Driver</SelectItem>
+  <SelectItem value="district_officer">District Officer (DO)</SelectItem>
+  <SelectItem value="driver">Driver</SelectItem>
                             <SelectItem value="chief_driver">Chief Driver</SelectItem>
                               </>
                         ) : (

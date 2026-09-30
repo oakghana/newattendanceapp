@@ -274,7 +274,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Only administrators can assign the Regional HR Leave Office role" }, { status: 403 })
     }
 
-    const allowedRolesForItAdmin = ["staff", "contract", "intern", "nsp", "regional_manager", "driver", "chief_driver"]
+    const allowedRolesForItAdmin = ["staff", "contract", "intern", "nsp", "regional_manager", "district_officer", "driver", "chief_driver"]
     const normalizedIncomingRole = String(role || "").trim().toLowerCase().replace(/[-\s]+/g, "_")
     const normalizedExistingRole = String(targetProfile.role || "").trim().toLowerCase().replace(/[-\s]+/g, "_")
     const isUnchangedRole = Boolean(role) && normalizedIncomingRole === normalizedExistingRole
@@ -287,6 +287,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         },
         { status: 403 },
       )
+    }
+
+    if (normalizedIncomingRole === "district_officer") {
+      if (!mergedAssignedLocationId || mergedAssignedLocationId === "none") return NextResponse.json({ error: "District Officers must be assigned to a district location" }, { status: 400 })
+      const { data: districtLocation } = await adminSupabase.from("geofence_locations").select("name, location_type, district_id").eq("id", mergedAssignedLocationId).maybeSingle()
+      const locationName = String(districtLocation?.name || "").toLowerCase()
+      const locationType = String(districtLocation?.location_type || "").toLowerCase()
+      if (!districtLocation?.district_id || (locationType && locationType !== "district" && !locationName.includes("district"))) return NextResponse.json({ error: "District Officers can only be assigned to district locations" }, { status: 400 })
     }
 
     if (isItAdmin && role === "department_head" && mergedAssignedLocationId && mergedAssignedLocationId !== "none") {
