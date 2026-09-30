@@ -153,7 +153,7 @@ export default async function TransportPage() {
     } catch (error) {
       console.error("[v0] Transport landing: regional metrics unavailable", error)
     }
-  } else if (isTransportManager || ["admin", "administrator", "it_admin"].includes(normalizedRole)) {
+  } else if (isTransportManager || ["admin", "administrator"].includes(normalizedRole)) {
     try {
       const [{ data: regionalRows }, { data: nonRegionalRows }] = await Promise.all([
         supabase.from("transport_requests").select("id, status, workflow_stage").order("created_at", { ascending: false }).limit(500),
@@ -171,6 +171,20 @@ export default async function TransportPage() {
       assignedCount = nonRegional.filter((row) => row.status === "assigned" || Boolean(row.recommended_driver_id)).length
     } catch (error) {
       console.error("[v0] Transport landing: manager metrics unavailable", error)
+    }
+  } else if (normalizedRole === "it-admin") {
+    try {
+      const { data: rows } = await supabase
+        .from("nonregional_transport_requisitions")
+        .select("id, status, md_decision, recommended_driver_id")
+        .eq("requester_id", user.id)
+      const ownRows = rows ?? []
+      totalCount = ownRows.length
+      pendingCount = ownRows.filter((row) => row.md_decision === "pending").length
+      approvedCount = ownRows.filter((row) => row.md_decision === "approved").length
+      assignedCount = ownRows.filter((row) => row.status === "assigned" || Boolean(row.recommended_driver_id)).length
+    } catch (error) {
+      console.error("[v0] Transport landing: IT Admin metrics unavailable", error)
     }
   } else if (isRegionalDriver) {
     try {
