@@ -68,8 +68,16 @@ export function isOvernightShiftDept(dept?: DeptInfo): boolean {
   return isSecurityDept(dept) || isTransportDept(dept)
 }
 
+export function hasTwentyTwoHourAutoCheckout(dept?: DeptInfo): boolean {
+  return isSecurityDept(dept) || isOperationalDept(dept) || isTransportDept(dept)
+}
+
+export function getMaximumOpenAttendanceHours(dept?: DeptInfo): number | null {
+  return hasTwentyTwoHourAutoCheckout(dept) ? 22 : null
+}
+
 export function shouldSkipSystemAutoCheckout(dept?: DeptInfo): boolean {
-  return isOvernightShiftDept(dept)
+  return isOvernightShiftDept(dept) && !hasTwentyTwoHourAutoCheckout(dept)
 }
 
 export function isExemptFromAttendanceReasons(role?: string | null): boolean {

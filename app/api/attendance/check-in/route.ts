@@ -141,9 +141,10 @@ export async function POST(request: NextRequest) {
             .from("attendance_records")
             .update({
               check_out_time: closeAt.toISOString(),
-              work_hours: Math.max(0, Math.min(24, (closeAt.getTime() - priorCheckIn.getTime()) / (1000 * 60 * 60))),
+              work_hours: Math.max(0, Math.min(22, (closeAt.getTime() - priorCheckIn.getTime()) / (1000 * 60 * 60))),
               auto_checkout: true,
-              notes: "Automatically closed prior-day open attendance session before a new check-in.",
+              check_out_method: "department_22_hour_auto_checkout",
+              notes: "Automatically closed prior-day open attendance session after the 22-hour maximum duty period.",
             })
             .eq("id", openPriorRecord.id)
             .is("check_out_time", null)
