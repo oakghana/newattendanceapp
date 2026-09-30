@@ -373,6 +373,16 @@ export function AttendanceRecorder({
     void loadRuntimeFlags()
   }, [loadRuntimeFlags])
 
+  // Never leave a late-arrival prompt visible after attendance has already been recorded.
+  useEffect(() => {
+    if (localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time) {
+      setShowLatenessDialog(false)
+      setPendingCheckInData(null)
+      setLatenessReason("")
+      setLatenessProvedBy("")
+    }
+  }, [localTodayAttendance?.check_in_time, localTodayAttendance?.check_out_time])
+
   // Check time restrictions and show warnings
   useEffect(() => {
     const now = getSystemNow()
@@ -1452,8 +1462,18 @@ export function AttendanceRecorder({
         }
       }
 
-      // Check if check-in is after 9:00 AM (late arrival)
-      const checkInTime = getSystemNow()
+  // Attendance may have completed while location/GPS work was still resolving.
+  // Re-check the authoritative local session before opening any late-arrival prompt.
+  if (localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time) {
+    setShowLatenessDialog(false)
+    setPendingCheckInData(null)
+    setIsCheckingIn(false)
+    setIsCheckInProcessing(false)
+    return
+  }
+
+  // Check if check-in is after 9:00 AM (late arrival)
+  const checkInTime = getSystemNow()
       const latenessRequired = requiresLatenessReason(checkInTime, userProfile?.departments, userProfile?.role, {
         latenessReasonDeadline: runtimeFlags.latenessReasonDeadline,
         exemptPrivilegedRolesFromReason: runtimeFlags.exemptPrivilegedRolesFromReason,
@@ -2412,7 +2432,8 @@ export function AttendanceRecorder({
       })
       const [dlHour2, dlMin2] = (runtimeFlags.latenessReasonDeadline ?? "09:00").split(":").map(Number)
       const isLateArrival = now.getHours() > dlHour2 || (now.getHours() === dlHour2 && now.getMinutes() >= dlMin2)
-      const needsAutomaticLatenessReason = isLateArrival && latenessRequiredAuto
+      const hasActiveAttendanceSession = Boolean(localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time)
+  const needsAutomaticLatenessReason = !hasActiveAttendanceSession && isLateArrival && latenessRequiredAuto
 
       // If UI/location preview has already resolved user is out-of-range, auto-open off-premises first.
       if (effectiveCanCheckIn === false && !autoTriggeredOffPremisesRef.current) {
