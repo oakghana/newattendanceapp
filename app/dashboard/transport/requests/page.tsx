@@ -82,12 +82,34 @@ export default async function TransportRequestsPage() {
     .eq("requester_id", user.id)
     .order("created_at", { ascending: false })
     .limit(200)
-  if (isRegionalRequester) ownRequestsQuery = ownRequestsQuery.eq("request_type", "regional_transport")
   const { data: ownRequests, error: ownRequestsError } = await ownRequestsQuery
-  if (canViewRegionalRegister && !ownRequestsError && ownRequests) {
+  const { data: ownNonregionalRequests } = await ownRequestsClient
+    .from("nonregional_transport_requisitions")
+    .select("id, requester_id, purpose, origin, destination, required_at, persons_requiring_transport, status, created_at, reference_number")
+    .eq("requester_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(200)
+  if (canViewRegionalRegister && !ownRequestsError) {
     const scopedRequests = requests ?? []
-    const personalRows = ownRequests.map((request: any) => ({ ...request, assigned_region: [] }))
-    requests = [...scopedRequests, ...personalRows.filter((request: any) => !scopedRequests.some((scopedRequest) => scopedRequest.id === request.id))]
+    const personalRows = (ownRequests ?? []).map((request: any) => ({ ...request, assigned_region: [] }))
+    const nonregionalRows = (ownNonregionalRequests ?? []).map((request: any) => ({
+      id: request.id,
+      requester_id: request.requester_id,
+      request_type: "nonregional_transport",
+      purpose: request.purpose,
+      origin: request.origin,
+      destination: request.destination,
+      event_date: request.required_at,
+      passenger_count: request.persons_requiring_transport ?? 0,
+      status: request.status ?? "submitted",
+      workflow_stage: request.status ?? "submitted",
+      reference_number: request.reference_number,
+      supporting_documents: [],
+      created_at: request.created_at,
+      assigned_region: [],
+    }))
+    const allPersonalRows = [...personalRows, ...nonregionalRows]
+    requests = [...scopedRequests, ...allPersonalRows.filter((request: any) => !scopedRequests.some((scopedRequest) => scopedRequest.id === request.id))]
       .sort((left, right) => new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime())
   }
   if (requestsError) {
