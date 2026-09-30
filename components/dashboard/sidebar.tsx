@@ -183,7 +183,7 @@ const navigationItems = [
     title: "Reports & Trends",
     href: "/dashboard/reports",
     icon: BarChart3,
-    roles: ["admin", "it-admin", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr_leave_office", "department_head", "accounts_executive", "transport_manager", "director_hr", "manager_hr"],
+    roles: ["admin", "it-admin", "managing_director", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr_leave_office", "department_head", "accounts_executive", "transport_manager", "director_hr", "manager_hr"],
     category: "admin",
   },
   {

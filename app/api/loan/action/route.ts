@@ -258,10 +258,10 @@ export async function POST(request: NextRequest) {
         .eq("staff_user_id", req.user_id)
         .maybeSingle()
       const isLinkedHodForRequest = Boolean(hodDecisionLinkage)
-      if (!canDoHodReview(role, isLinkedHodForRequest)) return NextResponse.json({ error: "Only HOD/manager/admin can review" }, { status: 403 })
+      if (role !== "managing_director" && !canDoHodReview(role, isLinkedHodForRequest)) return NextResponse.json({ error: "Only HOD/manager/admin can review" }, { status: 403 })
       if (req.status !== "pending_hod") return NextResponse.json({ error: "Request is not pending HOD review" }, { status: 400 })
 
-      if (role !== "admin") {
+      if (role !== "admin" && role !== "managing_director") {
         const reviewerDept = String((profile as any)?.department_id || "")
         const reviewerLocation = String((profile as any)?.assigned_location_id || "")
         const reviewerRegion = String((profile as any)?.region_id || "")

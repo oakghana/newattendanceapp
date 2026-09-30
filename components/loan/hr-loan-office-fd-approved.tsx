@@ -87,7 +87,7 @@ function normalizeFdApprovedLoan(loan: Record<string, unknown>): FDApprovedLoan 
   }
 }
 
-export function HRLoanOfficeFDApproved() {
+export function HRLoanOfficeFDApproved({ readOnly = false }: { readOnly?: boolean }) {
   const [fdApprovedLoans, setFdApprovedLoans] = useState<FDApprovedLoan[]>([])
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -352,23 +352,25 @@ export function HRLoanOfficeFDApproved() {
           <CardContent className="p-0">
             <div className="flex items-center justify-between border-b bg-slate-50 px-4 py-3">
               <div className="flex items-center gap-3">
-                <Checkbox
-                  aria-label="Select all pending loans"
-                  checked={allPendingSelected}
-                  onCheckedChange={(checked) => setSelectedForBulkPush(checked ? pendingLoans.map((loan) => loan.id) : [])}
-                />
-                <span className="text-sm text-slate-600">Select pending loans</span>
-                {selectedForBulkPush.length > 0 && <Badge variant="secondary">{selectedForBulkPush.length} selected</Badge>}
+                {!readOnly && <>
+                  <Checkbox
+                    aria-label="Select all pending loans"
+                    checked={allPendingSelected}
+                    onCheckedChange={(checked) => setSelectedForBulkPush(checked ? pendingLoans.map((loan) => loan.id) : [])}
+                  />
+                  <span className="text-sm text-slate-600">Select pending loans</span>
+                  {selectedForBulkPush.length > 0 && <Badge variant="secondary">{selectedForBulkPush.length} selected</Badge>}
+                </>}
               </div>
-              <Button size="sm" disabled={selectedForBulkPush.length === 0} onClick={() => setBulkPushOpen(true)}>
+              {!readOnly && <Button size="sm" disabled={selectedForBulkPush.length === 0} onClick={() => setBulkPushOpen(true)}>
                 <Send data-icon="inline-start" /> Forward selected to HR Executive
-              </Button>
+              </Button>}
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="border-b bg-slate-50">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600">Select</th>
+                    {!readOnly && <th className="px-4 py-3 text-left font-medium text-slate-600">Select</th>}
                     <th className="px-4 py-3 text-left font-medium text-slate-600">Staff</th>
                     <th className="px-4 py-3 text-left font-medium text-slate-600">Loan Type</th>
                     <th className="px-4 py-3 text-right font-medium text-slate-600">Amount</th>
@@ -382,14 +384,14 @@ export function HRLoanOfficeFDApproved() {
                 <tbody className="divide-y">
                   {filteredLoans.map((loan) => (
                     <tr key={loan.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-3">
+                      {!readOnly && <td className="px-4 py-3">
                         <Checkbox
                           aria-label={`Select ${loan.staff_name}`}
                           disabled={loan.status !== 'pending_hr_loan_office'}
                           checked={selectedForBulkPush.includes(loan.id)}
                           onCheckedChange={(checked) => setSelectedForBulkPush((current) => checked ? [...new Set([...current, loan.id])] : current.filter((id) => id !== loan.id))}
                         />
-                      </td>
+                      </td>}
                       <td className="px-4 py-3">
                         <div>
                           <p className="font-medium text-slate-900">{loan.staff_name}</p>
@@ -429,7 +431,7 @@ export function HRLoanOfficeFDApproved() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          {loan.status === 'pending_hr_loan_office' && (
+                          {!readOnly && loan.status === 'pending_hr_loan_office' && (
                             <>
                               <Button
                                 size="sm"
