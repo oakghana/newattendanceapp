@@ -25,6 +25,7 @@ export default async function TransportRequestsPage() {
   const canCreate = isChiefDriverRole(profile.role) || isRegionalHrRole(profile.role) || ["department_head", "accounts_executive", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
   const canAct = isRegionalManagerRole(profile.role) || isChiefDriverRole(profile.role)
   const canDistrictOfficer = isDistrictOfficerRole(profile.role)
+  const canRegionalHr = isRegionalHrRole(profile.role)
   const canHrRecords = ["hr_records", "hr_records_officer", "hr_records_manager"].includes(normalizedRole)
   const canManagingDirector = normalizedRole === "managing_director"
   const canHrExecutive = ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
@@ -40,8 +41,17 @@ export default async function TransportRequestsPage() {
   const rawRegionalName = locationRegionName || (assignedLocationName && !/accra|head office/i.test(assignedLocationName) ? assignedLocationName : "") || profileRegion?.name?.trim() || ""
   const regionalOfficeName = rawRegionalName ? rawRegionalName.replace(/\s+Regional\s+Office$/i, "").replace(/\s+Region$/i, "").trim() + " Regional Office" : "Regional Office"
   const requestFields = "id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url, assigned_region:geofence_locations!transport_requests_assigned_region_id_fkey(name, districts(region_id, regions(name)))"
+  const { data: regionalHrAssignments } = canRegionalHr
+    ? await supabase.from("regional_hr_office_locations").select("location_id").eq("regional_hr_user_id", user.id).eq("is_active", true)
+    : { data: [] as { location_id: string }[] }
+  const regionalHrLocationIds = (regionalHrAssignments ?? []).map((assignment) => assignment.location_id).filter(Boolean)
   let requestsQuery = supabase.from("transport_requests").select(requestFields).order("created_at", { ascending: false }).limit(200)
   if (canHrExecutive) requestsQuery = requestsQuery.eq("request_type", "regional_transport")
+  if (canRegionalHr) {
+    requestsQuery = requestsQuery.in("workflow_stage", ["regional_hr_review", "regional_hr_correction"])
+    if (regionalHrLocationIds.length) requestsQuery = requestsQuery.in("origin_location_id", regionalHrLocationIds)
+    else requestsQuery = requestsQuery.eq("id", "00000000-0000-0000-0000-000000000000")
+  }
   if (isDistrictOfficerRole(profile.role)) {
     if (districtId) requestsQuery = requestsQuery.eq("linked_district_id", districtId)
     else requestsQuery = requestsQuery.eq("id", "00000000-0000-0000-0000-000000000000")
@@ -149,6 +159,6 @@ export default async function TransportRequestsPage() {
 
   return <main className="flex flex-col gap-6">
     <header className="flex flex-col gap-5 border-b pb-6 md:flex-row md:items-end md:justify-between"><div className="flex items-start gap-3"><div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Bus /></div><div><p className="text-sm font-medium text-primary">Transport Management</p><h1 className="text-3xl font-semibold tracking-tight text-balance">Transport request register</h1><p className="mt-1 max-w-2xl text-muted-foreground leading-6">Track every request from submission through Regional HR review, approval, and fulfilment.</p></div></div><div className="flex flex-wrap gap-2"><Button variant="outline" asChild><Link href="/dashboard/transport"><ArrowLeft data-icon="inline-start" /> Back to transport</Link></Button>{canHrExecutive && <Button className="bg-emerald-600 hover:bg-emerald-700" asChild><Link href="/dashboard/transport/nonregional/new"><Plus data-icon="inline-start" /> New non-regional request</Link></Button>}{canCreate && <Button variant={canHrExecutive ? "outline" : "default"} asChild><Link href="/dashboard/transport"><Plus data-icon="inline-start" /> New regional request</Link></Button>}</div></header>
-    {requestsError && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">Transport requests could not be loaded. Please refresh and try again.</div>}<TransportRequestRegister rows={requestsWithSignatures} canCreate={canCreate} canAct={canAct} canDistrictOfficer={canDistrictOfficer} canHrRecords={canHrRecords} canManagingDirector={canManagingDirector} canHrExecutive={canHrExecutive} regionalOfficeName={regionalOfficeName} currentUserId={user.id} />
+    {requestsError && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">Transport requests could not be loaded. Please refresh and try again.</div>}<TransportRequestRegister rows={requestsWithSignatures} canCreate={canCreate} canAct={canAct} canDistrictOfficer={canDistrictOfficer} canRegionalHr={canRegionalHr} canHrRecords={canHrRecords} canManagingDirector={canManagingDirector} canHrExecutive={canHrExecutive} regionalOfficeName={regionalOfficeName} currentUserId={user.id} />
   </main>
 }

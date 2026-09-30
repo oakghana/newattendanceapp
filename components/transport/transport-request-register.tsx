@@ -127,6 +127,7 @@ export function TransportRequestRegister({
   canCreate,
   canAct,
   canDistrictOfficer,
+  canRegionalHr,
   canHrRecords,
   canManagingDirector,
   canHrExecutive,
@@ -137,6 +138,7 @@ export function TransportRequestRegister({
   canCreate: boolean;
   canAct: boolean;
   canDistrictOfficer: boolean;
+  canRegionalHr: boolean;
   canHrRecords: boolean;
   canManagingDirector: boolean;
   canHrExecutive: boolean;
@@ -165,8 +167,9 @@ export function TransportRequestRegister({
     decision:
       | "endorse"
       | "deny"
-      | "return_for_correction"
-      | "forward_to_md"
+  | "return_for_correction"
+  | "approve_within_authority"
+  | "forward_to_md"
       | "approve"
       | "reject"
       | "send_to_hr_executive"
@@ -461,8 +464,9 @@ export function TransportRequestRegister({
     decision:
       | "endorse"
       | "deny"
-      | "return_for_correction"
-      | "forward_to_md"
+  | "return_for_correction"
+  | "approve_within_authority"
+  | "forward_to_md"
       | "approve"
       | "reject"
       | "send_to_hr_executive"
@@ -477,8 +481,9 @@ export function TransportRequestRegister({
     decision:
       | "endorse"
       | "deny"
-      | "return_for_correction"
-      | "forward_to_md"
+  | "return_for_correction"
+  | "approve_within_authority"
+  | "forward_to_md"
       | "approve"
       | "reject"
       | "send_to_hr_executive"
@@ -923,6 +928,10 @@ export function TransportRequestRegister({
     canAct &&
     isRegional &&
     stage === "regional_manager_endorsement";
+  const regionalHrActions =
+    canRegionalHr &&
+    isRegional &&
+    stage === "regional_hr_review";
 
                   const hrActions =
                     canHrRecords &&
@@ -952,6 +961,7 @@ export function TransportRequestRegister({
                     );
                   const hasActions =
                     managerActions ||
+                    regionalHrActions ||
                     hrActions ||
                     mdActions ||
                     execActions ||
@@ -1022,6 +1032,19 @@ export function TransportRequestRegister({
                             <>
                               <Button size="sm" disabled={busy === row.id} onClick={() => requestDecision(row.id, "approve")}>
                                 Approve for Regional Manager
+                              </Button>
+                              <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "reject")}>
+                                Reject
+                              </Button>
+                            </>
+                          )}
+                          {regionalHrActions && (
+                            <>
+                              <Button size="sm" disabled={busy === row.id} onClick={() => requestDecision(row.id, "approve_within_authority")}>
+                                Within Regional HR authority
+                              </Button>
+                              <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "forward_to_md")}>
+                                Forward to MD
                               </Button>
                               <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "reject")}>
                                 Reject

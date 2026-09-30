@@ -85,6 +85,28 @@ async function notifyRoleHolders(
   }
 }
 
+async function notifyRegionalHrForLocation(
+  locationId: string | null,
+  message: string,
+  type: string,
+  referenceId: string,
+  excludeUserId?: string,
+) {
+  if (!locationId) return
+  try {
+    const admin = await createAdminClient()
+    const { data: assignments } = await admin
+      .from("regional_hr_office_locations")
+      .select("regional_hr_user_id")
+      .eq("location_id", locationId)
+      .eq("is_active", true)
+    const userIds = [...new Set((assignments ?? []).map((row) => row.regional_hr_user_id as string).filter((id) => id && id !== excludeUserId))]
+    await notifyTransportActors(userIds.map((user_id) => ({ user_id, message, type, reference_id: referenceId })))
+  } catch (error) {
+    console.warn("[transport] Regional HR notify skipped:", error)
+  }
+}
+
 async function notifyDistrictOfficers(
   districtId: string | null,
   message: string,
@@ -202,6 +224,7 @@ export async function POST(request: Request) {
     .select("role, is_active, region_id, assigned_location_id, geofence_locations!user_profiles_assigned_location_id_fkey(district_id, districts(region_id))")
     .eq("id", user.id)
     .single()
+  const isDistrictOfficer = isDistrictOfficerRole(profile?.role)
   const isRegionalHr = isRegionalHrRole(profile?.role)
   const isRegionalManager = isRegionalManagerRole(profile?.role)
   const isChiefDriver = isChiefDriverRole(profile?.role)
@@ -228,6 +251,15 @@ export async function POST(request: Request) {
   if (!purpose || !origin || !destination || !eventDate || !Number.isInteger(passengerCount) || passengerCount < 1) return NextResponse.json({ error: "Complete all required request details." }, { status: 400 })
   const { data: signer } = await supabase.from("user_profiles").select("signature_data_url").eq("id", user.id).single()
   const signedAt = new Date().toISOString()
+  let hasDistrictOfficer = false
+  if (linkedDistrictId) {
+    const { data: districtLocations } = await supabase.from("geofence_locations").select("id").eq("district_id", linkedDistrictId)
+    const locationIds = (districtLocations ?? []).map((location) => location.id).filter(Boolean)
+    if (locationIds.length) {
+      const { data: districtOfficers } = await supabase.from("user_profiles").select("id").eq("role", "district_officer").eq("is_active", true).in("assigned_location_id", locationIds).limit(1)
+      hasDistrictOfficer = Boolean(districtOfficers?.length)
+    }
+  }
   const insertPayload: Record<string, unknown> = {
     requester_id: user.id,
     request_type: "regional_transport",
@@ -237,7 +269,9 @@ export async function POST(request: Request) {
     event_date: eventDate,
     passenger_count: passengerCount,
     status: "submitted",
-    workflow_stage: linkedDistrictId ? "district_officer_review" : "regional_manager_endorsement",
+    workflow_stage: linkedDistrictId
+      ? hasDistrictOfficer ? "district_officer_review" : "regional_hr_review"
+      : "regional_manager_endorsement",
     regional_route: regionalRoute || "local_regional",
     supporting_documents: supportingDocuments,
     assigned_region_id: assignedRegionId,
@@ -260,11 +294,19 @@ export async function POST(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   // District assignment is derived from the requester's assigned location. If a district exists,
   // the request goes to every active DO in that district; otherwise the legacy RM route remains intact.
-  if (linkedDistrictId) {
+  if (linkedDistrictId && hasDistrictOfficer) {
     void notifyDistrictOfficers(
       linkedDistrictId,
       `New regional transport request awaiting District Officer review: ${purpose} (${origin} → ${destination}).`,
       "transport_pending_do",
+      data.id,
+      user.id,
+    )
+  } else if (linkedDistrictId) {
+    void notifyRegionalHrForLocation(
+      originLocationId,
+      `District Officer unavailable. Review this regional transport request and decide whether it is within Regional HR authority or requires Managing Director approval: ${purpose} (${origin} → ${destination}).`,
+      "transport_pending_regional_hr",
       data.id,
       user.id,
     )
@@ -620,7 +662,9 @@ workflow_stage: row.request_type === "regional_transport"
   } else if (isHrExecutive) {
     if (row.request_type !== "regional_transport" || row.workflow_stage !== "hr_executive_signing" || row.hr_executive_signed_at || row.hr_executive_signer_id || row.hr_executive_signature_data_url || !["save_memo", "approve_hr_memo"].includes(decision)) return NextResponse.json({ error: "This regional request has already been signed or is not awaiting HR Executive memo signing." }, { status: 409 })
   } else if (isRegionalHr) {
-    if (row.workflow_stage !== "regional_hr_correction" || decision !== "correct") return NextResponse.json({ error: "This request is not awaiting Regional HR correction." }, { status: 409 })
+    if (row.workflow_stage === "regional_hr_review") {
+      if (!(["approve_within_authority", "forward_to_md", "reject"].includes(decision))) return NextResponse.json({ error: "Choose whether this request is within Regional HR authority, requires Managing Director approval, or should be rejected." }, { status: 409 })
+    } else if (row.workflow_stage !== "regional_hr_correction" || decision !== "correct") return NextResponse.json({ error: "This request is not awaiting Regional HR correction." }, { status: 409 })
   } else if (isTransportManager || isAdmin) {
     // Ops roles only use assign_vehicle / complete_trip (handled above). Block other decisions.
     return NextResponse.json({ error: "Transport Manager actions are limited to vehicle assignment and trip completion." }, { status: 403 })
@@ -679,6 +723,8 @@ workflow_stage: row.request_type === "regional_transport"
   else if (decision === "send_to_hr_executive") update = { status: "approved", workflow_stage: "hr_records_review", hr_executive_handoff_by: user.id, hr_executive_handoff_at: new Date().toISOString(), updated_at: new Date().toISOString() }
   else if (isDistrictOfficer && decision === "approve") update = { status: "pending_manager_review", workflow_stage: "regional_manager_endorsement", updated_at: new Date().toISOString() }
   else if (isDistrictOfficer && decision === "reject") update = { status: "rejected", workflow_stage: "closed", updated_at: new Date().toISOString() }
+  else if (isRegionalHr && decision === "approve_within_authority") update = { status: "approved", workflow_stage: "chief_driver_assignment", regional_hr_signer_id: user.id, regional_hr_signed_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+  else if (isRegionalHr && decision === "forward_to_md") update = { status: "pending_md_approval", workflow_stage: "managing_director_approval", regional_hr_signer_id: user.id, regional_hr_signed_at: new Date().toISOString(), updated_at: new Date().toISOString() }
   else if (decision === "endorse") { const { data: signer } = await supabase.from("approval_signature_registry").select("signature_data_url").eq("user_id", user.id).eq("is_active", true).maybeSingle(); const signedAt = new Date().toISOString(); let priorAmendments: Record<string, unknown> = {}; try { priorAmendments = row.memo_amendments ? JSON.parse(row.memo_amendments) as Record<string, unknown> : {} } catch { /* keep empty prior amendments */ } const isLocalRegionalRoute = row.request_type === "regional_transport" && row.regional_route === "local_regional"; update = { status: isLocalRegionalRoute ? "approved" : "endorsed", workflow_stage: isLocalRegionalRoute ? "chief_driver_assignment" : "managing_director_approval", regional_manager_signer_id: user.id, regional_manager_signed_at: signedAt, regional_manager_signature_data_url: signer?.signature_data_url ?? null, memo_amendments: JSON.stringify({ ...priorAmendments, regional_manager_comment: String(body.comment ?? "").trim() || null, regional_manager_signer_id: user.id, regional_manager_signed_at: signedAt, regional_manager_signature_data_url: signer?.signature_data_url ?? null }), updated_at: signedAt } }
   else if (decision === "deny" || decision === "reject") update = { status: "rejected", workflow_stage: "closed", updated_at: new Date().toISOString() }
   else if (decision === "return_for_correction") update = { status: "returned_for_correction", workflow_stage: "regional_hr_correction", updated_at: new Date().toISOString() }
