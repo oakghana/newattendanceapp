@@ -659,7 +659,7 @@ export async function GET() {
         }
       }
       for (const row of data) {
-        row.can_endorse = isRegionalManager || !isDepartmentHead || endorsableStaffIds.has(String(row.user_id || ""))
+        row.can_endorse = isManagingDirector ? endorsableStaffIds.has(String(row.user_id || "")) : isRegionalManager || !isDepartmentHead || endorsableStaffIds.has(String(row.user_id || ""))
       }
       data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       return { data, error }
