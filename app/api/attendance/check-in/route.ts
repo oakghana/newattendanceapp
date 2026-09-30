@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
-import { requiresLatenessReason, isExemptFromAttendanceReasons, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept, shouldSkipSystemAutoCheckout } from "@/lib/attendance-utils"
+import { requiresLatenessReason, isExemptFromAttendanceReasons, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept, isOvernightShiftDept, shouldSkipSystemAutoCheckout } from "@/lib/attendance-utils"
 import { trackLeaveResumption, processStaffResumptionCheckIn, checkLeaveOverdueBlock } from "@/lib/leave-resumption-service"
 import { validateAttendanceReason } from "@/lib/meaningful-text"
 
@@ -111,10 +111,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Guard against creating a duplicate check-in while an OLDER open (un-checked-out) session
-    // still exists. This happens for overnight-shift staff (security/transport) who are not
-    // auto-checked-out at midnight — without this guard, checking in the next day silently
-    // creates a second open record while the previous session is still "at post".
+    const { data: userProfile } = await supabase
+      .from("user_profiles")
+      .select(`
+        first_name,
+        last_name,
+        role,
+        assigned_location_id,
+        departments(code, name)
+      `)
+      .eq("id", user.id)
+      .maybeSingle()
+
+    // Previous-day open sessions are valid only for overnight departments.
+    // Everyone else is auto-closed at 23:59:59 before a new day's check-in.
     if (!existingRecord) {
       const { data: openPriorRecord, error: openPriorError } = await supabase
         .from("attendance_records")
@@ -132,22 +142,11 @@ export async function POST(request: NextRequest) {
 
       if (openPriorRecord) {
         const priorCheckIn = new Date(openPriorRecord.check_in_time)
-        const priorDate = priorCheckIn.toISOString().slice(0, 10)
-        const sessionHours = (Date.now() - priorCheckIn.getTime()) / (1000 * 60 * 60)
 
-        if (sessionHours >= 22) {
-          const closeAt = new Date(priorCheckIn.getTime() + 22 * 60 * 60 * 1000)
-          await supabase
-            .from("attendance_records")
-            .update({
-              check_out_time: closeAt.toISOString(),
-              work_hours: Math.max(0, Math.min(24, (closeAt.getTime() - priorCheckIn.getTime()) / (1000 * 60 * 60))),
-              auto_checkout: true,
-              notes: "Automatically closed prior-day open attendance session before a new check-in.",
-            })
-            .eq("id", openPriorRecord.id)
-            .is("check_out_time", null)
-        } else {
+        const overnightDepartment = isOvernightShiftDept(userProfile?.departments as any)
+        const sessionAgeHours = (Date.now() - priorCheckIn.getTime()) / (1000 * 60 * 60)
+
+        if (overnightDepartment && sessionAgeHours < 24) {
           return NextResponse.json(
             {
               error: `You still have an open attendance session from ${priorCheckIn.toLocaleString()} at ${openPriorRecord.check_in_location_name || "your post"} that has not been checked out. Please check out from that session first.`,
@@ -158,20 +157,23 @@ export async function POST(request: NextRequest) {
             { status: 409 },
           )
         }
+
+        const priorDate = priorCheckIn.toISOString().slice(0, 10)
+        const autoCheckoutAt = `${priorDate}T23:59:59.999Z`
+        await supabase
+          .from("attendance_records")
+          .update({
+            check_out_time: autoCheckoutAt,
+            work_hours: Math.max(0, Math.min(24, (new Date(autoCheckoutAt).getTime() - priorCheckIn.getTime()) / (1000 * 60 * 60))),
+            auto_checkout: true,
+            check_out_method: "system_midnight_auto_checkout",
+            notes: "Automatically checked out at 23:59:59 before the next day's check-in.",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", openPriorRecord.id)
+          .is("check_out_time", null)
       }
     }
-
-    const { data: userProfile } = await supabase
-      .from("user_profiles")
-      .select(`
-        first_name,
-        last_name,
-        role,
-        assigned_location_id,
-        departments(code, name)
-      `)
-      .eq("id", user.id)
-      .maybeSingle()
 
     // Check if user is on leave (per-day leave_status table)
     const { data: leaveStatus } = await supabase
