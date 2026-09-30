@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
-import { requiresLatenessReason, isExemptFromAttendanceReasons, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept, isOvernightShiftDept, shouldSkipSystemAutoCheckout } from "@/lib/attendance-utils"
+import { requiresLatenessReason, isExemptFromAttendanceReasons, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept, isOvernightShiftDept, shouldSkipSystemAutoCheckout, hasTwentyTwoHourAutoCheckout } from "@/lib/attendance-utils"
 import { trackLeaveResumption, processStaffResumptionCheckIn, checkLeaveOverdueBlock } from "@/lib/leave-resumption-service"
 import { validateAttendanceReason } from "@/lib/meaningful-text"
 
@@ -145,8 +145,22 @@ export async function POST(request: NextRequest) {
 
         const overnightDepartment = isOvernightShiftDept(userProfile?.departments as any)
         const sessionAgeHours = (Date.now() - priorCheckIn.getTime()) / (1000 * 60 * 60)
+        const departmentHas22HourLimit = hasTwentyTwoHourAutoCheckout(userProfile?.departments as any)
 
-        if (overnightDepartment && sessionAgeHours < 24) {
+        if (departmentHas22HourLimit && sessionAgeHours >= 22) {
+          const closeAt = new Date(priorCheckIn.getTime() + 22 * 60 * 60 * 1000)
+          await supabase
+            .from("attendance_records")
+            .update({
+              check_out_time: closeAt.toISOString(),
+              work_hours: 22,
+              auto_checkout: true,
+              check_out_method: "department_22_hour_auto_checkout",
+              notes: "Automatically closed prior-day open attendance session after the 22-hour maximum duty period.",
+            })
+            .eq("id", openPriorRecord.id)
+            .is("check_out_time", null)
+        } else if (overnightDepartment && sessionAgeHours < 24) {
           return NextResponse.json(
             {
               error: `You still have an open attendance session from ${priorCheckIn.toLocaleString()} at ${openPriorRecord.check_in_location_name || "your post"} that has not been checked out. Please check out from that session first.`,

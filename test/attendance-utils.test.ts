@@ -90,7 +90,7 @@ describe("attendance-utils", () => {
     ).toBe(true)
   })
 
-  it("never automatically checks out Security or Transport staff working overnight", () => {
+  it("allows automatic checkout handling for 22-hour departments", () => {
     const overnight = new Date("2026-02-12T23:59:00")
 
     for (const dept of [{ code: "security" }, { code: "transport" }, { code: "operations" }]) {
@@ -102,7 +102,7 @@ describe("attendance-utils", () => {
         isOnLeave: false,
         hoursWorked: 8,
         dept,
-      })).toBe(false)
+      })).toBe(true)
     }
   })
 
