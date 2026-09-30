@@ -186,7 +186,7 @@ export function TransportWorkspace({
   const [requestOpen, setRequestOpen] = useState(false)
   const [hodRequiredOpen, setHodRequiredOpen] = useState(false)
   const router = useRouter()
-  const regionalRouteRequired = isRegionalOnlyWorkspace
+  const regionalRouteRequired = isRegionalOnlyWorkspace && !isRegionalStaff
 
 
   async function handleRequestSubmit(event: FormEvent<HTMLFormElement>) {
@@ -242,7 +242,7 @@ export function TransportWorkspace({
               eventDate: form.get("eventDate"),
               passengerCount: form.get("passengerCount"),
               supportingDocuments: documents,
-              regionalRoute: form.get("regionalRoute"),
+              regionalRoute: isRegionalStaff ? "local_regional" : form.get("regionalRoute"),
             },
       ),
     })
@@ -771,6 +771,8 @@ export function TransportWorkspace({
                   : "Complete the transport requisition. It will follow the Regional HR, District Officer, Regional Manager, and Managing Director workflow."
                 : isRegionalHr
                 ? "Complete the regional requisition and select whether the request is for transport within your region or support from Head Office."
+                : isRegionalStaff
+                ? "Complete the digital regional requisition. Regional HR will review the request and determine the appropriate transport route."
                 : "Complete the digital regional requisition. The selected route determines the next approval desk after Regional Manager endorsement."}
             </DialogDescription>
           </DialogHeader>
