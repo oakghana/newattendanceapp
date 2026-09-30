@@ -2211,7 +2211,7 @@ export function AttendanceRecorder({
         setFlashMessage({
           message: autoCheckout
             ? `You were automatically checked out after 4:00 PM because you were outside the approved location range. Total work hours: ${workHours} hours.`
-            : `Successfully checked out from ${result.data.check_out_location_name}! Great work today. Total work hours: ${workHours} hours. See you tomorrow!`,
+            : `Checkout successful. Total work hours: ${workHours} hours.`,
           type: autoCheckout ? "info" : "success",
         })
 
