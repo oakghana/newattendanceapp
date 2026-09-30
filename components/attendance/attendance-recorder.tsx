@@ -3396,7 +3396,7 @@ export function AttendanceRecorder({
               setFlashMessage({ message: "You are staying checked in. Check out when your duty at the post ends.", type: "info" })
             }}
           >
-            Stay checked in
+            Still at post
           </Button>
         )}
         <Button
