@@ -84,7 +84,7 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   "/dashboard": ["driver", "chief_driver", "regional_chief_driver", "transport_manager", "staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_records", "regional_hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
   
   // Transport Management — role checks are repeated in each page for defense in depth
-  "/dashboard/transport": ["admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "regional_chief_driver", "staff", "contract", "audit_staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "department_head", "managing_director", "director_hr", "manager_hr", "hr", "hr_officer", "hr_leave_office", "hr_executive", "hr_executive_officer", "secretary", "committee", "loan_committee"],
+  "/dashboard/transport": ["admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "regional_chief_driver", "district_officer", "staff", "contract", "audit_staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "department_head", "managing_director", "director_hr", "manager_hr", "hr", "hr_officer", "hr_leave_office", "hr_executive", "hr_executive_officer", "secretary", "committee", "loan_committee"],
 
   // HR Records reference-management queue
   "/dashboard/hr-records": ["admin", "hr_records", "it-admin", "system_admin"],
@@ -106,7 +106,7 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   "/dashboard/md-approvals": ["managing_director", "admin"],
 
   // Secretary Memo Hub — Regional HR users inherit Secretary capabilities with scoped visibility
-  "/dashboard/secretary-memos": ["secretary", "hr_records", "hr_records_officer", "hr_records_manager", "regional_hr_leave_office", "regional_hr", "regional_leave_office", "admin", "hr_executive", "hr", "manager_hr", "director_hr", "hr_executive_officer"],
+  "/dashboard/secretary-memos": ["secretary", "hr_records", "hr_records_officer", "hr_records_manager", "regional_hr_leave_office", "regional_hr", "regional_leave_office", "admin", "managing_director", "hr_executive", "hr", "manager_hr", "director_hr", "hr_executive_officer"],
 
   // Overview dashboard — all roles
   "/dashboard/overview": ["driver", "chief_driver", "regional_chief_driver", "transport_manager", "staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_records", "regional_hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
