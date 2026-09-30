@@ -4,7 +4,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { canCreateTransportRequest, canManageTransport, isChiefDriverRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 
 const TRANSPORT_ROLES = new Set([
-  "admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "regional_chief_driver", "transport_manager", "regional_hr", "regional hr", "regional_hr_office", "regional hr office", "regional_hr_officer", "regional hr officer", "regional_manager", "regional manager",
+  "admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "regional_chief_driver", "district_officer", "transport_manager", "regional_hr", "regional hr", "regional_hr_office", "regional hr office", "regional_hr_officer", "regional hr officer", "regional_manager", "regional manager",
   "hr_records", "hr_records_officer", "hr_records_manager", "hr", "hr_officer", "hr_leave_office", "department_head", "managing_director", "director_hr", "manager_hr", "hr_executive", "hr_executive_officer", "staff", "contract", "audit_staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "secretary", "committee", "loan_committee",
 ])
 
@@ -60,7 +60,10 @@ export default async function TransportPage() {
     )
   )
   const isBasicStaffRole = ["staff", "contract", "audit_staff"].includes(normalizedRole)
-  if (!profile || !hasTransportAccess || (isBasicStaffRole && isRegionalOrDistrictLinked)) redirect("/dashboard")
+  const isDistrictStaff =
+    preliminaryLocationName.includes("district") ||
+    String((profile?.geofence_locations as { location_type?: string | null } | null)?.location_type || "").toLowerCase().includes("district")
+  if (!profile || !hasTransportAccess || (isBasicStaffRole && isRegionalOrDistrictLinked && !isDistrictStaff)) redirect("/dashboard")
 
   const isManagingDirector = ["managing_director", "director"].includes(normalizedRole)
   const isHrExecutive = ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
