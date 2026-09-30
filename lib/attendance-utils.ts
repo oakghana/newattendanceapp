@@ -19,7 +19,9 @@ function isManagerOrAdminRole(role?: string | null): boolean {
     "super_admin",
     "department_head",
     "head_of_department",
-    "regional_manager",
+    "managing_director",
+    "accounts_executive",
+    "hr_executive",
   ].includes(normalizedRole)
 }
 
@@ -97,10 +99,16 @@ export function isExemptFromAttendanceReasons(role?: string | null): boolean {
   return isManagerOrAdminRole(role)
 }
 
+export function isExemptFromLatenessReason(dept?: DeptInfo, role?: string | null): boolean {
+  return isExemptFromAttendanceReasons(role) || isSecurityDept(dept) || isOperationalDept(dept) || isTransportDept(dept)
+}
+
 /**
  * Returns true when a lateness reason SHOULD be required.
  * - Requires reason only on weekdays (Mon-Fri)
- * - Role and department do not bypass this requirement
+ * - Managing Director, Department Head, Accounts Executive, HR Executive, Administrator,
+ *   Security, Transport, and Operations staff do not need a reason
+ * - Regional Managers and all other staff must provide a reason
  */
 export function requiresLatenessReason(
   date: Date = new Date(),
@@ -109,7 +117,7 @@ export function requiresLatenessReason(
   config?: AttendanceTimeConfig,
 ): boolean {
   if (isWeekend(date)) return false
-  if (isExemptFromAttendanceReasons(role) || isExemptFromTimeRestrictions(dept, role)) return false
+  if (isExemptFromLatenessReason(dept, role)) return false
   void config
   // Check if current time is past the configured lateness deadline
   const deadlineStr = config?.latenessReasonDeadline ?? "09:00"
