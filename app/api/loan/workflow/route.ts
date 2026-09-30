@@ -532,7 +532,8 @@ export async function GET() {
     }
 
     if (resolvedTypesRes.error && isSchemaIssue(resolvedTypesRes.error)) {
-      const viewAllTabs = isAdminRole(role)
+      const isManagingDirector = role === "managing_director"
+  const viewAllTabs = isAdminRole(role) || isManagingDirector
       return NextResponse.json(
         {
           degraded: true,
@@ -582,7 +583,7 @@ export async function GET() {
             hrOffice: canDoHrOffice(role, deptName, deptCode),
             directorHr: canDoDirectorHr(role, deptName, deptCode),
             viewAllTabs,
-            allLoans: isAdminRole(role) || ["loan_office", "loan_officer", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
+            allLoans: isAdminRole(role) || isManagingDirector || ["loan_office", "loan_officer", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
           },
         },
         { status: 200 },
@@ -600,7 +601,8 @@ export async function GET() {
   await normalizeImportedCommitteeLoans(admin)
   await broadcastDelayedPostLoanOfficeRequests(admin)
 
-    const viewAllTabs = isAdminRole(role)
+    const isManagingDirector = role === "managing_director"
+  const viewAllTabs = isAdminRole(role) || isManagingDirector
 
     const permissions = {
       hod: canDoHodReview(role, isLinkedHod),
@@ -610,7 +612,7 @@ export async function GET() {
       hrOffice: canDoHrOffice(role, deptName, deptCode),
       directorHr: canDoDirectorHr(role, deptName, deptCode),
       viewAllTabs,
-      allLoans: isAdminRole(role) || ["loan_office", "loan_officer", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
+      allLoans: isAdminRole(role) || isManagingDirector || ["loan_office", "loan_officer", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
     }
 
     // HOD query: include requests explicitly assigned to this HOD, plus linked-staff fallback for legacy data.
@@ -1137,7 +1139,7 @@ export async function GET() {
             hrOffice: canDoHrOffice(role, deptName, deptCode),
             directorHr: canDoDirectorHr(role, deptName, deptCode),
             viewAllTabs: viewAllTabsFallback,
-            allLoans: isAdminRole(role) || ["loan_office", "loan_officer", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
+            allLoans: isAdminRole(role) || isManagingDirector || ["loan_office", "loan_officer", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
           },
         },
         { status: 200 },

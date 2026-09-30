@@ -1434,6 +1434,7 @@ export default function LoanAppPage() {
   const p = data?.permissions
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
   const isAdmin = isAdminRoleValue(normalizedRole)
+  const isManagingDirector = normalizedRole === "managing_director"
   const isItAdmin = ["it_admin", "it-admin"].includes(normalizedRole.replace(/\s+/g, "_"))
   const canSeeFdReviewerName = isAdmin || p?.directorHr || p?.hrOffice || p?.viewAllTabs
     // Loan Office workspace: loan_office/manager_hr ONLY if in HR dept (not Accounts dept)
@@ -1484,6 +1485,7 @@ export default function LoanAppPage() {
     // Determine if this user is ONLY an HR Executive (director_hr) with no other elevated roles
     const isHrExecutive = !isAdminUser && !!p?.directorHr
     const isAccountsExecutive = !isAdminUser && (normalizedRole === "accounts_executive" || normalizedRole === "account_executive" || normalizedRole === "accounts_exec")
+    const isManagingDirectorUser = isManagingDirector
     const isHrExecutiveOnly = !isAdminUser && p?.directorHr && !p?.hod && !p?.loanOffice && !p?.accounts && !p?.hrOffice && !p?.viewAllTabs
 
     // IT Administrators may use the loan workspace only for their own loans and tracking.
@@ -1525,7 +1527,7 @@ export default function LoanAppPage() {
     // Loan Office tab: ONLY for HR department loan office staff to process HOD-approved loans and perform FD checks
     // Supports both new (hr_loan_office) and legacy (loan_office in HR dept) role names
     const isHRLoanOffice = (["hr_loan_office", "loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) || normalizedRole.includes("hr_loan") || /hr.*loan.*office/i.test(`${normalizedRole} ${userDeptName}`)) && !userDeptIsAccounts || (p?.loanOffice && !userDeptIsAccounts)
-    if (isHRLoanOffice) {
+    if (isHRLoanOffice || isManagingDirectorUser) {
       tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice})` })
     }
 
@@ -1545,7 +1547,7 @@ export default function LoanAppPage() {
     }
 
     // Repayment Tracking tab: for Loan Office, Accounts Office, executives, and HR Loan Office
-    if (canAccessLoanOfficeWorkspace || isAccountsOffice || isAccountsExecutive || isHRLoanOffice || isAdminUser) {
+    if (canAccessLoanOfficeWorkspace || isAccountsOffice || isAccountsExecutive || isHRLoanOffice || isAdminUser || isManagingDirectorUser) {
       tabs.push({ key: "repayment-tracking", label: "Repayment Tracking" })
       tabs.push({ key: "running-loans", label: "Running Loans" })
     }
@@ -1557,7 +1559,7 @@ export default function LoanAppPage() {
     if (canAccessLoanOfficeWorkspace && !p?.accounts && !p?.viewAllTabs) tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
     // HR Loan Office users need visibility of the committee queue for end-to-end tracking,
   // but the Committee page remains read-only unless the user has committee permission.
-  if (p?.committee || p?.viewAllTabs || isHRLoanOffice) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
+  if (p?.committee || p?.viewAllTabs || isHRLoanOffice || isManagingDirectorUser) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
     // Payment Approvals: single tab only (HR/Accounts executives). Avoid second push for HR Loan Office alone.
     if (isHrExecutive || isAccountsExecutive || isAccountsOffice || isAdminUser) {
@@ -4687,7 +4689,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             </button>
             {!collapsedSections.loanOfficeFdApproved && (
               <div className="p-5">
-                <HRLoanOfficeFDApproved />
+                <HRLoanOfficeFDApproved readOnly={isManagingDirector} />
               </div>
             )}
           </div>
@@ -6015,7 +6017,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
         {/* ── Repayment Tracking ── */}
 <TabsContent value="running-loans" className="space-y-4">
   {normalizedRole === "hr_loan_office" && <SettlementInitiationPanel />}
-  <RunningLoansReport />
+  <RunningLoansReport readOnly={isManagingDirector} />
   </TabsContent>
 
         <TabsContent value="repayment-tracking" className="space-y-4">
