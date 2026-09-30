@@ -602,71 +602,8 @@ export function TransportWorkspace({
             href: "/dashboard/transport/requests",
             cta: isTransportManager ? "Open national board" : isChiefDriver ? "Open dispatch desk" : "Open regional register",
             badge: isTransportManager ? "National" : isChiefDriver ? "Local fleet" : "Regional",
-          },
-        ]),
-    ...(isManagingDirector
-      ? [
-          {
-            title: "Executive approval desk",
-            description: `Handle ${regionalPendingCount} regional and ${nonRegionalPendingCount} HOD-cleared Head Office requests awaiting your decision.`,
-            icon: ShieldCheck,
-            href: "/dashboard/transport/requests",
-            cta: "Open approval tabs",
-            badge: `${pendingCount} pending`,
-          },
+              },
         ]
-      : []),
-    ...(isDriver || isNonRegionalStaff || isRegionalOnlyWorkspace
-      ? []
-      : [
-          {
-            title: isActingHod ? "New Head Office request" : "Regional requests",
-            description: isActingHod
-              ? "Create a transport requisition with HOD authorization for Managing Director review."
-              : "Review work routed to Regional HR, Regional Managers, HR Records, MD, and Transport.",
-            icon: Inbox,
-            href: isActingHod ? "/dashboard/transport/nonregional/new" : "/dashboard/transport/requests",
-            cta: isActingHod ? "Create requisition" : "Open queues",
-            badge: isActingHod ? "Create" : undefined,
-          },
-        ]),
-    ...(canViewDriverLicense
-      ? [
-          {
-            title: "Driver licenses",
-            description: "Monitor expiry dates and keep expired or suspended drivers out of assignments.",
-            icon: IdCard,
-            href: "/dashboard/transport/drivers",
-            cta: "Open driver desk",
-            badge: undefined as string | undefined,
-          },
-        ]
-      : []),
-    ...(canManageFleet
-      ? [
-          {
-            title: isManagingDirector ? "Nationwide fleet inventory" : "Fleet inventory",
-            description: isManagingDirector ? "View every vehicle nationwide, location, type, capacity, compliance, and reservations." : "Register vehicles, track capacity and compliance, and monitor active reservations.",
-            icon: Truck,
-            href: "/dashboard/transport/fleet",
-            cta: "Open fleet desk",
-            badge: "Operations",
-          },
-        ]
-      : []),
-    ...((isTransportManager || canManage || isHrExecutive) && !isDepartmentHead && !isRegionalOnlyWorkspace && !isRegionalManager
-      ? [
-          {
-            title: "Head Office requests",
-            description: "Assign drivers to MD-approved Head Office trips.",
-            icon: Navigation,
-            href: "/dashboard/transport/nonregional",
-            cta: "Open Head Office",
-            badge: "Fulfilment",
-          },
-        ]
-      : []),
-  ]
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
