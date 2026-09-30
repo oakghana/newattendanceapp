@@ -3384,19 +3384,30 @@ export function AttendanceRecorder({
       <CardHeader>
           <CardTitle>Continue previous attendance session?</CardTitle>
           <CardDescription>
-            You have an open {overnightOpenAttendance.department_name || "shift"} attendance session from {new Date(overnightOpenAttendance.check_in_time).toLocaleString()}. You must check out from that previous session before starting a new attendance session. The system will not auto-close it or create a new check-in.
+            You have an open {overnightOpenAttendance.department_name || "shift"} attendance session from {new Date(overnightOpenAttendance.check_in_time).toLocaleString()}. Check out when your duty ends, or continue this session if you are still at your post. A new check-in will not be created while this session remains open.
           </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+        {isOvernightShiftDept(userProfile?.departments) && (
+          <Button
+            onClick={() => {
+              setLocalTodayAttendance(overnightOpenAttendance)
+              setOvernightAttendanceConfirmed(true)
+              setFlashMessage({ message: "You are staying checked in. Check out when your duty at the post ends.", type: "info" })
+            }}
+          >
+            Stay checked in
+          </Button>
+        )}
         <Button
           variant="outline"
           onClick={() => {
             setLocalTodayAttendance(overnightOpenAttendance)
-            setOvernightAttendanceConfirmed(false)
-            setFlashMessage({ message: "Your open attendance session is ready. Please check out first.", type: "info" })
+            setOvernightAttendanceConfirmed(true)
+            setFlashMessage({ message: "Your open attendance session is ready. Please check out when your duty ends.", type: "info" })
           }}
         >
-          Check out previous session first
+          Check out later
         </Button>
       </CardContent>
     </Card>
