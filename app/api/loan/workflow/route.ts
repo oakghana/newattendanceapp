@@ -576,7 +576,7 @@ export async function GET() {
             allLoans: [],
           },
           permissions: {
-            hod: canDoHodReview(role, isLinkedHod),
+            hod: role === "managing_director" || canDoHodReview(role, isLinkedHod),
             loanOffice: canDoLoanOffice(role, deptName, deptCode),
             accounts: canDoAccounts(role, deptName, deptCode),
             committee: canDoCommittee(role),
@@ -605,7 +605,7 @@ export async function GET() {
   const viewAllTabs = isAdminRole(role) || isManagingDirector
 
     const permissions = {
-      hod: canDoHodReview(role, isLinkedHod),
+      hod: role === "managing_director" || canDoHodReview(role, isLinkedHod),
       loanOffice: canDoLoanOffice(role, deptName, deptCode),
       accounts: canDoAccounts(role, deptName, deptCode),
       committee: canDoCommittee(role),
@@ -618,7 +618,7 @@ export async function GET() {
     // HOD query: include requests explicitly assigned to this HOD, plus linked-staff fallback for legacy data.
     const hodPromise: Promise<any> = (async () => {
       if (!(permissions.hod || viewAllTabs)) return { data: [], error: null }
-      if ((viewAllTabs && !isManagingDirector) || (!isDepartmentHead && !isRegionalManager && !isLinkedHod)) {
+      if (isManagingDirector || (viewAllTabs && !isManagingDirector) || (!isDepartmentHead && !isRegionalManager && !isLinkedHod)) {
         return admin
           .from("loan_requests")
           .select("*")
@@ -659,7 +659,7 @@ export async function GET() {
         }
       }
       for (const row of data) {
-        row.can_endorse = isManagingDirector ? endorsableStaffIds.has(String(row.user_id || "")) : isRegionalManager || !isDepartmentHead || endorsableStaffIds.has(String(row.user_id || ""))
+        row.can_endorse = isManagingDirector ? true : isRegionalManager || !isDepartmentHead || endorsableStaffIds.has(String(row.user_id || ""))
       }
       data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       return { data, error }
@@ -1132,7 +1132,7 @@ export async function GET() {
             allLoans: [],
           },
           permissions: {
-            hod: canDoHodReview(role, isLinkedHod),
+            hod: role === "managing_director" || canDoHodReview(role, isLinkedHod),
             loanOffice: canDoLoanOffice(role, deptName, deptCode),
             accounts: canDoAccounts(role, deptName, deptCode),
             committee: canDoCommittee(role),

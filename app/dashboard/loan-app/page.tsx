@@ -4081,7 +4081,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
           {hodViewMode === "card" && pagedHod.map((row) => (
             <StageCard key={row.id} row={row}>
-              {p?.hod && row.can_endorse !== false && <Button size="sm" onClick={() => openActionModal(row, "hod")}>Review &amp; Decide</Button>}
+              {p?.hod && row.can_endorse === true && <Button size="sm" onClick={() => openActionModal(row, "hod")}>Review &amp; Decide</Button>}
             </StageCard>
           ))}
           <div className="flex items-center justify-end gap-2">
@@ -8343,7 +8343,7 @@ if (!modalDisbursement || !modalRecovery) {
       }}>
         <DialogContent className="flex !w-[96vw] !max-w-[96vw] sm:!max-w-[96vw] h-[92vh] max-h-[92vh] flex-col p-0 gap-0 overflow-hidden" showCloseButton={false}>
 
-          {/* ── Header bar ─────────────────────────────────────────────── */}
+          {/* ── Header bar ────────────────���────────────────────────────── */}
           <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-3 shrink-0">
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-indigo-600" />
