@@ -74,9 +74,10 @@ export default async function TransportRequestsPage() {
     requestsQuery = requestsQuery.eq("request_type", "regional_transport")
   }
   let { data: requests, error: requestsError } = await requestsQuery
+  const ownRequestFields = "id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url"
   let ownRequestsQuery: any = supabase
     .from("transport_requests")
-    .select(requestFields)
+    .select(ownRequestFields)
     .eq("requester_id", user.id)
     .order("created_at", { ascending: false })
     .limit(200)
@@ -84,7 +85,8 @@ export default async function TransportRequestsPage() {
   const { data: ownRequests, error: ownRequestsError } = await ownRequestsQuery
   if (canViewRegionalRegister && !ownRequestsError && ownRequests) {
     const scopedRequests = requests ?? []
-    requests = [...scopedRequests, ...ownRequests.filter((request: any) => !scopedRequests.some((scopedRequest) => scopedRequest.id === request.id))]
+    const personalRows = ownRequests.map((request: any) => ({ ...request, assigned_region: [] }))
+    requests = [...scopedRequests, ...personalRows.filter((request: any) => !scopedRequests.some((scopedRequest) => scopedRequest.id === request.id))]
       .sort((left, right) => new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime())
   }
   if (requestsError) {
