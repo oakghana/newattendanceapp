@@ -121,7 +121,10 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
           }
         }
         if (error || !data?.user) {
-          router.push("/auth/login")
+          setUser(null)
+          setProfile(null)
+          setLoading(true)
+          router.replace("/auth/login")
           return
         }
 
@@ -176,19 +179,20 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
         setLoading(false)
       } catch (err) {
         console.error("[v0] Auth check error:", err)
-        // Set minimal profile to allow dashboard to load
-        setProfile({
-          id: "unknown",
-          first_name: "User",
-          last_name: "",
-          role: "staff",
-        })
-        setLoading(false)
+        setUser(null)
+        setProfile(null)
+        setLoading(true)
+        router.replace("/auth/login")
       }
     }
 
     // Add timeout to prevent infinite loading
     const timeoutId = setTimeout(() => {
+      // Never render the dashboard shell without a confirmed session.
+      if (!user) {
+        router.replace("/auth/login")
+        return
+      }
       setLoading(false)
     }, 10000) // 10 second timeout
 
@@ -265,7 +269,7 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
     }
   }, [profile])
 
-  if (loading) {
+  if (loading || !user || !profile) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-background/98 to-muted/10 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
