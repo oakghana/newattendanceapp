@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
     if (!canConfirmDisbursement(profile.role)) {
       return NextResponse.json(
-        { error: "Only the Accounts Office and Accounts Executive are authorized to initiate or confirm loan disbursements." },
+        { error: "Only an Administrator, Accounts Office, or Accounts Executive is authorized to initiate or confirm loan disbursements." },
         { status: 403 }
       )
     }

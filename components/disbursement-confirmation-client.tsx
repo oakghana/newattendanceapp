@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, Clock, FileText, Loader2, Download, Eye } from "lucide-react"
+import { CheckCircle2, Clock, FileText, Loader2, Download, Eye, ListChecks } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { canConfirmDisbursement } from "@/lib/role-capabilities"
 
@@ -105,6 +105,41 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
     }
   }
 
+  const handleConfirmAll = async () => {
+    if (!canConfirm || pendingDisbursements.length === 0) return
+    if (!window.confirm(`Confirm receipt for all ${pendingDisbursements.length} pending loans?`)) return
+    setConfirmingId("all")
+    try {
+      const results = await Promise.allSettled(
+        pendingDisbursements.map((loan) =>
+          fetch("/api/loan/disbursement-confirm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ loan_id: loan.id }),
+          }).then(async (response) => {
+            const data = await response.json()
+            if (!response.ok || !data.success) throw new Error(data.error || `Could not confirm ${loan.request_number}`)
+            return { loan, data }
+          }),
+        ),
+      )
+      const succeeded = results.filter((result): result is PromiseFulfilledResult<{ loan: DisbursedLoan; data: any }> => result.status === "fulfilled")
+      const failed = results.length - succeeded.length
+      const confirmedAt = new Date().toISOString()
+      setLoans((previous) => previous.map((loan) => {
+        const result = succeeded.find((item) => item.value.loan.id === loan.id)
+        return result
+          ? { ...loan, status: "partially_recovered", staff_receiving_funds_confirmed_at: result.value.data.confirmedAt || confirmedAt, staff_receiving_funds_confirmed_by: result.value.data.confirmedByName || "Accounts Officer", repayment_plan_generated_at: result.value.data.confirmedAt || confirmedAt, repayment_duration_months: result.value.data.loan?.repayment_duration_months || loan.recovery_months || loan.repayment_duration_months || 12 }
+          : loan
+      }))
+      toast({ title: failed ? "Bulk confirmation partially completed" : "All disbursements confirmed", description: `${succeeded.length} confirmed${failed ? `; ${failed} failed and remain pending.` : "."}` })
+    } catch (error: any) {
+      toast({ title: "Bulk confirmation failed", description: error?.message || "Unable to confirm pending loans.", variant: "destructive" })
+    } finally {
+      setConfirmingId(null)
+    }
+  }
+
   const pendingDisbursements = loans.filter((l) => !l.staff_receiving_funds_confirmed_at)
   // Repayment Tracking starts from every account-confirmed disbursement, regardless of
   // the repayment status label assigned by the imported or current workflow.
@@ -151,7 +186,18 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-900">Disbursement Confirmation</h1>
-          <p className="text-slate-500 mt-2">Confirm staff have received approved MD loans. Confirmation activates the repayment schedule and makes the loan available for repayment tracking.</p>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">Disbursement Confirmation</h1>
+              <p className="text-slate-500 mt-2">Confirm staff have received approved MD loans. Confirmation activates the repayment schedule and makes the loan available for repayment tracking.</p>
+            </div>
+            {canConfirm && pendingDisbursements.length > 0 && (
+              <Button onClick={handleConfirmAll} disabled={confirmingId === "all"} className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">
+                {confirmingId === "all" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListChecks className="h-4 w-4" />}
+                {confirmingId === "all" ? "Confirming all..." : `Confirm all ${pendingDisbursements.length}`}
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Stats Cards */}

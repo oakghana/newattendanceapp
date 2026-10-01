@@ -935,9 +935,9 @@ export function TransportRequestRegister({
                   const stage = row.workflow_stage ?? "";
                   const isRegional = row.request_type === "regional_transport";
   const districtOfficerActions =
-    canDistrictOfficer &&
-    isRegional &&
-    stage === "district_officer_review";
+  canDistrictOfficer &&
+  isRegional &&
+  ["district_officer_review", "awaiting_do_regional_hr_endorsement"].includes(stage);
   const managerActions =
     canAct &&
     isRegional &&
