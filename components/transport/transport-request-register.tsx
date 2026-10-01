@@ -1077,10 +1077,10 @@ export function TransportRequestRegister({
                     ) : (
                       <>
                         <Button size="sm" disabled={busy === row.id} onClick={() => requestDecision(row.id, "approve_within_authority")}>
-                          Within Regional HR authority → RM endorsement
+                          Treat within region → RM endorsement → Chief Driver
                         </Button>
                         <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "forward_to_rm")}>
-                          Require Regional Manager endorsement
+                          Refer to RM endorsement → Chief Driver
                         </Button>
                         <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "reject")}>
                           Reject
@@ -1413,12 +1413,17 @@ export function TransportRequestRegister({
                 <div><p className="text-xs text-muted-foreground">Event date</p><p className="font-medium">{openRequest.event_date ?? "—"}</p></div>
                 <div><p className="text-xs text-muted-foreground">Passengers</p><p className="font-medium">{openRequest.passenger_count}</p></div>
                 <div><p className="text-xs text-muted-foreground">Status</p><p className="font-medium">{label(openRequest.status)}</p></div>
+                <div className="rounded-md border border-primary/20 bg-primary/5 p-3 sm:col-span-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">Approval flow</p>
+                  <p className="mt-1 text-sm text-foreground">Regional HR review → Regional Manager endorsement → Regional Chief Driver assignment</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Treating this request as within the region still sends it to the Regional Manager before Chief Driver action.</p>
+                </div>
                 <div><p className="text-xs text-muted-foreground">Previous requests</p><p className="font-medium">{openRequest.previous_request_count ?? 0}</p></div>
               </div>
               {openRequest.supporting_documents?.length ? <div><p className="mb-2 text-sm font-medium">Supporting documents</p>{openRequest.supporting_documents.map((document) => document.url ? <a key={document.url} className="block text-sm text-primary underline" href={document.url} target="_blank" rel="noreferrer">{document.name ?? "Open document"}</a> : null)}</div> : null}
               <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
                 {canDistrictOfficer && (openRequest.workflow_stage === "district_officer_review" || openRequest.workflow_stage === "awaiting_do_regional_hr_endorsement") && <><Button disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "approve"); }}>Endorse</Button><Button variant="outline" disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "reject"); }}>Deny</Button></>}
-                {canRegionalHr && <>{openRequest.workflow_stage === "district_officer_review" || openRequest.workflow_stage === "awaiting_do_regional_hr_endorsement" ? <><Button disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "approve"); }}>Endorse for Regional Manager</Button><Button variant="outline" disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "reject"); }}>Reject</Button></> : <><Button disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "approve_within_authority"); }}>Treat within region</Button><Button variant="outline" disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "forward_to_rm"); }}>Head office support → RM</Button><Button variant="outline" disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "reject"); }}>Reject</Button></>}</>}
+                {canRegionalHr && <>{openRequest.workflow_stage === "district_officer_review" || openRequest.workflow_stage === "awaiting_do_regional_hr_endorsement" ? <><Button disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "approve"); }}>Endorse for Regional Manager</Button><Button variant="outline" disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "reject"); }}>Reject</Button></> : <><Button disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "approve_within_authority"); }}>Treat within region → RM endorsement → Chief Driver</Button><Button variant="outline" disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "forward_to_rm"); }}>Refer to RM endorsement → Chief Driver</Button><Button variant="outline" disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "reject"); }}>Reject</Button></>}</>}
                 {canAct && openRequest.workflow_stage === "regional_manager_endorsement" && <><Button disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "endorse"); }}>Endorse</Button><Button variant="outline" disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "deny"); }}>Deny</Button></>}
               </div>
             </CardContent>
