@@ -13,23 +13,7 @@ import { toast } from "@/hooks/use-toast"
 import { ToastAction } from "@/components/ui/toast"
 
 const POLL_INTERVAL_MS = 120_000
-// Keep sessions alive during normal work. Short client-side timers signed users
-// out while they are reading, working in another tab, or waiting on a long task.
-const IDLE_WARNING_MS = 25 * 60 * 1000
-const IDLE_TIMEOUT_MS = 30 * 60 * 1000
 const SESSION_REFRESH_INTERVAL_MS = 5 * 60 * 1000
-const IDLE_EVENTS: Array<keyof WindowEventMap> = [
-  "mousemove",
-  "mousedown",
-  "keydown",
-  "touchstart",
-  "scroll",
-  "wheel",
-  "pointerdown",
-  "click",
-  "input",
-  "focus",
-]
 
 
 interface DashboardLayoutProps {
@@ -51,68 +35,20 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
     if (!user) return
 
     const supabase = createClient()
-    let signedOut = false
-    let inactivityWarningShown = false
-    let lastActivityAt = Date.now()
-    let idleCheckTimer: ReturnType<typeof setInterval> | null = null
-
-    const signOutForInactivity = async () => {
-      if (signedOut || document.hidden || Date.now() - lastActivityAt < IDLE_TIMEOUT_MS) return
-      signedOut = true
-      try {
-        await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" })
-      } finally {
-        await supabase.auth.signOut()
-        router.replace("/auth/login?reason=idle")
-      }
-    }
-
-    const markActive = () => {
-      if (!signedOut) {
-        lastActivityAt = Date.now()
-        inactivityWarningShown = false
-      }
-    }
-
-    const checkIdleState = () => {
-      if (signedOut || document.hidden) return
-
-      const idleDuration = Date.now() - lastActivityAt
-      if (idleDuration >= IDLE_WARNING_MS && !inactivityWarningShown) {
-        inactivityWarningShown = true
-        toast({
-          title: "Are you still there?",
-          description: "You will be signed out after 30 minutes of inactivity. Any interaction with the app keeps your session active.",
-          duration: 12000,
-        })
-      }
-
-      if (idleDuration >= IDLE_TIMEOUT_MS) {
-        void signOutForInactivity()
-      }
-    }
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) markActive()
-    }
-
-    IDLE_EVENTS.forEach((eventName) => window.addEventListener(eventName, markActive, { passive: true }))
-    document.addEventListener("visibilitychange", handleVisibilityChange)
-    idleCheckTimer = setInterval(checkIdleState, 10_000)
-    const sessionRefreshTimer = setInterval(() => {
-      if (!document.hidden && navigator.onLine && !signedOut) {
+    const refreshSession = () => {
+      if (!document.hidden && navigator.onLine) {
         void supabase.auth.refreshSession()
       }
-    }, SESSION_REFRESH_INTERVAL_MS)
-    markActive()
+    }
+
+    const sessionRefreshTimer = window.setInterval(refreshSession, SESSION_REFRESH_INTERVAL_MS)
+    window.addEventListener("focus", refreshSession)
 
     return () => {
-      if (idleCheckTimer) clearInterval(idleCheckTimer)
-      clearInterval(sessionRefreshTimer)
-      IDLE_EVENTS.forEach((eventName) => window.removeEventListener(eventName, markActive))
-      document.removeEventListener("visibilitychange", handleVisibilityChange)
+      window.clearInterval(sessionRefreshTimer)
+      window.removeEventListener("focus", refreshSession)
     }
-  }, [router, user])
+  }, [user])
 
   useEffect(() => {
     const checkAuth = async () => {
