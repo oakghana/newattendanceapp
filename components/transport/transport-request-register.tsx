@@ -159,6 +159,7 @@ export function TransportRequestRegister({
   const [editing, setEditing] = React.useState<TransportRequestRow | null>(
     null,
   );
+  const [openRequest, setOpenRequest] = React.useState<TransportRequestRow | null>(null);
   const [memoPreview, setMemoPreview] =
     React.useState<TransportRequestRow | null>(null);
   const [memoView, setMemoView] = React.useState<"original" | "rejoinder">(
@@ -1045,7 +1046,8 @@ export function TransportRequestRegister({
                         )}
                       </td>
                       <td className="min-w-[230px] px-4 py-4">
-                        <div className="flex flex-wrap gap-2">
+                        <Button size="sm" onClick={() => setOpenRequest(row)}>View request</Button>
+                        <div className="sr-only">
                           {districtOfficerActions && (
                             <>
                               <Button size="sm" disabled={busy === row.id} onClick={() => requestDecision(row.id, "approve")}>
@@ -1384,8 +1386,41 @@ export function TransportRequestRegister({
           </Card>
         </div>
       )}
+      {openRequest && (
+        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-foreground/50 p-4" role="dialog" aria-modal="true" aria-label="Transport request details">
+          <Card className="max-h-[90vh] w-full max-w-3xl overflow-y-auto">
+            <CardHeader>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle>Transport request details</CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">Review the complete request before deciding.</p>
+                </div>
+                <Button variant="ghost" onClick={() => setOpenRequest(null)}>Close</Button>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div><p className="text-xs text-muted-foreground">Requesting staff</p><p className="font-medium">{openRequest.requester_name ?? "Requester not linked"}</p></div>
+                <div><p className="text-xs text-muted-foreground">Assigned location</p><p className="font-medium">{openRequest.requester_location ?? "Location not assigned"}</p></div>
+                <div><p className="text-xs text-muted-foreground">Purpose</p><p className="font-medium">{openRequest.purpose}</p></div>
+                <div><p className="text-xs text-muted-foreground">Journey</p><p className="font-medium">{openRequest.origin} → {openRequest.destination}</p></div>
+                <div><p className="text-xs text-muted-foreground">Event date</p><p className="font-medium">{openRequest.event_date ?? "—"}</p></div>
+                <div><p className="text-xs text-muted-foreground">Passengers</p><p className="font-medium">{openRequest.passenger_count}</p></div>
+                <div><p className="text-xs text-muted-foreground">Status</p><p className="font-medium">{label(openRequest.status)}</p></div>
+                <div><p className="text-xs text-muted-foreground">Previous requests</p><p className="font-medium">{openRequest.previous_request_count ?? 0}</p></div>
+              </div>
+              {openRequest.supporting_documents?.length ? <div><p className="mb-2 text-sm font-medium">Supporting documents</p>{openRequest.supporting_documents.map((document) => document.url ? <a key={document.url} className="block text-sm text-primary underline" href={document.url} target="_blank" rel="noreferrer">{document.name ?? "Open document"}</a> : null)}</div> : null}
+              <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+                {canDistrictOfficer && (openRequest.workflow_stage === "district_officer_review" || openRequest.workflow_stage === "awaiting_do_regional_hr_endorsement") && <><Button disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "approve"); }}>Endorse</Button><Button variant="outline" disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "reject"); }}>Deny</Button></>}
+                {canRegionalHr && <>{openRequest.workflow_stage === "district_officer_review" || openRequest.workflow_stage === "awaiting_do_regional_hr_endorsement" ? <><Button disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "approve"); }}>Endorse for Regional Manager</Button><Button variant="outline" disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "reject"); }}>Reject</Button></> : <><Button disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "approve_within_authority"); }}>Treat within region</Button><Button variant="outline" disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "forward_to_rm"); }}>Head office support → RM</Button><Button variant="outline" disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "reject"); }}>Reject</Button></>}</>}
+                {canAct && openRequest.workflow_stage === "regional_manager_endorsement" && <><Button disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "endorse"); }}>Endorse</Button><Button variant="outline" disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "deny"); }}>Deny</Button></>}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
       {commentRequest && (
-        <div
+  <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/40 p-4"
           role="dialog"
           aria-modal="true"

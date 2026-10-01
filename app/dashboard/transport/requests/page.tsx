@@ -106,15 +106,17 @@ export default async function TransportRequestsPage() {
     requestsError = fallback.error
   }
   if ((canRegionalHr || isDistrictOfficerRole(profile.role)) && requests) {
-    const { data: requesterProfiles } = await regionalHrDataClient
-      .from("user_profiles")
-      .select("id, first_name, last_name, assigned_location_id, region_id, geofence_locations!user_profiles_assigned_location_id_fkey(name, district_id, districts(region_id))")
-      .not("assigned_location_id", "is", null)
-      .limit(1000)
+    const requesterIds = [...new Set((requests ?? []).map((request: any) => request.requester_id).filter(Boolean))]
+    const { data: requesterProfiles } = requesterIds.length
+      ? await regionalHrDataClient
+          .from("user_profiles")
+          .select("id, first_name, last_name, assigned_location_id, region_id, geofence_locations!user_profiles_assigned_location_id_fkey(name, district_id, districts(region_id))")
+          .in("id", requesterIds)
+      : { data: [] as any[] }
     const requesterScope = new Map((requesterProfiles ?? []).map((profile: any) => {
       const location = Array.isArray(profile.geofence_locations) ? profile.geofence_locations[0] : profile.geofence_locations
       const district = Array.isArray(location?.districts) ? location.districts[0] : location?.districts
-      return [profile.id, { locationId: profile.assigned_location_id, districtId: location?.district_id, regionId: profile.region_id ?? district?.region_id, name: [profile.first_name, profile.last_name].filter(Boolean).join(" ") || "Unknown staff", locationName: location?.name ?? "Assigned location unavailable" }]
+      return [profile.id, { locationId: profile.assigned_location_id, districtId: location?.district_id, regionId: profile.region_id ?? district?.region_id, name: [profile.first_name, profile.last_name].filter(Boolean).join(" ") || "Requester not linked", locationName: location?.name ?? "Location not assigned" }]
     }))
     const historyCounts = new Map<string, number>()
     for (const request of requests ?? []) {
