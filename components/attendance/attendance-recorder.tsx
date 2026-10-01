@@ -115,7 +115,7 @@ interface AttendanceRecorderProps {
 type WindowsCapabilities = ReturnType<typeof detectWindowsLocationCapabilities>
 
 const REFRESH_PAUSE_DURATION = 50000 // 50 seconds instead of 120000 (2 minutes)
-const MINIMUM_OFF_PREMISES_CHECKOUT_HOURS = 7
+const MINIMUM_OFF_PREMISES_CHECKOUT_HOURS = 0
 
 function isOffPremisesFallbackError(message: string) {
   const normalized = String(message || "").toLowerCase()
@@ -1969,10 +1969,10 @@ export function AttendanceRecorder({
       const hoursWorkedSoFar = checkInTimeDate
         ? (now.getTime() - checkInTimeDate.getTime()) / (1000 * 60 * 60)
         : 0
-  const workedEightPlusHoursForReason = hoursWorkedSoFar >= 8
-  // Eight hours completes the standard workday; shorter shifts need one meaningful reason.
-  setEarlyCheckoutReasonRequired(Boolean(effectiveRequireEarlyCheckoutReason) && !workedEightPlusHoursForReason)
-  const workedEightPlusHours = hoursWorkedSoFar >= 8
+  const workedNinePlusHoursForReason = hoursWorkedSoFar >= 9
+  // Nine hours completes the standard workday; shorter shifts need one meaningful reason.
+  setEarlyCheckoutReasonRequired(Boolean(effectiveRequireEarlyCheckoutReason) && !workedNinePlusHoursForReason)
+  const workedNinePlusHours = hoursWorkedSoFar >= 9
       const isApprovedOffPremisesStarter = Boolean(
         localTodayAttendance?.on_official_duty_outside_premises || localTodayAttendance?.is_remote_location,
       )
@@ -2052,7 +2052,7 @@ export function AttendanceRecorder({
               return
           } else {
               console.log("[v0] CHECKOUT_ROUTING_DECISION", {
-                decision: isApprovedOffPremisesStarter && workedEightPlusHours ? "DIRECT_OFFPREMISES_CHECKOUT" : "OFFPREMISES_DIALOG",
+                decision: isApprovedOffPremisesStarter && workedNinePlusHours ? "DIRECT_OFFPREMISES_CHECKOUT" : "OFFPREMISES_DIALOG",
                 hoursWorked: hoursWorkedSoFar.toFixed(2),
                 outOfRange: true,
                 device: deviceInfo?.type,
@@ -2070,7 +2070,7 @@ export function AttendanceRecorder({
                 nearestLocForDialog = locationDistances2[0]?.location ?? null
               }
               setPendingOffPremisesCheckoutData({ location: locationData, nearestLocation: nearestLocForDialog })
-              setPendingOffPremisesIsDirectCheckout(isApprovedOffPremisesStarter && workedEightPlusHours)
+              setPendingOffPremisesIsDirectCheckout(isApprovedOffPremisesStarter && workedNinePlusHours)
               setOffPremisesCheckoutReason("")
               setShowOffPremisesCheckoutDialog(true)
               setIsLoading(false)
@@ -2111,8 +2111,8 @@ export function AttendanceRecorder({
       const checkInTimeForHours = localTodayAttendance && localTodayAttendance.check_in_time ? new Date(localTodayAttendance.check_in_time) : null
       const hoursSinceCheckIn = checkInTimeForHours ? (now.getTime() - checkInTimeForHours.getTime()) / (1000 * 60 * 60) : 0
 
-  if (!isBeforeCheckoutTime || !effectiveRequireEarlyCheckoutReason || hoursSinceCheckIn >= 8 || workedEightPlusHours) {
-  console.log("[v0] SMART CHECKOUT: Checkout time passed, exempt, or worked at least 8 hours - immediate checkout", { hoursSinceCheckIn })
+  if (!isBeforeCheckoutTime || !effectiveRequireEarlyCheckoutReason || hoursSinceCheckIn >= 9 || workedNinePlusHours) {
+  console.log("[v0] SMART CHECKOUT: Checkout time passed, exempt, or worked at least 9 hours - immediate checkout", { hoursSinceCheckIn })
         await performCheckoutAPI(locationData, nearestLocation, "", null, false, loginIssueRecoveryCheckout)
         return
       }

@@ -315,7 +315,7 @@ export async function POST(request: NextRequest) {
     const provisionalWorkHours = (now.getTime() - checkInTimeForPolicy.getTime()) / (1000 * 60 * 60)
     const serverTimeMinutes = now.getHours() * 60 + now.getMinutes()
     const isAfter530PmServerTime = serverTimeMinutes >= 17 * 60 + 30
-    const hasWorkedAtLeast8Hours = provisionalWorkHours >= 8
+    const hasWorkedAtLeast8Hours = provisionalWorkHours >= 9
     const isPrivilegedRole = isExemptFromAttendanceReasons(userProfile?.role)
 
     // Staff policy: minimum 2 hours required for regular checkout.
@@ -643,7 +643,7 @@ export async function POST(request: NextRequest) {
     const checkInTime = new Date(attendanceRecord.check_in_time)
     const checkOutTime = new Date()
     const workHours = (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
-    const allowLocationBypass = workHours >= 7 || retryStats.outOfRangeAfter530Failures >= 4
+    const allowLocationBypass = workHours >= 9 || retryStats.outOfRangeAfter530Failures >= 4
     let policyLocationBypassUsed = false
     let retryAutoCheckoutInRangeUsed = false
     let retryOutOfRangeRecoveryUsed = false
@@ -681,35 +681,6 @@ export async function POST(request: NextRequest) {
     // `checkoutLocationData` already declared above; assign as needed below
     // Determine whether this attendance record was created from an approved off-premises request
     const isAttendanceOffPremises = !!attendanceRecord.on_official_duty_outside_premises || !!attendanceRecord.is_remote_location
-
-    if (isAttendanceOffPremises) {
-      // If the user is currently within range, only 2 hours minimum is required.
-      // Remote / out-of-range checkout for off-premises sessions still requires 7 hours.
-      let withinRangeNow = false
-      if (!qr_code_used && typeof latitude === "number" && typeof longitude === "number") {
-        const tempLoc: LocationData = {
-          latitude,
-          longitude,
-          accuracy: typeof accuracy === "number" ? accuracy : 50,
-        }
-        const tempValidation = validateCheckoutLocation(tempLoc, qccLocations, deviceCheckOutRadius)
-        withinRangeNow = tempValidation.canCheckOut
-      }
-
-      const minHours = withinRangeNow ? 2 : 7
-      if (workHours < minHours) {
-        return NextResponse.json(
-          {
-            error: withinRangeNow
-              ? `You need at least 2 hours of work before checking out. You have worked ${workHours.toFixed(2)} hours so far.`
-              : `Approved off-premises sessions can check out remotely only after 7 hours of work. You have worked ${workHours.toFixed(2)} hours so far.`,
-            minimumHoursRequired: minHours,
-            workedHours: Number(workHours.toFixed(2)),
-          },
-          { status: 400 },
-        )
-      }
-    }
 
     if (!qr_code_used && latitude && longitude) {
       const userLocation: LocationData = {
@@ -762,15 +733,6 @@ export async function POST(request: NextRequest) {
           })
           checkoutLocationData = validation.nearestLocation
         } else
-
-        if (!validation.canCheckOut && !withinStandardRange && workHours < 7) {
-          return NextResponse.json(
-            {
-              error: "Out-of-location check-out is available only after working at least 7 hours.",
-            },
-            { status: 400 },
-          )
-        }
 
         if (!validation.canCheckOut && !withinStandardRange && allowAutomaticOutOfRangeCheckout) {
           console.log("[v0] Automatic out-of-range checkout allowed after 4 PM")
@@ -839,7 +801,7 @@ export async function POST(request: NextRequest) {
     )
     const isPrivilegedReasonExempt = isExemptFromAttendanceReasons(userProfileData?.role)
     const requiresOutOfLocationReason =
-      willBeRemoteCheckout && !isPrivilegedReasonExempt && !auto_checkout && !allowLocationBypass
+      willBeRemoteCheckout && !isPrivilegedReasonExempt && !auto_checkout && !allowLocationBypass && workHours < 9
     
     // Parse checkout end time (HH:MM format)
     const [endHour, endMinute] = checkOutEndTime.split(":").map(Number)
@@ -868,7 +830,7 @@ export async function POST(request: NextRequest) {
     const checkInTimeForHours = new Date(attendanceRecord.check_in_time)
     const hoursWorked = (checkOutTime.getTime() - checkInTimeForHours.getTime()) / (1000 * 60 * 60)
 
-    if (isEarlyCheckout && effectiveRequireEarlyCheckoutReason && !isWeekend && hoursWorked < 8 && !isAfter530PmServerTime && !hasWorkedAtLeast8Hours) {
+    if (isEarlyCheckout && effectiveRequireEarlyCheckoutReason && !isWeekend && hoursWorked < 9 && !isAfter530PmServerTime && !hasWorkedAtLeast8Hours) {
       earlyCheckoutWarning = {
         message: `Early checkout detected at ${checkOutTime.toLocaleTimeString()}. Standard work hours end at ${checkOutEndTime}.`,
         checkoutTime: checkOutTime.toISOString(),
@@ -932,8 +894,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (policyLocationBypassUsed) {
-      const policyNote = hasWorkedAtLeast8Hours
-        ? "Checkout location bypass applied: staff has worked at least 7 hours."
+const policyNote = hasWorkedAtLeast8Hours
+  ? "Checkout location bypass applied: staff has worked at least 9 hours."
         : "Checkout location bypass applied: checkout requested after 5:30 PM server time."
       checkoutData.notes = checkoutData.notes ? `${checkoutData.notes}\n${policyNote}` : policyNote
     }
