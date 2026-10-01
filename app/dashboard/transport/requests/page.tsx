@@ -96,6 +96,15 @@ export default async function TransportRequestsPage() {
     requestsQuery = requestsQuery.eq("request_type", "regional_transport")
   }
   let { data: requests, error: requestsError } = await requestsQuery
+  if (canRegionalHr && requestsError) {
+    const fallback = await regionalHrDataClient
+      .from("transport_requests")
+.select("id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url")
+      .order("created_at", { ascending: false })
+      .limit(500)
+    requests = fallback.data as any[] | null
+    requestsError = fallback.error
+  }
   if (canRegionalHr && requests) {
     const { data: requesterProfiles } = await regionalHrDataClient
       .from("user_profiles")
