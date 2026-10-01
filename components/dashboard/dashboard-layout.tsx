@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { memo, useEffect, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Sidebar } from "./sidebar"
 import { OfflineIndicator } from "@/components/ui/offline-indicator"
@@ -40,6 +40,7 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
   const [loading, setLoading] = useState(true)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const router = useRouter()
+  const pathname = usePathname()
   const lastSeenIdRef = useRef<string | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -281,7 +282,7 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className={`min-w-0 w-full overflow-x-hidden transition-all duration-300 ease-in-out ${isCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
         <main className="mx-auto min-w-0 w-full max-w-[min(100%-1rem,96rem)] overflow-x-hidden px-4 pb-28 pt-4 sm:px-5 sm:pb-32 sm:pt-5 lg:px-8 lg:pb-12 lg:pt-8 xl:px-10">
           <div className="relative">
-            {children}
+            <div key={pathname}>{children}</div>
             <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.02] via-transparent to-accent/[0.02] pointer-events-none -z-10 rounded-3xl" />
           </div>
         </main>
