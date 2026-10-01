@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { TransportRequestRegister } from "@/components/transport/transport-request-register"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { canManageTransport, isChiefDriverRole, isDistrictOfficerRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
+import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
 export default async function TransportRequestsPage() {
   const supabase = await createClient()
@@ -18,7 +19,7 @@ export default async function TransportRequestsPage() {
   if (!profile || !profile.role) redirect("/dashboard")
   const normalizedRole = normalizeAppRole(profile.role)
   const locationId = profile.assigned_location_id ?? null
-  const isRegionalRequester = normalizedRole === "staff" && Boolean(locationId)
+  const isRegionalRequester = ["staff", "it-admin"].includes(normalizedRole) && Boolean(locationId)
   const canViewRegionalRegister = normalizedRole === "admin" || isRegionalRequester || isDistrictOfficerRole(profile.role) || isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role) || canManageTransport(profile.role) || normalizedRole === "managing_director" || ["hr_records", "hr_records_officer", "hr_records_manager", "hr_executive", "hr_executive_officer"].includes(normalizedRole)
   if (!canViewRegionalRegister) redirect("/dashboard")
   const isRegionalDriver = isRegionalDriverRole(profile.role)
@@ -53,6 +54,10 @@ export default async function TransportRequestsPage() {
     ...(regionId ? [regionId] : []),
     ...(regionalHrAssignments ?? []).map((assignment) => assignment.region_id).filter(Boolean),
   ])]
+  if (canRegionalHr && locationId) {
+    const ownedLocationIds = await resolveOwnedLocationIdsForRegionalOffice(regionalHrDataClient, locationId, regionId)
+    regionalHrScopeLocationIds = [...new Set([...regionalHrScopeLocationIds, ...ownedLocationIds])]
+  }
   if (canRegionalHr && regionalHrRegionIds.length) {
     const { data: regionalLocations } = await regionalHrDataClient
       .from("geofence_locations")
