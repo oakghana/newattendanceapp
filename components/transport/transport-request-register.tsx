@@ -173,6 +173,7 @@ export function TransportRequestRegister({
       | "deny"
   | "return_for_correction"
   | "approve_within_authority"
+  | "forward_to_rm"
   | "forward_to_md"
       | "approve"
       | "reject"
@@ -470,6 +471,7 @@ export function TransportRequestRegister({
       | "deny"
   | "return_for_correction"
   | "approve_within_authority"
+  | "forward_to_rm"
   | "forward_to_md"
       | "approve"
       | "reject"
@@ -487,6 +489,7 @@ export function TransportRequestRegister({
       | "deny"
   | "return_for_correction"
   | "approve_within_authority"
+  | "forward_to_rm"
   | "forward_to_md"
       | "approve"
       | "reject"
@@ -1057,8 +1060,8 @@ export function TransportRequestRegister({
                         <Button size="sm" disabled={busy === row.id} onClick={() => requestDecision(row.id, "approve_within_authority")}>
                           Within Regional HR authority
                         </Button>
-                        <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "forward_to_md")}>
-                          Forward to MD
+                        <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "forward_to_rm")}>
+                          Forward to Regional Manager
                         </Button>
                         <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "reject")}>
                           Reject
