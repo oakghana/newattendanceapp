@@ -111,66 +111,97 @@ export async function GET(req: NextRequest) {
     if (lt.loan_key && lt.category) loanTypeCategoryMap[lt.loan_key] = lt.category
   }
 
-  let query = admin
-    .from("loan_requests")
-    .select(`
-      id,
-      request_number,
-      loan_type_label,
-      loan_type_key,
-      fixed_amount,
-      requested_amount,
-      status,
-      created_at,
-      md_approved_at,
-      md_approved_by_name,
-      reference_number,
-      memo_reference_locked,
-      user_id,
-      staff_full_name,
-      staff_number,
-      staff_location_name,
-      staff_district_name,
-      staff_rank,
-      department_id,
-      departments!department_id (
-        name
-      ),
-      user_profiles!user_id (
-        first_name,
-        last_name,
-        employee_id,
-        profile_image_url,
-        assigned_location_id,
-  position,
-  geofence_locations!user_profiles_assigned_location_id_fkey (name)
-  )
-  `)
-    .order("created_at", { ascending: false })
+  const loanSelect = `
+    id,
+    request_number,
+    loan_type_label,
+    loan_type_key,
+    fixed_amount,
+    requested_amount,
+    status,
+    created_at,
+    disbursement_date,
+    md_approved_at,
+    md_approved_by_name,
+    reference_number,
+    memo_reference_locked,
+    user_id,
+    staff_full_name,
+    staff_number,
+    staff_location_name,
+    staff_district_name,
+    staff_rank,
+    department_id,
+    departments!department_id (name),
+    user_profiles!user_id (
+      first_name,
+      last_name,
+      employee_id,
+      profile_image_url,
+      assigned_location_id,
+      position,
+      geofence_locations!user_profiles_assigned_location_id_fkey (name)
+    )
+  `
 
+  let data: Record<string, unknown>[] = []
   if (view === "pending") {
-  query = query
-  .eq("status", "awaiting_director_hr")
-  .is("md_approved_at", null)
+    const { data: pending, error } = await admin
+      .from("loan_requests")
+      .select(loanSelect)
+      .eq("status", "awaiting_director_hr")
+      .is("md_approved_at", null)
+      .order("created_at", { ascending: false })
+      .limit(200)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    data = (pending || []) as Record<string, unknown>[]
   } else {
-    // A timestamp alone is not proof of approval. Only final MD-approved
-    // statuses belong in this tab; this prevents in-progress loans with a
-    // stale/incorrect md_approved_at value from appearing as approved.
-    query = query
-      .in("status", ["approved_director", "md_approved"])
-      .not("md_approved_at", "is", null)
-      .order("md_approved_at", { ascending: false })
+    // The approved-memo feed must include both loans approved through the
+    // current MD workflow and legacy/imported loans already disbursed and
+    // still running. These are stored with different status values.
+    const [{ data: mdApproved, error: mdError }, { data: running, error: runningError }] = await Promise.all([
+      admin
+        .from("loan_requests")
+        .select(loanSelect)
+        .in("status", ["approved_director", "md_approved"])
+        .not("md_approved_at", "is", null)
+        .order("md_approved_at", { ascending: false })
+        .limit(500),
+      admin
+        .from("loan_requests")
+        .select(loanSelect)
+        .in("status", ["approved", "active", "staff_receiving_funds", "partially_recovered"])
+        .not("disbursement_date", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(500),
+    ])
+    if (mdError || runningError) {
+      return NextResponse.json({ error: (mdError || runningError)?.message || "Failed to load approved loans" }, { status: 500 })
+    }
+
+    const byId = new Map<string, Record<string, unknown>>()
+    for (const loan of [...(mdApproved || []), ...(running || [])] as Record<string, unknown>[]) {
+      const id = String(loan.id || "")
+      if (id) byId.set(id, loan)
+    }
+    data = Array.from(byId.values()).sort((a, b) => {
+      const aDate = String(a.md_approved_at || a.disbursement_date || a.created_at || "")
+      const bDate = String(b.md_approved_at || b.disbursement_date || b.created_at || "")
+      return bDate.localeCompare(aDate)
+    })
   }
 
-  const { data, error } = await query.limit(200)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
   // Attach category and resolve the staff location from the profile assignment.
-  const loans = (data || []).map((l: Record<string, unknown>) => {
+  const loans = data.map((l: Record<string, unknown>) => {
     const profile = l.user_profiles as Record<string, unknown> | null
     const assignedLocation = profile?.geofence_locations as { name?: string } | null
+    const isLegacyRunningLoan = view === "approved" && !l.md_approved_at
     return {
       ...l,
+      // Legacy records are already disbursed/active; use their disbursement
+      // date for the memo timeline without changing the stored audit fields.
+      md_approved_at: l.md_approved_at || (isLegacyRunningLoan ? l.disbursement_date : null),
+      md_approved_by_name: l.md_approved_by_name || (isLegacyRunningLoan ? "Legacy approved loan" : null),
       staff_location_name: assignedLocation?.name || l.staff_location_name || "Unknown location",
       loan_category: l.loan_type_key ? (loanTypeCategoryMap[l.loan_type_key as string] || null) : null,
     }
