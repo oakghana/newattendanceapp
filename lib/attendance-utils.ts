@@ -100,7 +100,12 @@ export function isExemptFromAttendanceReasons(role?: string | null): boolean {
 }
 
 export function isExemptFromLatenessReason(dept?: DeptInfo, role?: string | null): boolean {
-  return isExemptFromAttendanceReasons(role) || isSecurityDept(dept) || isOperationalDept(dept) || isTransportDept(dept)
+  const normalizedRole = normalizeRole(role)
+  const operationalStaff = isOperationalDept(dept) && ["", "staff"].includes(normalizedRole)
+
+  // Normal operational staff must explain late arrivals. Security and Transport
+  // remain exempt because their shifts and reporting times are operationally different.
+  return isExemptFromAttendanceReasons(role) || isSecurityDept(dept) || isTransportDept(dept) || (isOperationalDept(dept) && !operationalStaff)
 }
 
 /**

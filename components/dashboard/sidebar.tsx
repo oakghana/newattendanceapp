@@ -48,6 +48,7 @@ import {
   Stamp,
   ScrollText,
   Bus,
+  ClipboardList,
 } from "lucide-react"
 import Image from "next/image"
 import { canAccessMemoConsole, isAttendanceOnlyRole, normalizeAppRole } from "@/lib/role-capabilities"
@@ -121,6 +122,14 @@ const navigationItems = [
     icon: FileText,
     roles: ALL_STAFF_ROLES,
     category: "main",
+  },
+  {
+    title: "Weekly Returns",
+    href: "/dashboard/weekly-returns",
+    icon: ClipboardList,
+    roles: ["staff"],
+    category: "main",
+    operationalOnly: true,
   },
   {
     title: "Leave Administration",
@@ -504,8 +513,10 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
     isDistrictStaff ||
     (!isBasicNonRegionalRole || isExplicitNonRegionalLocation || !isRegionalOrDistrictLinked)
   const isChiefDriver = ["chief_driver", "regional_chief_driver"].includes(normalizedProfileRole) || effectiveRole === "chief_driver"
+  const isOperationalDepartment = departmentCodeLower.includes("operation") || departmentNameLower.includes("operation")
 
   const filteredNavItems = allNavigationItems.filter((item) => {
+  if (item.operationalOnly && !isOperationalDepartment) return false
   if (isChiefDriver && ROLE_RESTRICTED_MAIN_HREFS.has(item.href)) return false
     if (item.href === "/dashboard/transport") {
       if (!canSeeTransportMenu) return false
