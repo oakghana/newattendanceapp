@@ -239,8 +239,26 @@ export async function POST(request: Request) {
   }
   const assignedLocation = profile.geofence_locations as { district_id?: string | null; districts?: { region_id?: string | null } | null } | null
   const linkedDistrictId = assignedLocation?.district_id ?? null
-  const assignedRegionId = profile.region_id ?? assignedLocation?.districts?.region_id ?? null
   const originLocationId = profile.assigned_location_id ?? null
+  let assignedRegionId = profile.region_id ?? assignedLocation?.districts?.region_id ?? null
+  // Regional HR users are commonly scoped through regional_hr_office_locations rather
+  // than user_profiles.region_id. Resolve that assignment before inserting so the FK
+  // receives a real regions.id instead of an empty or stale profile value.
+  if (isRegionalHr && (!assignedRegionId || originLocationId)) {
+    const admin = await createAdminClient()
+    const { data: officeAssignment } = await admin
+      .from("regional_hr_office_locations")
+      .select("region_id")
+      .eq("regional_hr_user_id", user.id)
+      .eq("is_active", true)
+      .not("region_id", "is", null)
+      .limit(1)
+    assignedRegionId = assignedRegionId ?? officeAssignment?.[0]?.region_id ?? null
+    if (assignedRegionId) {
+      const { data: validRegion } = await admin.from("regions").select("id").eq("id", assignedRegionId).maybeSingle()
+      if (!validRegion) assignedRegionId = officeAssignment?.[0]?.region_id ?? null
+    }
+  }
   const body = await request.json()
   const purpose = String(body.purpose ?? "").trim()
   const origin = String(body.origin ?? "").trim()
