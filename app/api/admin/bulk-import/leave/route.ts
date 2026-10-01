@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
       // Resolve user
       let userId: string | null = null
       try {
-        let userQuery = admin.from("user_profiles").select("id")
+        const userQuery = admin.from("user_profiles").select("id")
         if (employeeId) {
           const { data: byEmp } = await userQuery.eq("employee_id", employeeId).maybeSingle()
           if (byEmp) userId = byEmp.id

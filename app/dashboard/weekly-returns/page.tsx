@@ -21,7 +21,8 @@ export default async function WeeklyReturnsPage() {
   const departmentValue = `${department?.code || ""} ${department?.name || ""}`.toLowerCase()
   const isOperational = departmentValue.includes("operation") || departmentValue.includes("operational")
 
-  if (role !== "staff" || !isOperational) redirect("/dashboard/overview")
+  const canUseWeeklyReturns = ["staff", "district_officer", "transport_manager", "regional_manager"].includes(role)
+  if (!canUseWeeklyReturns || (!isOperational && role === "staff")) redirect("/dashboard/overview")
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-6">
