@@ -104,6 +104,7 @@ const ROLE_OPTIONS = [
   ["chief_driver", "Chief Driver"],
   ["contract", "Contract"],
   ["department_head", "Department Head"],
+  ["district_officer", "District Officer (DO)"],
   ["director_hr", "Director HR"],
   ["driver", "Driver"],
   ["hr_executive", "HR Executive"],
@@ -1270,7 +1271,8 @@ export function StaffManagement() {
                             <SelectItem value="contract">Contract</SelectItem>
   {!isRegionalItAdmin && <SelectItem value="department_head">Department Head</SelectItem>}
   <SelectItem value="regional_manager">Regional Manager</SelectItem>
-                            <SelectItem value="driver">Driver</SelectItem>
+  <SelectItem value="district_officer">District Officer (DO)</SelectItem>
+  <SelectItem value="driver">Driver</SelectItem>
                             <SelectItem value="chief_driver">Chief Driver</SelectItem>
                               </>
                         ) : (

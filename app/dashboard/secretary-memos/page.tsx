@@ -19,7 +19,7 @@ export default async function SecretaryMemosPage() {
   // The proxy has already validated the role. Administrators and secretaries
   // may use the memo console without being sent back to the login screen.
   const normalizedRole = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-  const canUseMemoConsole = canAccessMemoConsole(normalizedRole) || regionalSecretaryRoles(normalizedRole) || ["hr_records", "hr_records_officer", "hr_records_manager", "regional_manager"].includes(normalizedRole)
+  const canUseMemoConsole = canAccessMemoConsole(normalizedRole) || regionalSecretaryRoles(normalizedRole) || ["hr_records", "hr_records_officer", "hr_records_manager", "regional_manager", "managing_director"].includes(normalizedRole)
   if (!profile || !canUseMemoConsole) {
     redirect("/dashboard/attendance")
   }

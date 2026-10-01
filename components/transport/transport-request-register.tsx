@@ -108,7 +108,11 @@ export type TransportRequestRow = {
 };
 
 const label = (value: string | null) =>
-  (value ?? "submitted")
+  (value === "district_officer_review"
+    ? "District Officer review"
+    : value === "awaiting_do_regional_hr_endorsement"
+      ? "Awaiting DO/Regional HR Endorsement"
+      : value ?? "submitted")
     .replace(/_/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
 const displayStage = (row: TransportRequestRow) =>
@@ -126,6 +130,8 @@ export function TransportRequestRegister({
   rows,
   canCreate,
   canAct,
+  canDistrictOfficer,
+  canRegionalHr,
   canHrRecords,
   canManagingDirector,
   canHrExecutive,
@@ -135,6 +141,8 @@ export function TransportRequestRegister({
   rows: TransportRequestRow[];
   canCreate: boolean;
   canAct: boolean;
+  canDistrictOfficer: boolean;
+  canRegionalHr: boolean;
   canHrRecords: boolean;
   canManagingDirector: boolean;
   canHrExecutive: boolean;
@@ -163,8 +171,9 @@ export function TransportRequestRegister({
     decision:
       | "endorse"
       | "deny"
-      | "return_for_correction"
-      | "forward_to_md"
+  | "return_for_correction"
+  | "approve_within_authority"
+  | "forward_to_md"
       | "approve"
       | "reject"
       | "send_to_hr_executive"
@@ -459,8 +468,9 @@ export function TransportRequestRegister({
     decision:
       | "endorse"
       | "deny"
-      | "return_for_correction"
-      | "forward_to_md"
+  | "return_for_correction"
+  | "approve_within_authority"
+  | "forward_to_md"
       | "approve"
       | "reject"
       | "send_to_hr_executive"
@@ -475,8 +485,9 @@ export function TransportRequestRegister({
     decision:
       | "endorse"
       | "deny"
-      | "return_for_correction"
-      | "forward_to_md"
+  | "return_for_correction"
+  | "approve_within_authority"
+  | "forward_to_md"
       | "approve"
       | "reject"
       | "send_to_hr_executive"
@@ -913,10 +924,19 @@ export function TransportRequestRegister({
                 {visibleRows.map((row) => {
                   const stage = row.workflow_stage ?? "";
                   const isRegional = row.request_type === "regional_transport";
-                  const managerActions =
-                    canAct &&
-                    isRegional &&
-                    stage === "regional_manager_endorsement";
+  const districtOfficerActions =
+    canDistrictOfficer &&
+    isRegional &&
+    stage === "district_officer_review";
+  const managerActions =
+    canAct &&
+    isRegional &&
+    stage === "regional_manager_endorsement";
+  const regionalHrActions =
+  canRegionalHr &&
+  isRegional &&
+  ["regional_hr_review", "district_officer_review", "awaiting_do_regional_hr_endorsement"].includes(stage);
+
                   const hrActions =
                     canHrRecords &&
                     isRegional &&
@@ -945,6 +965,7 @@ export function TransportRequestRegister({
                     );
                   const hasActions =
                     managerActions ||
+                    regionalHrActions ||
                     hrActions ||
                     mdActions ||
                     execActions ||
@@ -1011,6 +1032,40 @@ export function TransportRequestRegister({
                       </td>
                       <td className="min-w-[230px] px-4 py-4">
                         <div className="flex flex-wrap gap-2">
+                          {districtOfficerActions && (
+                            <>
+                              <Button size="sm" disabled={busy === row.id} onClick={() => requestDecision(row.id, "approve")}>
+                                Approve for Regional Manager
+                              </Button>
+                              <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "reject")}>
+                                Reject
+                              </Button>
+                            </>
+                          )}
+                  {regionalHrActions && (
+                    row.workflow_stage === "district_officer_review" || row.workflow_stage === "awaiting_do_regional_hr_endorsement" ? (
+                      <>
+                        <Button size="sm" disabled={busy === row.id} onClick={() => requestDecision(row.id, "approve")}>
+                          Endorse for Regional Manager
+                        </Button>
+                        <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "reject")}>
+                          Reject
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button size="sm" disabled={busy === row.id} onClick={() => requestDecision(row.id, "approve_within_authority")}>
+                          Within Regional HR authority
+                        </Button>
+                        <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "forward_to_md")}>
+                          Forward to MD
+                        </Button>
+                        <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "reject")}>
+                          Reject
+                        </Button>
+                      </>
+                    )
+                  )}
                           {managerActions && (
                             <>
                               <Button

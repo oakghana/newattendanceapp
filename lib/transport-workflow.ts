@@ -4,6 +4,7 @@ export type TransportSlaTone = "ok" | "watch" | "overdue" | "terminal"
 
 export const REGIONAL_STAGE_ORDER = [
   "submitted",
+  "district_officer_review",
   "regional_manager_endorsement",
   "managing_director_approval",
   "hr_executive_signing",
@@ -22,6 +23,8 @@ export const TERMINAL_TRANSPORT_STAGES = new Set(["completed", "closed", "reject
 export function transportStageLabel(stage?: string | null): string {
   const value = String(stage || "submitted")
   if (value === "referenced") return "Referenced (ready to assign)"
+  if (value === "district_officer_review") return "District Officer review"
+  if (value === "regional_hr_review") return "Regional HR review"
   if (value === "hr_executive_signing") return "HR Executive signing"
   if (value === "regional_manager_endorsement") return "Regional Manager endorsement"
   if (value === "managing_director_approval") return "Managing Director approval"

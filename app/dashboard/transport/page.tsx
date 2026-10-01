@@ -4,7 +4,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { canCreateTransportRequest, canManageTransport, isChiefDriverRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 
 const TRANSPORT_ROLES = new Set([
-  "admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "regional_chief_driver", "transport_manager", "regional_hr", "regional hr", "regional_hr_office", "regional hr office", "regional_hr_officer", "regional hr officer", "regional_manager", "regional manager",
+  "admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "regional_chief_driver", "district_officer", "transport_manager", "regional_hr", "regional hr", "regional_hr_office", "regional hr office", "regional_hr_officer", "regional hr officer", "regional_manager", "regional manager",
   "hr_records", "hr_records_officer", "hr_records_manager", "hr", "hr_officer", "hr_leave_office", "department_head", "managing_director", "director_hr", "manager_hr", "hr_executive", "hr_executive_officer", "staff", "contract", "audit_staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "secretary", "committee", "loan_committee",
 ])
 
@@ -60,7 +60,10 @@ export default async function TransportPage() {
     )
   )
   const isBasicStaffRole = ["staff", "contract", "audit_staff"].includes(normalizedRole)
-  if (!profile || !hasTransportAccess || (isBasicStaffRole && isRegionalOrDistrictLinked)) redirect("/dashboard")
+  const isDistrictStaff =
+    preliminaryLocationName.includes("district") ||
+    String((profile?.geofence_locations as { location_type?: string | null } | null)?.location_type || "").toLowerCase().includes("district")
+  if (!profile || !hasTransportAccess || (isBasicStaffRole && isRegionalOrDistrictLinked && !isDistrictStaff)) redirect("/dashboard")
 
   const isManagingDirector = ["managing_director", "director"].includes(normalizedRole)
   const isHrExecutive = ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
@@ -71,7 +74,9 @@ export default async function TransportPage() {
   const isChiefDriver = isChiefDriverRole(profile.role)
   const isRegionalHr = isRegionalHrRole(profile.role)
   const isRegionalManager = isRegionalManagerRole(profile.role)
-  const isRegionalScoped = isChiefDriver || isRegionalHr || isRegionalManager
+  const isDistrictOfficer = normalizedRole === "district_officer"
+  const isRegionalStaff = isRegionalOrDistrictLinked && isBasicStaffRole
+  const isRegionalScoped = isChiefDriver || isRegionalHr || isRegionalManager || isDistrictOfficer || isRegionalStaff
   const isDriver = normalizedRole === "driver"
   const isRegionalDriver = isDriver && isRegionalDriverRole(profile.role)
   const isNonRegionalDriver = isDriver && !isRegionalDriver
@@ -122,6 +127,38 @@ export default async function TransportPage() {
     }
   } else if (isRegionalScoped) {
     try {
+      if (isRegionalStaff) {
+        const [{ data: ownRegionalRows }, { data: ownNonRegionalRows }] = await Promise.all([
+          adminSupabase.from("transport_requests").select("id, status, workflow_stage").eq("requester_id", user.id).limit(500),
+          adminSupabase.from("nonregional_transport_requisitions").select("id, status, md_decision, hod_decision, recommended_driver_id").eq("requester_id", user.id).limit(500),
+        ])
+        const regionalRows = ownRegionalRows ?? []
+        const nonRegionalRows = ownNonRegionalRows ?? []
+        totalCount = regionalRows.length + nonRegionalRows.length
+        pendingCount = regionalRows.filter((row) => !["approved", "referenced", "completed", "rejected", "closed"].includes(String(row.status || "")) && !["completed", "closed"].includes(String(row.workflow_stage || ""))).length
+          + nonRegionalRows.filter((row) => !["approved", "referenced", "completed", "rejected", "closed"].includes(String(row.status || "")) && !["approved", "completed", "rejected", "closed"].includes(String(row.md_decision || ""))).length
+        approvedCount = regionalRows.filter((row) => ["approved", "referenced", "completed"].includes(String(row.status || "")) || ["approved", "referenced", "completed"].includes(String(row.workflow_stage || ""))).length
+          + nonRegionalRows.filter((row) => ["approved", "completed"].includes(String(row.status || "")) || row.md_decision === "approved").length
+        assignedCount = regionalRows.filter((row) => row.status === "assigned" || row.workflow_stage === "assigned").length
+          + nonRegionalRows.filter((row) => row.status === "assigned" || Boolean(row.recommended_driver_id)).length
+      } else if (isRegionalHr) {
+        const { data: hrAssignments } = await adminSupabase.from("regional_hr_office_locations").select("location_id, region_id").eq("regional_hr_user_id", user.id).eq("is_active", true)
+        const locationIds = (hrAssignments ?? []).map((row: any) => row.location_id).filter(Boolean)
+        const regionIds = [...new Set([regionId, ...(hrAssignments ?? []).map((row: any) => row.region_id)].filter(Boolean))]
+        const { data: allLocations } = await adminSupabase.from("geofence_locations").select("id, district_id, districts(region_id)")
+        const scopedLocations = (allLocations ?? []).filter((location: any) => {
+          const linkedRegionId = Array.isArray(location.districts) ? location.districts[0]?.region_id : location.districts?.region_id
+          return regionIds.includes(linkedRegionId)
+        })
+        const scopeLocationIds = [...new Set([...locationIds, ...scopedLocations.map((row: any) => row.id).filter(Boolean)])]
+        const scopeDistrictIds = scopedLocations.map((row: any) => row.district_id).filter(Boolean)
+        const { data: rows } = await adminSupabase.from("transport_requests").select("id, status, workflow_stage, assigned_region_id, linked_district_id, origin_location_id").in("workflow_stage", ["submitted", "district_officer_review", "regional_hr_review", "regional_hr_correction", "awaiting_do_regional_hr_endorsement"]).limit(500)
+        const scoped = (rows ?? []).filter((row: any) => scopeLocationIds.includes(row.origin_location_id) || scopeDistrictIds.includes(row.linked_district_id) || regionIds.includes(row.assigned_region_id))
+        totalCount = scoped.length
+        pendingCount = scoped.filter((row: any) => !["approved", "referenced", "completed", "rejected", "closed"].includes(String(row.status || ""))).length
+        approvedCount = scoped.filter((row: any) => ["approved", "referenced", "completed"].includes(String(row.status || "")) || ["approved", "referenced", "completed"].includes(String(row.workflow_stage || ""))).length
+        assignedCount = scoped.filter((row: any) => row.status === "assigned" || row.workflow_stage === "assigned").length
+      } else {
       let query = supabase
         .from("transport_requests")
         .select("id, status, workflow_stage, assigned_region_id, linked_district_id, origin_location_id")
@@ -149,6 +186,7 @@ export default async function TransportPage() {
       } else if (isChiefDriver) {
         pendingCount = scoped.filter((row) => row.workflow_stage === "chief_driver_assignment").length
         assignedCount = scoped.filter((row) => row.workflow_stage === "assigned" || row.status === "assigned").length
+      }
       }
     } catch (error) {
       console.error("[v0] Transport landing: regional metrics unavailable", error)
@@ -271,8 +309,9 @@ export default async function TransportPage() {
       scopeLabel={scopeLabel}
       driverKind={isRegionalDriver ? "regional" : isNonRegionalDriver ? "nonregional" : undefined}
   isLinkedHod={isAssignedHod || isStaffLinkedToHod}
-  isNonRegionalLocation={isHeadOfficeLocation}
-  isChiefDriver={isChiefDriver}
+      isNonRegionalLocation={isHeadOfficeLocation}
+      isRegionalStaff={isRegionalStaff}
+      isChiefDriver={isChiefDriver}
     />
   )
 }

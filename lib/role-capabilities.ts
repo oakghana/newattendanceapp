@@ -25,6 +25,10 @@ export function isRegionalManagerRole(role?: string | null): boolean {
   return normalizeAppRole(role) === "regional_manager"
 }
 
+export function isDistrictOfficerRole(role?: string | null): boolean {
+  return normalizeAppRole(role) === "district_officer"
+}
+
 export const NON_REGIONAL_TRANSPORT_LOCATIONS = ["QCC Head Office", "HEAD OFFICE SWANZY ARCADE", "Awutu Stores", "Nsawam Archives"] as const
 
 export function isTransportManagerRole(role?: string | null): boolean {

@@ -3,11 +3,12 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 import {
   isAdminRole,
   isChiefDriverRole,
+  isDistrictOfficerRole,
   isRegionalHrRole,
   isRegionalManagerRole,
   isTransportManagerRole,
 } from "@/lib/role-capabilities"
-import { isAssignableRegionalStage, isCompletableTransportStage, transportStageLabel } from "@/lib/transport-workflow"
+import { isAssignableRegionalStage, isCompletableTransportStage } from "@/lib/transport-workflow"
 import { sendWebPushToUsers } from "@/lib/web-push"
 
 /** Best-effort in-app notice; never fails the transport action. */
@@ -81,6 +82,61 @@ async function notifyRoleHolders(
     await notifyTransportActors(entries)
   } catch (error) {
     console.warn("[transport] role notify skipped:", error)
+  }
+}
+
+async function notifyRegionalHrForLocation(
+  locationId: string | null,
+  message: string,
+  type: string,
+  referenceId: string,
+  excludeUserId?: string,
+) {
+  if (!locationId) return
+  try {
+    const admin = await createAdminClient()
+    const { data: assignments } = await admin
+      .from("regional_hr_office_locations")
+      .select("regional_hr_user_id")
+      .eq("location_id", locationId)
+      .eq("is_active", true)
+    const userIds = [...new Set((assignments ?? []).map((row) => row.regional_hr_user_id as string).filter((id) => id && id !== excludeUserId))]
+    await notifyTransportActors(userIds.map((user_id) => ({ user_id, message, type, reference_id: referenceId })))
+  } catch (error) {
+    console.warn("[transport] Regional HR notify skipped:", error)
+  }
+}
+
+async function notifyDistrictOfficers(
+  districtId: string | null,
+  message: string,
+  type: string,
+  referenceId: string,
+  excludeUserId?: string,
+) {
+  if (!districtId) return
+  try {
+    const admin = await createAdminClient()
+    const { data: locations } = await admin
+      .from("geofence_locations")
+      .select("id")
+      .eq("district_id", districtId)
+    const locationIds = (locations ?? []).map((location) => location.id).filter(Boolean)
+    if (!locationIds.length) return
+    const { data: officers } = await admin
+      .from("user_profiles")
+      .select("id")
+      .eq("role", "district_officer")
+      .eq("is_active", true)
+      .in("assigned_location_id", locationIds)
+    await notifyTransportActors(
+      (officers ?? [])
+        .map((officer) => officer.id as string)
+        .filter((id) => id && id !== excludeUserId)
+        .map((user_id) => ({ user_id, message, type, reference_id: referenceId })),
+    )
+  } catch (error) {
+    console.warn("[transport] district officer notify skipped:", error)
   }
 }
 
@@ -168,13 +224,15 @@ export async function POST(request: Request) {
     .select("role, is_active, region_id, assigned_location_id, geofence_locations!user_profiles_assigned_location_id_fkey(district_id, districts(region_id))")
     .eq("id", user.id)
     .single()
+  const isDistrictOfficer = isDistrictOfficerRole(profile?.role)
   const isRegionalHr = isRegionalHrRole(profile?.role)
   const isRegionalManager = isRegionalManagerRole(profile?.role)
   const isChiefDriver = isChiefDriverRole(profile?.role)
-  // Regional HR Office and Regional Managers can raise regional requests; the request follows the Regional Manager, MD, and HR Executive workflow.
-  if (!profile?.is_active || (!isRegionalHr && !isRegionalManager && !isChiefDriver)) {
+  const isRegionalStaffRequester = profile?.role === "staff" && Boolean(profile.assigned_location_id)
+  // Active location-assigned regional staff can submit requests; Regional HR determines the route during review.
+  if (!profile?.is_active || (!isRegionalHr && !isRegionalManager && !isDistrictOfficer && !isChiefDriver && !isRegionalStaffRequester)) {
     return NextResponse.json(
-      { error: "Only active Regional HR Office users or Chief Drivers can create regional transport requests." },
+      { error: "Only active regional staff with an assigned location, Regional HR Office, Regional Manager, District Officer, or Chief Driver users can create regional transport requests." },
       { status: 403 },
     )
   }
@@ -194,6 +252,15 @@ export async function POST(request: Request) {
   if (!purpose || !origin || !destination || !eventDate || !Number.isInteger(passengerCount) || passengerCount < 1) return NextResponse.json({ error: "Complete all required request details." }, { status: 400 })
   const { data: signer } = await supabase.from("user_profiles").select("signature_data_url").eq("id", user.id).single()
   const signedAt = new Date().toISOString()
+  let hasDistrictOfficer = false
+  if (linkedDistrictId) {
+    const { data: districtLocations } = await supabase.from("geofence_locations").select("id").eq("district_id", linkedDistrictId)
+    const locationIds = (districtLocations ?? []).map((location) => location.id).filter(Boolean)
+    if (locationIds.length) {
+      const { data: districtOfficers } = await supabase.from("user_profiles").select("id").eq("role", "district_officer").eq("is_active", true).in("assigned_location_id", locationIds).limit(1)
+      hasDistrictOfficer = Boolean(districtOfficers?.length)
+    }
+  }
   const insertPayload: Record<string, unknown> = {
     requester_id: user.id,
     request_type: "regional_transport",
@@ -203,7 +270,9 @@ export async function POST(request: Request) {
     event_date: eventDate,
     passenger_count: passengerCount,
     status: "submitted",
-    workflow_stage: regionalRoute === "head_office" ? "regional_manager_endorsement" : "regional_manager_endorsement",
+    workflow_stage: linkedDistrictId
+      ? hasDistrictOfficer ? "district_officer_review" : "regional_hr_review"
+      : "regional_manager_endorsement",
     regional_route: regionalRoute || "local_regional",
     supporting_documents: supportingDocuments,
     assigned_region_id: assignedRegionId,
@@ -224,14 +293,33 @@ export async function POST(request: Request) {
     ;({ data, error } = await supabase.from("transport_requests").insert(fallback).select("id").single())
   }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  // Non-fatal: alert regional managers that a new request needs endorsement
-  void notifyRoleHolders(
-    ["regional_manager"],
-    `New regional transport request awaiting endorsement: ${purpose} (${origin} → ${destination}).`,
-    "transport_pending_rm",
-    data.id,
-    user.id,
-  )
+  // District assignment is derived from the requester's assigned location. If a district exists,
+  // the request goes to every active DO in that district; otherwise the legacy RM route remains intact.
+  if (linkedDistrictId && hasDistrictOfficer) {
+    void notifyDistrictOfficers(
+      linkedDistrictId,
+      `New regional transport request awaiting District Officer review: ${purpose} (${origin} → ${destination}).`,
+      "transport_pending_do",
+      data.id,
+      user.id,
+    )
+  } else if (linkedDistrictId) {
+    void notifyRegionalHrForLocation(
+      originLocationId,
+      `District Officer unavailable. Review this regional transport request and decide whether it is within Regional HR authority or requires Managing Director approval: ${purpose} (${origin} → ${destination}).`,
+      "transport_pending_regional_hr",
+      data.id,
+      user.id,
+    )
+  } else {
+    void notifyRoleHolders(
+      ["regional_manager"],
+      `New regional transport request awaiting endorsement: ${purpose} (${origin} → ${destination}).`,
+      "transport_pending_rm",
+      data.id,
+      user.id,
+    )
+  }
   return NextResponse.json({ id: data.id }, { status: 201 })
 }
 
@@ -246,12 +334,14 @@ export async function PATCH(request: Request) {
   const isManagingDirector = role === "managing_director"
   const isHrExecutive = ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(role)
   const isManager = isRegionalManagerRole(profile?.role)
+  const isDistrictOfficer = isDistrictOfficerRole(profile?.role)
   const isChiefDriver = isChiefDriverRole(profile?.role)
   const isTransportManager = isTransportManagerRole(profile?.role)
   const isAdmin = isAdminRole(profile?.role) || ["it_admin", "it-admin", "administrator"].includes(role)
   if (
     !profile?.is_active ||
     (!isManager &&
+      !isDistrictOfficer &&
       !isChiefDriver &&
       !isHrRecords &&
       !isRegionalHr &&
@@ -548,7 +638,18 @@ workflow_stage: row.request_type === "regional_transport"
     )
     return NextResponse.json({ ok: true })
   }
-  if (isManager) {
+  if (isDistrictOfficer) {
+    if (row.requester_id === user.id) {
+      return NextResponse.json({ error: "A District Officer cannot endorse or approve their own transport request." }, { status: 403 })
+    }
+    const districtId = assignedLocation?.district_id ?? null
+    if (!districtId || row.linked_district_id !== districtId) {
+      return NextResponse.json({ error: "This request is outside your assigned district." }, { status: 403 })
+    }
+    if (row.workflow_stage !== "district_officer_review" || !["approve", "reject"].includes(decision)) {
+      return NextResponse.json({ error: "This request is not awaiting District Officer action." }, { status: 409 })
+    }
+  } else if (isManager) {
     const locationId = profile.assigned_location_id ?? null
     const districtId = assignedLocation?.district_id ?? null
     const regionId = profile.region_id ?? assignedLocation?.districts?.region_id ?? null
@@ -562,7 +663,11 @@ workflow_stage: row.request_type === "regional_transport"
   } else if (isHrExecutive) {
     if (row.request_type !== "regional_transport" || row.workflow_stage !== "hr_executive_signing" || row.hr_executive_signed_at || row.hr_executive_signer_id || row.hr_executive_signature_data_url || !["save_memo", "approve_hr_memo"].includes(decision)) return NextResponse.json({ error: "This regional request has already been signed or is not awaiting HR Executive memo signing." }, { status: 409 })
   } else if (isRegionalHr) {
-    if (row.workflow_stage !== "regional_hr_correction" || decision !== "correct") return NextResponse.json({ error: "This request is not awaiting Regional HR correction." }, { status: 409 })
+    if (["district_officer_review", "awaiting_do_regional_hr_endorsement"].includes(row.workflow_stage)) {
+      if (!["approve", "reject"].includes(decision)) return NextResponse.json({ error: "Regional HR may endorse or reject requests awaiting District Officer action." }, { status: 409 })
+    } else if (row.workflow_stage === "regional_hr_review") {
+      if (!( ["approve_within_authority", "forward_to_md", "reject"].includes(decision))) return NextResponse.json({ error: "Choose whether this request is within Regional HR authority, requires Managing Director approval, or should be rejected." }, { status: 409 })
+    } else if (row.workflow_stage !== "regional_hr_correction" || decision !== "correct") return NextResponse.json({ error: "This request is not awaiting Regional HR correction." }, { status: 409 })
   } else if (isTransportManager || isAdmin) {
     // Ops roles only use assign_vehicle / complete_trip (handled above). Block other decisions.
     return NextResponse.json({ error: "Transport Manager actions are limited to vehicle assignment and trip completion." }, { status: 403 })
@@ -619,6 +724,11 @@ workflow_stage: row.request_type === "regional_transport"
     }
   }
   else if (decision === "send_to_hr_executive") update = { status: "approved", workflow_stage: "hr_records_review", hr_executive_handoff_by: user.id, hr_executive_handoff_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+  else if (isDistrictOfficer && decision === "approve") update = { status: "pending_manager_review", workflow_stage: "regional_manager_endorsement", updated_at: new Date().toISOString() }
+  else if (isDistrictOfficer && decision === "reject") update = { status: "rejected", workflow_stage: "closed", updated_at: new Date().toISOString() }
+  else if (isRegionalHr && decision === "approve") update = { status: "pending_manager_review", workflow_stage: "regional_manager_endorsement", regional_hr_signer_id: user.id, regional_hr_signed_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+  else if (isRegionalHr && decision === "approve_within_authority") update = { status: "approved", workflow_stage: "chief_driver_assignment", regional_hr_signer_id: user.id, regional_hr_signed_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+  else if (isRegionalHr && decision === "forward_to_md") update = { status: "pending_md_approval", workflow_stage: "managing_director_approval", regional_hr_signer_id: user.id, regional_hr_signed_at: new Date().toISOString(), updated_at: new Date().toISOString() }
   else if (decision === "endorse") { const { data: signer } = await supabase.from("approval_signature_registry").select("signature_data_url").eq("user_id", user.id).eq("is_active", true).maybeSingle(); const signedAt = new Date().toISOString(); let priorAmendments: Record<string, unknown> = {}; try { priorAmendments = row.memo_amendments ? JSON.parse(row.memo_amendments) as Record<string, unknown> : {} } catch { /* keep empty prior amendments */ } const isLocalRegionalRoute = row.request_type === "regional_transport" && row.regional_route === "local_regional"; update = { status: isLocalRegionalRoute ? "approved" : "endorsed", workflow_stage: isLocalRegionalRoute ? "chief_driver_assignment" : "managing_director_approval", regional_manager_signer_id: user.id, regional_manager_signed_at: signedAt, regional_manager_signature_data_url: signer?.signature_data_url ?? null, memo_amendments: JSON.stringify({ ...priorAmendments, regional_manager_comment: String(body.comment ?? "").trim() || null, regional_manager_signer_id: user.id, regional_manager_signed_at: signedAt, regional_manager_signature_data_url: signer?.signature_data_url ?? null }), updated_at: signedAt } }
   else if (decision === "deny" || decision === "reject") update = { status: "rejected", workflow_stage: "closed", updated_at: new Date().toISOString() }
   else if (decision === "return_for_correction") update = { status: "returned_for_correction", workflow_stage: "regional_hr_correction", updated_at: new Date().toISOString() }
