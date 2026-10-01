@@ -99,21 +99,33 @@ export function isExemptFromAttendanceReasons(role?: string | null): boolean {
   return isManagerOrAdminRole(role)
 }
 
-export function isExemptFromLatenessReason(dept?: DeptInfo, role?: string | null): boolean {
+export function isExemptFromLatenessReason(_dept?: DeptInfo, role?: string | null): boolean {
   const normalizedRole = normalizeRole(role)
-  const operationalStaff = isOperationalDept(dept) && ["", "staff"].includes(normalizedRole)
 
-  // Normal operational staff must explain late arrivals. Security and Transport
-  // remain exempt because their shifts and reporting times are operationally different.
-  return isExemptFromAttendanceReasons(role) || isSecurityDept(dept) || isTransportDept(dept) || (isOperationalDept(dept) && !operationalStaff)
+  // These leadership and operational office roles are exempt from lateness reasons.
+  // Every other role, department, and staff category must explain a late arrival.
+  return [
+    "managing_director",
+    "department_head",
+    "head_of_department",
+    "regional_manager",
+    "regional_hr_office",
+    "regional_hr",
+    "accounts_executive",
+    "hr_executive",
+    "transport_manager",
+    "administrator",
+    "admin",
+    "super_admin",
+  ].includes(normalizedRole)
 }
 
 /**
  * Returns true when a lateness reason SHOULD be required.
  * - Requires reason only on weekdays (Mon-Fri)
- * - Managing Director, Department Head, Accounts Executive, HR Executive, Administrator,
- *   Security, Transport, and Operations staff do not need a reason
- * - Regional Managers and all other staff must provide a reason
+ * - Managing Director, HOD/Department Head, Regional Manager, Regional HR Office,
+ *   Accounts Executive, HR Executive, Transport Manager, and Administrator roles do not need a reason
+ * - Every other role and department must provide a reason
  */
 export function requiresLatenessReason(
   date: Date = new Date(),
@@ -121,15 +133,14 @@ export function requiresLatenessReason(
   role?: string | null,
   config?: AttendanceTimeConfig,
 ): boolean {
-  if (isWeekend(date)) return false
   if (isExemptFromLatenessReason(dept, role)) return false
   void config
-  // Check if current time is past the configured lateness deadline
+  // Lateness starts strictly after 9:00 AM. Checking in at exactly 9:00 AM is on time.
   const deadlineStr = config?.latenessReasonDeadline ?? "09:00"
   const [deadlineHour, deadlineMin] = deadlineStr.split(":").map(Number)
   const hours = date.getHours()
   const minutes = date.getMinutes()
-  return hours > deadlineHour || (hours === deadlineHour && minutes >= deadlineMin)
+  return hours > deadlineHour || (hours === deadlineHour && minutes > deadlineMin)
 }
 
 /**

@@ -30,10 +30,11 @@ describe("attendance-utils", () => {
     const weekday = new Date("2026-02-12T10:30:00Z") // Thursday
     const saturday = new Date("2026-02-14T10:30:00Z")
 
-    expect(requiresLatenessReason(weekday, { code: "HR" })).toBe(true)
-    expect(requiresLatenessReason(saturday, { code: "HR" })).toBe(false)
-    expect(requiresLatenessReason(weekday, { code: "security" })).toBe(false)
-    expect(requiresLatenessReason(weekday, { code: "transport" })).toBe(false)
+    expect(requiresLatenessReason(new Date("2026-02-12T09:00:00"), { code: "HR" })).toBe(false)
+    expect(requiresLatenessReason(new Date("2026-02-12T09:01:00"), { code: "HR" })).toBe(true)
+    expect(requiresLatenessReason(saturday, { code: "HR" })).toBe(true)
+    expect(requiresLatenessReason(weekday, { code: "security" })).toBe(true)
+    expect(requiresLatenessReason(weekday, { code: "transport" })).toBe(true)
     expect(requiresLatenessReason(weekday, { code: "operations" })).toBe(true)
     expect(requiresLatenessReason(weekday, { code: "operations" }, "staff")).toBe(true)
     expect(requiresLatenessReason(weekday, { code: "operations" }, "department_head")).toBe(false)
@@ -50,7 +51,10 @@ describe("attendance-utils", () => {
     expect(requiresLatenessReason(weekday, { code: "HR" }, "managing_director")).toBe(false)
     expect(requiresLatenessReason(weekday, { code: "HR" }, "accounts_executive")).toBe(false)
     expect(requiresLatenessReason(weekday, { code: "HR" }, "hr_executive")).toBe(false)
-    expect(requiresLatenessReason(weekday, { code: "HR" }, "regional_manager")).toBe(true)
+    expect(requiresLatenessReason(weekday, { code: "HR" }, "regional_manager")).toBe(false)
+    for (const role of ["regional_hr_office", "accounts_executive", "hr_executive", "transport_manager", "administrator"]) {
+      expect(requiresLatenessReason(weekday, { code: "HR" }, role)).toBe(false)
+    }
     expect(requiresEarlyCheckoutReason(weekday, true, "department_head", { code: "HR" })).toBe(false)
   })
 

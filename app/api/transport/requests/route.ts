@@ -126,7 +126,7 @@ async function notifyDistrictOfficers(
     const { data: officers } = await admin
       .from("user_profiles")
       .select("id")
-      .eq("role", "district_officer")
+      .in("role", ["district_officer", "district officer"])
       .eq("is_active", true)
       .in("assigned_location_id", locationIds)
     await notifyTransportActors(
@@ -255,10 +255,19 @@ export async function POST(request: Request) {
   const signedAt = new Date().toISOString()
   let hasDistrictOfficer = false
   if (linkedDistrictId) {
-    const { data: districtLocations } = await supabase.from("geofence_locations").select("id").eq("district_id", linkedDistrictId)
+    // Use the service-role client for reviewer discovery. RLS on user_profiles can
+    // hide district officers from the requester and incorrectly send the request
+    // straight to Regional HR even when a matching officer exists.
+    const reviewerLookup = await createAdminClient()
+    const { data: districtLocations } = await reviewerLookup.from("geofence_locations").select("id").eq("district_id", linkedDistrictId)
     const locationIds = (districtLocations ?? []).map((location) => location.id).filter(Boolean)
     if (locationIds.length) {
-      const { data: districtOfficers } = await supabase.from("user_profiles").select("id").eq("role", "district_officer").eq("is_active", true).in("assigned_location_id", locationIds).limit(1)
+      const { data: districtOfficers } = await reviewerLookup
+      .from("user_profiles")
+      .select("id")
+      .in("role", ["district_officer", "district officer"])
+      .eq("is_active", true)
+      .in("assigned_location_id", locationIds).limit(1)
       hasDistrictOfficer = Boolean(districtOfficers?.length)
     }
   }
@@ -647,7 +656,7 @@ workflow_stage: row.request_type === "regional_transport"
     if (!districtId || row.linked_district_id !== districtId) {
       return NextResponse.json({ error: "This request is outside your assigned district." }, { status: 403 })
     }
-    if (row.workflow_stage !== "district_officer_review" || !["approve", "reject"].includes(decision)) {
+    if (!["district_officer_review", "awaiting_do_regional_hr_endorsement"].includes(row.workflow_stage) || !["approve", "reject"].includes(decision)) {
       return NextResponse.json({ error: "This request is not awaiting District Officer action." }, { status: 409 })
     }
   } else if (isManager) {

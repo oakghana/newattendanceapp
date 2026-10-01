@@ -1479,7 +1479,7 @@ export function AttendanceRecorder({
         exemptPrivilegedRolesFromReason: runtimeFlags.exemptPrivilegedRolesFromReason,
       })
       const [dlHour, dlMin] = (runtimeFlags.latenessReasonDeadline ?? "09:00").split(":").map(Number)
-      const isLateArrival = checkInTime.getHours() > dlHour || (checkInTime.getHours() === dlHour && checkInTime.getMinutes() >= dlMin)
+      const isLateArrival = checkInTime.getHours() > dlHour || (checkInTime.getHours() === dlHour && checkInTime.getMinutes() > dlMin)
 
       // Require lateness reason only on weekdays and for non‑security staff
       if (isLateArrival && latenessRequired) {
@@ -2431,7 +2431,7 @@ export function AttendanceRecorder({
         exemptPrivilegedRolesFromReason: runtimeFlags.exemptPrivilegedRolesFromReason,
       })
       const [dlHour2, dlMin2] = (runtimeFlags.latenessReasonDeadline ?? "09:00").split(":").map(Number)
-      const isLateArrival = now.getHours() > dlHour2 || (now.getHours() === dlHour2 && now.getMinutes() >= dlMin2)
+      const isLateArrival = now.getHours() > dlHour2 || (now.getHours() === dlHour2 && now.getMinutes() > dlMin2)
       const hasActiveAttendanceSession = Boolean(localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time)
   const needsAutomaticLatenessReason = !hasActiveAttendanceSession && isLateArrival && latenessRequiredAuto
 
