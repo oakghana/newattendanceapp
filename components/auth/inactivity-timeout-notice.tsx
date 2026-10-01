@@ -64,7 +64,7 @@ export function InactivityTimeoutNotice() {
 export function InactivityTimeoutPrompt() {
   return (
     <p className="sr-only">
-      For your security, this app automatically signs you out after 4 minutes of inactivity.
+      For your security, this app automatically signs you out after 30 minutes of inactivity.
     </p>
   )
 }
