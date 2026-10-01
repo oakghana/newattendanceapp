@@ -77,9 +77,16 @@ export default async function TransportRequestsPage() {
     requestsQuery = requestsQuery.eq("id", "00000000-0000-0000-0000-000000000000")
   }
   if (isDistrictOfficerRole(profile.role)) {
-    if (districtId) requestsQuery = requestsQuery.eq("linked_district_id", districtId)
-    else requestsQuery = requestsQuery.eq("id", "00000000-0000-0000-0000-000000000000")
-    requestsQuery = requestsQuery.eq("workflow_stage", "district_officer_review")
+    if (locationId && districtId) {
+      requestsQuery = requestsQuery.or(`origin_location_id.eq.${locationId},linked_district_id.eq.${districtId}`)
+    } else if (locationId) {
+      requestsQuery = requestsQuery.eq("origin_location_id", locationId)
+    } else if (districtId) {
+      requestsQuery = requestsQuery.eq("linked_district_id", districtId)
+    } else {
+      requestsQuery = requestsQuery.eq("id", "00000000-0000-0000-0000-000000000000")
+    }
+    requestsQuery = requestsQuery.in("workflow_stage", ["district_officer_review", "submitted"])
   }
   if (isRegionalManagerRole(profile.role)) {
     if (locationId) requestsQuery = requestsQuery.or(`origin_location_id.eq.${locationId},origin_location_id.is.null`)
@@ -172,7 +179,7 @@ export default async function TransportRequestsPage() {
   }
   const ownRequestFields = "id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url"
   const ownRequestsClient = await createAdminClient()
-  let ownRequestsQuery: any = ownRequestsClient
+  const ownRequestsQuery: any = ownRequestsClient
     .from("transport_requests")
     .select(ownRequestFields)
     .eq("requester_id", user.id)
