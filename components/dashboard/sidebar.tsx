@@ -325,7 +325,7 @@ const navigationItems = [
   },
 ]
 
-export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsCollapsed }: SidebarProps) {
+function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsCollapsed }: SidebarProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isClearingCache, setIsClearingCache] = useState(false)
   const [openAdminGroups, setOpenAdminGroups] = useState<string[]>([])
@@ -598,6 +598,15 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
   const adminStandaloneItems = adminItems.filter((item) => !groupedAdminHrefs.has(item.href))
   const settingsItems = filteredNavItems.filter((item) => item.category === "settings")
 
+  useEffect(() => {
+    // Warm the most likely destinations once the user's role is known so clicks
+    // resolve from the Next.js router cache instead of waiting on a new bundle.
+    filteredNavItems
+      .filter((item) => !(item as any).external)
+      .slice(0, 12)
+      .forEach((item) => router.prefetch(item.href))
+  }, [effectiveRole, filteredNavItems, router])
+
   const firstInitial = String(profile?.first_name ?? "").trim()[0] || ""
   const lastInitial = String(profile?.last_name ?? "").trim()[0] || ""
   const userInitials = (firstInitial + lastInitial).toUpperCase() || "U"
@@ -699,13 +708,10 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
                       isCollapsed ? "gap-0 px-0 py-2 justify-center" : "gap-2.5 px-3 py-2",
                       isActive ? "bg-primary/12 border-primary/30 text-primary" : "border-transparent text-sidebar-foreground hover:bg-muted/60 hover:border-border hover:text-foreground",
                     )}
-                    onClick={(event) => {
-                      setIsMobileMenuOpen(false)
-                      if (item.href === "/dashboard/loan-app") {
-                        event.preventDefault()
-                        router.push("/dashboard/loan-app")
-                      }
-                    }}
+                      prefetch
+                      onClick={() => {
+                        setIsMobileMenuOpen(false)
+                      }}
                   >
                     <Icon className="h-4.5 w-4.5 flex-shrink-0" />
                     {!isCollapsed && (
@@ -1141,3 +1147,7 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
     </>
   )
 }
+
+export const MemoizedSidebar = memo(Sidebar)
+export { MemoizedSidebar as Sidebar }
+export default MemoizedSidebar
