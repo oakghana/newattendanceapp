@@ -13,8 +13,11 @@ import { toast } from "@/hooks/use-toast"
 import { ToastAction } from "@/components/ui/toast"
 
 const POLL_INTERVAL_MS = 120_000
-const IDLE_WARNING_MS = 2 * 60 * 1000
-const IDLE_TIMEOUT_MS = 4 * 60 * 1000
+// Keep sessions alive during normal work. Short client-side timers signed users
+// out while they are reading, working in another tab, or waiting on a long task.
+const IDLE_WARNING_MS = 25 * 60 * 1000
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000
+const SESSION_REFRESH_INTERVAL_MS = 5 * 60 * 1000
 const IDLE_EVENTS: Array<keyof WindowEventMap> = [
   "mousemove",
   "mousedown",
@@ -79,7 +82,7 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
         inactivityWarningShown = true
         toast({
           title: "Are you still there?",
-          description: "You will be signed out after 4 minutes of inactivity. Move your mouse or interact with the app to stay signed in.",
+          description: "You will be signed out after 30 minutes of inactivity. Any interaction with the app keeps your session active.",
           duration: 12000,
         })
       }
@@ -96,10 +99,16 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
     IDLE_EVENTS.forEach((eventName) => window.addEventListener(eventName, markActive, { passive: true }))
     document.addEventListener("visibilitychange", handleVisibilityChange)
     idleCheckTimer = setInterval(checkIdleState, 10_000)
+    const sessionRefreshTimer = setInterval(() => {
+      if (!document.hidden && navigator.onLine && !signedOut) {
+        void supabase.auth.refreshSession()
+      }
+    }, SESSION_REFRESH_INTERVAL_MS)
     markActive()
 
     return () => {
       if (idleCheckTimer) clearInterval(idleCheckTimer)
+      clearInterval(sessionRefreshTimer)
       IDLE_EVENTS.forEach((eventName) => window.removeEventListener(eventName, markActive))
       document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
