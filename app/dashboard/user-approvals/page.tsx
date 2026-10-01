@@ -14,7 +14,7 @@ export default async function UserApprovalsPage() {
   // Check if user has admin role - user approvals are admin-only
   const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
 
-  if (!profile || profile.role !== "admin") {
+  if (!profile || !["admin", "administrator"].includes(String(profile.role).toLowerCase())) {
     redirect("/dashboard")
   }
 

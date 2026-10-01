@@ -35,21 +35,29 @@ export async function POST(request: NextRequest) {
       if (schedulesError) return NextResponse.json({ error: schedulesError.message }, { status: 500 })
       const scheduledIds = new Set((existing || []).map((row) => row.loan_request_id))
       const missing = (loans || []).filter((loan) => !loan.repayment_plan_generated_at && !scheduledIds.has(loan.id))
-      const failures: Array<{ loanRequestId: string; error: string }> = []
-      let generated = 0
-      for (const loan of missing) {
-        const result = await admin.rpc("generate_repayment_schedule", {
-          p_loan_request_id: loan.id,
-          p_start_date: loan.recovery_start_date || loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || new Date().toISOString().slice(0, 10),
-          p_duration_months: loan.recovery_months || loan.repayment_duration_months || 12,
-        })
-        if (result.error) {
-          failures.push({ loanRequestId: loan.id, error: result.error.message })
-          continue
-        }
-        await admin.from("loan_requests").update({ repayment_plan_generated_at: new Date().toISOString(), repayment_duration_months: loan.recovery_months || loan.repayment_duration_months || 12, repayment_status: "active" }).eq("id", loan.id)
-        generated += 1
-      }
+      const results = await Promise.all(
+        missing.map(async (loan) => {
+          const result = await admin.rpc("generate_repayment_schedule", {
+            p_loan_request_id: loan.id,
+            p_start_date: loan.recovery_start_date || loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || new Date().toISOString().slice(0, 10),
+            p_duration_months: loan.recovery_months || loan.repayment_duration_months || 12,
+          })
+          if (result.error) {
+            return { loanRequestId: loan.id, error: result.error.message, ok: false as const }
+          }
+          await admin
+            .from("loan_requests")
+            .update({
+              repayment_plan_generated_at: new Date().toISOString(),
+              repayment_duration_months: loan.recovery_months || loan.repayment_duration_months || 12,
+              repayment_status: "active",
+            })
+            .eq("id", loan.id)
+          return { loanRequestId: loan.id, ok: true as const }
+        }),
+      )
+      const failures = results.filter((r): r is { loanRequestId: string; error: string; ok: false } => !r.ok)
+      const generated = results.length - failures.length
       return NextResponse.json({ success: true, scanned: (loans || []).length, generated, remaining: failures.length, failures })
     }
 

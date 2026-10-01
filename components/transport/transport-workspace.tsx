@@ -179,7 +179,7 @@ export function TransportWorkspace({
   const isRegionalOnlyWorkspace = isRegionalManager || isRegionalHr || isRegionalDriver || isChiefDriver || isRegionalStaff
   const isBasicStaff = ["staff", "contract", "audit_staff"].includes(normalizedRole)
   const isNonRegionalWorkspaceRole = isNonRegionalLocation && !isRegionalOnlyWorkspace
-  const isNonRegionalStaff = !isRegionalOnlyWorkspace && (isBasicStaff || isNonRegionalWorkspaceRole)
+  const isNonRegionalStaff = !isRegionalOnlyWorkspace && !canManage && !isTransportManager && !isManagingDirector && (isBasicStaff || isNonRegionalWorkspaceRole)
   const isHeadOfficeRequester = !isRegionalOnlyWorkspace && (isNonRegionalStaff || isNonRegionalLocation)
   const canViewDriverLicense = isChiefDriver || isRegionalHr || isRegionalManager || isDriver || isTransportManager || canManage
   const canManageFleet = isManagingDirector || isChiefDriver || isRegionalHr || isRegionalManager || isTransportManager || canManage
@@ -552,6 +552,13 @@ export function TransportWorkspace({
             { label: isChiefDriver ? "Trips assigned" : "Approved / referenced", value: isChiefDriver ? assignedCount : approvedCount, note: isChiefDriver ? "Vehicle and driver allocated locally" : "Approved regional requests", icon: CheckCircle2, tone: "emerald" as const },
             { label: "Coverage", value: scopeLabel || "Assigned", note: "Location, district, or region only", icon: MapPin, tone: "slate" as const },
           ]
+      : isTransportManager || canManage
+        ? [
+            { label: "Nationwide requests", value: totalCount, note: "All regional and Head Office requests", icon: Inbox, tone: "primary" as const },
+            { label: "Pending", value: pendingCount, note: "Awaiting the next action nationwide", icon: Clock3, tone: "amber" as const },
+            { label: "Approved", value: approvedCount, note: "Cleared for transport fulfilment nationwide", icon: CheckCircle2, tone: "emerald" as const },
+            { label: "Assigned", value: assignedCount, note: "Vehicle and driver allocated nationwide", icon: Route, tone: "slate" as const },
+          ]
       : [
           { label: "Requests", value: totalCount, note: "Transport requests in your workspace", icon: Inbox, tone: "primary" as const },
           { label: "Pending", value: pendingCount, note: "Requests awaiting the next action", icon: Clock3, tone: "amber" as const },
@@ -604,18 +611,51 @@ export function TransportWorkspace({
                 badge: "Driver",
               },
             ]
-          : [
-              {
-                title: isTransportManager ? "Nationwide request board" : "Regional request register",
-                description: isTransportManager
-                  ? "See all regional and Head Office requests."
-                  : "View transport requests within your assigned regional or district scope.",
-                icon: Bus,
-                href: "/dashboard/transport/requests",
-                cta: isTransportManager ? "Open national board" : "Open regional register",
-                badge: isTransportManager ? "National" : "Regional",
-              },
-            ]
+          : isTransportManager || canManage
+            ? [
+                {
+                  title: "Nationwide request board",
+                  description: "See every regional and Head Office transport request, nationwide.",
+                  icon: Bus,
+                  href: "/dashboard/transport/requests",
+                  cta: "Open national board",
+                  badge: "National",
+                },
+                {
+                  title: "Driver licenses",
+                  description: "View and manage the full nationwide driver license register.",
+                  icon: IdCard,
+                  href: "/dashboard/transport/drivers",
+                  cta: "Open driver register",
+                  badge: "National",
+                },
+                {
+                  title: "Fleet management",
+                  description: "View and manage the full nationwide vehicle fleet.",
+                  icon: Truck,
+                  href: "/dashboard/transport/fleet",
+                  cta: "Open fleet register",
+                  badge: "National",
+                },
+                {
+                  title: "Head Office requests",
+                  description: "Review and track all Head Office transport requisitions.",
+                  icon: Route,
+                  href: "/dashboard/transport/nonregional",
+                  cta: "Open Head Office requests",
+                  badge: "National",
+                },
+              ]
+            : [
+                {
+                  title: "Regional request register",
+                  description: "View transport requests within your assigned regional or district scope.",
+                  icon: Bus,
+                  href: "/dashboard/transport/requests",
+                  cta: "Open regional register",
+                  badge: "Regional",
+                },
+              ]
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -653,6 +693,20 @@ export function TransportWorkspace({
                   <Route data-icon="inline-start" /> Head Office
                 </Link>
               </Button>
+            )}
+            {(isTransportManager || canManage) && (
+              <>
+                <Button variant="outline" className="bg-background/80" asChild>
+                  <Link href="/dashboard/transport/drivers">
+                    <IdCard data-icon="inline-start" /> Drivers
+                  </Link>
+                </Button>
+                <Button variant="outline" className="bg-background/80" asChild>
+                  <Link href="/dashboard/transport/fleet">
+                    <Truck data-icon="inline-start" /> Fleet
+                  </Link>
+                </Button>
+              </>
             )}
 
           </div>
