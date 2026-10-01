@@ -7,6 +7,7 @@ import { TimeBasedThemeProvider } from "@/components/theme/time-based-theme-prov
 import { Toaster as AppToaster } from "@/components/ui/toaster"
 import { Toaster as SonnerToaster } from "sonner"
 import { PushNotificationSetup } from "@/components/notifications/push-notification-setup"
+import { InactivityTimeoutNotice, InactivityTimeoutPrompt } from "@/components/auth/inactivity-timeout-notice"
 
 export default function RootLayoutClient({
   children,
@@ -139,6 +140,8 @@ export default function RootLayoutClient({
       <AppToaster />
       <SonnerToaster richColors closeButton position="top-right" />
       <PushNotificationSetup />
+      <InactivityTimeoutNotice />
+      <InactivityTimeoutPrompt />
     </TimeBasedThemeProvider>
   )
 }

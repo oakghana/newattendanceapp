@@ -1077,10 +1077,10 @@ export function TransportRequestRegister({
                     ) : (
                       <>
                         <Button size="sm" disabled={busy === row.id} onClick={() => requestDecision(row.id, "approve_within_authority")}>
-                          Within Regional HR authority
+                          Within Regional HR authority → RM endorsement
                         </Button>
                         <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "forward_to_rm")}>
-                          Forward to Regional Manager
+                          Require Regional Manager endorsement
                         </Button>
                         <Button size="sm" variant="outline" disabled={busy === row.id} onClick={() => requestDecision(row.id, "reject")}>
                           Reject
