@@ -30,7 +30,8 @@ export async function GET(request: NextRequest) {
     const normalizedRole = String(userProfile.role || '').toLowerCase().trim().replace(/[-\s]+/g, '_');
     const isRegionalHr = ['regional_hr', 'regional_hr_office', 'regional_hr_officer', 'regional_hr_leave_office', 'regional_leave_office'].includes(normalizedRole);
     const isRegionalLoanOffice = normalizedRole === 'regional_loan_office';
-    if (!isRegionalHr && !isRegionalLoanOffice && normalizedRole !== 'admin') {
+    const isAdmin = ['admin', 'administrator'].includes(normalizedRole);
+    if (!isRegionalHr && !isRegionalLoanOffice && !isAdmin) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
@@ -39,8 +40,14 @@ const regionIds = userProfile.region_id ? [userProfile.region_id] : [];
  const locationStaffIds = locationIds.length
    ? (await admin.from('user_profiles').select('id').in('assigned_location_id', locationIds).neq('id', userId)).data?.map((row: any) => row.id).filter(Boolean) || []
    : [];
+ // Administrators see every regional request nationwide — they are never scoped
+ // to a single assigned location/region the way Regional HR staff are.
  let scopedStaffIds: string[] = [];
-    if (locationIds.length > 0 || regionIds.length > 0) {
+    if (isAdmin) {
+      const { data: allStaff, error: allStaffError } = await admin.from('user_profiles').select('id').neq('id', userId);
+      if (allStaffError) return NextResponse.json({ error: 'Failed to resolve nationwide staff scope' }, { status: 500 });
+      scopedStaffIds = (allStaff || []).map((row: any) => row.id).filter(Boolean);
+    } else if (locationIds.length > 0 || regionIds.length > 0) {
       let staffQuery = admin.from('user_profiles').select('id').neq('id', userId);
       if (locationIds.length > 0) {
         staffQuery = staffQuery.in('assigned_location_id', locationIds);
@@ -51,7 +58,7 @@ const regionIds = userProfile.region_id ? [userProfile.region_id] : [];
       if (scopedStaffError) return NextResponse.json({ error: 'Failed to resolve regional staff scope' }, { status: 500 });
       scopedStaffIds = [...new Set([...(scopedStaff || []).map((row: any) => row.id), ...locationStaffIds].filter(Boolean))];
     }
-    if (locationIds.length === 0 && regionIds.length === 0) {
+    if (!isAdmin && locationIds.length === 0 && regionIds.length === 0) {
       return NextResponse.json(
         { leaves: [], summary: { total: 0, pending: 0, approved: 0 } },
         { status: 200 }

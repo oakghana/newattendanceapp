@@ -168,11 +168,12 @@ export function canAccessDisbursementConfirmation(role?: string | null): boolean
 
 /**
  * Recommended and authorized roles to sign off & confirm loan disbursement/repayment.
- * Only the Accounts Office and Accounts Executive may initiate or confirm
- * disbursement. All other roles, including administrators, are read-only here.
+ * The Accounts Office, Accounts Executive, and Administrators may initiate or
+ * confirm disbursement. Administrators retain full working access to every
+ * module, including this one — they are never read-only.
  */
 export function canConfirmDisbursement(role?: string | null): boolean {
-  return ["accounts", "accounts_executive"].includes(normalizeAppRole(role))
+return ["admin", "accounts", "accounts_executive"].includes(normalizeAppRole(role))
 }
 
 export function canManageOwnSignature(role?: string | null): boolean {
