@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, memo, useMemo } from "react"
+import { useState, useEffect, useCallback, memo, useMemo, type MouseEvent } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -332,6 +332,15 @@ function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsColla
   const pathname = usePathname()
   const router = useRouter()
   const [ghanaTime, setGhanaTime] = useState<string>("")
+
+  const handleModuleNavigation = useCallback((event: MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (!["/dashboard/loan-app", "/dashboard/leave-management"].includes(href)) {
+      return
+    }
+    event.preventDefault()
+    setIsMobileMenuOpen(false)
+    router.push(href)
+  }, [router])
 
   useEffect(() => {
     let baseServerMs = 0
@@ -709,7 +718,8 @@ function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsColla
                       isActive ? "bg-primary/12 border-primary/30 text-primary" : "border-transparent text-sidebar-foreground hover:bg-muted/60 hover:border-border hover:text-foreground",
                     )}
                       prefetch
-                      onClick={() => {
+                      onClick={(event) => {
+                        handleModuleNavigation(event, item.href)
                         setIsMobileMenuOpen(false)
                       }}
                   >
@@ -762,7 +772,7 @@ function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsColla
                             ? "bg-primary/12 border-primary/30 text-primary"
                             : "border-transparent text-sidebar-foreground hover:bg-muted/60 hover:border-border hover:text-foreground",
                         )}
-                        onClick={() => setIsMobileMenuOpen(false)}
+                        onClick={(event) => handleModuleNavigation(event, onlyItem.href)}
                       >
                         <OnlyItemIcon className="h-4.5 w-4.5 flex-shrink-0" />
                         {!isCollapsed && (
@@ -824,7 +834,7 @@ function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsColla
                                   "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium transition-colors min-h-[36px]",
                                   isActive ? "bg-primary/12 text-primary" : "text-sidebar-foreground hover:bg-muted/60 hover:text-foreground",
                                 )}
-                                onClick={() => setIsMobileMenuOpen(false)}
+                                onClick={(event) => handleModuleNavigation(event, item.href)}
                               >
                                 <ItemIcon className="h-3.5 w-3.5 flex-shrink-0" />
                                 <span className="flex-1">{item.title}</span>
