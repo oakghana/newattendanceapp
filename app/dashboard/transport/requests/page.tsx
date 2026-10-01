@@ -218,6 +218,21 @@ export default async function TransportRequestsPage() {
     requests = [...scopedRequests, ...allPersonalRows.filter((request: any) => !scopedRequests.some((scopedRequest) => scopedRequest.id === request.id))]
       .sort((left, right) => new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime())
   }
+  if (canViewRegionalRegister && requests?.length) {
+    const requesterIds = [...new Set(requests.map((request: any) => request.requester_id).filter(Boolean))]
+    const adminClient = await createAdminClient()
+    const { data: requesterProfiles } = await adminClient.from("user_profiles").select("id, first_name, last_name, assigned_location_id").in("id", requesterIds)
+    const locationIds = [...new Set((requesterProfiles ?? []).map((profile: any) => profile.assigned_location_id).filter(Boolean))]
+    const { data: requesterLocations } = locationIds.length ? await adminClient.from("geofence_locations").select("id, name").in("id", locationIds) : { data: [] as any[] }
+    const locationsById = new Map((requesterLocations ?? []).map((location: any) => [location.id, location.name]))
+    const profilesById = new Map((requesterProfiles ?? []).map((profile: any) => [profile.id, profile]))
+    const finalHistory = new Map<string, number>()
+    for (const request of requests) if (request.requester_id) finalHistory.set(request.requester_id, (finalHistory.get(request.requester_id) ?? 0) + 1)
+    requests = requests.map((request: any) => {
+      const requester = profilesById.get(request.requester_id)
+      return { ...request, requester_name: requester ? [requester.first_name, requester.last_name].filter(Boolean).join(" ") || "Requester not linked" : "Requester not linked", requester_location: requester ? locationsById.get(requester.assigned_location_id) ?? "Location not assigned" : "Location not assigned", previous_request_count: Math.max(0, (finalHistory.get(request.requester_id) ?? 1) - 1) }
+    })
+  }
   if (requestsError) {
     console.error("[v0] Transport request query failed:", requestsError.message)
     let fallbackQuery = supabase.from("transport_requests").select("id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments").order("created_at", { ascending: false }).limit(200)
