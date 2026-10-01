@@ -35,6 +35,11 @@ export default async function TransportRequestsPage() {
   const assignedLocation = profile.geofence_locations as { district_id?: string | null; districts?: { region_id?: string | null } | null } | null
   const districtId = assignedLocation?.district_id ?? null
   const regionId = profile.region_id ?? assignedLocation?.districts?.region_id ?? null
+  // Older profiles can have an assigned location without the nested district relation
+  // in the session response. Resolve that relation before applying District Officer scope.
+  const resolvedDistrictId = districtId ?? (locationId
+    ? (await supabase.from("geofence_locations").select("district_id").eq("id", locationId).maybeSingle()).data?.district_id ?? null
+    : null)
   const profileRegion = profile.regions as { name?: string | null } | null
   const assignedLocationName = (profile.geofence_locations as { name?: string | null } | null)?.name?.trim() ?? ""
   const locationRegionAliases: Record<string, string> = { kumasi: "Ashanti", "kumasi regional office": "Ashanti", accra: "Greater Accra", "accra regional office": "Greater Accra", takoradi: "Western", cape: "Central", sunyani: "Bono", tamale: "Northern", bolgatanga: "Upper East", wa: "Upper West", koforidua: "Eastern", ho: "Volta" }
@@ -77,16 +82,24 @@ export default async function TransportRequestsPage() {
     requestsQuery = requestsQuery.eq("id", "00000000-0000-0000-0000-000000000000")
   }
   if (isDistrictOfficerRole(profile.role)) {
-    if (locationId && districtId) {
-      requestsQuery = requestsQuery.or(`origin_location_id.eq.${locationId},linked_district_id.eq.${districtId}`)
+    if (locationId && resolvedDistrictId) {
+      requestsQuery = requestsQuery.or(`origin_location_id.eq.${locationId},linked_district_id.eq.${resolvedDistrictId}`)
     } else if (locationId) {
       requestsQuery = requestsQuery.eq("origin_location_id", locationId)
-    } else if (districtId) {
-      requestsQuery = requestsQuery.eq("linked_district_id", districtId)
+    } else if (resolvedDistrictId) {
+      requestsQuery = requestsQuery.eq("linked_district_id", resolvedDistrictId)
+    } else if (regionId) {
+      requestsQuery = requestsQuery.eq("assigned_region_id", regionId)
     } else {
       requestsQuery = requestsQuery.eq("id", "00000000-0000-0000-0000-000000000000")
     }
-    requestsQuery = requestsQuery.in("workflow_stage", ["district_officer_review", "submitted"])
+    requestsQuery = requestsQuery.in("workflow_stage", [
+      "submitted",
+      "district_officer_review",
+      "regional_hr_review",
+      "regional_hr_correction",
+      "awaiting_do_regional_hr_endorsement",
+    ])
   }
   if (isRegionalManagerRole(profile.role)) {
     if (locationId) requestsQuery = requestsQuery.or(`origin_location_id.eq.${locationId},origin_location_id.is.null`)
