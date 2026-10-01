@@ -1046,7 +1046,13 @@ export function TransportRequestRegister({
                         )}
                       </td>
                       <td className="min-w-[230px] px-4 py-4">
-                        <Button size="sm" onClick={() => setOpenRequest(row)}>View request</Button>
+                        {row.workflow_stage === "referenced" || row.status === "referenced" ? (
+                          <Button size="sm" onClick={() => window.print()}>
+                            <Download className="mr-2 size-3" /> Print / Save PDF
+                          </Button>
+                        ) : (
+                          <Button size="sm" onClick={() => setOpenRequest(row)}>View request</Button>
+                        )}
                         <div className="sr-only">
                           {districtOfficerActions && (
                             <>

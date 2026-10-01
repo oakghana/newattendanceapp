@@ -110,13 +110,17 @@ export default async function TransportRequestsPage() {
     const { data: requesterProfiles } = requesterIds.length
       ? await regionalHrDataClient
           .from("user_profiles")
-          .select("id, first_name, last_name, assigned_location_id, region_id, geofence_locations!user_profiles_assigned_location_id_fkey(name, district_id, districts(region_id))")
+          .select("id, first_name, last_name, assigned_location_id, region_id")
           .in("id", requesterIds)
       : { data: [] as any[] }
+    const requesterLocationIds = [...new Set((requesterProfiles ?? []).map((profile: any) => profile.assigned_location_id).filter(Boolean))]
+    const { data: requesterLocations } = requesterLocationIds.length
+      ? await regionalHrDataClient.from("geofence_locations").select("id, name, district_id").in("id", requesterLocationIds)
+      : { data: [] as any[] }
+    const locationById = new Map((requesterLocations ?? []).map((location: any) => [location.id, location]))
     const requesterScope = new Map((requesterProfiles ?? []).map((profile: any) => {
-      const location = Array.isArray(profile.geofence_locations) ? profile.geofence_locations[0] : profile.geofence_locations
-      const district = Array.isArray(location?.districts) ? location.districts[0] : location?.districts
-      return [profile.id, { locationId: profile.assigned_location_id, districtId: location?.district_id, regionId: profile.region_id ?? district?.region_id, name: [profile.first_name, profile.last_name].filter(Boolean).join(" ") || "Requester not linked", locationName: location?.name ?? "Location not assigned" }]
+      const location = locationById.get(profile.assigned_location_id)
+      return [profile.id, { locationId: profile.assigned_location_id, districtId: location?.district_id, regionId: profile.region_id, name: [profile.first_name, profile.last_name].filter(Boolean).join(" ") || "Requester not linked", locationName: location?.name ?? "Location not assigned" }]
     }))
     const historyCounts = new Map<string, number>()
     for (const request of requests ?? []) {
