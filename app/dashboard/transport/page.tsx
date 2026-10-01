@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { TransportWorkspace } from "@/components/transport/transport-workspace"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { canCreateTransportRequest, canManageTransport, isChiefDriverRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
+import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
 const TRANSPORT_ROLES = new Set([
   "admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "regional_chief_driver", "district_officer", "transport_manager", "regional_hr", "regional hr", "regional_hr_office", "regional hr office", "regional_hr_officer", "regional hr officer", "regional_manager", "regional manager",
@@ -75,7 +76,8 @@ export default async function TransportPage() {
   const isRegionalHr = isRegionalHrRole(profile.role)
   const isRegionalManager = isRegionalManagerRole(profile.role)
   const isDistrictOfficer = normalizedRole === "district_officer"
-  const isRegionalStaff = isRegionalOrDistrictLinked && isBasicStaffRole
+  const isRegionalRequester = isRegionalOrDistrictLinked && !isExplicitNonRegionalLocation
+  const isRegionalStaff = isRegionalRequester && (isBasicStaffRole || normalizedRole === "it-admin")
   const isRegionalScoped = isChiefDriver || isRegionalHr || isRegionalManager || isDistrictOfficer || isRegionalStaff
   const isDriver = normalizedRole === "driver"
   const isRegionalDriver = isDriver && isRegionalDriverRole(profile.role)
@@ -145,13 +147,10 @@ export default async function TransportPage() {
         const { data: hrAssignments } = await adminSupabase.from("regional_hr_office_locations").select("location_id, region_id").eq("regional_hr_user_id", user.id).eq("is_active", true)
         const locationIds = (hrAssignments ?? []).map((row: any) => row.location_id).filter(Boolean)
         const regionIds = [...new Set([regionId, ...(hrAssignments ?? []).map((row: any) => row.region_id)].filter(Boolean))]
-        const { data: allLocations } = await adminSupabase.from("geofence_locations").select("id, district_id, districts(region_id)")
-        const scopedLocations = (allLocations ?? []).filter((location: any) => {
-          const linkedRegionId = Array.isArray(location.districts) ? location.districts[0]?.region_id : location.districts?.region_id
-          return regionIds.includes(linkedRegionId)
-        })
-        const scopeLocationIds = [...new Set([...locationIds, ...scopedLocations.map((row: any) => row.id).filter(Boolean)])]
-        const scopeDistrictIds = scopedLocations.map((row: any) => row.district_id).filter(Boolean)
+        const ownedLocationIds = await resolveOwnedLocationIdsForRegionalOffice(adminSupabase, locationId, regionId)
+        const scopeLocationIds = [...new Set([...locationIds, ...ownedLocationIds])]
+        const { data: scopedLocationRows } = await adminSupabase.from("geofence_locations").select("id, district_id").in("id", scopeLocationIds)
+        const scopeDistrictIds = (scopedLocationRows ?? []).map((row: any) => row.district_id).filter(Boolean)
         const { data: rows } = await adminSupabase.from("transport_requests").select("id, status, workflow_stage, assigned_region_id, linked_district_id, origin_location_id").in("workflow_stage", ["submitted", "district_officer_review", "regional_hr_review", "regional_hr_correction", "awaiting_do_regional_hr_endorsement"]).limit(500)
         const scoped = (rows ?? []).filter((row: any) => scopeLocationIds.includes(row.origin_location_id) || scopeDistrictIds.includes(row.linked_district_id) || regionIds.includes(row.assigned_region_id))
         totalCount = scoped.length

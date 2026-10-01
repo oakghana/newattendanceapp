@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { TransportRequestRegister } from "@/components/transport/transport-request-register"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { canManageTransport, isChiefDriverRole, isDistrictOfficerRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
+import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
 export default async function TransportRequestsPage() {
   const supabase = await createClient()
@@ -18,7 +19,7 @@ export default async function TransportRequestsPage() {
   if (!profile || !profile.role) redirect("/dashboard")
   const normalizedRole = normalizeAppRole(profile.role)
   const locationId = profile.assigned_location_id ?? null
-  const isRegionalRequester = normalizedRole === "staff" && Boolean(locationId)
+  const isRegionalRequester = ["staff", "it-admin"].includes(normalizedRole) && Boolean(locationId)
   const canViewRegionalRegister = normalizedRole === "admin" || isRegionalRequester || isDistrictOfficerRole(profile.role) || isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role) || canManageTransport(profile.role) || normalizedRole === "managing_director" || ["hr_records", "hr_records_officer", "hr_records_manager", "hr_executive", "hr_executive_officer"].includes(normalizedRole)
   if (!canViewRegionalRegister) redirect("/dashboard")
   const isRegionalDriver = isRegionalDriverRole(profile.role)
@@ -53,6 +54,10 @@ export default async function TransportRequestsPage() {
     ...(regionId ? [regionId] : []),
     ...(regionalHrAssignments ?? []).map((assignment) => assignment.region_id).filter(Boolean),
   ])]
+  if (canRegionalHr && locationId) {
+    const ownedLocationIds = await resolveOwnedLocationIdsForRegionalOffice(regionalHrDataClient, locationId, regionId)
+    regionalHrScopeLocationIds = [...new Set([...regionalHrScopeLocationIds, ...ownedLocationIds])]
+  }
   if (canRegionalHr && regionalHrRegionIds.length) {
     const { data: regionalLocations } = await regionalHrDataClient
       .from("geofence_locations")
@@ -91,17 +96,36 @@ export default async function TransportRequestsPage() {
     requestsQuery = requestsQuery.eq("request_type", "regional_transport")
   }
   let { data: requests, error: requestsError } = await requestsQuery
-  if (canRegionalHr && requests) {
-    const { data: requesterProfiles } = await regionalHrDataClient
-      .from("user_profiles")
-      .select("id, assigned_location_id, region_id, geofence_locations!user_profiles_assigned_location_id_fkey(district_id, districts(region_id))")
-      .not("assigned_location_id", "is", null)
-      .limit(1000)
+  if (canRegionalHr && requestsError) {
+    const fallback = await regionalHrDataClient
+      .from("transport_requests")
+.select("id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url")
+      .order("created_at", { ascending: false })
+      .limit(500)
+    requests = fallback.data as any[] | null
+    requestsError = fallback.error
+  }
+  if ((canRegionalHr || isDistrictOfficerRole(profile.role)) && requests) {
+    const requesterIds = [...new Set((requests ?? []).map((request: any) => request.requester_id).filter(Boolean))]
+    const { data: requesterProfiles } = requesterIds.length
+      ? await regionalHrDataClient
+          .from("user_profiles")
+          .select("id, first_name, last_name, assigned_location_id, region_id")
+          .in("id", requesterIds)
+      : { data: [] as any[] }
+    const requesterLocationIds = [...new Set((requesterProfiles ?? []).map((profile: any) => profile.assigned_location_id).filter(Boolean))]
+    const { data: requesterLocations } = requesterLocationIds.length
+      ? await regionalHrDataClient.from("geofence_locations").select("id, name, district_id").in("id", requesterLocationIds)
+      : { data: [] as any[] }
+    const locationById = new Map((requesterLocations ?? []).map((location: any) => [location.id, location]))
     const requesterScope = new Map((requesterProfiles ?? []).map((profile: any) => {
-      const location = Array.isArray(profile.geofence_locations) ? profile.geofence_locations[0] : profile.geofence_locations
-      const district = Array.isArray(location?.districts) ? location.districts[0] : location?.districts
-      return [profile.id, { locationId: profile.assigned_location_id, districtId: location?.district_id, regionId: profile.region_id ?? district?.region_id }]
+      const location = locationById.get(profile.assigned_location_id)
+      return [profile.id, { locationId: profile.assigned_location_id, districtId: location?.district_id, regionId: profile.region_id, name: [profile.first_name, profile.last_name].filter(Boolean).join(" ") || "Requester not linked", locationName: location?.name ?? "Location not assigned" }]
     }))
+    const historyCounts = new Map<string, number>()
+    for (const request of requests ?? []) {
+      if (request.requester_id) historyCounts.set(request.requester_id, (historyCounts.get(request.requester_id) ?? 0) + 1)
+    }
     requests = requests.filter((request: any) => {
       if (!regionalHrStages.includes(request.workflow_stage)) return false
       const requester = requesterScope.get(request.requester_id)
@@ -141,6 +165,10 @@ export default async function TransportRequestsPage() {
     }))
     const existingRequests = requests ?? []
     requests = [...existingRequests, ...legacyRows.filter((legacy: any) => !existingRequests.some((request: any) => request.id === legacy.id))] as any
+    requests = (requests ?? []).map((request: any) => {
+      const requester = requesterScope.get(request.requester_id)
+      return { ...request, requester_name: requester?.name ?? "Unknown staff", requester_location: requester?.locationName ?? "Assigned location unavailable", previous_request_count: Math.max(0, (historyCounts.get(request.requester_id) ?? 1) - 1) }
+    }) as any
   }
   const ownRequestFields = "id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url"
   const ownRequestsClient = await createAdminClient()
@@ -189,6 +217,21 @@ export default async function TransportRequestsPage() {
     const allPersonalRows = [...personalRows, ...nonregionalRows]
     requests = [...scopedRequests, ...allPersonalRows.filter((request: any) => !scopedRequests.some((scopedRequest) => scopedRequest.id === request.id))]
       .sort((left, right) => new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime())
+  }
+  if (canViewRegionalRegister && requests?.length) {
+    const requesterIds = [...new Set(requests.map((request: any) => request.requester_id).filter(Boolean))]
+    const adminClient = await createAdminClient()
+    const { data: requesterProfiles } = await adminClient.from("user_profiles").select("id, first_name, last_name, assigned_location_id").in("id", requesterIds)
+    const locationIds = [...new Set((requesterProfiles ?? []).map((profile: any) => profile.assigned_location_id).filter(Boolean))]
+    const { data: requesterLocations } = locationIds.length ? await adminClient.from("geofence_locations").select("id, name").in("id", locationIds) : { data: [] as any[] }
+    const locationsById = new Map((requesterLocations ?? []).map((location: any) => [location.id, location.name]))
+    const profilesById = new Map((requesterProfiles ?? []).map((profile: any) => [profile.id, profile]))
+    const finalHistory = new Map<string, number>()
+    for (const request of requests) if (request.requester_id) finalHistory.set(request.requester_id, (finalHistory.get(request.requester_id) ?? 0) + 1)
+    requests = requests.map((request: any) => {
+      const requester = profilesById.get(request.requester_id)
+      return { ...request, requester_name: requester ? [requester.first_name, requester.last_name].filter(Boolean).join(" ") || "Requester not linked" : "Requester not linked", requester_location: requester ? locationsById.get(requester.assigned_location_id) ?? "Location not assigned" : "Location not assigned", previous_request_count: Math.max(0, (finalHistory.get(request.requester_id) ?? 1) - 1) }
+    })
   }
   if (requestsError) {
     console.error("[v0] Transport request query failed:", requestsError.message)

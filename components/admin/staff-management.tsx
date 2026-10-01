@@ -1283,6 +1283,7 @@ export function StaffManagement() {
                             {isAdministrator && <SelectItem value="admin">Admin</SelectItem>}
                             <SelectItem value="contract">Contract</SelectItem>
                             <SelectItem value="department_head">Department Head</SelectItem>
+                            <SelectItem value="district_officer">District Officer (DO)</SelectItem>
                             {isAdministrator && <SelectItem value="director_hr">Director HR</SelectItem>}
                             {isAdministrator && <SelectItem value="hr_executive">HR Executive</SelectItem>}
                             {isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
