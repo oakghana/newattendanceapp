@@ -102,15 +102,29 @@ export function isExemptFromAttendanceReasons(role?: string | null): boolean {
 export function isExemptFromLatenessReason(_dept?: DeptInfo, role?: string | null): boolean {
   const normalizedRole = normalizeRole(role)
 
-  // Only the Managing Director, HODs, and Regional Managers are exempt.
+  // These leadership and operational office roles are exempt from lateness reasons.
   // Every other role, department, and staff category must explain a late arrival.
-  return ["managing_director", "department_head", "head_of_department", "regional_manager"].includes(normalizedRole)
+  return [
+    "managing_director",
+    "department_head",
+    "head_of_department",
+    "regional_manager",
+    "regional_hr_office",
+    "regional_hr",
+    "accounts_executive",
+    "hr_executive",
+    "transport_manager",
+    "administrator",
+    "admin",
+    "super_admin",
+  ].includes(normalizedRole)
 }
 
 /**
  * Returns true when a lateness reason SHOULD be required.
  * - Requires reason only on weekdays (Mon-Fri)
- * - Managing Director, Department Heads, and Regional Managers do not need a reason
+ * - Managing Director, HOD/Department Head, Regional Manager, Regional HR Office,
+ *   Accounts Executive, HR Executive, Transport Manager, and Administrator roles do not need a reason
  * - Every other role and department must provide a reason
  */
 export function requiresLatenessReason(
