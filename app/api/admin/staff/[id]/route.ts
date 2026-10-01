@@ -289,12 +289,19 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       )
     }
 
-    if (normalizedIncomingRole === "district_officer") {
+    const normalizedMergedRole = String(mergedRole || "").trim().toLowerCase().replace(/[\s-]+/g, "_")
+    if (normalizedMergedRole === "district_officer") {
       if (!mergedAssignedLocationId || mergedAssignedLocationId === "none") return NextResponse.json({ error: "District Officers must be assigned to a district location" }, { status: 400 })
       const { data: districtLocation } = await adminSupabase.from("geofence_locations").select("name, location_type, district_id").eq("id", mergedAssignedLocationId).maybeSingle()
       const locationName = String(districtLocation?.name || "").toLowerCase()
-      const locationType = String(districtLocation?.location_type || "").toLowerCase()
-      if (!districtLocation?.district_id || (locationType && locationType !== "district" && !locationName.includes("district"))) return NextResponse.json({ error: "District Officers can only be assigned to district locations" }, { status: 400 })
+      const locationType = String(districtLocation?.location_type || "").toLowerCase().replace(/[\s-]+/g, "_")
+      const isDistrictLocation = Boolean(
+        districtLocation?.district_id ||
+        locationType === "district" ||
+        locationType.includes("district") ||
+        locationName.includes("district"),
+      )
+      if (!districtLocation || !isDistrictLocation) return NextResponse.json({ error: "District Officers can only be assigned to district locations" }, { status: 400 })
     }
 
     if (isItAdmin && role === "department_head" && mergedAssignedLocationId && mergedAssignedLocationId !== "none") {

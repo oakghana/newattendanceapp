@@ -424,13 +424,22 @@ export async function POST(request: NextRequest) {
       return createJsonResponse({ success: false, error: "Only administrators can assign the Regional HR Leave Office role" }, 403)
     }
 
-    if (role === "district_officer") {
-      if (!assigned_location_id) return createJsonResponse({ success: false, error: "District Officers must be assigned to a district location" }, 400)
-      const { data: assignedLocation } = await adminSupabase.from("geofence_locations").select("name, location_type, district_id").eq("id", assigned_location_id).maybeSingle()
-      if (!assignedLocation || !assignedLocation.district_id || (assignedLocation.location_type && String(assignedLocation.location_type).toLowerCase() !== "district" && !String(assignedLocation.name || "").toLowerCase().includes("district"))) {
-        return createJsonResponse({ success: false, error: "District Officers can only be assigned to district locations" }, 400)
-      }
-    }
+  const normalizedIncomingRole = String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_")
+  if (normalizedIncomingRole === "district_officer") {
+  if (!assigned_location_id) return createJsonResponse({ success: false, error: "District Officers must be assigned to a district location" }, 400)
+  const { data: assignedLocation } = await adminSupabase.from("geofence_locations").select("name, location_type, district_id").eq("id", assigned_location_id).maybeSingle()
+  const locationName = String(assignedLocation?.name || "").toLowerCase()
+  const locationType = String(assignedLocation?.location_type || "").toLowerCase().replace(/[\s-]+/g, "_")
+  const isDistrictLocation = Boolean(
+    assignedLocation?.district_id ||
+    locationType === "district" ||
+    locationType.includes("district") ||
+    locationName.includes("district"),
+  )
+  if (!assignedLocation || !isDistrictLocation) {
+  return createJsonResponse({ success: false, error: "District Officers can only be assigned to district locations" }, 400)
+  }
+  }
 
     if (role === "regional_manager") {
       if (!assigned_location_id) {

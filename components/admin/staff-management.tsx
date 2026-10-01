@@ -360,7 +360,7 @@ export function StaffManagement() {
         const msg = "Session expired or unauthorized. Please sign in again."
         showError(msg, "Authentication Required")
         setError(msg)
-        setTimeout(() => (window.location.href = "/signin"), 1200)
+        setTimeout(() => (window.location.href = "/auth/login"), 1200)
         return
       }
 
@@ -426,7 +426,7 @@ export function StaffManagement() {
         const msg = "Session expired or unauthorized. Please sign in again."
         showError(msg, "Authentication Required")
         setError(msg)
-        setTimeout(() => (window.location.href = "/signin"), 1200)
+        setTimeout(() => (window.location.href = "/auth/login"), 1200)
         return
       }
 
@@ -499,7 +499,7 @@ export function StaffManagement() {
         const msg = "Session expired. Please sign in again."
         showError(msg, "Authentication Required")
         setError(msg)
-        setTimeout(() => (window.location.href = "/signin"), 1200)
+        setTimeout(() => (window.location.href = "/auth/login"), 1200)
         return
       }
 

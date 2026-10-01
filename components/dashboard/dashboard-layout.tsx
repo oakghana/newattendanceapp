@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useEffect, useRef, useState } from "react"
+import { memo, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Sidebar } from "./sidebar"
@@ -33,7 +33,7 @@ interface DashboardLayoutProps {
   children: React.ReactNode
 }
 
-export function DashboardLayout({ children }: DashboardLayoutProps) {
+function DashboardLayout({ children }: DashboardLayoutProps) {
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
   const [isAssignedHod, setIsAssignedHod] = useState(false)
@@ -268,7 +268,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-background/98 to-muted/10 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+          <div className="size-8 animate-spin rounded-full border-4 border-primary border-t-transparent" role="status" aria-label="Loading dashboard" />
           <p className="text-muted-foreground">Loading dashboard...</p>
         </div>
       </div>
@@ -299,4 +299,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   )
 }
 
-export default DashboardLayout
+export const MemoizedDashboardLayout = memo(DashboardLayout)
+export { MemoizedDashboardLayout as DashboardLayout }
+export default MemoizedDashboardLayout
