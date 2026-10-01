@@ -487,6 +487,7 @@ function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsColla
   const HR_RECORDS_SIDEBAR_ROLES = new Set(["hr_records", "hr_records_officer", "hr_records_manager"])
   const HR_LEAVE_OFFICE_SIDEBAR_ROLES = new Set(["hr_leave_office", "hr_office", "director_hr", "manager_hr", "regional_hr"])
   const isRegionalHr = effectiveRole === "regional_hr"
+  const isAdministratorRole = ["admin", "administrator"].includes(effectiveRole)
   // Administrators are intentionally excluded from this restriction — they must retain
   // full visibility into every module, including Disbursement Confirmation, regardless
   // of which specialized HR role would otherwise be denied access.
@@ -528,8 +529,6 @@ function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsColla
     (!isBasicNonRegionalRole || isExplicitNonRegionalLocation || !isRegionalOrDistrictLinked)
   const isChiefDriver = ["chief_driver", "regional_chief_driver"].includes(normalizedProfileRole) || effectiveRole === "chief_driver"
   const isOperationalDepartment = departmentCodeLower.includes("operation") || departmentNameLower.includes("operation")
-
-  const isAdministratorRole = ["admin", "administrator"].includes(effectiveRole)
 
   const filteredNavItems = allNavigationItems.filter((item) => {
   if (item.operationalOnly && !isOperationalDepartment && !isAdministratorRole) return false
