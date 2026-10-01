@@ -119,15 +119,14 @@ export function requiresLatenessReason(
   role?: string | null,
   config?: AttendanceTimeConfig,
 ): boolean {
-  if (isWeekend(date)) return false
   if (isExemptFromLatenessReason(dept, role)) return false
   void config
-  // Check if current time is past the configured lateness deadline
+  // Lateness starts strictly after 9:00 AM. Checking in at exactly 9:00 AM is on time.
   const deadlineStr = config?.latenessReasonDeadline ?? "09:00"
   const [deadlineHour, deadlineMin] = deadlineStr.split(":").map(Number)
   const hours = date.getHours()
   const minutes = date.getMinutes()
-  return hours > deadlineHour || (hours === deadlineHour && minutes >= deadlineMin)
+  return hours > deadlineHour || (hours === deadlineHour && minutes > deadlineMin)
 }
 
 /**
