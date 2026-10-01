@@ -14,6 +14,8 @@ interface LeaveComplianceCheckResult {
   isAnnualLeaveReminder: boolean
   daysUntilDeadline: number
   isLocked: boolean
+  hasSubmitted: boolean
+  submissionStatus: string | null
   shouldShowGrantAwareness: boolean
   pendingEndorsements: number
   escalationDue: boolean
@@ -88,6 +90,22 @@ export async function isAnnualLeaveLocked(
   return (submitted && submitted.length > 0) ? true : false
 }
 
+async function getAnnualLeaveSubmission(userId: string, admin: any) {
+  const currentYear = new Date().getFullYear()
+  const { data } = await admin
+    .from('leave_plan_requests')
+    .select('status')
+    .eq('user_id', userId)
+    .eq('leave_type_key', 'annual')
+    .eq('leave_year_period', `${currentYear}/${currentYear + 1}`)
+    .not('status', 'in', '(draft,rejected,cancelled)')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  return data?.status ? String(data.status) : null
+}
+
 /**
  * Get compliance check for a user
  */
@@ -97,7 +115,9 @@ export async function checkLeaveCompliance(
 ): Promise<LeaveComplianceCheckResult> {
   const isReminder = isAnnualLeaveReminderPeriod()
   const daysLeft = daysUntilAnnualLeaveDeadline()
-  const isLocked = await isAnnualLeaveLocked(userId, admin)
+  const submissionStatus = await getAnnualLeaveSubmission(userId, admin)
+  const hasSubmitted = Boolean(submissionStatus)
+  const isLocked = hasSubmitted || await isAnnualLeaveLocked(userId, admin)
   
   // Count pending endorsements
   const { data: pendingReviews, error: reviewError } = await admin
@@ -124,7 +144,10 @@ export async function checkLeaveCompliance(
     isAnnualLeaveReminder: isReminder,
     daysUntilDeadline: daysLeft,
     isLocked,
+    hasSubmitted,
+    submissionStatus,
     shouldShowGrantAwareness: isReminder && !isLocked,
+
     pendingEndorsements: pendingCount,
     escalationDue,
   }

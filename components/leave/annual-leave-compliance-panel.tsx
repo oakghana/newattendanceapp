@@ -13,6 +13,8 @@ interface ComplianceData {
     isAnnualLeaveReminder: boolean
     daysUntilDeadline: number
     isLocked: boolean
+    hasSubmitted: boolean
+    submissionStatus: string | null
     shouldShowGrantAwareness: boolean
     pendingEndorsements: number
     escalationDue: boolean
@@ -51,11 +53,29 @@ export function AnnualLeaveCompliancePanel() {
   }
 
   const { compliance, reminders, escalations } = data
+  const submissionStatusLabel = compliance.submissionStatus === 'pending_hod_review'
+    ? 'awaiting your HOD\'s endorsement'
+    : compliance.submissionStatus === 'regional_hr_review'
+      ? 'awaiting Regional HR review'
+      : compliance.submissionStatus === 'pending_regional_manager_review'
+        ? 'awaiting the Regional Manager\'s endorsement'
+        : 'moving through the endorsement process'
 
   return (
     <div className="space-y-3">
+      {/* Confirmation shown on future logins after submission */}
+      {compliance.isAnnualLeaveReminder && compliance.hasSubmitted && (
+        <Alert className="border-emerald-300 bg-emerald-50 shadow-sm">
+          <Info className="h-5 w-5 text-emerald-600" />
+          <AlertTitle className="font-semibold text-emerald-900">Annual Leave Plan submitted</AlertTitle>
+          <AlertDescription className="mt-1 text-emerald-800">
+            Your annual leave request has been submitted successfully and is {submissionStatusLabel}. You will be notified when the next action is completed.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Annual Leave Reminder Banner */}
-      {compliance.isAnnualLeaveReminder && !compliance.isLocked && (
+      {compliance.isAnnualLeaveReminder && !compliance.hasSubmitted && !compliance.isLocked && (
         <Alert className="border-amber-400 bg-amber-50 shadow-sm">
           <Clock className="h-5 w-5 text-amber-600" />
           <AlertTitle className="text-amber-900 font-semibold">
@@ -87,7 +107,7 @@ export function AnnualLeaveCompliancePanel() {
       )}
 
       {/* Annual Leave Locked Banner */}
-      {compliance.isLocked && (
+      {compliance.isLocked && !compliance.hasSubmitted && (
         <Alert className="border-red-300 bg-red-50">
           <Lock className="h-5 w-5 text-red-600" />
           <AlertTitle className="text-red-900 font-semibold">
