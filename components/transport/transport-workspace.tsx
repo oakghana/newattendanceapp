@@ -266,7 +266,7 @@ export function TransportWorkspace({
     router.refresh()
   }
 
-  if (normalizedRole === "it_admin" || normalizedRole === "it-admin") {
+  if ((normalizedRole === "it_admin" || normalizedRole === "it-admin") && !isRegionalStaff) {
     return (
       <div className="flex min-w-0 flex-col gap-6">
         <header className="overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/[0.08] via-background to-background shadow-sm">

@@ -75,7 +75,8 @@ export default async function TransportPage() {
   const isRegionalHr = isRegionalHrRole(profile.role)
   const isRegionalManager = isRegionalManagerRole(profile.role)
   const isDistrictOfficer = normalizedRole === "district_officer"
-  const isRegionalStaff = isRegionalOrDistrictLinked && isBasicStaffRole
+  const isRegionalRequester = isRegionalOrDistrictLinked && !isExplicitNonRegionalLocation
+  const isRegionalStaff = isRegionalRequester && (isBasicStaffRole || normalizedRole === "it-admin")
   const isRegionalScoped = isChiefDriver || isRegionalHr || isRegionalManager || isDistrictOfficer || isRegionalStaff
   const isDriver = normalizedRole === "driver"
   const isRegionalDriver = isDriver && isRegionalDriverRole(profile.role)
