@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   CalendarDays,
@@ -152,6 +153,7 @@ export function TransportRequestRegister({
   regionalOfficeName: string;
   currentUserId?: string;
 }) {
+  const router = useRouter();
   const [query, setQuery] = React.useState("");
   const [status, setStatus] = React.useState("all");
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -237,7 +239,7 @@ export function TransportRequestRegister({
           : "Requests processed",
       description: "The selected transport requests were updated successfully.",
     });
-    window.setTimeout(() => window.location.reload(), 900);
+    router.refresh();
   };
   const visibleRows = rows.filter(
     (row) =>
@@ -532,7 +534,7 @@ export function TransportRequestRegister({
           : "The transport workflow has been updated successfully.",
       duration: 5000,
     });
-    window.setTimeout(() => window.location.reload(), 900);
+    router.refresh();
   }
 
   async function saveCorrection(event: React.FormEvent<HTMLFormElement>) {
@@ -568,7 +570,7 @@ export function TransportRequestRegister({
       });
       return;
     }
-    window.location.reload();
+    router.refresh();
   }
 
   async function saveMemo(event: React.FormEvent<HTMLFormElement>) {
@@ -605,7 +607,7 @@ export function TransportRequestRegister({
       });
       return;
     }
-    window.location.reload();
+    router.refresh();
   }
 
   return (
@@ -1413,8 +1415,29 @@ export function TransportRequestRegister({
                 <div><p className="text-xs text-muted-foreground">Event date</p><p className="font-medium">{openRequest.event_date ?? "—"}</p></div>
                 <div><p className="text-xs text-muted-foreground">Passengers</p><p className="font-medium">{openRequest.passenger_count}</p></div>
                 <div><p className="text-xs text-muted-foreground">Status</p><p className="font-medium">{label(openRequest.status)}</p></div>
-                <div className="rounded-md border border-primary/20 bg-primary/5 p-3 sm:col-span-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">Approval flow</p>
+  <div className="rounded-md border border-border bg-muted/30 p-4 sm:col-span-2">
+  <p className="text-sm font-semibold text-foreground">Supporting documents</p>
+  {openRequest.supporting_documents?.filter((document) => document.url).length ? (
+    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      {openRequest.supporting_documents.filter((document) => document.url).map((document, index) => (
+        <a
+          key={`${document.url}-${index}`}
+          href={document.url}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center justify-between rounded-md border bg-background px-3 py-2 text-sm text-primary hover:bg-primary/5"
+        >
+          <span className="truncate">{document.name ?? `Supporting document ${index + 1}`}</span>
+          <ExternalLink className="ml-2 size-4 shrink-0" />
+        </a>
+      ))}
+    </div>
+  ) : (
+    <p className="mt-2 text-sm text-muted-foreground">No supporting document was attached to this request.</p>
+  )}
+  </div>
+  <div className="rounded-md border border-primary/20 bg-primary/5 p-3 sm:col-span-2">
+  <p className="text-xs font-semibold uppercase tracking-wide text-primary">Approval flow</p>
                   <p className="mt-1 text-sm text-foreground">Regional HR review → Regional Manager endorsement → Regional Chief Driver assignment</p>
                   <p className="mt-1 text-xs text-muted-foreground">Treating this request as within the region still sends it to the Regional Manager before Chief Driver action.</p>
                 </div>
