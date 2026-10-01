@@ -23,7 +23,7 @@ export default async function DeviceRadiusPage() {
     .eq("id", user.id)
     .single()
 
-  if (profile?.role !== "admin") {
+  if (!["admin", "administrator"].includes(String(profile?.role).toLowerCase())) {
     redirect("/dashboard")
   }
 

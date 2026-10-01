@@ -19,7 +19,7 @@ const WeeklyDeviceSharingRoutePage = async () => {
     .eq("id", user.id)
     .single()
 
-  if (!profile || profile.role !== "admin") {
+  if (!profile || !["admin", "administrator"].includes(String(profile.role).toLowerCase())) {
     redirect("/dashboard")
   }
 

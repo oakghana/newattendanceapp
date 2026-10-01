@@ -13,7 +13,7 @@ export default async function AuditLogsPage() {
   // Check if user has admin role - audit logs are admin-only
   const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
 
-  if (!profile || (profile.role !== "admin" && profile.role !== "audit_staff")) {
+  if (!profile || (!["admin", "administrator"].includes(String(profile.role).toLowerCase()) && profile.role !== "audit_staff")) {
     redirect("/dashboard")
   }
 

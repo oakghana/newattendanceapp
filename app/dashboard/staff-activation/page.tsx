@@ -15,7 +15,7 @@ export default async function StaffActivationPage() {
 
   const { data: profile } = await supabase.from("user_profiles").select("role, is_active").eq("id", user.id).single()
 
-  if (!profile || profile.role !== "admin" || !profile.is_active) {
+  if (!profile || !["admin", "administrator"].includes(String(profile.role).toLowerCase()) || !profile.is_active) {
     redirect("/dashboard")
   }
 

@@ -47,7 +47,7 @@ export default async function DashboardOverviewPage() {
 
   // Get pending approvals if admin
   let pendingApprovals = 0
-  if (profile?.role === "admin") {
+  if (["admin", "administrator"].includes(String(profile?.role).toLowerCase())) {
     const { count } = await supabase
       .from("user_profiles")
       .select("*", { count: "exact", head: true })
