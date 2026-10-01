@@ -3091,8 +3091,19 @@ export function AttendanceRecorder({
   const isCheckedIn = localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time && !isFromPreviousDay
   const isCheckedOut = localTodayAttendance?.check_out_time
   const isCompletedForDay =
-    localTodayAttendance?.check_in_time && localTodayAttendance?.check_out_time && !isFromPreviousDay
+  localTodayAttendance?.check_in_time && localTodayAttendance?.check_out_time && !isFromPreviousDay
 
+  // A late-arrival reason belongs only to the pending check-in flow. If attendance
+  // has already been recorded or completed, never leave a stale dialog on screen.
+  useEffect(() => {
+    if ((isCheckedIn || isCompletedForDay) && showLatenessDialog) {
+      setShowLatenessDialog(false)
+      setPendingCheckInData(null)
+      setLatenessReason("")
+      setLatenessProvedBy("")
+    }
+  }, [isCheckedIn, isCompletedForDay, showLatenessDialog])
+  
   const defaultMode = canCheckInButton ? "checkin" : canCheckOutButton ? "checkout" : null
 
   const handleLocationSelect = (location: GeofenceLocation) => {
@@ -3816,8 +3827,8 @@ export function AttendanceRecorder({
         </div>
       )}
 
-      {showLatenessDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+{showLatenessDialog && pendingCheckInData && !isCheckedIn && !isCompletedForDay && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-md">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-orange-600">
