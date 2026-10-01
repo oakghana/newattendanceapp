@@ -525,8 +525,10 @@ function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsColla
   const isChiefDriver = ["chief_driver", "regional_chief_driver"].includes(normalizedProfileRole) || effectiveRole === "chief_driver"
   const isOperationalDepartment = departmentCodeLower.includes("operation") || departmentNameLower.includes("operation")
 
+  const isAdministratorRole = ["admin", "administrator"].includes(effectiveRole)
+
   const filteredNavItems = allNavigationItems.filter((item) => {
-  if (item.operationalOnly && !isOperationalDepartment) return false
+  if (item.operationalOnly && !isOperationalDepartment && !isAdministratorRole) return false
   if (isChiefDriver && ROLE_RESTRICTED_MAIN_HREFS.has(item.href)) return false
     if (item.href === "/dashboard/transport") {
       if (!canSeeTransportMenu) return false
