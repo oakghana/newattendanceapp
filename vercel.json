@@ -11,6 +11,10 @@
     {
       "path": "/api/leave/reminders/resume-five-days",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/transport-district-escalation",
+      "schedule": "0 * * * *"
     }
   ]
 }
