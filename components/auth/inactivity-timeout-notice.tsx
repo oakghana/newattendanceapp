@@ -6,8 +6,8 @@ import { createClient } from "@/lib/supabase/client"
 import { clearAllDataAndLogout } from "@/lib/cache-manager"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
-const IDLE_TIMEOUT_MS = 4 * 60 * 1000
-const WARNING_TIMEOUT_MS = 3 * 60 * 1000 // warn with one minute remaining before the four-minute logout
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000
+const WARNING_TIMEOUT_MS = 25 * 60 * 1000 // warn with five minutes remaining before logout
 
 export function InactivityTimeoutNotice() {
   const [warningVisible, setWarningVisible] = useState(false)
@@ -52,9 +52,9 @@ export function InactivityTimeoutNotice() {
     <div className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-xl" role="status" aria-live="polite">
       <Alert>
         <AlertTriangle />
-        <AlertTitle>You will be signed out in 1 minute</AlertTitle>
+        <AlertTitle>You will be signed out in 5 minutes</AlertTitle>
         <AlertDescription>
-          For your security, the app signs you out after 4 minutes without activity. Move your mouse, press a key, or use the app to stay signed in.
+          For your security, the app signs you out after 30 minutes without activity. Move your mouse, press a key, or use the app to stay signed in.
         </AlertDescription>
       </Alert>
     </div>
