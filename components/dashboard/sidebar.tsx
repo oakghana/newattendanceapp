@@ -524,7 +524,7 @@ export function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, set
       return false
     }
     if (isItAdmin && item.category === "admin") {
-      return ["/dashboard/leave-management", "/dashboard/staff"].includes(item.href)
+      return ["/dashboard/leave-management", "/dashboard/staff", "/dashboard/transport"].includes(item.href)
     }
     if (["driver", "transport_manager"].includes(effectiveRole) && ["/dashboard/leave-management", "/dashboard/loan-app", "/dashboard/transport"].includes(item.href)) {
       return true
