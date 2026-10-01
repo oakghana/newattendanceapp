@@ -126,7 +126,7 @@ async function notifyDistrictOfficers(
     const { data: officers } = await admin
       .from("user_profiles")
       .select("id")
-      .eq("role", "district_officer")
+      .in("role", ["district_officer", "district officer"])
       .eq("is_active", true)
       .in("assigned_location_id", locationIds)
     await notifyTransportActors(
@@ -262,7 +262,12 @@ export async function POST(request: Request) {
     const { data: districtLocations } = await reviewerLookup.from("geofence_locations").select("id").eq("district_id", linkedDistrictId)
     const locationIds = (districtLocations ?? []).map((location) => location.id).filter(Boolean)
     if (locationIds.length) {
-      const { data: districtOfficers } = await supabase.from("user_profiles").select("id").eq("role", "district_officer").eq("is_active", true).in("assigned_location_id", locationIds).limit(1)
+      const { data: districtOfficers } = await reviewerLookup
+      .from("user_profiles")
+      .select("id")
+      .in("role", ["district_officer", "district officer"])
+      .eq("is_active", true)
+      .in("assigned_location_id", locationIds).limit(1)
       hasDistrictOfficer = Boolean(districtOfficers?.length)
     }
   }
