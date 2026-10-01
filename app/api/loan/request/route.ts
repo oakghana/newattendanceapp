@@ -296,7 +296,9 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ error: "Profile not found" }, { status: 404 })
   }
 
-  if (normalizeRole((profile as any).role) !== "admin") {
+  // Managing Director sits above every HOD, so a linkage is optional for them —
+  // their requests fall back to an administrator reviewer automatically below.
+  if (!["admin", "managing_director"].includes(normalizeRole((profile as any).role))) {
     try {
       if (!(await hasAssignedReviewer(admin, user.id))) {
         return NextResponse.json({ error: REVIEWER_LINKAGE_REQUIRED_MESSAGE, code: "REVIEWER_LINKAGE_REQUIRED" }, { status: 403 })
@@ -434,7 +436,9 @@ export async function POST(request: NextRequest) {
       if (hodId && !assignedHodIds.includes(hodId)) assignedHodIds.push(hodId)
     }
 
-    if (assignedHodIds.length === 0 && role === "it_admin") {
+    // The Managing Director is not required to be linked to an HOD — fall back
+    // to an administrator reviewer automatically instead of blocking submission.
+    if (assignedHodIds.length === 0 && (role === "it_admin" || role === "managing_director")) {
       const { data: adminApprovers } = await admin
         .from("user_profiles")
         .select("id")

@@ -142,7 +142,8 @@ export async function POST(request: NextRequest) {
     const normalizedRole = String((roleProfile as any)?.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
   const admin = await createAdminClient()
 
-  if (normalizedRole !== "admin") {
+  // Managing Director sits above every HOD, so a linkage is optional for them.
+  if (!["admin", "managing_director"].includes(normalizedRole)) {
     try {
       if (!(await hasAssignedReviewer(admin, user.id))) {
         return NextResponse.json({ error: REVIEWER_LINKAGE_REQUIRED_MESSAGE, code: "REVIEWER_LINKAGE_REQUIRED" }, { status: 403 })
