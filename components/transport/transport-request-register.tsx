@@ -23,6 +23,9 @@ import { TrackedMemoEditor } from "@/components/memo/tracked-memo-editor";
 export type TransportRequestRow = {
   id: string;
   requester_id?: string | null;
+  requester_name?: string | null;
+  requester_location?: string | null;
+  previous_request_count?: number;
   request_type?: "regional_transport" | "nonregional_transport" | string | null;
   purpose: string;
   origin: string;
@@ -237,7 +240,7 @@ export function TransportRequestRegister({
   };
   const visibleRows = rows.filter(
     (row) =>
-      `${row.reference_number ?? ""} ${row.purpose} ${row.origin} ${row.destination}`
+      `${row.reference_number ?? ""} ${row.requester_name ?? ""} ${row.requester_location ?? ""} ${row.purpose} ${row.origin} ${row.destination}`
         .toLowerCase()
         .includes(query.toLowerCase()) &&
       (status === "all" || (row.status ?? "submitted") === status),
@@ -913,8 +916,9 @@ export function TransportRequestRegister({
               <thead className="border-b bg-muted/30 text-left text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3 font-medium">Request type</th>
-                  <th className="px-4 py-3 font-medium">Request</th>
-                  <th className="px-4 py-3 font-medium">Journey</th>
+<th className="px-4 py-3 font-medium">Requesting staff</th>
+  <th className="px-4 py-3 font-medium">Request</th>
+  <th className="px-4 py-3 font-medium">Journey</th>
                   <th className="px-4 py-3 font-medium">Event date</th>
                   <th className="px-4 py-3 font-medium">Passengers</th>
                   <th className="px-4 py-3 font-medium">Status</th>
@@ -982,6 +986,13 @@ export function TransportRequestRegister({
                         >
                           {requestTypeLabel(row.request_type)}
                         </Badge>
+                      </td>
+                      <td className="px-4 py-4">
+                        <p className="font-medium">{row.requester_name ?? "Unknown staff"}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{row.requester_location ?? "Assigned location unavailable"}</p>
+                        {typeof row.previous_request_count === "number" && row.previous_request_count > 0 && (
+                          <p className="mt-1 text-xs text-muted-foreground">{row.previous_request_count} previous transport request{row.previous_request_count === 1 ? "" : "s"}</p>
+                        )}
                       </td>
                       <td className="px-4 py-4">
                         <p className="font-medium">

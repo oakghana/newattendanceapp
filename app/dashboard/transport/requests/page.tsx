@@ -105,17 +105,21 @@ export default async function TransportRequestsPage() {
     requests = fallback.data as any[] | null
     requestsError = fallback.error
   }
-  if (canRegionalHr && requests) {
+  if ((canRegionalHr || isDistrictOfficerRole(profile.role)) && requests) {
     const { data: requesterProfiles } = await regionalHrDataClient
       .from("user_profiles")
-      .select("id, assigned_location_id, region_id, geofence_locations!user_profiles_assigned_location_id_fkey(district_id, districts(region_id))")
+      .select("id, first_name, last_name, assigned_location_id, region_id, geofence_locations!user_profiles_assigned_location_id_fkey(name, district_id, districts(region_id))")
       .not("assigned_location_id", "is", null)
       .limit(1000)
     const requesterScope = new Map((requesterProfiles ?? []).map((profile: any) => {
       const location = Array.isArray(profile.geofence_locations) ? profile.geofence_locations[0] : profile.geofence_locations
       const district = Array.isArray(location?.districts) ? location.districts[0] : location?.districts
-      return [profile.id, { locationId: profile.assigned_location_id, districtId: location?.district_id, regionId: profile.region_id ?? district?.region_id }]
+      return [profile.id, { locationId: profile.assigned_location_id, districtId: location?.district_id, regionId: profile.region_id ?? district?.region_id, name: [profile.first_name, profile.last_name].filter(Boolean).join(" ") || "Unknown staff", locationName: location?.name ?? "Assigned location unavailable" }]
     }))
+    const historyCounts = new Map<string, number>()
+    for (const request of requests ?? []) {
+      if (request.requester_id) historyCounts.set(request.requester_id, (historyCounts.get(request.requester_id) ?? 0) + 1)
+    }
     requests = requests.filter((request: any) => {
       if (!regionalHrStages.includes(request.workflow_stage)) return false
       const requester = requesterScope.get(request.requester_id)
@@ -155,6 +159,10 @@ export default async function TransportRequestsPage() {
     }))
     const existingRequests = requests ?? []
     requests = [...existingRequests, ...legacyRows.filter((legacy: any) => !existingRequests.some((request: any) => request.id === legacy.id))] as any
+    requests = (requests ?? []).map((request: any) => {
+      const requester = requesterScope.get(request.requester_id)
+      return { ...request, requester_name: requester?.name ?? "Unknown staff", requester_location: requester?.locationName ?? "Assigned location unavailable", previous_request_count: Math.max(0, (historyCounts.get(request.requester_id) ?? 1) - 1) }
+    }) as any
   }
   const ownRequestFields = "id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url"
   const ownRequestsClient = await createAdminClient()
