@@ -34,7 +34,9 @@ describe("attendance-utils", () => {
     expect(requiresLatenessReason(saturday, { code: "HR" })).toBe(false)
     expect(requiresLatenessReason(weekday, { code: "security" })).toBe(false)
     expect(requiresLatenessReason(weekday, { code: "transport" })).toBe(false)
-    expect(requiresLatenessReason(weekday, { code: "operations" })).toBe(false)
+    expect(requiresLatenessReason(weekday, { code: "operations" })).toBe(true)
+    expect(requiresLatenessReason(weekday, { code: "operations" }, "staff")).toBe(true)
+    expect(requiresLatenessReason(weekday, { code: "operations" }, "department_head")).toBe(false)
   })
 
   it("exempts administrator roles from attendance reasons", () => {
@@ -71,10 +73,10 @@ describe("attendance-utils", () => {
     }
   })
 
-  it("bypasses lateness and early-checkout reasons for shift departments", () => {
+  it("requires lateness reasons from operational staff but keeps shift checkout rules", () => {
     const weekday = new Date("2026-02-12T10:30:00Z")
 
-    expect(requiresLatenessReason(weekday, { code: "operational" })).toBe(false)
+    expect(requiresLatenessReason(weekday, { code: "operational" })).toBe(true)
     expect(requiresEarlyCheckoutReason(weekday, true, undefined, { code: "operational" })).toBe(false)
   })
 

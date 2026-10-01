@@ -781,6 +781,15 @@ workflow_stage: row.request_type === "regional_transport"
   // Non-fatal stage notifications (does not affect auth/login)
   const toStage = String(update.workflow_stage ?? "")
   const purposeLabel = `${row.purpose} (${row.origin} → ${row.destination})`
+  if (isRegionalHr && ["approve_within_authority", "forward_to_rm"].includes(decision) && toStage === "regional_manager_endorsement") {
+    void notifyRoleHolders(
+      ["regional_manager"],
+      `Regional transport requires your endorsement before Chief Driver review: ${purposeLabel}.`,
+      "transport_pending_rm",
+      requestId,
+      user.id,
+    )
+  }
   if (decision === "endorse" && toStage === "managing_director_approval") {
     void notifyRoleHolders(
       ["managing_director"],
