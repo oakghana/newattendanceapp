@@ -170,6 +170,23 @@ export async function GET(request: Request) {
   } else if (role === "it-admin") {
     // IT Admins may submit non-regional requests, but can only track their own.
     query = query.eq("requester_id", user.id)
+  } else if (["staff", "contract", "audit_staff", "intern", "nsp"].includes(role)) {
+    // Non-regional staff may see their own requests and colleagues' requests
+    // from the same department, but never requests from other departments.
+    if (profile.department_id) {
+      const { data: departmentUsers } = await supabase
+        .from("user_profiles")
+        .select("id")
+        .eq("department_id", profile.department_id)
+        .eq("is_active", true)
+      const departmentUserIds = Array.from(new Set([
+        user.id,
+        ...(departmentUsers ?? []).map((row) => String(row.id || "")).filter(Boolean),
+      ]))
+      query = query.in("requester_id", departmentUserIds)
+    } else {
+      query = query.eq("requester_id", user.id)
+    }
   } else if (isDepartmentHeadRole(role) || isLinkedHod) {
     const scopeClauses = [`requester_id.eq.${user.id}`, `hod_id.eq.${user.id}`]
     if (linkedStaffIds.length > 0) scopeClauses.push(`requester_id.in.(${linkedStaffIds.join(",")})`)
@@ -209,8 +226,8 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     requests: data ?? [],
-    drivers: drivers ?? [],
-    unavailableDriverIds,
+    drivers: ["staff", "contract", "audit_staff", "intern", "nsp"].includes(role) ? [] : (drivers ?? []),
+    unavailableDriverIds: ["staff", "contract", "audit_staff", "intern", "nsp"].includes(role) ? [] : unavailableDriverIds,
     viewerRole: role,
     viewerId: user.id,
     viewerLocation,

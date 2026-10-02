@@ -614,11 +614,19 @@ export function TransportWorkspace({
           : isNonRegionalLocation
             ? [
                 {
+                  title: "New Head Office request",
+                  description: "Submit a transport request for an official Head Office trip.",
+                  icon: Bus,
+                  href: "/dashboard/transport/nonregional/new",
+                  cta: "Create new request",
+                  badge: "Head Office",
+                },
+                {
                   title: "Head Office request register",
-                  description: "View and track transport requests for your Head Office location.",
+                  description: "View your requests and requests from your department.",
                   icon: Route,
                   href: "/dashboard/transport/nonregional",
-                  cta: "Open Head Office register",
+                  cta: "View requests",
                   badge: "Head Office",
                 },
               ]
