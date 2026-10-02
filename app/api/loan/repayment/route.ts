@@ -21,11 +21,11 @@ export async function POST(request: NextRequest) {
 
       const { data: loans, error: loansError } = await admin
         .from("loan_requests")
-        .select("id, recovery_start_date, recovery_months, repayment_duration_months, disbursement_date, staff_receiving_funds_confirmed_at, md_approved_at, repayment_plan_generated_at, status, hod_review_note, is_imported")
+        .select("id, recovery_start_date, recovery_months, repayment_duration_months, disbursement_date, md_approved_at, repayment_plan_generated_at, status, hod_review_note, is_imported")
         .is("repayment_plan_generated_at", null)
         .in("status", ["approved_director", "md_final_approved", "approved", "active", "partially_recovered", "payment_completed", "fully_recovered", "disbursed", "completed"])
         .or("md_approved_at.not.is.null,is_imported.eq.true,hod_review_note.ilike.%bulk imported by administrator%")
-        .or("disbursement_date.not.is.null,staff_receiving_funds_confirmed_at.not.is.null,is_imported.eq.true,hod_review_note.ilike.%bulk imported by administrator%")
+        .or("disbursement_date.not.is.null,is_imported.eq.true,hod_review_note.ilike.%bulk imported by administrator%")
       if (loansError) return NextResponse.json({ error: loansError.message }, { status: 500 })
 
       const ids = (loans || []).map((loan) => loan.id)
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
         missing.map(async (loan) => {
           const result = await admin.rpc("generate_repayment_schedule", {
             p_loan_request_id: loan.id,
-            p_start_date: loan.recovery_start_date || loan.disbursement_date || loan.staff_receiving_funds_confirmed_at || new Date().toISOString().slice(0, 10),
+            p_start_date: loan.recovery_start_date || loan.disbursement_date || new Date().toISOString().slice(0, 10),
             p_duration_months: loan.recovery_months || loan.repayment_duration_months || 12,
           })
           if (result.error) {
