@@ -16,6 +16,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { StaffLeaveHistory } from "@/components/leave/staff-leave-history"
 import { HODResumptionConfirmations } from "@/components/leave/hod-resumption-confirmations"
@@ -1101,7 +1109,7 @@ function HrExecRejectForm({
   )
 }
 
-// ─── Main Component ──────────���───────────────────────────────────────────────���
+// ─── Main Component ──────────���───────────────────────────────────────────────�����
 // SINGLE SOURCE OF TRUTH for the annual leave End Date shown/saved anywhere in the
 // HR Office review panel. Uses the exact same formula as the printed memo
 // (lib/annual-leave-calculator): granted = entitlement - enjoyed + outstanding + travel,
@@ -2797,12 +2805,27 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
         </div>
       </div>
 
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+  <Dialog open={Boolean(error)} onOpenChange={(open) => { if (!open) setError(null) }}>
+  <DialogContent className="max-w-md overflow-hidden rounded-2xl border border-red-100 bg-white p-0 shadow-2xl">
+  <div className="h-2 bg-gradient-to-r from-red-600 via-rose-500 to-orange-400" />
+  <div className="space-y-5 p-6">
+  <DialogHeader className="space-y-3 text-left">
+  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 ring-8 ring-red-50/60">
+  <AlertCircle className="h-6 w-6 text-red-600" aria-hidden="true" />
+  </div>
+  <DialogTitle className="text-xl font-bold text-slate-900">Leave request cannot be submitted</DialogTitle>
+  <DialogDescription className="text-sm leading-6 text-slate-600">
+  {error}
+  </DialogDescription>
+  </DialogHeader>
+  <DialogFooter>
+  <Button type="button" onClick={() => setError(null)} className="w-full rounded-xl bg-slate-900 text-white hover:bg-slate-800">
+  Understood
+  </Button>
+  </DialogFooter>
+  </div>
+  </DialogContent>
+  </Dialog>
 
       {loading && !data && (
         <div className="text-center text-slate-500 py-12">

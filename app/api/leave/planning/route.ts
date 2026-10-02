@@ -142,6 +142,67 @@ function canBackdateLeaveApplication(role: string | null | undefined) {
   return isHrLeaveOfficeRole(normalized) || ["regional_hr_leave_office", "regional_leave_office"].includes(normalized)
 }
 
+const LEAVE_APPROVED_BY_HOD_OR_RM_STATUSES = [
+  "hod_approved",
+  "manager_confirmed",
+  "hr_office_forwarded",
+  "hr_approved",
+  "approved",
+]
+
+async function validateDependentLeaveEligibility(admin: any, userId: string, leaveTypeKey: string, leaveYearPeriod: string) {
+  if (!["casual", "casual_leave", "part_leave", "part-leave"].includes(leaveTypeKey)) return null
+
+  const { data: annualRequests, error } = await admin
+    .from("leave_plan_requests")
+    .select("leave_type_key, status, requested_days, adjusted_days, entitlement_days, leave_year_period")
+    .eq("user_id", userId)
+    .eq("is_archived", false)
+    .eq("leave_year_period", leaveYearPeriod)
+    .in("status", LEAVE_APPROVED_BY_HOD_OR_RM_STATUSES)
+
+  if (error) throw error
+
+  const approvedAnnualRequests = (annualRequests || []).filter((request: any) =>
+    ["annual", "annual_leave"].includes(String(request.leave_type_key || "").toLowerCase()),
+  )
+
+  if (leaveTypeKey === "part_leave" || leaveTypeKey === "part-leave") {
+    if (approvedAnnualRequests.length === 0) {
+      return {
+        code: "ANNUAL_LEAVE_APPROVAL_REQUIRED",
+        error: "Part Leave cannot be requested until your Annual Leave has been submitted and approved by your HOD or Regional Manager.",
+      }
+    }
+    return null
+  }
+
+  const annualEntitlement = approvedAnnualRequests.reduce((total: number, request: any) => {
+    const entitlement = Number(request.entitlement_days || 0)
+    return Math.max(total, entitlement)
+  }, 0)
+  const approvedAnnualDays = approvedAnnualRequests.reduce(
+    (total: number, request: any) => total + Number(request.adjusted_days || request.requested_days || 0),
+    0,
+  )
+
+  if (annualEntitlement > 0 && approvedAnnualDays < annualEntitlement) {
+    return {
+      code: "ANNUAL_LEAVE_ENTITLEMENT_NOT_EXHAUSTED",
+      error: `Casual Leave cannot be requested yet. You must first exhaust your Annual Leave entitlement (${approvedAnnualDays} of ${annualEntitlement} day(s) approved).`,
+    }
+  }
+
+  if (approvedAnnualRequests.length === 0) {
+    return {
+      code: "ANNUAL_LEAVE_ENTITLEMENT_NOT_EXHAUSTED",
+      error: "Casual Leave cannot be requested until your Annual Leave entitlement has been exhausted through an approved Annual Leave request.",
+    }
+  }
+
+  return null
+}
+
 function isSchemaIssue(error: any) {
   const code = error?.code || ""
   const message = String(error?.message || "")
@@ -1445,15 +1506,25 @@ export async function POST(request: NextRequest) {
 
     const selectedLeaveYearPeriod = normalizeLeaveYearPeriod(leave_year_period)
     const allowedPeriods = getAllowedLeaveYearPeriods()
-    if (!allowedPeriods.includes(selectedLeaveYearPeriod)) {
-      return NextResponse.json(
-        { error: `Unsupported leave year period. Choose one of: ${allowedPeriods.join(", ")}` },
-        { status: 400 },
-      )
-    }
+  if (!allowedPeriods.includes(selectedLeaveYearPeriod)) {
+  return NextResponse.json(
+  { error: `Unsupported leave year period. Choose one of: ${allowedPeriods.join(", ")}` },
+  { status: 400 },
+  )
+  }
+  
+  const leaveTypeKey = String(leave_type || "annual").toLowerCase().replace(/[-\s]+/g, "_")
+  const dependentLeaveEligibility = await validateDependentLeaveEligibility(
+    admin,
+    user.id,
+    leaveTypeKey,
+    selectedLeaveYearPeriod,
+  )
+  if (dependentLeaveEligibility) {
+    return NextResponse.json(dependentLeaveEligibility, { status: 400 })
+  }
 
-    const leaveTypeKey = String(leave_type || "annual").toLowerCase()
-    if (["maternity", "paternity"].includes(leaveTypeKey) && preferred_start_date !== delivery_date) {
+  if (["maternity", "paternity"].includes(leaveTypeKey) && preferred_start_date !== delivery_date) {
       return NextResponse.json({ error: "For maternity leave, the start date must equal the date of delivery." }, { status: 400 })
     }
   if (["maternity", "paternity"].includes(leaveTypeKey) && !String(medical_report_url || "").trim()) {
