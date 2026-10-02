@@ -157,10 +157,11 @@ export async function GET(request: NextRequest) {
       // role names instead of incorrectly returning 403 for valid Accounts,
       // HR Loan Office, MD, or admin users.
       const privileged = [
-        "admin", "super_admin", "accounts", "accounts_executive", "account_executive",
+        "admin", "super_admin", "system_admin", "administrator", "it_admin",
+        "accounts", "accounts_executive", "account_executive", "accounts_exec",
         "accounts_loan_office", "accounts_office", "hr_executive", "hr_loan_office",
         "managing_director", "director", "loan_office",
-      ].includes(role) || role.includes("account") || role.includes("loan_office") || role.includes("managing_director") || role.includes("director") || department.includes("account") || department.includes("finance") || department.includes("loan")
+      ].includes(role) || role.includes("account") || role.includes("loan_office") || role.includes("managing_director") || role.includes("director") || role.endsWith("_admin") || role.includes("administrator") || department.includes("account") || department.includes("finance") || department.includes("loan")
       if (!loanOwner || (!privileged && loanOwner.staff_id !== user.id)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
