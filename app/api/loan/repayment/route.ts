@@ -84,6 +84,12 @@ export async function POST(request: NextRequest) {
     const duration = durationMonths || 12
     const start = startDate ? new Date(startDate) : new Date()
 
+    const { data: requesterProfile } = await admin.from("user_profiles").select("role, department_id, departments(name)").eq("id", user.id).maybeSingle()
+    const requesterRole = String(requesterProfile?.role || "").trim().toLowerCase().replace(/[ -]+/g, "_")
+    const requesterDepartment = String((requesterProfile?.departments as { name?: string } | null)?.name || requesterProfile?.department_id || "").trim().toLowerCase().replace(/[ -]+/g, "_")
+    const canGenerate = ["admin", "super_admin", "accounts", "accounts_executive", "account_executive", "accounts_loan_office", "accounts_office", "hr_loan_office", "loan_office", "managing_director"].includes(requesterRole) || requesterRole.includes("account") || requesterRole.includes("loan_office") || requesterRole.includes("managing_director") || requesterDepartment.includes("account") || requesterDepartment.includes("finance") || requesterDepartment.includes("loan")
+    if (!canGenerate) return NextResponse.json({ error: "Only authorized Accounts or Loan Office users can generate repayment schedules." }, { status: 403 })
+
     const { data: loan, error: loanError } = await admin.from("loan_requests").select("id, status, md_approved_at, disbursement_date, recovery_start_date, recovery_months, repayment_duration_months, hod_review_note").eq("id", loanRequestId).maybeSingle()
     if (loanError || !loan) return NextResponse.json({ error: "Loan request not found" }, { status: 404 })
     const isLegacyImported = String(loan.hod_review_note || "").toLowerCase().startsWith("bulk imported by administrator")
@@ -143,9 +149,9 @@ export async function GET(request: NextRequest) {
     // continue to inspect schedules across the tracking workspace.
     if (loanRequestId) {
       const { data: loanOwner } = await admin.from("loan_requests").select("staff_id").eq("id", loanRequestId).maybeSingle()
-      const { data: requesterProfile } = await admin.from("user_profiles").select("role, department_id").eq("id", user.id).maybeSingle()
+      const { data: requesterProfile } = await admin.from("user_profiles").select("role, department_id, departments(name)").eq("id", user.id).maybeSingle()
       const role = String(requesterProfile?.role || "").trim().toLowerCase().replace(/[ -]+/g, "_")
-      const department = String(requesterProfile?.department_id || "").trim().toLowerCase()
+      const department = String((requesterProfile?.departments as { name?: string } | null)?.name || requesterProfile?.department_id || "").trim().toLowerCase().replace(/[ -]+/g, "_")
       // The tracking tab is an authorized operational view. Role labels vary
       // across older profiles, so use capability prefixes as well as canonical
       // role names instead of incorrectly returning 403 for valid Accounts,
