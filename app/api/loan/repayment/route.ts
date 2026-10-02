@@ -156,10 +156,7 @@ export async function GET(request: NextRequest) {
         updated_at,
         loan_requests!inner(staff_full_name, request_number, md_approved_at, disbursement_date, status)
       `)
-      .in("loan_requests.status", ["approved_director", "md_final_approved", "approved", "active", "partially_recovered", "payment_completed"])
-      .not("loan_requests.md_approved_at", "is", null)
-      .not("loan_requests.disbursement_date", "is", null)
-
+      .in("loan_requests.status", ["approved_director", "md_final_approved", "approved", "active", "staff_receiving_funds", "partially_recovered", "payment_completed", "fully_recovered", "disbursed", "completed"])
       .order("due_date", { ascending: true })
 
     if (loanRequestId) {
