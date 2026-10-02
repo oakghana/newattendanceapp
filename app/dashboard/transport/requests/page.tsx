@@ -24,7 +24,9 @@ export default async function TransportRequestsPage() {
     "qcc head office",
     "head office swanzy arcade",
     "awutu stores",
+    "awutu store",
     "nsawam archives",
+    "nsawam archive",
   ]).has(assignedLocationName)
   const isRegionalRequester = ["staff", "contract", "audit_staff", "it-admin", "it_admin"].includes(normalizedRole) && Boolean(locationId) && !isExplicitNonRegionalLocation
   const canViewRegionalRegister = ["admin", "administrator"].includes(normalizedRole) || isRegionalRequester || isDistrictOfficerRole(profile.role) || isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role) || canManageTransport(profile.role) || normalizedRole === "managing_director" || ["hr_records", "hr_records_officer", "hr_records_manager", "hr_executive", "hr_executive_officer"].includes(normalizedRole)
