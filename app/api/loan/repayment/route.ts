@@ -143,8 +143,18 @@ export async function GET(request: NextRequest) {
     // continue to inspect schedules across the tracking workspace.
     if (loanRequestId) {
       const { data: loanOwner } = await admin.from("loan_requests").select("staff_id").eq("id", loanRequestId).maybeSingle()
-      const { data: requesterProfile } = await admin.from("user_profiles").select("role").eq("id", user.id).maybeSingle()
-      const privileged = ["admin", "super_admin", "accounts", "accounts_executive", "accounts_loan_office", "hr_executive", "hr_loan_office", "managing_director"].includes(String(requesterProfile?.role || "").toLowerCase())
+      const { data: requesterProfile } = await admin.from("user_profiles").select("role, department_id").eq("id", user.id).maybeSingle()
+      const role = String(requesterProfile?.role || "").trim().toLowerCase().replace(/[ -]+/g, "_")
+      const department = String(requesterProfile?.department_id || "").trim().toLowerCase()
+      // The tracking tab is an authorized operational view. Role labels vary
+      // across older profiles, so use capability prefixes as well as canonical
+      // role names instead of incorrectly returning 403 for valid Accounts,
+      // HR Loan Office, MD, or admin users.
+      const privileged = [
+        "admin", "super_admin", "accounts", "accounts_executive", "account_executive",
+        "accounts_loan_office", "accounts_office", "hr_executive", "hr_loan_office",
+        "managing_director", "director", "loan_office",
+      ].includes(role) || role.includes("account") || role.includes("loan_office") || role.includes("managing_director") || role.includes("director") || department.includes("account") || department.includes("finance") || department.includes("loan")
       if (!loanOwner || (!privileged && loanOwner.staff_id !== user.id)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
