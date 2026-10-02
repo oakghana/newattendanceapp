@@ -3431,9 +3431,9 @@ export function AttendanceRecorder({
   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <Card className="w-full max-w-md shadow-2xl">
       <CardHeader>
-          <CardTitle>Continue previous attendance session?</CardTitle>
+          <CardTitle>Open attendance session</CardTitle>
           <CardDescription>
-            You have an open {overnightOpenAttendance.department_name || "shift"} attendance session from {new Date(overnightOpenAttendance.check_in_time).toLocaleString()}. Check out when your duty ends, or continue this session if you are still at your post. A new check-in will not be created while this session remains open.
+            You checked in on {new Date(overnightOpenAttendance.check_in_time).toLocaleDateString()} at {new Date(overnightOpenAttendance.check_in_time).toLocaleTimeString()}. Are you still on duty?
           </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 sm:flex-row sm:justify-end">
@@ -3451,12 +3451,13 @@ export function AttendanceRecorder({
         <Button
           variant="outline"
           onClick={() => {
+            localTodayAttendanceRef.current = overnightOpenAttendance
             setLocalTodayAttendance(overnightOpenAttendance)
             setOvernightAttendanceConfirmed(true)
-            setFlashMessage({ message: "Your open attendance session is ready. Please check out when your duty ends.", type: "info" })
+            window.setTimeout(() => void handleCheckOut(), 0)
           }}
         >
-          Check out later
+          Check out
         </Button>
       </CardContent>
     </Card>

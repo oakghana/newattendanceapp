@@ -84,7 +84,9 @@ export function isOvernightShiftDept(dept?: DeptInfo): boolean {
 }
 
 export function hasTwentyTwoHourAutoCheckout(dept?: DeptInfo): boolean {
-  return isSecurityDept(dept) || isOperationalDept(dept) || isTransportDept(dept)
+  // Security staff must end their own sessions because they may remain at post
+  // beyond the normal shift window. Never close their attendance automatically.
+  return isOperationalDept(dept) || isTransportDept(dept)
 }
 
 export function getMaximumOpenAttendanceHours(dept?: DeptInfo): number | null {
