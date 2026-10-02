@@ -611,7 +611,18 @@ export function TransportWorkspace({
                 badge: "Driver",
               },
             ]
-          : isTransportManager || canManage
+          : isNonRegionalLocation
+            ? [
+                {
+                  title: "Head Office request register",
+                  description: "View and track transport requests for your Head Office location.",
+                  icon: Route,
+                  href: "/dashboard/transport/nonregional",
+                  cta: "Open Head Office register",
+                  badge: "Head Office",
+                },
+              ]
+            : isTransportManager || canManage
             ? [
                 {
                   title: "Nationwide request board",
