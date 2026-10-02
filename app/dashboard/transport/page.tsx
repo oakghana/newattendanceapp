@@ -37,7 +37,14 @@ export default async function TransportPage() {
 
   const departmentName = (profile as { departments?: { name?: string | null } | null } | null)?.departments?.name ?? ""
   const locationName = (profile as { geofence_locations?: { name?: string | null } | null } | null)?.geofence_locations?.name ?? ""
-  const hasTransportAccess = TRANSPORT_ROLES.has(normalizedRole) || canManageTransport(profile?.role) || canCreateTransportRequest(profile?.role) || ["managing_director", "hr_executive", "hr_executive_officer", "department_head", "transport_manager"].includes(normalizedRole)
+  const hasTransportAccess = Boolean(profile) && (
+    TRANSPORT_ROLES.has(normalizedRole) ||
+    canManageTransport(profile?.role) ||
+    canCreateTransportRequest(profile?.role) ||
+    // Transport is available to every authenticated staff profile; role and
+    // location are used below to select the correct workflow and scope.
+    Boolean(normalizedRole)
+  )
   const preliminaryLocation = profile?.geofence_locations as { name?: string | null } | null
   const preliminaryLocationName = String(preliminaryLocation?.name || "").toLowerCase()
   const isExplicitNonRegionalLocation = [
@@ -61,7 +68,10 @@ export default async function TransportPage() {
   const isDistrictStaff =
     preliminaryLocationName.includes("district") ||
     String((profile?.geofence_locations as { location_type?: string | null } | null)?.location_type || "").toLowerCase().includes("district")
-  if (!profile || !hasTransportAccess || (isBasicStaffRole && isRegionalOrDistrictLinked && !isDistrictStaff)) redirect("/dashboard")
+  // Every authenticated staff member may open Transport Management. The
+  // assigned location and role determine the request/approval workflow below,
+  // not whether the transport service exists in the dashboard.
+  if (!profile || !hasTransportAccess) redirect("/dashboard")
 
   const isManagingDirector = ["managing_director", "director"].includes(normalizedRole)
   const isHrExecutive = ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr"].includes(normalizedRole)
