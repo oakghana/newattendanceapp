@@ -364,16 +364,38 @@ export async function checkLeaveOverdueBlock(userId: string): Promise<{ isBlocke
     today.setHours(0, 0, 0, 0)
 
     for (const record of overdueRecords || []) {
-      const leaveEndDate = new Date(record.leave_end_date)
-      leaveEndDate.setHours(0, 0, 0, 0)
+      // A resumption row is only actionable when its source leave request still
+      // exists and is finally approved. Old/orphaned tracking rows must never
+      // block checkout or produce a formal query warning.
+      const { data: sourceLeave, error: sourceLeaveError } = await getSupabase()
+        .from('leave_plan_requests')
+        .select('id, user_id, status, preferred_end_date, adjusted_end_date, is_archived')
+        .eq('id', record.leave_request_id)
+        .eq('user_id', userId)
+        .in('status', ['hr_approved', 'approved', 'completed'])
+        .maybeSingle()
+
+      if (sourceLeaveError || !sourceLeave || sourceLeave.is_archived === true) {
+        console.warn('[v0] Ignoring stale leave resumption record during checkout validation:', {
+          resumptionId: record.id,
+          leaveRequestId: record.leave_request_id,
+          reason: sourceLeaveError?.message || 'source leave is missing, not finally approved, or archived',
+        })
+        continue
+      }
+
+      const effectiveEndDate = String(sourceLeave.adjusted_end_date || sourceLeave.preferred_end_date || record.leave_end_date || '').slice(0, 10)
+      if (!effectiveEndDate) continue
+
+      const leaveEndDate = new Date(`${effectiveEndDate}T00:00:00`)
       const daysAfterLeaveEnd = Math.floor((today.getTime() - leaveEndDate.getTime()) / (1000 * 60 * 60 * 24))
 
-      // If 10+ days past leave end and not yet resumed, block check-in
+      // If 10+ days past a real, finally approved leave and not yet resumed, block checkout.
       if (daysAfterLeaveEnd >= 10) {
         return {
           isBlocked: true,
           daysOverdue: daysAfterLeaveEnd,
-          leaveEndDate: record.leave_end_date,
+          leaveEndDate: effectiveEndDate,
         }
       }
     }
