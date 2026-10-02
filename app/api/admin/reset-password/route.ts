@@ -53,7 +53,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User profile not found" }, { status: 404 })
     }
 
-    if (profile.role !== "admin" && profile.role !== "it-admin") {
+    const normalizedRole = String(profile.role || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, "_")
+
+    if (normalizedRole !== "admin" && normalizedRole !== "it_admin") {
       console.error("[v0] Admin password reset: Insufficient permissions:", profile.role)
       return NextResponse.json(
         {
@@ -82,7 +87,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    if (profile.role === "it-admin" && (targetUser.role === "admin" || targetUser.role === "it-admin")) {
+    if (normalizedRole === "it_admin" && ["admin", "it_admin"].includes(String(targetUser.role || "").trim().toLowerCase().replace(/[\s-]+/g, "_"))) {
       console.error("[v0] Admin password reset: IT-Admin tried to reset admin/it-admin password")
       return NextResponse.json(
         {

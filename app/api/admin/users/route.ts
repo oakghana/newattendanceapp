@@ -48,13 +48,19 @@ export async function GET(request: NextRequest) {
 
     console.log("[v0] Users API: User profile:", profile)
 
-    if (!["admin", "department_head", "it-admin"].includes(profile.role)) {
+    const normalizedRole = String(profile.role || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, "_")
+    const canManagePasswords = ["admin", "department_head", "it_admin"].includes(normalizedRole)
+
+    if (!canManagePasswords) {
       console.log("[v0] Users API: Insufficient permissions - user role:", profile.role)
       return NextResponse.json(
         {
           error: "Insufficient permissions",
           userRole: profile.role,
-          requiredRoles: ["admin", "department_head", "it-admin"],
+          requiredRoles: ["admin", "department_head", "it_admin"],
         },
         { status: 403 },
       )
@@ -105,8 +111,11 @@ export async function GET(request: NextRequest) {
     }
 
     let filteredUsers = users || []
-    if (profile.role === "it-admin") {
-      filteredUsers = users?.filter((u) => u.role !== "admin" && u.role !== "it-admin") || []
+    if (normalizedRole === "it_admin") {
+      filteredUsers = users?.filter((u) => {
+        const targetRole = String(u.role || "").trim().toLowerCase().replace(/[\s-]+/g, "_")
+        return targetRole !== "admin" && targetRole !== "it_admin"
+      }) || []
       console.log("[v0] Users API: IT-Admin filtering applied, showing", filteredUsers.length, "users")
     }
 
