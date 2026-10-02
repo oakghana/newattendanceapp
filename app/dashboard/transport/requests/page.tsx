@@ -19,7 +19,14 @@ export default async function TransportRequestsPage() {
   if (!profile || !profile.role) redirect("/dashboard")
   const normalizedRole = normalizeAppRole(profile.role)
   const locationId = profile.assigned_location_id ?? null
-  const isRegionalRequester = ["staff", "it-admin"].includes(normalizedRole) && Boolean(locationId)
+  const assignedLocationName = String((profile.geofence_locations as { name?: string | null } | null)?.name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+  const isExplicitNonRegionalLocation = new Set([
+    "qcc head office",
+    "head office swanzy arcade",
+    "awutu stores",
+    "nsawam archives",
+  ]).has(assignedLocationName)
+  const isRegionalRequester = ["staff", "contract", "audit_staff", "it-admin", "it_admin"].includes(normalizedRole) && Boolean(locationId) && !isExplicitNonRegionalLocation
   const canViewRegionalRegister = ["admin", "administrator"].includes(normalizedRole) || isRegionalRequester || isDistrictOfficerRole(profile.role) || isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role) || canManageTransport(profile.role) || normalizedRole === "managing_director" || ["hr_records", "hr_records_officer", "hr_records_manager", "hr_executive", "hr_executive_officer"].includes(normalizedRole)
   if (!canViewRegionalRegister) redirect("/dashboard")
   const isRegionalDriver = isRegionalDriverRole(profile.role)

@@ -55,20 +55,12 @@ export default async function TransportPage() {
   ])
   const normalizedLocationName = preliminaryLocationName.replace(/[^a-z0-9]+/g, " ").trim()
   const isExplicitNonRegionalLocation = nonRegionalLocationNames.has(normalizedLocationName)
-  const locationType = String(
-    (profile?.geofence_locations as { location_type?: string | null } | null)?.location_type || "",
-  ).toLowerCase()
-  const isRegionalOrDistrictLinked = !isExplicitNonRegionalLocation && (
-    locationType.includes("regional") ||
-    locationType.includes("district") ||
-    preliminaryLocationName.includes("regional") ||
-    preliminaryLocationName.includes("district")
-  )
+  // Every assigned location outside the four Head Office locations follows the
+  // regional/district transport workflow, even when its name is not labelled
+  // "regional" or "district".
+  const isRegionalOrDistrictLinked = Boolean(profile?.assigned_location_id) && !isExplicitNonRegionalLocation
   const isHeadOfficeLocation = isExplicitNonRegionalLocation
   const isBasicStaffRole = ["staff", "contract", "audit_staff"].includes(normalizedRole)
-  const isDistrictStaff =
-    preliminaryLocationName.includes("district") ||
-    String((profile?.geofence_locations as { location_type?: string | null } | null)?.location_type || "").toLowerCase().includes("district")
   // Every authenticated staff member may open Transport Management. The
   // assigned location and role determine the request/approval workflow below,
   // not whether the transport service exists in the dashboard.
