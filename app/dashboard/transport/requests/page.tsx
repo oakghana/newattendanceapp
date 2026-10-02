@@ -48,7 +48,6 @@ export default async function TransportRequestsPage() {
     ? (await supabase.from("geofence_locations").select("district_id").eq("id", locationId).maybeSingle()).data?.district_id ?? null
     : null)
   const profileRegion = profile.regions as { name?: string | null } | null
-  const assignedLocationName = (profile.geofence_locations as { name?: string | null } | null)?.name?.trim() ?? ""
   const locationRegionAliases: Record<string, string> = { kumasi: "Ashanti", "kumasi regional office": "Ashanti", accra: "Greater Accra", "accra regional office": "Greater Accra", takoradi: "Western", cape: "Central", sunyani: "Bono", tamale: "Northern", bolgatanga: "Upper East", wa: "Upper West", koforidua: "Eastern", ho: "Volta" }
   const locationKey = assignedLocationName.toLowerCase().replace(/\s+/g, " ").trim()
   const locationRegionName = Object.entries(locationRegionAliases).find(([key]) => locationKey.includes(key))?.[1] ?? ""
