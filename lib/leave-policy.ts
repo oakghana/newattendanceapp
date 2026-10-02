@@ -67,6 +67,10 @@ export function getMaternityEntitlementDays(deliveryType?: string | null): numbe
   return normalized === "cs" || normalized === "twins" || normalized === "cs_twins" ? 98 : 84
 }
 
+export function getMaternityEntitlementWeeks(deliveryType?: string | null): number {
+  return getMaternityEntitlementDays(deliveryType) / 7
+}
+
 export function getMaternityDeliveryLabel(deliveryType?: string | null): string {
   const normalized = String(deliveryType || "normal").toLowerCase().trim()
   if (normalized === "cs" || normalized === "cs_twins") return "Caesarean section"
