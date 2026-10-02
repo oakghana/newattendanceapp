@@ -89,6 +89,23 @@ export async function GET(request: NextRequest) {
       hodId = linkedAuthorizers.find((hod) => hod.hasSignature)?.id ?? linkedAuthorizers[0]?.id ?? null
     }
 
+    const assignedLocation = (profile?.geofence_locations as { name?: string | null } | null)?.name ?? null
+
+    // Transport requests only need the routing target at submission time. Do not make
+    // the request form depend on reading an approver's signature data.
+    if (scope === "transport" && !canSelfAuthorize) {
+      return NextResponse.json({
+        success: true,
+        hasSignature: false,
+        role: normalizedRole,
+        isDepartmentHead,
+        canSelfAuthorize: false,
+        hodId,
+        assignedLocation,
+        signature: {},
+      })
+    }
+
     // scope=self never inherits the HOD signature (non-regional staff leave authorization blank).
     const shouldUseLinkedHod = scope !== "self" && Boolean(hodId && !isDepartmentHead)
     const { data: signerProfile, error: signerError } = shouldUseLinkedHod
@@ -108,8 +125,6 @@ export async function GET(request: NextRequest) {
     const signerDepartment = (signer?.departments as { name?: string | null } | null)?.name ?? null
     const requesterName = `${profile?.first_name ?? ""} ${profile?.last_name ?? ""}`.trim()
     const requesterDepartment = (profile?.departments as { name?: string | null } | null)?.name ?? null
-    const assignedLocation = (profile?.geofence_locations as { name?: string | null } | null)?.name ?? null
-
     let signatureDataUrl = String(signer?.signature_data_url || "").trim() || null
     let signatureMode = String(signer?.signature_mode || "").trim() || "draw"
     if (!signatureDataUrl) {
