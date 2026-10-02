@@ -139,6 +139,15 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const loanRequestId = searchParams.get("loanRequestId")
 
+    // Borrowers may request only their own schedule; admins/executives can
+    // continue to inspect schedules across the tracking workspace.
+    if (loanRequestId) {
+      const { data: loanOwner } = await admin.from("loan_requests").select("staff_id").eq("id", loanRequestId).maybeSingle()
+      const { data: requesterProfile } = await admin.from("user_profiles").select("role").eq("id", user.id).maybeSingle()
+      const privileged = ["admin", "super_admin", "accounts", "accounts_executive", "accounts_loan_office", "hr_executive", "hr_loan_office", "managing_director"].includes(String(requesterProfile?.role || "").toLowerCase())
+      if (!loanOwner || (!privileged && loanOwner.staff_id !== user.id)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
     // Use loan_repayment_schedule which is confirmed to exist in the schema
     let query = admin
       .from("loan_repayment_schedule")
