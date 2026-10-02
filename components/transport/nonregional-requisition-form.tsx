@@ -160,7 +160,7 @@ export function NonRegionalRequisitionForm() {
           ? "Sent to your Head of Department for authorization. Managing Director review follows after HOD approval."
           : "The requisition is now awaiting Managing Director approval.",
     })
-    router.push("/dashboard/transport/nonregional")
+    router.push("/dashboard/transport")
   }
 
   return (
