@@ -17,7 +17,8 @@ export default async function DriverLicensesPage() {
   const normalizedRole = String(profile?.role ?? "").toLowerCase().trim().replace(/[\s-]+/g, "_")
   const isDriver = normalizedRole === "driver"
   const isRegionalDriver = isDriver && isRegionalDriverRole(profile?.role)
-  if (!profile || profile.is_active === false || (!canManageTransport(profile.role) && !isDriver)) redirect("/dashboard")
+  const canViewDriverData = isDriver || canManageTransport(profile?.role) || isChiefDriverRole(profile?.role)
+  if (!profile || profile.is_active === false || !canViewDriverData) redirect("/dashboard")
   const assignedLocation = profile.geofence_locations as { districts?: { region_id?: string | null } | null } | null
   const regionId = profile.region_id ?? assignedLocation?.districts?.region_id ?? null
   // Only Transport Manager and administrators see nationwide driver records.
@@ -27,7 +28,7 @@ export default async function DriverLicensesPage() {
   const ownedLocationIds = isScopedToRegion
     ? await resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id, regionId)
     : []
-  let driversQuery = supabase.from("transport_drivers").select("*").order("expiry_date")
+  const driversQuery = supabase.from("transport_drivers").select("*").order("expiry_date")
   const { data: queriedDrivers } = await driversQuery
   const canEdit = !isDriver && canEditDriverLicenses(profile.role)
   // Every non-driver viewer (including read-only regional roles) should see drivers who have not submitted a license, not just those with a record.

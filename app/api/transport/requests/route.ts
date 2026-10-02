@@ -229,7 +229,7 @@ export async function POST(request: Request) {
   const isRegionalManager = isRegionalManagerRole(profile?.role)
   const isChiefDriver = isChiefDriverRole(profile?.role)
   const normalizedRequesterRole = String(profile?.role ?? "").toLowerCase().trim().replace(/[\s-]+/g, "_")
-  const isRegionalStaffRequester = ["staff", "it_admin"].includes(normalizedRequesterRole) && Boolean(profile.assigned_location_id)
+  const isRegionalStaffRequester = ["staff", "contract", "audit_staff", "it_admin"].includes(normalizedRequesterRole) && Boolean(profile.assigned_location_id)
   // Active location-assigned regional staff can submit requests; Regional HR determines the route during review.
   if (!profile?.is_active || (!isRegionalHr && !isRegionalManager && !isDistrictOfficer && !isChiefDriver && !isRegionalStaffRequester)) {
     return NextResponse.json(

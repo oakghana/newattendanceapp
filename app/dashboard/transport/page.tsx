@@ -20,7 +20,7 @@ export default async function TransportPage() {
   const { data: profile } = await supabase
     .from("user_profiles")
     .select(
-      "role, first_name, last_name, region_id, assigned_location_id, regions(name), departments(name), geofence_locations!user_profiles_assigned_location_id_fkey(name, district_id, districts(region_id))",
+      "role, first_name, last_name, region_id, assigned_location_id, regions(name), departments(name), geofence_locations!user_profiles_assigned_location_id_fkey(name, location_type, district_id, districts(region_id))",
     )
     .eq("id", user.id)
     .maybeSingle()
@@ -47,27 +47,20 @@ export default async function TransportPage() {
   )
   const preliminaryLocation = profile?.geofence_locations as { name?: string | null } | null
   const preliminaryLocationName = String(preliminaryLocation?.name || "").toLowerCase()
-  const isExplicitNonRegionalLocation = [
-    "head office",
-    "swanzy arcade",
-    "archive center",
-    "archivial center",
+  const nonRegionalLocationNames = new Set([
+    "qcc head office",
+    "head office swanzy arcade",
     "awutu stores",
-    "cocoa clinic",
-  ].some((location) => preliminaryLocationName.includes(location))
-  const isHeadOfficeLocation = isExplicitNonRegionalLocation || Boolean(
-    locationName && !preliminaryLocationName.includes("regional") && !preliminaryLocationName.includes("district"),
-  )
-  const isRegionalOrDistrictLinked = Boolean(
-    !isExplicitNonRegionalLocation && (
-      preliminaryLocationName.includes("regional") ||
-      preliminaryLocationName.includes("district")
-    )
-  )
+    "nsawam archives",
+  ])
+  const normalizedLocationName = preliminaryLocationName.replace(/[^a-z0-9]+/g, " ").trim()
+  const isExplicitNonRegionalLocation = nonRegionalLocationNames.has(normalizedLocationName)
+  // Every assigned location outside the four Head Office locations follows the
+  // regional/district transport workflow, even when its name is not labelled
+  // "regional" or "district".
+  const isRegionalOrDistrictLinked = Boolean(profile?.assigned_location_id) && !isExplicitNonRegionalLocation
+  const isHeadOfficeLocation = isExplicitNonRegionalLocation
   const isBasicStaffRole = ["staff", "contract", "audit_staff"].includes(normalizedRole)
-  const isDistrictStaff =
-    preliminaryLocationName.includes("district") ||
-    String((profile?.geofence_locations as { location_type?: string | null } | null)?.location_type || "").toLowerCase().includes("district")
   // Every authenticated staff member may open Transport Management. The
   // assigned location and role determine the request/approval workflow below,
   // not whether the transport service exists in the dashboard.
