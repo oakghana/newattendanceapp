@@ -6,6 +6,7 @@ export function PWAServiceWorker() {
   useEffect(() => {
     const isPreview =
       window.location.hostname.includes("vusercontent.net") ||
+      window.location.hostname.includes("v0.build") ||
       window.location.hostname.includes("localhost") ||
       process.env.NODE_ENV === "development"
 

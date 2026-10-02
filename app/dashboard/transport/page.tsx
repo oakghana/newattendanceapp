@@ -51,7 +51,9 @@ export default async function TransportPage() {
     "qcc head office",
     "head office swanzy arcade",
     "awutu stores",
+    "awutu store",
     "nsawam archives",
+    "nsawam archive",
   ])
   const normalizedLocationName = preliminaryLocationName.replace(/[^a-z0-9]+/g, " ").trim()
   const isExplicitNonRegionalLocation = nonRegionalLocationNames.has(normalizedLocationName)

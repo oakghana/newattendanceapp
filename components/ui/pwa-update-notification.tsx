@@ -11,7 +11,13 @@ export function PWAUpdateNotification() {
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null)
 
   useEffect(() => {
-    if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+    if (
+      typeof window === "undefined" ||
+      !("serviceWorker" in navigator) ||
+      window.location.hostname.includes("v0.build") ||
+      window.location.hostname.includes("vusercontent.net") ||
+      window.location.hostname.includes("localhost")
+    ) {
       return
     }
 

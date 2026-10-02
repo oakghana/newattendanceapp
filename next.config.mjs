@@ -16,7 +16,8 @@ const nextConfig = {
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
   compiler: {
-    reactCompiler: true,
+    // The React compiler can emit invalid RSC performance timestamps in v0/Turbopack previews.
+    reactCompiler: false,
     removeConsole: process.env.NODE_ENV === 'production' ? {
       exclude: ['error', 'warn'],
     } : false,

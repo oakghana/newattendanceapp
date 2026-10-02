@@ -41,7 +41,7 @@ export function NonRegionalRequisitionForm() {
   const [requesterSignatureDataUrl, setRequesterSignatureDataUrl] = useState("")
   const [cleanHodSignatureDataUrl, setCleanHodSignatureDataUrl] = useState("")
   const [hodLinked, setHodLinked] = useState(false)
-  const [linkedAuthorizers, setLinkedAuthorizers] = useState<Array<{ name: string; position: string | null; hasSignature: boolean }>>([])
+
   const [peopleCount, setPeopleCount] = useState(1)
 
   useEffect(() => {
@@ -71,8 +71,7 @@ export function NonRegionalRequisitionForm() {
       if (!response.ok) throw new Error(body?.error ?? "Unable to load your profile.")
 
       const signature = (body.signature ?? {}) as SignatureProfile
-      setLinkedAuthorizers(Array.isArray(body.linkedAuthorizers) ? body.linkedAuthorizers : [])
-      // HR Executives are departmental heads for their own non-regional trips.
+          // HR Executives are departmental heads for their own non-regional trips.
       // Their requisitions go straight to MD approval, never to HR Executive approval.
       const selfAuth = SELF_AUTHORIZING_ROLES.has(String(body.role || ""))
       setCanSelfAuthorize(selfAuth)
@@ -102,13 +101,13 @@ export function NonRegionalRequisitionForm() {
         : ""
       setHodAuthorization(authorizationText.toUpperCase())
       setHodSignatureDataUrl(signature.signature_data_url ?? "")
-      if (!body.hasSignature) throw new Error(body?.message ?? "No saved signature found in your profile. Add one in Profile first.")
+      if (!body.hasSignature) throw new Error("Authorization details are unavailable. Please try again.")
       setAuthorized(true)
-    } catch (error) {
-      setAuthorized(false)
+  } catch {
+  setAuthorized(false)
       toast({
         title: "Authorization unavailable",
-        description: error instanceof Error ? error.message : "Please save your signature in Profile first.",
+        description: "We could not prepare the authorization details. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -125,7 +124,7 @@ export function NonRegionalRequisitionForm() {
     if (canSelfAuthorize && (!hodSignatureDataUrl || !hodAuthorization)) {
       toast({
         title: "Authorization required",
-        description: "Your saved signature could not be picked up automatically. Add one in Profile, then reload this page.",
+        description: "Authorization details are not ready. Please try again.",
         variant: "destructive",
       })
       return
@@ -160,7 +159,7 @@ export function NonRegionalRequisitionForm() {
           ? "Sent to your Head of Department for authorization. Managing Director review follows after HOD approval."
           : "The requisition is now awaiting Managing Director approval.",
     })
-    router.push("/dashboard/transport/nonregional")
+    router.push("/dashboard/transport")
   }
 
   return (
@@ -168,8 +167,8 @@ export function NonRegionalRequisitionForm() {
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle>Quality Control Company Limited — Requisition for Transport</CardTitle>
-          <Button type="button" variant="outline" size="sm" onClick={() => router.push("/dashboard/transport/nonregional")}>
-            <ArrowLeft data-icon="inline-start" /> My requests
+          <Button type="button" variant="outline" size="sm" onClick={() => router.push("/dashboard/transport")}>
+            <ArrowLeft data-icon="inline-start" /> Transport
           </Button>
         </div>
       </CardHeader>
@@ -264,14 +263,10 @@ export function NonRegionalRequisitionForm() {
                 <p className="font-medium">Departmental authorization</p>
   <p className="text-sm text-muted-foreground">
   {canSelfAuthorize
-  ? "Your name, position, department, and saved signature are picked up automatically. This request goes directly to the Managing Director for approval."
-  : "One linked authorizer with a saved signature is selected automatically. The request then goes to the Managing Director, then Transport Manager."}
+    ? "Your request will be routed to the appropriate approving office."
+    : "Your request will be routed through the required approval process."}
   </p>
-  {!canSelfAuthorize && linkedAuthorizers.length > 0 ? (
-  <p className="mt-2 text-xs text-muted-foreground">
-  Linked authorizers: {linkedAuthorizers.map((authorizer) => `${authorizer.name}${authorizer.position ? ` (${authorizer.position})` : ""}`).join(", ")}
-  </p>
-  ) : null}
+
               </div>
               {canSelfAuthorize ? (
                 <Button type="button" variant="outline" onClick={populateAuthorization} disabled={authorizing}>
@@ -304,7 +299,7 @@ export function NonRegionalRequisitionForm() {
   <span className="text-muted-foreground">Preparing verified signature…</span>
   ) : (
                     <span className="text-muted-foreground">
-                      {canSelfAuthorize ? "Saved signature will appear here" : "Left blank for HOD signature"}
+                      {canSelfAuthorize ? "Authorization will be completed here" : "Completed by the approving officer"}
                     </span>
                   )}
                 </div>
@@ -321,7 +316,7 @@ export function NonRegionalRequisitionForm() {
               </p>
             ) : !authorizing && canSelfAuthorize ? (
               <p className="mt-3 text-sm font-medium text-destructive">
-                No saved signature found. Save one in Profile, then use Retry authorization.
+                Authorization details are unavailable. Use Retry authorization or try again later.
               </p>
             ) : null}
           </div>
