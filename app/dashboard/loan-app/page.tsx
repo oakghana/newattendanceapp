@@ -3458,7 +3458,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   </div>
   {loading || data?.profile.assignedLocationType === "district_office" ? (
   <div><strong>Assigned District:</strong>{" "}
-  {loading ? <span className="inline-block h-4 w-24 animate-pulse rounded bg-slate-200 align-middle" /> : <span className="text-slate-600">{data?.profile.assignedDistrictName || <span className="text-slate-400">Not assigned</span>}</span>}
+  {loading ? <span className="inline-block h-4 w-24 animate-pulse rounded bg-slate-200 align-middle" /> : <span className="text-slate-600">{data?.profile.assignedDistrictName || (data?.profile.assignedLocationType === "district_office" ? data?.profile.assignedLocationName : null) || <span className="text-slate-400">Not assigned</span>}</span>}
   </div>
   ) : null}
           <div><strong>Linked HOD:</strong>{" "}

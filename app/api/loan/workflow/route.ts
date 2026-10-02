@@ -1045,7 +1045,10 @@ export async function GET() {
   assignedLocationName: (profile as any)?.geofence_locations?.name || null,
   assignedLocationAddress: (profile as any)?.geofence_locations?.address || null,
   assignedLocationType: (profile as any)?.geofence_locations?.location_type || null,
-  assignedDistrictName: (profile as any)?.geofence_locations?.districts?.name || null,
+  assignedDistrictName:
+    (profile as any)?.geofence_locations?.location_type === "district_office"
+      ? (profile as any)?.geofence_locations?.name || (profile as any)?.geofence_locations?.districts?.name || null
+      : (profile as any)?.geofence_locations?.districts?.name || null,
         linkedHodName,
         currentHodProfile,
         currentHodProfiles,
