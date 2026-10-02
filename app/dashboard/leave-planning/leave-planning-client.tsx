@@ -44,7 +44,7 @@ import {
   calculateWorkingDays,
 } from "@/lib/leave-planning"
 import { getLeaveWorkflowView } from "@/lib/hr-workflow"
-import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays } from "@/lib/leave-policy"
+import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays, getMaternityEntitlementWeeks } from "@/lib/leave-policy"
 import { calculateAnnualLeaveMemoBreakdown, addAnnualLeaveWorkingDays } from "@/lib/annual-leave-calculator"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -2769,7 +2769,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   // ── Render ────��──────��─────────────────���─────���───────────────────��──
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
-      {/* ─��� Header Banner ──────�����──────────��──────��─────────────────── */}
+      {/* ─��� Header Banner ──────�������──────────��──────��─────────────────── */}
       <div className="rounded-2xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 text-white p-6 shadow-lg">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
@@ -3000,7 +3000,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                   </Select>
   {selectedLeaveType && (
   <p className="text-xs text-slate-500">
-  Entitlement: <strong>{selectedLeaveType.entitlementDays} day(s)</strong>
+  Entitlement: <strong>{leaveType === "maternity" ? getMaternityEntitlementWeeks(maternityDeliveryType) : selectedLeaveType.entitlementDays} {leaveType === "maternity" ? "week(s)" : "day(s)"}</strong>
   {(leaveType === "annual" || leaveType === "annual_leave") && myAnnualEntitlement && (
   <span> ({myAnnualEntitlement.tierLabel} — {myAnnualEntitlement.annualLeaveDays} + {myAnnualEntitlement.travelDays} travel)</span>
   )}
@@ -3019,9 +3019,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                             <SelectValue placeholder="Select delivery type" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="normal">Normal delivery — 84 days</SelectItem>
-                            <SelectItem value="cs">Caesarean section — 98 days</SelectItem>
-                            <SelectItem value="twins">Twins delivery — 98 days</SelectItem>
+<SelectItem value="normal">Normal delivery — 12 weeks</SelectItem>
+<SelectItem value="cs">Caesarean section — 14 weeks</SelectItem>
+<SelectItem value="twins">Twins delivery — 14 weeks</SelectItem>
                           </SelectContent>
                         </Select>
                       ) : (
