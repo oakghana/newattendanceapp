@@ -99,10 +99,20 @@ describe("attendance-utils", () => {
     ).toBe(true)
   })
 
-  it("allows automatic checkout handling for 22-hour departments", () => {
+  it("never auto-checks out security staff, while retaining the 22-hour rule for other overnight departments", () => {
     const overnight = new Date("2026-02-12T23:59:00")
 
-    for (const dept of [{ code: "security" }, { code: "transport" }, { code: "operations" }]) {
+    expect(canAutoCheckoutOutOfRange({
+      now: overnight,
+      hasCheckedIn: true,
+      hasCheckedOut: false,
+      isOutOfRange: true,
+      isOnLeave: false,
+      hoursWorked: 8,
+      dept: { code: "security" },
+    })).toBe(false)
+
+    for (const dept of [{ code: "transport" }, { code: "operations" }]) {
       expect(canAutoCheckoutOutOfRange({
         now: overnight,
         hasCheckedIn: true,
