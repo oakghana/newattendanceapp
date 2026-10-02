@@ -492,32 +492,6 @@ function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsColla
   ])
 
   const normalizedProfileRole = normalizeAppRole(profile?.role)
-  const assignedLocationName = String(profile?.assigned_location?.name || "").toLowerCase()
-  const assignedLocationType = String(profile?.assigned_location?.location_type || "").toLowerCase()
-  const isExplicitNonRegionalLocation = [
-    "head office",
-    "swanzy arcade",
-    "archive center",
-    "archivial center",
-    "awutu stores",
-    "cocoa clinic",
-  ].some((location) => assignedLocationName.includes(location))
-  const isRegionalOrDistrictLinked = Boolean(
-    !isExplicitNonRegionalLocation && (
-      assignedLocationType.includes("regional") ||
-      assignedLocationType.includes("district") ||
-      assignedLocationName.includes("regional") ||
-      assignedLocationName.includes("district")
-    )
-  )
-  const isHeadOfficeStaff = isExplicitNonRegionalLocation || assignedLocationName.includes("head office")
-  const isBasicNonRegionalRole = ["staff", "contract", "audit_staff"].includes(normalizedProfileRole)
-  const isDistrictStaff =
-    assignedLocationType.includes("district") || assignedLocationName.includes("district")
-  const canSeeTransportMenu =
-    (isHeadOfficeStaff && !isAttendanceOnly) ||
-    isDistrictStaff ||
-    (!isBasicNonRegionalRole || isExplicitNonRegionalLocation || !isRegionalOrDistrictLinked)
   const isChiefDriver = ["chief_driver", "regional_chief_driver"].includes(normalizedProfileRole) || effectiveRole === "chief_driver"
   const isOperationalDepartment = departmentCodeLower.includes("operation") || departmentNameLower.includes("operation")
 
@@ -525,9 +499,9 @@ function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsColla
   if (item.operationalOnly && !isOperationalDepartment && !isAdministratorRole) return false
   if (isChiefDriver && ROLE_RESTRICTED_MAIN_HREFS.has(item.href)) return false
     if (item.href === "/dashboard/transport") {
-      if (!canSeeTransportMenu) return false
-      if (isHeadOfficeStaff && !isAttendanceOnly) return true
-      if (isBasicNonRegionalRole && !isRegionalOrDistrictLinked) return true
+      // Transport requesting is a core service for every authenticated staff
+      // member; location and role only change the workflow shown inside it.
+      return true
     }
     if (isAttendanceOnly) return item.href === "/dashboard/attendance"
     if (isAssignedHod && item.roles.some((role) => normalizeAppRole(role) === "department_head")) return true
