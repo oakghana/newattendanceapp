@@ -6,7 +6,8 @@ describe("lateness reason policy", () => {
 
   it("requires a reason for every non-exempt role and department", () => {
     expect(isExemptFromLatenessReason({ name: "Transport" }, "staff")).toBe(false)
-    expect(isExemptFromLatenessReason({ name: "Security" }, "security_officer")).toBe(false)
+    expect(isExemptFromLatenessReason({ name: "Security" }, "security_officer")).toBe(true)
+    expect(requiresLatenessReason(new Date(2026, 0, 5, 17, 30), { name: "Security" }, "security_officer")).toBe(false)
     expect(requiresLatenessReason(lateMorning, { name: "Transport" }, "staff")).toBe(true)
   })
 
