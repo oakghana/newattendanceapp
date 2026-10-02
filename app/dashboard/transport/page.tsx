@@ -20,7 +20,7 @@ export default async function TransportPage() {
   const { data: profile } = await supabase
     .from("user_profiles")
     .select(
-      "role, first_name, last_name, region_id, assigned_location_id, regions(name), departments(name), geofence_locations!user_profiles_assigned_location_id_fkey(name, district_id, districts(region_id))",
+      "role, first_name, last_name, region_id, assigned_location_id, regions(name), departments(name), geofence_locations!user_profiles_assigned_location_id_fkey(name, location_type, district_id, districts(region_id))",
     )
     .eq("id", user.id)
     .maybeSingle()
@@ -47,23 +47,24 @@ export default async function TransportPage() {
   )
   const preliminaryLocation = profile?.geofence_locations as { name?: string | null } | null
   const preliminaryLocationName = String(preliminaryLocation?.name || "").toLowerCase()
-  const isExplicitNonRegionalLocation = [
-    "head office",
-    "swanzy arcade",
-    "archive center",
-    "archivial center",
+  const nonRegionalLocationNames = new Set([
+    "qcc head office",
+    "head office swanzy arcade",
     "awutu stores",
-    "cocoa clinic",
-  ].some((location) => preliminaryLocationName.includes(location))
-  const isHeadOfficeLocation = isExplicitNonRegionalLocation || Boolean(
-    locationName && !preliminaryLocationName.includes("regional") && !preliminaryLocationName.includes("district"),
+    "nsawam archives",
+  ])
+  const normalizedLocationName = preliminaryLocationName.replace(/[^a-z0-9]+/g, " ").trim()
+  const isExplicitNonRegionalLocation = nonRegionalLocationNames.has(normalizedLocationName)
+  const locationType = String(
+    (profile?.geofence_locations as { location_type?: string | null } | null)?.location_type || "",
+  ).toLowerCase()
+  const isRegionalOrDistrictLinked = !isExplicitNonRegionalLocation && (
+    locationType.includes("regional") ||
+    locationType.includes("district") ||
+    preliminaryLocationName.includes("regional") ||
+    preliminaryLocationName.includes("district")
   )
-  const isRegionalOrDistrictLinked = Boolean(
-    !isExplicitNonRegionalLocation && (
-      preliminaryLocationName.includes("regional") ||
-      preliminaryLocationName.includes("district")
-    )
-  )
+  const isHeadOfficeLocation = isExplicitNonRegionalLocation
   const isBasicStaffRole = ["staff", "contract", "audit_staff"].includes(normalizedRole)
   const isDistrictStaff =
     preliminaryLocationName.includes("district") ||
