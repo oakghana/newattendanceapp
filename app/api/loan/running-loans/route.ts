@@ -25,6 +25,7 @@ const ALLOWED_ROLES = new Set([
   "hr_executive",
   "loan_committee",
   "committee",
+  "managing_director",
 ])
 
 const RUNNING_LOAN_STATUSES = [

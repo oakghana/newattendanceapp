@@ -837,6 +837,7 @@ export async function POST(request: NextRequest) {
     }
 
     const latenessRequired = requiresLatenessReason(checkInTime, userProfile?.departments, userProfile?.role)
+    const latenessExempt = !latenessRequired
     const attendanceReasonExempt = isExemptFromAttendanceReasons(userProfile?.role)
     let normalizedLatenessReason: string | null = null
     if (isLateArrival && latenessRequired && !attendanceReasonExempt) {
@@ -864,7 +865,8 @@ export async function POST(request: NextRequest) {
       check_in_time: checkInTime.toISOString(),
       check_in_location_id: acceptedLocationId,
       device_session_id: deviceSessionId,
-      status: isLateArrival ? "late" : "present",
+      // Exempt roles/departments are present even when they report after 09:00.
+      status: isLateArrival && !latenessExempt ? "late" : "present",
       check_in_method: qr_code_used ? "qr_code" : "gps",
       check_in_location_name: locationData?.name || null,
       is_remote_location: false, // Will be calculated based on user's assigned location

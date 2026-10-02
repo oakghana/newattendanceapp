@@ -64,7 +64,10 @@ export function RepaymentTrackingPanel({ loans }: { loans: LoanLite[] }) {
       if (!loan?.id || unique.has(loan.id)) continue
       const hasDisbursementEvidence = loan.disbursement_date || loan.staff_receiving_funds_confirmed_at || loan.disbursement_confirmed_at || loan.md_approved_at
       const historic = isHistoricLoan(loan)
-      if (!TRACKABLE.has(String(loan.status || '')) || (!loan.md_approved_at && !historic) || (!hasDisbursementEvidence && !historic) || loan.repayment_plan_generated_at) continue
+      // Show every running/disbursed loan, including loans that already have a
+      // schedule. The tracking view must verify both scheduled and unscheduled
+      // loans rather than hiding the completed scheduling work.
+      if (!TRACKABLE.has(String(loan.status || '')) || (!loan.md_approved_at && !historic) || (!hasDisbursementEvidence && !historic)) continue
       unique.set(loan.id, loan)
     }
     return Array.from(unique.values()).filter((l) => {

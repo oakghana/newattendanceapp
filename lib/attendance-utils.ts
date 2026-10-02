@@ -99,11 +99,16 @@ export function isExemptFromAttendanceReasons(role?: string | null): boolean {
   return isManagerOrAdminRole(role)
 }
 
-export function isExemptFromLatenessReason(_dept?: DeptInfo, role?: string | null): boolean {
+export function isExemptFromLatenessReason(dept?: DeptInfo, role?: string | null): boolean {
   const normalizedRole = normalizeRole(role)
 
-  // These leadership and operational office roles are exempt from lateness reasons.
-  // Every other role, department, and staff category must explain a late arrival.
+  // Security staff work shifts that can legitimately cross the normal office
+  // hours. They must still be recorded, but never need to explain a late
+  // arrival through the office-hours lateness prompt.
+  if (isSecurityDept(dept)) return true
+
+  // These leadership and operational office roles are exempt from lateness
+  // reasons and are recorded as present, not late, after 09:00.
   return [
     "managing_director",
     "department_head",
