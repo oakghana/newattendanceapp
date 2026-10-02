@@ -40,40 +40,55 @@ export async function POST(request: Request) {
 
     let distance = 0
     let proximityVerified = false
-    let gpsAvailable = false
+    const gpsAvailable = userLatitude !== undefined && userLongitude !== undefined
 
-    const browserTolerance = await getBrowserTolerance()
-
-    if (userLatitude !== undefined && userLongitude !== undefined) {
-      gpsAvailable = true
-      distance = calculateDistance(userLatitude, userLongitude, location.latitude, location.longitude)
-
-      console.log("[v0] QR scan with GPS - distance from location:", distance, "meters")
-      console.log("[v0] Browser tolerance:", browserTolerance, "meters")
-
-      const QR_PROXIMITY_LIMIT = browserTolerance
-
-      if (distance > QR_PROXIMITY_LIMIT) {
-        console.log("[v0] User too far from location for QR check-in:", distance, "meters")
-        return NextResponse.json(
-          {
-            error: "Too far from location",
-            message: `You must be within 50 meters of your assigned location to check in. Please use manual location code entry.`,
-            distance: Math.round(distance),
-            locationName: location.name,
-          },
-          { status: 403 },
-        )
-      }
-
-      proximityVerified = true
-      console.log("[v0] GPS proximity verified - within", browserTolerance, "m of:", location.name)
-    } else {
-      console.log("[v0] QR check-in WITHOUT GPS (device GPS unavailable or manual entry)")
-      distance = 0
-      proximityVerified = false
-      gpsAvailable = false
+    if (!gpsAvailable || !Number.isFinite(Number(userLatitude)) || !Number.isFinite(Number(userLongitude))) {
+      console.warn("[v0] QR check-in rejected: GPS coordinates were not provided")
+      await supabase.from("audit_logs").insert({
+        user_id: user.id,
+        action: "qr_check_in_rejected_no_gps",
+        table_name: "attendance_records",
+        record_id: null,
+        new_values: { location_id, qr_timestamp, device_info },
+      })
+      return NextResponse.json(
+        {
+          error: "GPS verification is required",
+          message: "Enable location access and scan the QR code again. QR/manual location entry cannot be used to bypass the attendance geofence.",
+        },
+        { status: 403 },
+      )
     }
+
+    distance = calculateDistance(Number(userLatitude), Number(userLongitude), Number(location.latitude), Number(location.longitude))
+    const configuredRadius = Number(location.radius_meters)
+    const allowedRadius = Number.isFinite(configuredRadius) && configuredRadius > 0 ? configuredRadius : await getBrowserTolerance()
+
+    console.log("[v0] QR scan with GPS - distance:", distance, "allowed radius:", allowedRadius, "location:", location.name)
+
+    if (distance > allowedRadius) {
+      console.log("[v0] User too far from location for QR check-in:", distance, "meters")
+      await supabase.from("audit_logs").insert({
+        user_id: user.id,
+        action: "qr_check_in_rejected_out_of_range",
+        table_name: "attendance_records",
+        record_id: null,
+        new_values: { location_id, location_name: location.name, distance_meters: Math.round(distance), allowed_radius_meters: allowedRadius, userLatitude, userLongitude },
+      })
+      return NextResponse.json(
+        {
+          error: "Too far from location",
+          message: `You must be within ${Math.round(allowedRadius)} meters of ${location.name} to check in.`,
+          distance: Math.round(distance),
+          allowedRadius: Math.round(allowedRadius),
+          locationName: location.name,
+        },
+        { status: 403 },
+      )
+    }
+
+    proximityVerified = true
+    console.log("[v0] GPS proximity verified for QR check-in")
 
     const now = new Date()
     const today = now.toISOString().split("T")[0]
@@ -144,8 +159,8 @@ export async function POST(request: Request) {
         check_in_longitude: userLongitude || location.longitude,
         status: "present",
         notes: gpsAvailable
-          ? `QR code scanned - ${Math.round(distance)}m from location (GPS verified within ${browserTolerance}m tolerance)`
-          : `QR code scanned - GPS unavailable, location verified by QR code only (manual entry or GPS disabled)`,
+? `QR code scanned - ${Math.round(distance)}m from location (GPS verified within ${Math.round(allowedRadius)}m radius)`
+        : `QR code scanned - GPS verification was not completed`,
       })
       .select()
       .single()
@@ -183,7 +198,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: `Successfully checked in at ${location.name} using QR code${gpsAvailable ? " (GPS verified)" : " (manual entry)"}`,
+      message: `Successfully checked in at ${location.name} using QR code (GPS verified)`,
       data: {
         attendance,
         location_tracking: {
