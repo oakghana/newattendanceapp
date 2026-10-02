@@ -86,12 +86,8 @@ export function NonRegionalRequisitionForm() {
       setRequesterSignatureDataUrl(signature.signature_data_url ?? "")
 
       if (!selfAuth) {
-        const linkedSignature = body.hasSignature && body.hodId ? signature : null
-        const authorizationText = linkedSignature?.signer_name
-          ? `${linkedSignature.signer_name}${linkedSignature.signer_position ? ` — ${linkedSignature.signer_position}` : ""}`
-          : ""
-        setHodAuthorization(authorizationText.toUpperCase())
-        setHodSignatureDataUrl(linkedSignature?.signature_data_url ?? "")
+        setHodAuthorization("")
+        setHodSignatureDataUrl("")
         setAuthorized(Boolean(body.hodId))
         return
       }
