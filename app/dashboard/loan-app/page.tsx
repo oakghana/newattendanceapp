@@ -205,9 +205,10 @@ type WorkflowResponse = {
     dateOfAppointment: string | null
     departmentName: string | null
     assignedLocationId?: string | null
-    assignedLocationName?: string | null
-    assignedLocationAddress?: string | null
-    assignedDistrictName?: string | null
+  assignedLocationName?: string | null
+  assignedLocationAddress?: string | null
+  assignedLocationType?: string | null
+  assignedDistrictName?: string | null
     linkedHodName?: string | null
     currentHodProfile?: {
       id: string
@@ -3455,9 +3456,11 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   <div><strong>Assigned Location:</strong>{" "}
                     {loading ? <span className="inline-block h-4 w-32 animate-pulse rounded bg-slate-200 align-middle" /> : <span className="text-slate-600">{data?.profile.assignedLocationName || <span className="text-slate-400">Not assigned</span>}</span>}
                   </div>
-                  <div><strong>Assigned District:</strong>{" "}
-                    {loading ? <span className="inline-block h-4 w-24 animate-pulse rounded bg-slate-200 align-middle" /> : <span className="text-slate-600">{data?.profile.assignedDistrictName || <span className="text-slate-400">Not assigned</span>}</span>}
-                  </div>
+  {loading || data?.profile.assignedLocationType === "district_office" ? (
+  <div><strong>Assigned District:</strong>{" "}
+  {loading ? <span className="inline-block h-4 w-24 animate-pulse rounded bg-slate-200 align-middle" /> : <span className="text-slate-600">{(data?.profile.assignedDistrictName || (data?.profile.assignedLocationType === "district_office" ? data?.profile.assignedLocationName : null))?.replace(/\s+district(?:\s+office)?\b/gi, "").trim() || <span className="text-slate-400">Not assigned</span>}</span>}
+  </div>
+  ) : null}
           <div><strong>Linked HOD:</strong>{" "}
           {loading
           ? <span className="inline-block h-4 w-40 animate-pulse rounded bg-slate-200 align-middle" />

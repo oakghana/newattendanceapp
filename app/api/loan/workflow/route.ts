@@ -283,7 +283,7 @@ export async function GET() {
     await ensureImportedLoanReferences(admin)
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id, departments(name, code), geofence_locations!assigned_location_id(name, address, districts(name))")
+      .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id, departments(name, code), geofence_locations!assigned_location_id(name, address, location_type, parent_location_id, districts(name))")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -1042,9 +1042,13 @@ export async function GET() {
         departmentId: (profile as any).department_id,
         assignedLocationId: (profile as any).assigned_location_id,
         departmentName: (profile as any)?.departments?.name || null,
-        assignedLocationName: (profile as any)?.geofence_locations?.name || null,
-        assignedLocationAddress: (profile as any)?.geofence_locations?.address || null,
-        assignedDistrictName: (profile as any)?.geofence_locations?.districts?.name || null,
+  assignedLocationName: (profile as any)?.geofence_locations?.name || null,
+  assignedLocationAddress: (profile as any)?.geofence_locations?.address || null,
+  assignedLocationType: (profile as any)?.geofence_locations?.location_type || null,
+  assignedDistrictName:
+    (profile as any)?.geofence_locations?.location_type === "district_office"
+      ? (profile as any)?.geofence_locations?.name || (profile as any)?.geofence_locations?.districts?.name || null
+      : (profile as any)?.geofence_locations?.districts?.name || null,
         linkedHodName,
         currentHodProfile,
         currentHodProfiles,

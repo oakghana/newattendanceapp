@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Calendar, Loader2, Info, AlertTriangle } from "lucide-react"
 import { useEffect } from "react"
-import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays } from "@/lib/leave-policy"
+import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays, getMaternityEntitlementWeeks } from "@/lib/leave-policy"
 import { useToast } from "@/hooks/use-toast"
 import { AssignmentRequiredModal } from "@/components/shared/assignment-required-modal"
 
@@ -120,13 +120,14 @@ export function RequestLeaveButton() {
     }
     const maternity = formData.leave_type === "maternity"
     const paternity = formData.leave_type === "paternity"
-    const maternityDays = getMaternityEntitlementDays(formData.maternity_delivery_type)
-    if (paternity && !uploadedFile) {
+  const maternityDays = getMaternityEntitlementDays(formData.maternity_delivery_type)
+  const maternityWeeks = getMaternityEntitlementWeeks(formData.maternity_delivery_type)
+  if (paternity && !uploadedFile) {
       alert("Spouse delivery proof is required for paternity leave.")
       return
     }
     if (maternity && (!formData.delivery_date || requestedDays !== maternityDays)) {
-      alert(`Maternity leave must be ${maternityDays} days for the selected delivery type, with the delivery date provided.`)
+      alert(`Maternity leave must be ${maternityWeeks} weeks for the selected delivery type, with the delivery date provided.`)
       return
     }
     if (!maternity && !zeroEntitlement && selectedType && requestedDays > selectedType.entitlementDays) {
@@ -276,12 +277,12 @@ export function RequestLeaveButton() {
               <div>
                 <Label htmlFor="maternity_delivery_type">Delivery Type</Label>
                 <select id="maternity_delivery_type" value={formData.maternity_delivery_type} onChange={(e) => setFormData({ ...formData, maternity_delivery_type: e.target.value })} className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm">
-                  <option value="normal">Normal delivery — 84 days</option>
-                  <option value="cs">Caesarean section — 98 days</option>
-                  <option value="twins">Twins delivery — 98 days</option>
+  <option value="normal">Normal delivery — 12 weeks</option>
+  <option value="cs">Caesarean section — 14 weeks</option>
+  <option value="twins">Twins delivery — 14 weeks</option>
                 </select>
               </div>
-              <p className="text-xs text-pink-800">Entitlement is calculated from the delivery type; the old fixed 90-day entitlement is no longer used.</p>
+              <p className="text-xs text-pink-800">Maternity leave is calculated in weeks: 12 weeks for normal delivery and 14 weeks for Caesarean section or twins.</p>
             </div>
           )}
 
