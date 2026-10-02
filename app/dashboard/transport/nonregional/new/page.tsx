@@ -15,6 +15,8 @@ export default async function NewHeadOfficeTransportRequestPage() {
   const normalizedRole = normalizeAppRole(profile?.role)
   const normalizedLocationName = String((profile as { geofence_locations?: { name?: string | null } | null } | null)?.geofence_locations?.name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
   const isExplicitNonRegionalLocation = [
+    "head office",
+    "swanzy arcade",
     "qcc head office",
     "head office swanzy arcade",
     "awutu stores",
