@@ -162,8 +162,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Direct check-in must never accept a client-controlled remote flag. Out-of-range
+    // attendance must go through the pending HOD/RM approval workflow instead.
+    if (is_remote_location) {
+      return NextResponse.json(
+        { error: "Remote check-in is not allowed through the direct check-in endpoint. Submit an out-of-range request with a reason for HOD/RM approval.", type: "out_of_range_requires_approval" },
+        { status: 403 },
+      )
+    }
+
     // --- CRITICAL: Server-side geofence validation to prevent out-of-range check-ins ---
-    if (latitude && longitude && !is_remote_location) {
+    if (latitude && longitude) {
       // Fetch active QCC locations and device radius settings
       const [{ data: qccLocations }, { data: deviceRadiusSettings }] = await Promise.all([
         supabase.from("geofence_locations").select("id, name, latitude, longitude, radius_meters, is_active").eq("is_active", true),

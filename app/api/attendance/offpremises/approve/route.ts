@@ -43,10 +43,15 @@ export async function POST(request: NextRequest) {
     }
 
     const approverRole = normalizeAppRole(approverProfile.role)
-    if (!["department_head", "regional_manager", "regional_hr", "admin"].includes(approverRole)) {
+    const roleLabel = String(approverProfile.role || "").trim().toLowerCase().replace(/[ -]+/g, "_")
+    const canApproveAsAdmin = approverRole === "admin" || roleLabel === "super_admin" || roleLabel === "system_admin"
+    const canApproveAsHod = approverRole === "department_head" || roleLabel.includes("department_head") || roleLabel.includes("dept_head") || roleLabel === "hod" || roleLabel.includes("head_of_department")
+    const canApproveAsRm = isRegionalManagerRole(approverRole) || roleLabel.includes("regional_manager") || roleLabel === "rm" || roleLabel.includes("regional_director")
+    const canApproveAsRegionalHr = isRegionalHrRole(approverRole) || roleLabel.includes("regional_hr") || roleLabel.includes("regional_human")
+    if (!canApproveAsAdmin && !canApproveAsHod && !canApproveAsRm && !canApproveAsRegionalHr) {
       console.error("[v0] User not authorized to approve:", approverProfile.role)
       return NextResponse.json(
-        { error: "Only managers can approve off-premises check-ins" },
+        { error: "Only the staff member's HOD, Regional Manager, Regional HR, or an administrator can approve off-premises check-ins" },
         { status: 403 }
       )
     }
@@ -89,10 +94,10 @@ export async function POST(request: NextRequest) {
     const locationMap = await loadLocationHierarchyMap(supabase, [approverProfile.assigned_location_id, staffLocationId])
     const staffLocation = locationMap.get(String(staffLocationId || ""))
 
-    if (approverRole === "admin") {
+    if (canApproveAsAdmin) {
       // Admins can approve all requests
       console.log("[v0] Admin approving request")
-    } else if (approverRole === "department_head" && (
+    } else if (canApproveAsHod && (
       pendingRequest.user_profiles?.department_id !== approverProfile.department_id ||
       !isNonRegionalLocation(staffLocation?.name)
     )) {
@@ -102,7 +107,7 @@ export async function POST(request: NextRequest) {
         { error: "You can only approve nonregional requests from staff in your department" },
         { status: 403 }
       )
-    } else if ((isRegionalManagerRole(approverRole) || isRegionalHrRole(approverRole)) && (
+    } else if ((canApproveAsRm || canApproveAsRegionalHr) && (
       !staffLocationId ||
       isNonRegionalLocation(staffLocation?.name) ||
       !isRegionalManagerLocationMatch(staffLocationId, staffLocation, approverProfile.assigned_location_id, locationMap)

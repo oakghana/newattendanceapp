@@ -21,11 +21,11 @@ export async function POST(request: NextRequest) {
 
       const { data: loans, error: loansError } = await admin
         .from("loan_requests")
-        .select("id, recovery_start_date, recovery_months, repayment_duration_months, disbursement_date, disbursement_confirmed_at, staff_receiving_funds_confirmed_at, md_approved_at, repayment_plan_generated_at, status, hod_review_note, is_imported")
+        .select("id, recovery_start_date, recovery_months, repayment_duration_months, disbursement_date, md_approved_at, repayment_plan_generated_at, status, hod_review_note, is_imported")
         .is("repayment_plan_generated_at", null)
         .in("status", ["approved_director", "md_final_approved", "approved", "active", "partially_recovered", "payment_completed", "fully_recovered", "disbursed", "completed"])
         .or("md_approved_at.not.is.null,is_imported.eq.true,hod_review_note.ilike.%bulk imported by administrator%")
-        .or("disbursement_date.not.is.null,disbursement_confirmed_at.not.is.null,staff_receiving_funds_confirmed_at.not.is.null,is_imported.eq.true,hod_review_note.ilike.%bulk imported by administrator%")
+        .or("disbursement_date.not.is.null,is_imported.eq.true,hod_review_note.ilike.%bulk imported by administrator%")
       if (loansError) return NextResponse.json({ error: loansError.message }, { status: 500 })
 
       const ids = (loans || []).map((loan) => loan.id)
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
         missing.map(async (loan) => {
           const result = await admin.rpc("generate_repayment_schedule", {
             p_loan_request_id: loan.id,
-            p_start_date: loan.recovery_start_date || loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || new Date().toISOString().slice(0, 10),
+            p_start_date: loan.recovery_start_date || loan.disbursement_date || new Date().toISOString().slice(0, 10),
             p_duration_months: loan.recovery_months || loan.repayment_duration_months || 12,
           })
           if (result.error) {
@@ -83,6 +83,12 @@ export async function POST(request: NextRequest) {
 
     const duration = durationMonths || 12
     const start = startDate ? new Date(startDate) : new Date()
+
+    const { data: requesterProfile } = await admin.from("user_profiles").select("role, department_id, departments(name)").eq("id", user.id).maybeSingle()
+    const requesterRole = String(requesterProfile?.role || "").trim().toLowerCase().replace(/[ -]+/g, "_")
+    const requesterDepartment = String((requesterProfile?.departments as { name?: string } | null)?.name || requesterProfile?.department_id || "").trim().toLowerCase().replace(/[ -]+/g, "_")
+    const canGenerate = ["admin", "super_admin", "accounts", "accounts_executive", "account_executive", "accounts_loan_office", "accounts_office", "hr_loan_office", "loan_office", "managing_director"].includes(requesterRole) || requesterRole.includes("account") || requesterRole.includes("loan_office") || requesterRole.includes("managing_director") || requesterDepartment.includes("account") || requesterDepartment.includes("finance") || requesterDepartment.includes("loan")
+    if (!canGenerate) return NextResponse.json({ error: "Only authorized Accounts or Loan Office users can generate repayment schedules." }, { status: 403 })
 
     const { data: loan, error: loanError } = await admin.from("loan_requests").select("id, status, md_approved_at, disbursement_date, recovery_start_date, recovery_months, repayment_duration_months, hod_review_note").eq("id", loanRequestId).maybeSingle()
     if (loanError || !loan) return NextResponse.json({ error: "Loan request not found" }, { status: 404 })
@@ -143,8 +149,18 @@ export async function GET(request: NextRequest) {
     // continue to inspect schedules across the tracking workspace.
     if (loanRequestId) {
       const { data: loanOwner } = await admin.from("loan_requests").select("staff_id").eq("id", loanRequestId).maybeSingle()
-      const { data: requesterProfile } = await admin.from("user_profiles").select("role").eq("id", user.id).maybeSingle()
-      const privileged = ["admin", "super_admin", "accounts", "accounts_executive", "accounts_loan_office", "hr_executive", "hr_loan_office", "managing_director"].includes(String(requesterProfile?.role || "").toLowerCase())
+      const { data: requesterProfile } = await admin.from("user_profiles").select("role, department_id, departments(name)").eq("id", user.id).maybeSingle()
+      const role = String(requesterProfile?.role || "").trim().toLowerCase().replace(/[ -]+/g, "_")
+      const department = String((requesterProfile?.departments as { name?: string } | null)?.name || requesterProfile?.department_id || "").trim().toLowerCase().replace(/[ -]+/g, "_")
+      // The tracking tab is an authorized operational view. Role labels vary
+      // across older profiles, so use capability prefixes as well as canonical
+      // role names instead of incorrectly returning 403 for valid Accounts,
+      // HR Loan Office, MD, or admin users.
+      const privileged = [
+        "admin", "super_admin", "accounts", "accounts_executive", "account_executive",
+        "accounts_loan_office", "accounts_office", "hr_executive", "hr_loan_office",
+        "managing_director", "director", "loan_office",
+      ].includes(role) || role.includes("account") || role.includes("loan_office") || role.includes("managing_director") || role.includes("director") || department.includes("account") || department.includes("finance") || department.includes("loan")
       if (!loanOwner || (!privileged && loanOwner.staff_id !== user.id)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 

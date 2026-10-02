@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
       const { data: deptHeads } = await supabase
         .from('user_profiles')
         .select('id, email, first_name, last_name, role')
-        .eq('role', 'department_head')
+        .in('role', ['department_head', 'dept_head', 'hod', 'head_of_department', 'Department Head', 'HOD'])
         .eq('department_id', userProfile.department_id)
         .eq('is_active', true)
       departmentHeads = deptHeads || []

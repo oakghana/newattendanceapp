@@ -115,7 +115,7 @@ interface AttendanceRecorderProps {
 type WindowsCapabilities = ReturnType<typeof detectWindowsLocationCapabilities>
 
 const REFRESH_PAUSE_DURATION = 50000 // 50 seconds instead of 120000 (2 minutes)
-const MINIMUM_OFF_PREMISES_CHECKOUT_HOURS = 0
+  const MINIMUM_OFF_PREMISES_CHECKOUT_HOURS = 9
 
 function isOffPremisesFallbackError(message: string) {
   const normalized = String(message || "").toLowerCase()
@@ -2013,6 +2013,20 @@ export function AttendanceRecorder({
           })
           // fall through to regular checkout path below
         } else {
+          // Completing the nine-hour work requirement is sufficient for checkout.
+          // Do not apply the off-premises window or location-reason dialog to a completed shift.
+          if (workedNinePlusHours) {
+            console.log("[v0] CHECKOUT_ROUTING_DECISION", {
+              decision: "DIRECT_OFFPREMISES_CHECKOUT_NINE_HOURS",
+              hoursWorked: hoursWorkedSoFar.toFixed(2),
+              outOfRange: true,
+              device: deviceInfo?.type,
+              timestamp: new Date().toISOString(),
+            })
+            await performCheckoutAPI(locationData, null, "", null, false, loginIssueRecoveryCheckout)
+            return
+          }
+
           const offPremisesEnabled = runtimeFlags.offPremisesCheckoutEnabled
           const [opStartH, opStartM] = (runtimeFlags.offPremisesCheckoutStartTime ?? "15:00").split(":").map(Number)
           const [opEndH, opEndM] = (runtimeFlags.offPremisesCheckoutEndTime ?? "23:59").split(":").map(Number)
