@@ -3,7 +3,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { normalizeAppRole } from "@/lib/role-capabilities"
 import { NonRegionalRequisitionForm } from "@/components/transport/nonregional-requisition-form"
 
-export default async function NewNonRegionalRequisitionPage() {
+export default async function NewHeadOfficeTransportRequestPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
@@ -41,7 +41,6 @@ export default async function NewNonRegionalRequisitionPage() {
   const isRegionalOrDistrictLocation = !isExplicitNonRegionalLocation && (normalizedLocationName.includes("regional") || normalizedLocationName.includes("district"))
   if ((isNonRegionalStaff || normalizedRole === "it-admin") && isRegionalOrDistrictLocation) redirect("/dashboard/transport/requests")
   if (isNonRegionalStaff && !isExplicitNonRegionalLocation) redirect("/dashboard/transport")
-  if (isNonRegionalStaff && !isLinkedToHod) redirect("/dashboard/transport")
   if (!isAssignedHod && !isLinkedToHod && !["staff", "contract", "audit_staff", "hr_records", "department_head", "accounts_executive", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "admin", "it-admin"].includes(normalizedRole)) redirect("/dashboard/transport/nonregional")
   return <main className="mx-auto w-full max-w-4xl"><NonRegionalRequisitionForm /></main>
 }

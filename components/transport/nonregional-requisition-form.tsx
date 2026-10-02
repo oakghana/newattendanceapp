@@ -168,8 +168,8 @@ export function NonRegionalRequisitionForm() {
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle>Quality Control Company Limited — Requisition for Transport</CardTitle>
-          <Button type="button" variant="outline" size="sm" onClick={() => router.push("/dashboard/transport/nonregional")}>
-            <ArrowLeft data-icon="inline-start" /> My requests
+          <Button type="button" variant="outline" size="sm" onClick={() => router.push("/dashboard/transport")}>
+            <ArrowLeft data-icon="inline-start" /> Transport
           </Button>
         </div>
       </CardHeader>
