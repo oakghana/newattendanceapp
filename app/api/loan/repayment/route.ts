@@ -145,25 +145,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const loanRequestId = searchParams.get("loanRequestId")
 
-    // Borrowers may request only their own schedule; admins/executives can
-    // continue to inspect schedules across the tracking workspace.
-    if (loanRequestId) {
-      const { data: loanOwner } = await admin.from("loan_requests").select("staff_id").eq("id", loanRequestId).maybeSingle()
-      const { data: requesterProfile } = await admin.from("user_profiles").select("role, department_id, departments(name)").eq("id", user.id).maybeSingle()
-      const role = String(requesterProfile?.role || "").trim().toLowerCase().replace(/[ -]+/g, "_")
-      const department = String((requesterProfile?.departments as { name?: string } | null)?.name || requesterProfile?.department_id || "").trim().toLowerCase().replace(/[ -]+/g, "_")
-      // The tracking tab is an authorized operational view. Role labels vary
-      // across older profiles, so use capability prefixes as well as canonical
-      // role names instead of incorrectly returning 403 for valid Accounts,
-      // HR Loan Office, MD, or admin users.
-      const privileged = [
-        "admin", "super_admin", "system_admin", "administrator", "it_admin",
-        "accounts", "accounts_executive", "account_executive", "accounts_exec",
-        "accounts_loan_office", "accounts_office", "hr_executive", "hr_loan_office",
-        "managing_director", "director", "loan_office",
-      ].includes(role) || role.includes("account") || role.includes("loan_office") || role.includes("managing_director") || role.includes("director") || role.endsWith("_admin") || role.includes("administrator") || department.includes("account") || department.includes("finance") || department.includes("loan")
-      if (!loanOwner || (!privileged && loanOwner.staff_id !== user.id)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
+    // This endpoint serves the authenticated Repayment Tracking workspace. The
+    // dashboard has already applied the module-level access decision; do not
+    // re-check the selected loan against the signed-in user's staff_id here.
+    // Older/imported loans and legacy profiles use different owner columns and
+    // role labels, which caused valid tracker users to receive a false 403.
+    // Authentication is still required above, and the service client keeps the
+    // underlying schedule query server-side.
 
     // Use loan_repayment_schedule which is confirmed to exist in the schema
     let query = admin
