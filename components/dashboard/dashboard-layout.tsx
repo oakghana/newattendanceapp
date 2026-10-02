@@ -131,19 +131,10 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
       }
     }
 
-    // Add timeout to prevent infinite loading
-    const timeoutId = setTimeout(() => {
-      // Never render the dashboard shell without a confirmed session.
-      if (!user) {
-        router.replace("/auth/login")
-        return
-      }
-      setLoading(false)
-    }, 10000) // 10 second timeout
-
-    checkAuth()
-
-    return () => clearTimeout(timeoutId)
+    // Do not use a fixed loading timeout here. Each module mounts this layout
+    // during navigation, and a slow profile query must not be mistaken for an
+    // expired session and redirect an active user to login.
+    void checkAuth()
   }, [router])
 
 
