@@ -7,7 +7,7 @@ export function normalizeAppRole(role?: string | null): string {
   if (normalized === "head_of_department") return "department_head"
   if (["regional_driver", "regional_drivers"].includes(normalized)) return "driver"
   if (normalized === "regional_chief_driver") return "chief_driver"
-  if (normalized === "it_admin") return "it-admin"
+  if (["it_admin", "it_administrator", "it_adminstrator", "information_technology_admin", "information_technology_administrator"].includes(normalized)) return "it-admin"
   return normalized || "staff"
 }
 
