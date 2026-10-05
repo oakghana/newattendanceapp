@@ -50,13 +50,26 @@ export async function POST(request: Request) {
     if (body.rows.length < 1 || body.rows.length > 1000) return NextResponse.json({ error: "Upload between 1 and 1,000 vehicle rows." }, { status: 400 })
     const scopedLocationIds = await resolveFleetScope(supabase, profile)
     let imported = 0; const errors: string[] = []
+    const { data: locations } = await supabase.from("geofence_locations").select("id, name").eq("is_active", true)
+    const locationByName = new Map((locations ?? []).map((location) => [String(location.name).trim().toLowerCase(), location.id]))
+    const allowedVehicleTypes = ["saloon", "bus", "truck", "pickup", "van"]
     for (let index = 0; index < body.rows.length; index += 1) {
-      const row = body.rows[index] ?? {}; const registrationNumber = String(row.registration_number ?? "").trim().toUpperCase(); const assignedLocationId = String(row.assigned_location_id ?? "").trim(); const capacity = Number(row.capacity)
-      const vehicleType = String(row.vehicle_type ?? "saloon").trim().toLowerCase()
-      if (!registrationNumber || !String(row.make ?? "").trim() || !String(row.model ?? "").trim() || !assignedLocationId || !String(row.chassis_number ?? "").trim() || !String(row.vehicle_colour ?? "").trim() || !["saloon", "bus", "truck", "pickup", "van"].includes(vehicleType) || !Number.isInteger(capacity) || capacity < 1) { errors.push(`Row ${index + 2}: required vehicle details are missing or invalid.`); continue }
-      if (scopedLocationIds && !scopedLocationIds.includes(assignedLocationId)) { errors.push(`Row ${index + 2}: location is outside your assigned fleet scope.`); continue }
-      const { error } = await supabase.from("transport_vehicles").insert({ registration_number: registrationNumber, make: String(row.make).trim(), model: String(row.model).trim(), capacity, vehicle_type: vehicleType, assigned_region_id: profile.region_id ?? null, assigned_location_id: assignedLocationId, status: ["available", "assigned", "maintenance", "inactive"].includes(String(row.status)) ? String(row.status) : "available", chassis_number: String(row.chassis_number).trim().toUpperCase(), vehicle_colour: String(row.vehicle_colour).trim(), insurance_expiry_date: String(row.insurance_expiry_date ?? "") || null, roadworthy_expiry_date: String(row.roadworthy_expiry_date ?? "") || null, notes: String(row.notes ?? "").trim() || null, created_by: user.id })
-      if (error) errors.push(`Row ${index + 2}: ${error.code === "23505" ? "registration number already exists." : "could not be imported."}`); else imported += 1
+      const row = body.rows[index] ?? {}
+      const registrationNumber = String(row.registration_number ?? "").trim().toUpperCase()
+      if (!registrationNumber) { errors.push(`Row ${index + 2}: registration_number is required.`); continue }
+      const vehicleTypeValue = String(row.vehicle_type ?? "").trim().toLowerCase()
+      const vehicleType = allowedVehicleTypes.includes(vehicleTypeValue) ? vehicleTypeValue : null
+      const locationValue = String(row.assigned_location_id ?? row.location ?? "").trim()
+      const assignedLocationId = locations?.some((location) => location.id === locationValue) ? locationValue : locationByName.get(locationValue.toLowerCase()) ?? null
+      if (vehicleTypeValue && !vehicleType) errors.push(`Row ${index + 2}: vehicle_type must be one of ${allowedVehicleTypes.join(", ")}.`)
+      if (locationValue && !assignedLocationId) errors.push(`Row ${index + 2}: location was not found: ${locationValue}.`)
+      if (assignedLocationId && scopedLocationIds && !scopedLocationIds.includes(assignedLocationId)) errors.push(`Row ${index + 2}: location is outside your assigned fleet scope.`)
+      const capacityValue = String(row.capacity ?? "").trim()
+      const capacity = capacityValue ? Number(capacityValue) : null
+      if (capacityValue && (!Number.isInteger(capacity) || capacity < 1)) errors.push(`Row ${index + 2}: capacity must be a positive whole number.`)
+      if ((vehicleTypeValue && !vehicleType) || (locationValue && !assignedLocationId) || (assignedLocationId && scopedLocationIds && !scopedLocationIds.includes(assignedLocationId)) || (capacityValue && (!Number.isInteger(capacity) || capacity < 1))) continue
+      const { error } = await supabase.from("transport_vehicles").insert({ registration_number: registrationNumber, make: String(row.make ?? "").trim() || null, model: String(row.model ?? "").trim() || null, capacity, vehicle_type: vehicleType, assigned_region_id: profile.region_id ?? null, assigned_location_id: assignedLocationId, status: ["available", "assigned", "maintenance", "inactive"].includes(String(row.status).toLowerCase()) ? String(row.status).toLowerCase() : "available", chassis_number: String(row.chassis_number ?? "").trim().toUpperCase() || null, vehicle_colour: String(row.vehicle_colour ?? "").trim() || null, insurance_expiry_date: String(row.insurance_expiry_date ?? "") || null, roadworthy_expiry_date: String(row.roadworthy_expiry_date ?? "") || null, notes: String(row.notes ?? "").trim() || null, created_by: user.id })
+      if (error) errors.push(`Row ${index + 2}: ${error.code === "23505" ? "registration number already exists." : error.message || "could not be imported."}`); else imported += 1
     }
     return NextResponse.json({ ok: errors.length === 0, imported, errors })
   }
