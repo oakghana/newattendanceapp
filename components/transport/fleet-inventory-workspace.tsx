@@ -105,7 +105,11 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
       if (/\.xlsx?$/i.test(file.name)) {
         const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" })
         const sheet = workbook.Sheets[workbook.SheetNames.includes("Fleet Import") ? "Fleet Import" : workbook.SheetNames[0]]
-        rows = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { range: 4, defval: "", raw: false })
+        const matrix = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1, defval: "", raw: false })
+        const headerIndex = matrix.findIndex((row) => row.some((value) => String(value).trim().toLowerCase() === "registration_number"))
+        if (headerIndex < 0) throw new Error("The workbook must contain a registration_number column in the Fleet Import sheet.")
+        const headers = matrix[headerIndex].map((value) => String(value).trim())
+        rows = matrix.slice(headerIndex + 1).filter((row) => row.some((value) => String(value).trim())).map((row) => Object.fromEntries(headers.map((header, index) => [header, String(row[index] ?? "").trim()])))
       } else {
         const lines = (await file.text()).split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith("#") && line.trim().toLowerCase() !== "sep=,")
         const delimiter = lines[0]?.includes("\t") ? "\t" : ","
