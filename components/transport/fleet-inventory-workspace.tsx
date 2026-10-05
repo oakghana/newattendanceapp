@@ -32,6 +32,10 @@ type Booking = { id: string; vehicle_id: string; starts_at: string; ends_at: str
 type FleetLocation = { id: string; name: string }
 
 const vehicleTypes = ["saloon", "bus", "truck", "pickup", "van"]
+
+function normalizeRegistration(value: unknown) {
+  return String(value ?? "").trim().toUpperCase().replace(/[\s-]+/g, "")
+}
 const statusTone: Record<Vehicle["status"], "default" | "secondary" | "destructive" | "outline"> = { available: "default", assigned: "secondary", maintenance: "destructive", inactive: "outline" }
 
 function VehicleFields({ vehicle, locations }: { vehicle?: Vehicle; locations: FleetLocation[] }) {
@@ -63,7 +67,11 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
   const [importing, setImporting] = useState(false)
   const [importErrors, setImportErrors] = useState<string[]>([])
   const uniqueVehicles = useMemo(() => Array.from(new Map(vehicles.map((vehicle) => [vehicle.registration_number.trim().toUpperCase(), vehicle])).values()), [vehicles])
-  const filteredVehicles = useMemo(() => uniqueVehicles.filter((vehicle) => (activeType === "all" || vehicle.vehicle_type === activeType) && `${vehicle.registration_number} ${vehicle.chassis_number || ""} ${vehicle.vehicle_colour || ""} ${vehicle.make} ${vehicle.model} ${vehicle.vehicle_type} ${vehicle.assigned_location?.name || ""}`.toLowerCase().includes(query.toLowerCase())), [uniqueVehicles, activeType, query])
+  const filteredVehicles = useMemo(() => uniqueVehicles.filter((vehicle) => {
+    if (activeType !== "all" && vehicle.vehicle_type !== activeType) return false
+    const searchable = `${vehicle.registration_number} ${vehicle.chassis_number || ""} ${vehicle.vehicle_colour || ""} ${vehicle.make} ${vehicle.model} ${vehicle.vehicle_type} ${vehicle.assigned_location?.name || ""}`.toLowerCase()
+    return searchable.includes(query.toLowerCase()) || normalizeRegistration(vehicle.registration_number).includes(normalizeRegistration(query))
+  }), [uniqueVehicles, activeType, query])
   const pageSize = 10
   const pageCount = Math.max(1, Math.ceil(filteredVehicles.length / pageSize))
   const visibleVehicles = filteredVehicles.slice((page - 1) * pageSize, page * pageSize)

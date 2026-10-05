@@ -11,6 +11,10 @@ async function actor() {
   return { supabase, user, profile }
 }
 
+function normalizeRegistration(value: unknown) {
+  return String(value ?? "").trim().toUpperCase().replace(/[\s-]+/g, "")
+}
+
 async function resolveFleetScope(supabase: any, profile: any) {
   if (hasNationwideFleetScope(profile.role)) return null
   if (isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role)) {
@@ -54,14 +58,16 @@ export async function POST(request: Request) {
     const locationByName = new Map((locations ?? []).map((location) => [String(location.name).trim().toLowerCase(), location.id]))
     const allowedVehicleTypes = ["saloon", "bus", "truck", "pickup", "van"]
     const { data: existingVehicles } = await supabase.from("transport_vehicles").select("registration_number")
-    const existingRegistrationNumbers = new Set((existingVehicles ?? []).map((vehicle) => String(vehicle.registration_number ?? "").trim().toUpperCase()))
+    const existingRegistrationNumbers = new Map((existingVehicles ?? []).map((vehicle) => [normalizeRegistration(vehicle.registration_number), String(vehicle.registration_number ?? "").trim()]))
     const importedRegistrationNumbers = new Set<string>()
     for (let index = 0; index < body.rows.length; index += 1) {
       const row = body.rows[index] ?? {}
       const registrationNumber = String(row.registration_number ?? "").trim().toUpperCase()
+      const registrationKey = normalizeRegistration(registrationNumber)
       if (!registrationNumber) { errors.push(`Row ${index + 2}: registration_number is required.`); continue }
-      if (existingRegistrationNumbers.has(registrationNumber) || importedRegistrationNumbers.has(registrationNumber)) { errors.push(`Row ${index + 2}: registration number ${registrationNumber} already exists in the fleet or appears earlier in this file.`); continue }
-      importedRegistrationNumbers.add(registrationNumber)
+      const existingValue = existingRegistrationNumbers.get(registrationKey)
+      if (existingValue || importedRegistrationNumbers.has(registrationKey)) { errors.push(`Row ${index + 2}: registration number ${registrationNumber} matches an existing or repeated registration${existingValue ? ` (${existingValue})` : " in this file"}.`); continue }
+      importedRegistrationNumbers.add(registrationKey)
       const vehicleTypeValue = String(row.vehicle_type ?? "").trim().toLowerCase()
       const vehicleType = allowedVehicleTypes.includes(vehicleTypeValue) ? vehicleTypeValue : null
       const locationValue = String(row.assigned_location_id ?? row.location ?? "").trim()
@@ -79,6 +85,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: errors.length === 0, imported, errors })
   }
   const registrationNumber = String(body.registration_number ?? "").trim().toUpperCase()
+  const registrationKey = normalizeRegistration(registrationNumber)
   const make = String(body.make ?? "").trim()
   const model = String(body.model ?? "").trim()
   const capacity = Number(body.capacity)
@@ -90,8 +97,9 @@ export async function POST(request: Request) {
   if (!registrationNumber || !make || !model || !assignedLocationId || !chassisNumber || !vehicleColour || !allowedVehicleTypes.includes(vehicleType) || !Number.isInteger(capacity) || capacity < 1) return NextResponse.json({ error: "Registration, chassis number, colour, make, model, location, valid vehicle type, and a positive capacity are required." }, { status: 400 })
   const scopedLocationIds = await resolveFleetScope(supabase, profile)
   if (scopedLocationIds && !scopedLocationIds.includes(assignedLocationId)) return NextResponse.json({ error: "You can register vehicles only at locations assigned to your office." }, { status: 403 })
-  const { data: duplicateVehicle } = await supabase.from("transport_vehicles").select("id").ilike("registration_number", registrationNumber).maybeSingle()
-  if (duplicateVehicle) return NextResponse.json({ error: `Registration number ${registrationNumber} already exists in the fleet.` }, { status: 409 })
+  const { data: duplicateVehicles } = await supabase.from("transport_vehicles").select("id, registration_number")
+  const duplicateVehicle = (duplicateVehicles ?? []).find((vehicle) => normalizeRegistration(vehicle.registration_number) === registrationKey)
+  if (duplicateVehicle) return NextResponse.json({ error: `Registration number ${registrationNumber} matches the existing fleet registration ${String(duplicateVehicle.registration_number).trim()}. Check spaces and hyphens, then use a different number.` }, { status: 409 })
   const { data, error } = await supabase.from("transport_vehicles").insert({
     registration_number: registrationNumber, make, model, capacity,
     vehicle_type: vehicleType,
