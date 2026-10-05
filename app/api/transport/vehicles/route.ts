@@ -53,7 +53,7 @@ export async function POST(request: Request) {
   if (Array.isArray(body.rows)) {
     if (body.rows.length < 1 || body.rows.length > 1000) return NextResponse.json({ error: "Upload between 1 and 1,000 vehicle rows." }, { status: 400 })
     const scopedLocationIds = await resolveFleetScope(supabase, profile)
-    let imported = 0; const errors: string[] = []
+    let imported = 0; const errors: string[] = []; const skippedDuplicates: string[] = []
     const { data: locations } = await supabase.from("geofence_locations").select("id, name").eq("is_active", true)
     const locationByName = new Map((locations ?? []).map((location) => [String(location.name).trim().toLowerCase(), location.id]))
     const allowedVehicleTypes = ["saloon", "bus", "truck", "pickup", "van"]
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
       const registrationKey = normalizeRegistration(registrationNumber)
       if (!registrationNumber) { errors.push(`Row ${index + 2}: registration_number is required.`); continue }
       const existingValue = existingRegistrationNumbers.get(registrationKey)
-      if (existingValue || importedRegistrationNumbers.has(registrationKey)) { errors.push(`Row ${index + 2}: registration number ${registrationNumber} matches an existing or repeated registration${existingValue ? ` (${existingValue})` : " in this file"}.`); continue }
+      if (existingValue || importedRegistrationNumbers.has(registrationKey)) { skippedDuplicates.push(`Row ${index + 2}: ${registrationNumber}${existingValue ? ` matches existing registration ${existingValue}` : " is repeated in this file"}.`); continue }
       importedRegistrationNumbers.add(registrationKey)
       const vehicleTypeValue = String(row.vehicle_type ?? "").trim().toLowerCase()
       const vehicleType = allowedVehicleTypes.includes(vehicleTypeValue) ? vehicleTypeValue : null
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
       const { error } = await supabase.from("transport_vehicles").insert({ registration_number: registrationNumber, make: String(row.make ?? "").trim() || null, model: String(row.model ?? "").trim() || null, capacity, vehicle_type: vehicleType, assigned_region_id: profile.region_id ?? null, assigned_location_id: assignedLocationId, status: ["available", "assigned", "maintenance", "inactive"].includes(String(row.status).toLowerCase()) ? String(row.status).toLowerCase() : "available", chassis_number: String(row.chassis_number ?? "").trim().toUpperCase() || null, vehicle_colour: String(row.vehicle_colour ?? "").trim() || null, insurance_expiry_date: String(row.insurance_expiry_date ?? "") || null, roadworthy_expiry_date: String(row.roadworthy_expiry_date ?? "") || null, notes: String(row.notes ?? "").trim() || null, created_by: user.id })
       if (error) errors.push(`Row ${index + 2}: ${error.code === "23505" ? "registration number already exists." : error.message || "could not be imported."}`); else imported += 1
     }
-    return NextResponse.json({ ok: errors.length === 0, imported, errors })
+    return NextResponse.json({ ok: errors.length === 0, imported, skippedDuplicates, errors })
   }
   const registrationNumber = String(body.registration_number ?? "").trim().toUpperCase()
   const registrationKey = normalizeRegistration(registrationNumber)

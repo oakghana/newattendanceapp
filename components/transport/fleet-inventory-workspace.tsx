@@ -133,8 +133,9 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
       const response = await fetch("/api/transport/vehicles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows }) })
       const body = await response.json().catch(() => null); if (!response.ok) throw new Error(body?.error ?? "Import failed")
       const errors = Array.isArray(body?.errors) ? body.errors : []
-      setImportErrors(errors)
-      toast({ title: errors.length ? "Fleet import completed with errors" : "Fleet import complete", description: `${body.imported ?? 0} vehicle(s) imported${errors.length ? `; ${errors.length} issue(s) need attention.` : "."}`, variant: errors.length ? "destructive" : "default" }); if (body.imported) window.location.reload()
+      const skippedDuplicates = Array.isArray(body?.skippedDuplicates) ? body.skippedDuplicates : []
+      setImportErrors([...skippedDuplicates.map((message: string) => `Skipped duplicate: ${message}`), ...errors])
+      toast({ title: body.imported ? "Fleet import completed" : "No new vehicles imported", description: `${body.imported ?? 0} unique vehicle(s) imported${skippedDuplicates.length ? `; ${skippedDuplicates.length} duplicate(s) skipped` : ""}${errors.length ? `; ${errors.length} other issue(s) need attention.` : "."}`, variant: errors.length ? "destructive" : "default" }); if (body.imported) window.location.reload()
     } catch (error) { toast({ title: "Fleet import failed", description: error instanceof Error ? error.message : "Please use the fleet template.", variant: "destructive" }) } finally { setImporting(false) }
   }
 
