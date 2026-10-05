@@ -73,8 +73,8 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
       ["registration_number", "vehicle_type", "assigned_location_id", "make", "model", "capacity", "chassis_number", "vehicle_colour", "insurance_expiry_date", "roadworthy_expiry_date", "notes"],
       ["GR-0001", "saloon", "", "Toyota", "Corolla", "5", "", "", "2027-12-31", "2027-12-31", "Replace this example with your vehicle details"],
     ]
-    const tsv = `\uFEFF${rows.map((row) => row.map((value) => String(value).replaceAll("\t", " ").replaceAll("\r", " ").replaceAll("\n", " ")).join("\t")).join("\r\n")}\r\n`
-    const url = URL.createObjectURL(new Blob([tsv], { type: "text/tab-separated-values;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = "fleet-vehicles-template.tsv"; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url)
+    const csv = `\uFEFFsep=,\r\n${rows.map((row) => row.map((value) => { const text = String(value); return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text }).join(",")).join("\r\n")}\r\n`
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = "fleet-vehicles-template.csv"; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url)
   }
 
   function exportFleet() {
@@ -89,7 +89,7 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
   async function importFleet(file: File) {
     setImporting(true)
     try {
-      const lines = (await file.text()).split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith("#"))
+      const lines = (await file.text()).split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith("#") && line.trim().toLowerCase() !== "sep=,")
       const delimiter = lines[0]?.includes("\t") ? "\t" : ","
       const headers = lines.shift()?.split(delimiter).map((value) => value.trim().replace(/^"|"$/g, "")) ?? []
       const rows = lines.map((line) => { const values = delimiter === "\t" ? line.split("\t") : line.match(/(?:"(?:[^"]|"")*"|[^,])+/g); return Object.fromEntries(headers.map((header, index) => [header, (values?.[index] ?? "").trim().replace(/^"|"$/g, "").replaceAll('""', '"')])) })
