@@ -8,6 +8,7 @@ import {
   isTransportManagerRole,
   normalizeAppRole,
   NON_REGIONAL_TRANSPORT_LOCATIONS,
+  isNonRegionalTransportLocation,
 } from "@/lib/role-capabilities"
 import { sendWebPushToUsers } from "@/lib/web-push"
 
@@ -252,13 +253,13 @@ export async function POST(request: Request) {
   let profileError: any = null
   ;({ data: profile, error: profileError } = await supabase
     .from("user_profiles")
-    .select("role, signature_data_url, hod_id, first_name, last_name, position, department_id, assigned_location_id, region_id")
+    .select("role, signature_data_url, hod_id, first_name, last_name, position, department_id, assigned_location_id, region_id, geofence_locations!user_profiles_assigned_location_id_fkey(id, name, district_id, location_type)")
     .eq("id", user.id)
     .single())
   if (profileError && /column .*does not exist|hod_id/i.test(profileError.message || "")) {
     ;({ data: profile, error: profileError } = await supabase
       .from("user_profiles")
-      .select("role, signature_data_url, first_name, last_name, position, department_id")
+      .select("role, signature_data_url, first_name, last_name, position, department_id, assigned_location_id, region_id, geofence_locations!user_profiles_assigned_location_id_fkey(id, name, district_id, location_type)")
       .eq("id", user.id)
       .single())
   }
@@ -266,6 +267,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: profileError?.message ?? "Profile not found" }, { status: 500 })
   }
 
+  const assignedLocation = profile?.geofence_locations as { id?: string; name?: string; district_id?: string | null; location_type?: string | null } | null
+  if (!isNonRegionalTransportLocation(assignedLocation?.name)) {
+    return NextResponse.json({ error: "This workflow is only for staff assigned to a Head Office/non-regional location. Regional and district staff must use regional transport requests." }, { status: 409 })
+  }
   const submitterRole = normalizeAppRole(profile?.role)
   const adminSupabase = await createAdminClient()
   const [{ data: assignedHodLink }, { data: requesterHodLinks }] = await Promise.all([
@@ -284,7 +289,10 @@ export async function POST(request: Request) {
     .select("id, name, location_type, district_id, districts(region_id)")
     .in("name", [String(body.location ?? "").trim(), String(body.origin ?? "").trim()].filter(Boolean))
     .eq("is_active", true)
-  const selectedLocation = (selectedLocations ?? []).find((location: any) => String(location.name).trim().toLowerCase() === String(body.origin ?? "").trim().toLowerCase())
+  const selectedLocation = (assignedLocation?.id
+    ? { id: assignedLocation.id, name: assignedLocation.name, district_id: assignedLocation.district_id, location_type: assignedLocation.location_type }
+    : null)
+    ?? (selectedLocations ?? []).find((location: any) => String(location.name).trim().toLowerCase() === String(body.origin ?? "").trim().toLowerCase())
     ?? (selectedLocations ?? []).find((location: any) => String(location.name).trim().toLowerCase() === String(body.location ?? "").trim().toLowerCase())
   const selectedDistrict = Array.isArray(selectedLocation?.districts) ? selectedLocation?.districts[0] : selectedLocation?.districts
   const isRegionalLocation = Boolean(selectedLocation?.district_id || selectedDistrict?.region_id || String(selectedLocation?.location_type ?? "").toLowerCase().includes("district") || String(selectedLocation?.location_type ?? "").toLowerCase().includes("regional"))

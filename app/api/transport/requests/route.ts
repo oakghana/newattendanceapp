@@ -7,6 +7,7 @@ import {
   isRegionalHrRole,
   isRegionalManagerRole,
   isTransportManagerRole,
+  isNonRegionalTransportLocation,
 } from "@/lib/role-capabilities"
 import { isAssignableRegionalStage, isCompletableTransportStage } from "@/lib/transport-workflow"
 import { sendWebPushToUsers } from "@/lib/web-push"
@@ -221,7 +222,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("role, is_active, region_id, assigned_location_id, geofence_locations!user_profiles_assigned_location_id_fkey(district_id, districts(region_id))")
+    .select("role, is_active, region_id, assigned_location_id, geofence_locations!user_profiles_assigned_location_id_fkey(name, district_id, districts(region_id))")
     .eq("id", user.id)
     .single()
   const isDistrictOfficer = isDistrictOfficerRole(profile?.role)
@@ -229,15 +230,20 @@ export async function POST(request: Request) {
   const isRegionalManager = isRegionalManagerRole(profile?.role)
   const isChiefDriver = isChiefDriverRole(profile?.role)
   const normalizedRequesterRole = String(profile?.role ?? "").toLowerCase().trim().replace(/[\s-]+/g, "_")
-  const isRegionalStaffRequester = ["staff", "contract", "audit_staff", "it_admin"].includes(normalizedRequesterRole) && Boolean(profile.assigned_location_id)
-  // Active location-assigned regional staff can submit requests; Regional HR determines the route during review.
+  const assignedLocation = profile?.geofence_locations as { name?: string; district_id?: string | null; districts?: { region_id?: string | null } | null } | null
+  const isNonRegionalRequesterLocation = isNonRegionalTransportLocation(assignedLocation?.name)
+  const isRegionalStaffRequester = ["staff", "contract", "audit_staff", "it_admin"].includes(normalizedRequesterRole) && Boolean(profile.assigned_location_id) && !isNonRegionalRequesterLocation
+  // The requester's assigned location is authoritative. Head Office/non-regional staff
+  // must use the HOD requisition flow and cannot be posted to the regional table.
+  if (isNonRegionalRequesterLocation && !isRegionalHr && !isRegionalManager && !isDistrictOfficer && !isChiefDriver) {
+    return NextResponse.json({ error: "Head Office/non-regional staff must submit through the Head Office transport requisition workflow." }, { status: 409 })
+  }
   if (!profile?.is_active || (!isRegionalHr && !isRegionalManager && !isDistrictOfficer && !isChiefDriver && !isRegionalStaffRequester)) {
     return NextResponse.json(
       { error: "Only active regional staff with an assigned location, Regional HR Office, Regional Manager, District Officer, or Chief Driver users can create regional transport requests." },
       { status: 403 },
     )
   }
-  const assignedLocation = profile.geofence_locations as { district_id?: string | null; districts?: { region_id?: string | null } | null } | null
   const linkedDistrictId = assignedLocation?.district_id ?? null
   const originLocationId = profile.assigned_location_id ?? null
   let assignedRegionId = profile.region_id ?? assignedLocation?.districts?.region_id ?? null
