@@ -81,10 +81,10 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
   function downloadFleetTemplate() {
     const locationList = locations.length ? locations.map((location) => `${location.name} (${location.id})`).join("; ") : "No active locations available"
     const rows = [
-      [`# Fleet import guide: registration_number is the only mandatory column. All other columns are optional.`],
+      [`# Fleet import guide: registration_number, vehicle_type, make, model, and capacity are required. assigned_location_id is optional and may be left blank for later assignment.`],
       [`# vehicle_type options: ${vehicleTypes.join(", ")}`],
       [`# assigned_location_id options: ${locationList}`],
-      [`# Use either a location ID or the exact location name. Leave optional values blank when unavailable.`],
+      [`# assigned_location_id may be blank. Use a location ID or exact location name only when assigning now; blank vehicles can be assigned later.`],
       ["registration_number", "vehicle_type", "assigned_location_id", "make", "model", "capacity", "chassis_number", "vehicle_colour", "insurance_expiry_date", "roadworthy_expiry_date", "notes"],
       ["GR-0001", "saloon", "", "Toyota", "Corolla", "5", "", "", "2027-12-31", "2027-12-31", "Replace this example with your vehicle details"],
     ]
