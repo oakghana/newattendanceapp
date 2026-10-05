@@ -250,6 +250,34 @@ export default async function TransportRequestsPage() {
     requests = [...scopedRequests, ...allPersonalRows.filter((request: any) => !scopedRequests.some((scopedRequest) => scopedRequest.id === request.id))]
       .sort((left, right) => new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime())
   }
+  if (["admin", "administrator"].includes(normalizedRole)) {
+    const { data: allNonregionalRequests } = await (await createAdminClient())
+      .from("nonregional_transport_requisitions")
+      .select("id, requester_id, purpose, origin, destination, required_at, persons_requiring_transport, status, created_at, reference_number")
+      .order("created_at", { ascending: false })
+      .limit(500)
+    const knownIds = new Set((requests ?? []).map((request: any) => request.id))
+    const nationwideNonregionalRows = (allNonregionalRequests ?? [])
+      .filter((request: any) => !knownIds.has(request.id))
+      .map((request: any) => ({
+        id: request.id,
+        requester_id: request.requester_id,
+        request_type: "nonregional_transport",
+        purpose: request.purpose,
+        origin: request.origin,
+        destination: request.destination,
+        event_date: request.required_at,
+        passenger_count: request.persons_requiring_transport ?? 0,
+        status: request.status ?? "submitted",
+        workflow_stage: request.status ?? "submitted",
+        reference_number: request.reference_number,
+        supporting_documents: [],
+        created_at: request.created_at,
+        assigned_region: [],
+      }))
+    requests = [...(requests ?? []), ...nationwideNonregionalRows]
+      .sort((left: any, right: any) => new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime()) as any
+  }
   if (canViewRegionalRegister && requests?.length) {
     const requesterIds = [...new Set(requests.map((request: any) => request.requester_id).filter(Boolean))]
     const adminClient = await createAdminClient()

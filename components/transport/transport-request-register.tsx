@@ -247,7 +247,8 @@ export function TransportRequestRegister({
   const deleteRequest = async (row: TransportRequestRow) => {
     if (!window.confirm(`Delete request ${row.reference_number ?? row.id}? This cannot be undone.`)) return
     setBusy(row.id)
-    const response = await fetch(`/api/transport/requests?id=${encodeURIComponent(row.id)}`, { method: "DELETE" })
+    const deleteEndpoint = row.request_type === "regional_transport" ? "/api/transport/requests" : "/api/transport/nonregional"
+  const response = await fetch(`${deleteEndpoint}?id=${encodeURIComponent(row.id)}`, { method: "DELETE" })
     const result = await response.json().catch(() => ({}))
     setBusy(null)
     if (!response.ok) return toast({ title: "Delete failed", description: result.error ?? "Unable to delete request.", variant: "destructive" })
