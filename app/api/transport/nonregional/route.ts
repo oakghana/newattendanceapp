@@ -518,8 +518,8 @@ export async function DELETE(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const { data: profile } = await supabase.from("user_profiles").select("role, is_active").eq("id", user.id).single()
-  if (!profile?.is_active || !(isAdminRole(profile.role) || normalizeAppRole(profile.role) === "it-admin")) {
-    return NextResponse.json({ error: "Only administrators or IT administrators can delete transport requisitions." }, { status: 403 })
+if (!profile?.is_active || !isAdminRole(profile.role)) {
+  return NextResponse.json({ error: "Only administrators can delete transport requisitions." }, { status: 403 })
   }
 
   const id = new URL(request.url).searchParams.get("id")?.trim()

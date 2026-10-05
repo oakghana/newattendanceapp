@@ -434,7 +434,7 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
                   <Button variant="outline" onClick={() => setPreviewRequest(request)}>
                     <FileText data-icon="inline-start" /> View / save PDF
                   </Button>
-                  {(["admin", "administrator", "it-admin", "it_admin"].includes(String(role).toLowerCase().trim().replace(/[\s-]+/g, "_")) || String(role).toLowerCase().trim().replace(/[\s-]+/g, "_") === "it_admin") && (
+                  {String(role).toLowerCase().trim().replace(/[\s-]+/g, "_") === "admin" && (
                     <Button
                       variant="destructive"
                       disabled={busy === request.id}

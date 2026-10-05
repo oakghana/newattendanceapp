@@ -119,7 +119,7 @@ export function canEditDriverLicenses(role?: string | null): boolean {
 /** Fleet inventory edit: Transport Manager nationwide; administrators retain emergency control. */
 export function canEditFleetInventory(role?: string | null): boolean {
   const normalizedRole = normalizeAppRole(role)
-  return isTransportManagerRole(role) || isAdminRole(role) || ["it_admin", "it-admin"].includes(normalizedRole)
+  return isTransportManagerRole(role) || isAdminRole(role)
 }
 
 /** Fleet dashboards / read: editors + MD + department heads */
@@ -141,8 +141,7 @@ export function hasNationwideFleetScope(role?: string | null): boolean {
   const normalizedRole = normalizeAppRole(role)
   return (
     isTransportManagerRole(role) ||
-    isAdminRole(role) ||
-    normalizedRole === "it-admin"
+    isAdminRole(role)
   )
 }
 
