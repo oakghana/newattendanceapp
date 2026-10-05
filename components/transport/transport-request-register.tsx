@@ -12,6 +12,7 @@ import {
   Search,
   Clock3,
   Users,
+  Trash2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -141,6 +142,7 @@ export function TransportRequestRegister({
   canHrExecutive,
   regionalOfficeName,
   currentUserId,
+  canDelete = false,
 }: {
   rows: TransportRequestRow[];
   canCreate: boolean;
@@ -152,6 +154,7 @@ export function TransportRequestRegister({
   canHrExecutive: boolean;
   regionalOfficeName: string;
   currentUserId?: string;
+  canDelete?: boolean;
 }) {
   const router = useRouter();
   const [query, setQuery] = React.useState("");
@@ -241,6 +244,16 @@ export function TransportRequestRegister({
     });
     router.refresh();
   };
+  const deleteRequest = async (row: TransportRequestRow) => {
+    if (!window.confirm(`Delete request ${row.reference_number ?? row.id}? This cannot be undone.`)) return
+    setBusy(row.id)
+    const response = await fetch(`/api/transport/requests?id=${encodeURIComponent(row.id)}`, { method: "DELETE" })
+    const result = await response.json().catch(() => ({}))
+    setBusy(null)
+    if (!response.ok) return toast({ title: "Delete failed", description: result.error ?? "Unable to delete request.", variant: "destructive" })
+    toast({ title: "Request deleted", description: "The transport request was removed immediately." })
+    router.refresh()
+  }
   const visibleRows = rows.filter(
     (row) =>
       `${row.reference_number ?? ""} ${row.requester_name ?? ""} ${row.requester_location ?? ""} ${row.purpose} ${row.origin} ${row.destination}`
@@ -1053,7 +1066,7 @@ export function TransportRequestRegister({
                             <Download className="mr-2 size-3" /> Print / Save PDF
                           </Button>
                         ) : (
-                          <Button size="sm" onClick={() => setOpenRequest(row)}>View request</Button>
+                          <div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => setOpenRequest(row)}>View request</Button>{canDelete && <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={busy === row.id} onClick={() => void deleteRequest(row)}><Trash2 className="mr-1 size-4" />Delete</Button>}</div>
                         )}
                         <div className="sr-only">
                           {districtOfficerActions && (
