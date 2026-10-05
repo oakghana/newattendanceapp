@@ -31,6 +31,15 @@ export function isDistrictOfficerRole(role?: string | null): boolean {
 
 export const NON_REGIONAL_TRANSPORT_LOCATIONS = ["QCC Head Office", "HEAD OFFICE SWANZY ARCADE", "Awutu Stores", "Nsawam Archives"] as const
 
+export function isNonRegionalTransportLocation(value?: string | null) {
+  const normalized = String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ")
+  if (!normalized) return false
+  return NON_REGIONAL_TRANSPORT_LOCATIONS.some((location) => {
+    const candidate = location.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ")
+    return normalized === candidate || normalized.includes(candidate) || candidate.includes(normalized) || (candidate.includes("nsawam archive") && normalized.includes("nsawam archive"))
+  })
+}
+
 export function isTransportManagerRole(role?: string | null): boolean {
   return normalizeAppRole(role) === "transport_manager"
 }

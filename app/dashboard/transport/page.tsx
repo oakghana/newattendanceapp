@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 import { TransportWorkspace } from "@/components/transport/transport-workspace"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
-import { canCreateTransportRequest, canManageTransport, isChiefDriverRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
+import { canCreateTransportRequest, canManageTransport, isChiefDriverRole, isNonRegionalTransportLocation, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
 const TRANSPORT_ROLES = new Set([
@@ -56,7 +56,7 @@ export default async function TransportPage() {
     "nsawam archive",
   ])
   const normalizedLocationName = preliminaryLocationName.replace(/[^a-z0-9]+/g, " ").trim()
-  const isExplicitNonRegionalLocation = nonRegionalLocationNames.has(normalizedLocationName)
+  const isExplicitNonRegionalLocation = isNonRegionalTransportLocation(preliminaryLocation?.name) || nonRegionalLocationNames.has(normalizedLocationName)
   // Every assigned location outside the four Head Office locations follows the
   // regional/district transport workflow, even when its name is not labelled
   // "regional" or "district".
