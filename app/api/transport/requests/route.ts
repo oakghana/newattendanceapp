@@ -8,6 +8,7 @@ import {
   isRegionalManagerRole,
   isTransportManagerRole,
   isNonRegionalTransportLocation,
+  normalizeAppRole,
 } from "@/lib/role-capabilities"
 import { isAssignableRegionalStage, isCompletableTransportStage } from "@/lib/transport-workflow"
 import { sendWebPushToUsers } from "@/lib/web-push"
@@ -373,7 +374,7 @@ export async function DELETE(request: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const { data: profile } = await supabase.from("user_profiles").select("role, is_active").eq("id", user.id).single()
-  if (!profile?.is_active || !isAdminRole(profile.role)) return NextResponse.json({ error: "Only administrators can delete transport requests." }, { status: 403 })
+  if (!profile?.is_active || !(isAdminRole(profile.role) || normalizeAppRole(profile.role) === "it-admin")) return NextResponse.json({ error: "Only administrators or IT administrators can delete transport requests." }, { status: 403 })
   const id = new URL(request.url).searchParams.get("id")?.trim()
   if (!id) return NextResponse.json({ error: "Request id is required." }, { status: 400 })
   const { error } = await supabase.from("transport_requests").delete().eq("id", id)
