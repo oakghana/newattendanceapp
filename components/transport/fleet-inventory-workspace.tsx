@@ -65,8 +65,16 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
 
   function downloadFleetTemplate() {
     const locationList = locations.length ? locations.map((location) => `${location.name} (${location.id})`).join("; ") : "No active locations available"
-    const csv = `# Fleet import guide: registration_number is the only mandatory column. All other columns are optional.\r\n# vehicle_type options: ${vehicleTypes.join(", ")}\r\n# assigned_location_id options: ${locationList}\r\n# Use either a location ID or the exact location name. Leave optional values blank when unavailable.\r\nregistration_number,vehicle_type,assigned_location_id,make,model,capacity,chassis_number,vehicle_colour,insurance_expiry_date,roadworthy_expiry_date,notes\r\nGR-0001,saloon,,Toyota,Corolla,5,,,2027-12-31,2027-12-31,"Replace this example with your vehicle details"\r\n`
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = "fleet-vehicles-template.csv"; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url)
+    const rows = [
+      [`# Fleet import guide: registration_number is the only mandatory column. All other columns are optional.`],
+      [`# vehicle_type options: ${vehicleTypes.join(", ")}`],
+      [`# assigned_location_id options: ${locationList}`],
+      [`# Use either a location ID or the exact location name. Leave optional values blank when unavailable.`],
+      ["registration_number", "vehicle_type", "assigned_location_id", "make", "model", "capacity", "chassis_number", "vehicle_colour", "insurance_expiry_date", "roadworthy_expiry_date", "notes"],
+      ["GR-0001", "saloon", "", "Toyota", "Corolla", "5", "", "", "2027-12-31", "2027-12-31", "Replace this example with your vehicle details"],
+    ]
+    const tsv = `\uFEFF${rows.map((row) => row.map((value) => String(value).replaceAll("\t", " ").replaceAll("\r", " ").replaceAll("\n", " ")).join("\t")).join("\r\n")}\r\n`
+    const url = URL.createObjectURL(new Blob([tsv], { type: "text/tab-separated-values;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = "fleet-vehicles-template.tsv"; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url)
   }
 
   function exportFleet() {
@@ -82,8 +90,9 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
     setImporting(true)
     try {
       const lines = (await file.text()).split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith("#"))
-      const headers = lines.shift()?.split(",").map((value) => value.trim().replace(/^"|"$/g, "")) ?? []
-      const rows = lines.map((line) => { const values = line.match(/(?:"(?:[^"]|"")*"|[^,])+/g)?.map((value) => value.trim().replace(/^"|"$/g, "").replaceAll('""', '"')) ?? []; return Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""])) })
+      const delimiter = lines[0]?.includes("\t") ? "\t" : ","
+      const headers = lines.shift()?.split(delimiter).map((value) => value.trim().replace(/^"|"$/g, "")) ?? []
+      const rows = lines.map((line) => { const values = delimiter === "\t" ? line.split("\t") : line.match(/(?:"(?:[^"]|"")*"|[^,])+/g); return Object.fromEntries(headers.map((header, index) => [header, (values?.[index] ?? "").trim().replace(/^"|"$/g, "").replaceAll('""', '"')])) })
       const response = await fetch("/api/transport/vehicles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows }) })
       const body = await response.json().catch(() => null); if (!response.ok) throw new Error(body?.error ?? "Import failed")
       const errors = Array.isArray(body?.errors) ? body.errors : []
