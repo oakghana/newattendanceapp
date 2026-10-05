@@ -65,11 +65,19 @@ export async function POST(request: Request) {
 
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index] ?? {}
-    const profile = profileById.get(String(row.profile_id ?? "").trim()) || profileByEmployee.get(String(row.employee_id ?? "").trim().toLowerCase())
-    if (!profile) { errors.push(`Row ${index + 2}: employee_id or profile_id does not match an active driver.`); continue }
+    const employeeId = String(row.employee_id ?? "").trim()
+    const profileId = String(row.profile_id ?? "").trim()
+    const profile = profileById.get(profileId) || profileByEmployee.get(employeeId.toLowerCase())
+    if (!profile) { errors.push(`Row ${index + 2}: no active driver matched employee_id/profile_id. Check the ID and ensure the user has a driver role.`); continue }
     const expiry = String(row.expiry_date ?? "").trim()
     const licenseNumber = String(row.license_number ?? "").trim()
-    if (!expiry || !licenseNumber) { errors.push(`Row ${index + 2}: expiry_date and license_number are required.`); continue }
+    const rowErrors: string[] = []
+    if (!licenseNumber) rowErrors.push("license_number is required")
+    if (!expiry) rowErrors.push("expiry_date is required")
+    else if (Number.isNaN(Date.parse(expiry))) rowErrors.push("expiry_date must be a valid date such as 2029-12-31")
+    const productionYear = String(row.production_year ?? "").trim()
+    if (productionYear && (!Number.isInteger(Number(productionYear)) || Number(productionYear) < 1900 || Number(productionYear) > new Date().getFullYear())) rowErrors.push("production_year must be a valid year")
+    if (rowErrors.length) { errors.push(`Row ${index + 2}: ${rowErrors.join("; ")}.`); continue }
     const payload = {
       profile_id: profile.id,
       full_name: String(row.full_name ?? [profile.first_name, profile.last_name].filter(Boolean).join(" ")).trim(),
