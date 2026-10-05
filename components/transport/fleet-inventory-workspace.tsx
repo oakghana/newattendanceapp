@@ -78,7 +78,15 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), "Fleet Import")
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(locations.map((location) => ({ location_id: location.id, location_name: location.name }))), "Locations")
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["Vehicle type options"], ...vehicleTypes.map((type) => [type])]), "Vehicle Types")
-    XLSX.utils.writeFile(workbook, "fleet-vehicles-template.xlsx")
+    const workbookData = XLSX.write(workbook, { bookType: "xlsx", type: "array" })
+    const url = URL.createObjectURL(new Blob([workbookData], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }))
+    const link = document.createElement("a")
+    link.href = url
+    link.download = "fleet-vehicles-template.xlsx"
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
   }
 
   function exportFleet() {
