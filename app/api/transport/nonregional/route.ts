@@ -512,6 +512,28 @@ export async function POST(request: Request) {
   )
 }
 
+export async function DELETE(request: Request) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const { data: profile } = await supabase.from("user_profiles").select("role, is_active").eq("id", user.id).single()
+  if (!profile?.is_active || !isAdminRole(profile.role)) {
+    return NextResponse.json({ error: "Only administrators can delete transport requisitions." }, { status: 403 })
+  }
+
+  const id = new URL(request.url).searchParams.get("id")?.trim()
+  if (!id) return NextResponse.json({ error: "Requisition id is required." }, { status: 400 })
+
+  const admin = await createAdminClient()
+  const { data: existing } = await admin.from("nonregional_transport_requisitions").select("id").eq("id", id).maybeSingle()
+  if (!existing) return NextResponse.json({ error: "Requisition not found." }, { status: 404 })
+
+  const { error } = await admin.from("nonregional_transport_requisitions").delete().eq("id", id)
+  if (error) return NextResponse.json({ error: "Unable to delete transport requisition." }, { status: 500 })
+  return NextResponse.json({ ok: true, id })
+}
+
 export async function PATCH(request: Request) {
   const supabase = await createClient()
   const {
