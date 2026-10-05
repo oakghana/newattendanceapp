@@ -1,7 +1,8 @@
 "use client"
 
 import { useMemo, useRef, useState, type FormEvent } from "react"
-import { ArrowLeft, CalendarClock, CarFront, CircleAlert, Download, FileSpreadsheet, Pencil, Plus, Search, Upload } from "lucide-react"
+import * as XLSX from "xlsx"
+import { ArrowLeft, CalendarClock, CarFront, CircleAlert, Download, FileSpreadsheet, Pencil, Plus, Search, Trash2, Upload } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -31,6 +32,10 @@ type Booking = { id: string; vehicle_id: string; starts_at: string; ends_at: str
 type FleetLocation = { id: string; name: string }
 
 const vehicleTypes = ["saloon", "bus", "truck", "pickup", "van"]
+
+function normalizeRegistration(value: unknown) {
+  return String(value ?? "").trim().toUpperCase().replace(/[\s-]+/g, "")
+}
 const statusTone: Record<Vehicle["status"], "default" | "secondary" | "destructive" | "outline"> = { available: "default", assigned: "secondary", maintenance: "destructive", inactive: "outline" }
 
 function VehicleFields({ vehicle, locations }: { vehicle?: Vehicle; locations: FleetLocation[] }) {
@@ -52,19 +57,50 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
   const [vehicles, setVehicles] = useState(initialVehicles)
   const [bookings] = useState(initialBookings)
   const [query, setQuery] = useState("")
+  const [activeType, setActiveType] = useState("all")
+  const [page, setPage] = useState(1)
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Vehicle | null>(null)
   const [saving, setSaving] = useState(false)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const importInput = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
-  const visibleVehicles = useMemo(() => vehicles.filter((vehicle) => `${vehicle.registration_number} ${vehicle.chassis_number || ""} ${vehicle.vehicle_colour || ""} ${vehicle.make} ${vehicle.model} ${vehicle.vehicle_type} ${vehicle.assigned_location?.name || ""}`.toLowerCase().includes(query.toLowerCase())), [vehicles, query])
+  const [importErrors, setImportErrors] = useState<string[]>([])
+  const uniqueVehicles = useMemo(() => Array.from(new Map(vehicles.map((vehicle) => [vehicle.registration_number.trim().toUpperCase(), vehicle])).values()), [vehicles])
+  const filteredVehicles = useMemo(() => uniqueVehicles.filter((vehicle) => {
+    if (activeType !== "all" && vehicle.vehicle_type !== activeType) return false
+    const searchable = `${vehicle.registration_number} ${vehicle.chassis_number || ""} ${vehicle.vehicle_colour || ""} ${vehicle.make} ${vehicle.model} ${vehicle.vehicle_type} ${vehicle.assigned_location?.name || ""}`.toLowerCase()
+    return searchable.includes(query.toLowerCase()) || normalizeRegistration(vehicle.registration_number).includes(normalizeRegistration(query))
+  }), [uniqueVehicles, activeType, query])
+  const pageSize = 10
+  const pageCount = Math.max(1, Math.ceil(filteredVehicles.length / pageSize))
+  const visibleVehicles = filteredVehicles.slice((page - 1) * pageSize, page * pageSize)
   const today = new Date().toISOString().slice(0, 10)
   const expiring = vehicles.filter((vehicle) => [vehicle.insurance_expiry_date, vehicle.roadworthy_expiry_date].some((date) => date && date <= new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10))).length
 
   function downloadFleetTemplate() {
-    const csv = 'registration_number,vehicle_type,assigned_location_id,make,model,capacity,chassis_number,vehicle_colour,insurance_expiry_date,roadworthy_expiry_date,notes\nGR-0001,saloon,LOCATION_ID,Toyota,Corolla,5,CHASSIS-0001,White,2027-12-31,2027-12-31,"Replace this example with your vehicle details"\r\n'
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = "fleet-vehicles-template.csv"; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url)
+    const locationList = locations.length ? locations.map((location) => `${location.name} (${location.id})`).join("; ") : "No active locations available"
+    const rows = [
+      [`# Fleet import guide: registration_number is the only mandatory column. All other columns are optional.`],
+      [`# vehicle_type options: ${vehicleTypes.join(", ")}`],
+      [`# assigned_location_id options: ${locationList}`],
+      [`# Use either a location ID or the exact location name. Leave optional values blank when unavailable.`],
+      ["registration_number", "vehicle_type", "assigned_location_id", "make", "model", "capacity", "chassis_number", "vehicle_colour", "insurance_expiry_date", "roadworthy_expiry_date", "notes"],
+      ["GR-0001", "saloon", "", "Toyota", "Corolla", "5", "", "", "2027-12-31", "2027-12-31", "Replace this example with your vehicle details"],
+    ]
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), "Fleet Import")
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(locations.map((location) => ({ location_id: location.id, location_name: location.name }))), "Locations")
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["Vehicle type options"], ...vehicleTypes.map((type) => [type])]), "Vehicle Types")
+    const workbookData = XLSX.write(workbook, { bookType: "xlsx", type: "array" })
+    const url = URL.createObjectURL(new Blob([workbookData], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }))
+    const link = document.createElement("a")
+    link.href = url
+    link.download = "fleet-vehicles-template.xlsx"
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
   }
 
   function exportFleet() {
@@ -79,12 +115,27 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
   async function importFleet(file: File) {
     setImporting(true)
     try {
-      const lines = (await file.text()).split(/\r?\n/).filter(Boolean)
-      const headers = lines.shift()?.split(",").map((value) => value.trim().replace(/^"|"$/g, "")) ?? []
-      const rows = lines.map((line) => { const values = line.match(/(?:"(?:[^"]|"")*"|[^,])+/g)?.map((value) => value.trim().replace(/^"|"$/g, "").replaceAll('""', '"')) ?? []; return Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""])) })
+      let rows: Record<string, string>[]
+      if (/\.xlsx?$/i.test(file.name)) {
+        const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" })
+        const sheet = workbook.Sheets[workbook.SheetNames.includes("Fleet Import") ? "Fleet Import" : workbook.SheetNames[0]]
+        const matrix = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1, defval: "", raw: false })
+        const headerIndex = matrix.findIndex((row) => row.some((value) => String(value).trim().toLowerCase() === "registration_number"))
+        if (headerIndex < 0) throw new Error("The workbook must contain a registration_number column in the Fleet Import sheet.")
+        const headers = matrix[headerIndex].map((value) => String(value).trim())
+        rows = matrix.slice(headerIndex + 1).filter((row) => row.some((value) => String(value).trim())).map((row) => Object.fromEntries(headers.map((header, index) => [header, String(row[index] ?? "").trim()])))
+      } else {
+        const lines = (await file.text()).split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith("#") && line.trim().toLowerCase() !== "sep=,")
+        const delimiter = lines[0]?.includes("\t") ? "\t" : ","
+        const headers = lines.shift()?.split(delimiter).map((value) => value.trim().replace(/^"|"$/g, "")) ?? []
+        rows = lines.map((line) => { const values = delimiter === "\t" ? line.split("\t") : line.match(/(?:"(?:[^"]|"")*"|[^,])+/g); return Object.fromEntries(headers.map((header, index) => [header, (values?.[index] ?? "").trim().replace(/^"|"$/g, "").replaceAll('""', '"')])) })
+      }
       const response = await fetch("/api/transport/vehicles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows }) })
       const body = await response.json().catch(() => null); if (!response.ok) throw new Error(body?.error ?? "Import failed")
-      toast({ title: "Fleet import complete", description: `${body.imported} vehicle(s) imported${body.errors?.length ? `; ${body.errors.length} row(s) need attention.` : "."}` }); window.location.reload()
+      const errors = Array.isArray(body?.errors) ? body.errors : []
+      const skippedDuplicates = Array.isArray(body?.skippedDuplicates) ? body.skippedDuplicates : []
+      setImportErrors([...skippedDuplicates.map((message: string) => `Skipped duplicate: ${message}`), ...errors])
+      toast({ title: body.imported ? "Fleet import completed" : "No new vehicles imported", description: `${body.imported ?? 0} unique vehicle(s) imported${skippedDuplicates.length ? `; ${skippedDuplicates.length} duplicate(s) skipped` : ""}${errors.length ? `; ${errors.length} other issue(s) need attention.` : "."}`, variant: errors.length ? "destructive" : "default" }); if (body.imported) window.location.reload()
     } catch (error) { toast({ title: "Fleet import failed", description: error instanceof Error ? error.message : "Please use the fleet template.", variant: "destructive" }) } finally { setImporting(false) }
   }
 
@@ -106,6 +157,15 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
     toast({ title: "Vehicle updated", description: `${body.vehicle.registration_number} details were saved.` })
   }
 
+  async function deleteVehicle(vehicle: Vehicle) {
+    if (!window.confirm(`Delete vehicle ${vehicle.registration_number}? This cannot be undone.`)) return
+    const response = await fetch(`/api/transport/vehicles?id=${encodeURIComponent(vehicle.id)}`, { method: "DELETE" })
+    const body = await response.json().catch(() => null)
+    if (!response.ok) return toast({ title: "Unable to delete vehicle", description: body?.error ?? "Please try again.", variant: "destructive" })
+    setVehicles((current) => current.filter((item) => item.id !== vehicle.id))
+    toast({ title: "Vehicle deleted", description: `${vehicle.registration_number} was removed from the fleet.` })
+  }
+
   async function changeStatus(vehicle: Vehicle, status: Vehicle["status"]) {
     setUpdatingId(vehicle.id)
     const response = await fetch("/api/transport/vehicles", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: vehicle.id, status }) })
@@ -115,11 +175,12 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
   }
 
   return <div className="space-y-6">
-    <header className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between"><div><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><CarFront className="size-5" /></div><div><p className="text-sm font-medium text-primary">Transport operations</p><h1 className="text-3xl font-semibold tracking-tight">Fleet inventory</h1></div></div><p className="mt-3 text-sm leading-6 text-muted-foreground">Maintain vehicle availability, location, compliance dates, and current trip reservations.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" asChild><a href="/dashboard/transport"><ArrowLeft data-icon="inline-start" /> Back to transport</a></Button>{canEdit && <><input ref={importInput} type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importFleet(file); event.currentTarget.value = "" }} /><Button variant="outline" onClick={downloadFleetTemplate}><FileSpreadsheet data-icon="inline-start" /> Template</Button><Button variant="outline" disabled={importing} onClick={() => importInput.current?.click()}><Upload data-icon="inline-start" /> {importing ? "Importing..." : "Import CSV"}</Button><Button variant="outline" onClick={exportFleet}><Download data-icon="inline-start" /> Export CSV</Button><Button onClick={() => setAdding(true)}><Plus data-icon="inline-start" /> Register vehicle</Button></>}</div></header>
+    <header className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between"><div><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><CarFront className="size-5" /></div><div><p className="text-sm font-medium text-primary">Transport operations</p><h1 className="text-3xl font-semibold tracking-tight">Fleet inventory</h1></div></div><p className="mt-3 text-sm leading-6 text-muted-foreground">Maintain vehicle availability, location, compliance dates, and current trip reservations.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" asChild><a href="/dashboard/transport"><ArrowLeft data-icon="inline-start" /> Back to transport</a></Button>{canEdit && <><input ref={importInput} type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importFleet(file); event.currentTarget.value = "" }} /><Button variant="outline" onClick={downloadFleetTemplate}><FileSpreadsheet data-icon="inline-start" /> Template</Button><Button variant="outline" disabled={importing} onClick={() => importInput.current?.click()}><Upload data-icon="inline-start" /> {importing ? "Importing..." : "Import CSV / Excel"}</Button><Button variant="outline" onClick={exportFleet}><Download data-icon="inline-start" /> Export CSV</Button><Button onClick={() => setAdding(true)}><Plus data-icon="inline-start" /> Register vehicle</Button></>}</div></header>
     <div className="grid gap-4 sm:grid-cols-3"><Card><CardContent className="p-5"><p className="text-sm text-muted-foreground">Vehicles in scope</p><p className="mt-1 text-3xl font-semibold">{vehicles.length}</p></CardContent></Card><Card><CardContent className="p-5"><p className="text-sm text-muted-foreground">Available now</p><p className="mt-1 text-3xl font-semibold text-emerald-700">{vehicles.filter((vehicle) => vehicle.status === "available").length}</p></CardContent></Card><Card><CardContent className="p-5"><p className="text-sm text-muted-foreground">Compliance due in 90 days</p><p className="mt-1 text-3xl font-semibold text-amber-700">{expiring}</p></CardContent></Card></div>
-    <Card><CardHeader className="flex-row items-center justify-between gap-4"><CardTitle>Vehicle register</CardTitle><div className="relative w-full max-w-sm"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input className="pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search registration, type, or location" /></div></CardHeader><CardContent className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="p-3">Vehicle</th><th className="p-3">Location</th><th className="p-3">Capacity</th><th className="p-3">Compliance</th><th className="p-3">Status</th><th className="p-3">Actions</th></tr></thead><tbody>{visibleVehicles.map((vehicle) => { const isDue = [vehicle.insurance_expiry_date, vehicle.roadworthy_expiry_date].some((date) => date && date <= today); const location = vehicle.assigned_location?.name || locations.find((item) => item.id === vehicle.assigned_location_id)?.name || "Not recorded"; return <tr key={vehicle.id} className="border-b last:border-0"><td className="p-3"><p className="font-medium">{vehicle.registration_number}</p><p className="text-xs text-muted-foreground">{vehicle.make} {vehicle.model} · {vehicle.vehicle_type} · {vehicle.vehicle_colour || "Colour not recorded"}</p></td><td className="p-3">{location}</td><td className="p-3">{vehicle.capacity} seats</td><td className="p-3">{isDue ? <span className="inline-flex items-center gap-1 text-amber-700"><CircleAlert className="size-4" /> Review due</span> : <span className="text-muted-foreground">Insurance: {vehicle.insurance_expiry_date || "Not recorded"}</span>}</td><td className="p-3"><Badge variant={statusTone[vehicle.status]}>{vehicle.status}</Badge></td><td className="p-3">{canEdit ? <div className="flex items-center gap-2"><select value={vehicle.status} disabled={updatingId === vehicle.id} onChange={(event) => void changeStatus(vehicle, event.target.value as Vehicle["status"])} className="h-9 rounded-md border bg-background px-2"><option value="available">Available</option><option value="assigned">Assigned</option><option value="maintenance">Maintenance</option><option value="inactive">Inactive</option></select><Button type="button" variant="outline" size="sm" onClick={() => setEditing(vehicle)}><Pencil data-icon="inline-start" /> Edit</Button></div> : <span className="text-xs text-muted-foreground">Read only</span>}</td></tr> })}</tbody></table></CardContent></Card>
+    <Card><CardHeader className="flex-col items-start gap-4"><div className="flex w-full items-center justify-between gap-4"><CardTitle>Vehicle register</CardTitle><span className="text-sm text-muted-foreground">{filteredVehicles.length} vehicle{filteredVehicles.length === 1 ? "" : "s"}</span></div><div className="flex w-full flex-wrap gap-2">{["all", ...vehicleTypes].map((type) => <Button key={type} size="sm" variant={activeType === type ? "default" : "outline"} onClick={() => { setActiveType(type); setPage(1) }}>{type === "all" ? "All vehicles" : type[0].toUpperCase() + type.slice(1)}</Button>)}</div><div className="relative w-full max-w-sm"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input className="pl-9" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1) }} placeholder="Search registration, type, or location" /></div></CardHeader><CardContent className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="p-3">Vehicle</th><th className="p-3">Location</th><th className="p-3">Capacity</th><th className="p-3">Compliance</th><th className="p-3">Status</th><th className="p-3">Actions</th></tr></thead><tbody>{visibleVehicles.map((vehicle) => { const isDue = [vehicle.insurance_expiry_date, vehicle.roadworthy_expiry_date].some((date) => date && date <= today); const location = vehicle.assigned_location?.name || locations.find((item) => item.id === vehicle.assigned_location_id)?.name || "Not recorded"; return <tr key={vehicle.id} className="border-b last:border-0"><td className="p-3"><p className="font-medium">{vehicle.registration_number}</p><p className="text-xs text-muted-foreground">{vehicle.make} {vehicle.model} · {vehicle.vehicle_type} · {vehicle.vehicle_colour || "Colour not recorded"}</p></td><td className="p-3">{location}</td><td className="p-3">{vehicle.capacity} seats</td><td className="p-3">{isDue ? <span className="inline-flex items-center gap-1 text-amber-700"><CircleAlert className="size-4" /> Review due</span> : <span className="text-muted-foreground">Insurance: {vehicle.insurance_expiry_date || "Not recorded"}</span>}</td><td className="p-3"><Badge variant={statusTone[vehicle.status]}>{vehicle.status}</Badge></td><td className="p-3">{canEdit && <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => void deleteVehicle(vehicle)}><Trash2 className="size-4" />Delete</Button>}{canEdit ? <div className="flex items-center gap-2"><select value={vehicle.status} disabled={updatingId === vehicle.id} onChange={(event) => void changeStatus(vehicle, event.target.value as Vehicle["status"])} className="h-9 rounded-md border bg-background px-2"><option value="available">Available</option><option value="assigned">Assigned</option><option value="maintenance">Maintenance</option><option value="inactive">Inactive</option></select><Button type="button" variant="outline" size="sm" onClick={() => setEditing(vehicle)}><Pencil data-icon="inline-start" /> Edit</Button></div> : <span className="text-xs text-muted-foreground">Read only</span>}</td></tr> })}</tbody></table><div className="mt-4 flex items-center justify-between border-t pt-4"><p className="text-sm text-muted-foreground">Page {page} of {pageCount}</p><div className="flex gap-2"><Button size="sm" variant="outline" disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</Button><Button size="sm" variant="outline" disabled={page === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>Next</Button></div></div></CardContent></Card>
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><CalendarClock className="size-5" /> Current booking register</CardTitle></CardHeader><CardContent>{bookings.length ? <ul className="divide-y">{bookings.slice(0, 10).map((booking) => <li key={booking.id} className="flex items-center justify-between py-3 text-sm"><span>{vehicles.find((vehicle) => vehicle.id === booking.vehicle_id)?.registration_number ?? "Vehicle"}</span><span className="text-muted-foreground">{new Date(booking.starts_at).toLocaleString()} to {new Date(booking.ends_at).toLocaleString()}</span><Badge variant="secondary">{booking.status}</Badge></li>)}</ul> : <p className="py-4 text-sm text-muted-foreground">No active vehicle bookings have been recorded.</p>}</CardContent></Card>
     <Dialog open={adding} onOpenChange={setAdding}><DialogContent><DialogHeader><DialogTitle>Register vehicle</DialogTitle></DialogHeader><form className="grid gap-4" onSubmit={addVehicle}><VehicleFields locations={locations} /><div className="grid gap-2"><Label>Notes</Label><Textarea name="notes" /></div><DialogFooter><Button type="submit" disabled={saving}>{saving ? "Registering..." : "Register vehicle"}</Button></DialogFooter></form></DialogContent></Dialog>
+    <Dialog open={importErrors.length > 0} onOpenChange={(open) => !open && setImportErrors([])}><DialogContent><DialogHeader><DialogTitle>Fleet import issues</DialogTitle></DialogHeader><p className="text-sm text-muted-foreground">Rows with issues were not imported. Correct these items and upload the file again.</p><ul className="max-h-72 list-disc space-y-2 overflow-y-auto rounded-md border p-4 text-sm">{importErrors.map((error, index) => <li key={`${error}-${index}`}>{error}</li>)}</ul><DialogFooter><Button variant="outline" onClick={() => setImportErrors([])}>Close</Button></DialogFooter></DialogContent></Dialog>
     <Dialog open={Boolean(editing)} onOpenChange={(open) => !open && setEditing(null)}><DialogContent><DialogHeader><DialogTitle>Edit vehicle</DialogTitle></DialogHeader>{editing && <form className="grid gap-4" onSubmit={saveVehicle}><VehicleFields vehicle={editing} locations={locations} /><div className="grid gap-2"><Label>Notes</Label><Textarea name="notes" defaultValue={editing.notes ?? ""} /></div><DialogFooter><Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button></DialogFooter></form>}</DialogContent></Dialog>
   </div>
 }

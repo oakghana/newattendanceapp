@@ -269,6 +269,17 @@ export async function POST(request: Request) {
   const regionalRoute = String(body.regionalRoute ?? "").trim()
   if ((isRegionalHr || isRegionalManager) && !["local_regional", "head_office"].includes(regionalRoute)) return NextResponse.json({ error: "Select a regional transport approval route." }, { status: 400 })
   if (!purpose || !origin || !destination || !eventDate || !Number.isInteger(passengerCount) || passengerCount < 1) return NextResponse.json({ error: "Complete all required request details." }, { status: 400 })
+  const { data: duplicateRequest } = await supabase
+    .from("transport_requests")
+    .select("id, reference_number, status")
+    .eq("requester_id", user.id)
+    .eq("event_date", eventDate)
+    .ilike("origin", origin)
+    .ilike("destination", destination)
+    .not("status", "in", "(rejected,cancelled,completed,closed)")
+    .limit(1)
+    .maybeSingle()
+  if (duplicateRequest) return NextResponse.json({ error: `Duplicate request blocked. You already have an active transport request for ${origin} to ${destination} on ${eventDate} (${duplicateRequest.reference_number ?? "submitted"}). Repeated requests are monitored and may be removed by an administrator.` }, { status: 409 })
   const { data: signer } = await supabase.from("user_profiles").select("signature_data_url").eq("id", user.id).single()
   const signedAt = new Date().toISOString()
   let hasDistrictOfficer = false
@@ -349,6 +360,19 @@ export async function POST(request: Request) {
     )
   }
   return NextResponse.json({ id: data.id }, { status: 201 })
+}
+
+export async function DELETE(request: Request) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const { data: profile } = await supabase.from("user_profiles").select("role, is_active").eq("id", user.id).single()
+  if (!profile?.is_active || !isAdminRole(profile.role)) return NextResponse.json({ error: "Only administrators can delete transport requests." }, { status: 403 })
+  const id = new URL(request.url).searchParams.get("id")?.trim()
+  if (!id) return NextResponse.json({ error: "Request id is required." }, { status: 400 })
+  const { error } = await supabase.from("transport_requests").delete().eq("id", id)
+  if (error) return NextResponse.json({ error: "Unable to delete transport request." }, { status: 500 })
+  return NextResponse.json({ ok: true, id })
 }
 
 export async function PATCH(request: Request) {

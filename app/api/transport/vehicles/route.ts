@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { canEditFleetInventory, canViewFleetInventory, hasNationwideFleetScope, isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
+import { canEditFleetInventory, canViewFleetInventory, hasNationwideFleetScope, isAdminRole, isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
 async function actor() {
@@ -9,6 +9,10 @@ async function actor() {
   if (!user) return { supabase, user: null, profile: null }
   const { data: profile } = await supabase.from("user_profiles").select("role, is_active, region_id, assigned_location_id").eq("id", user.id).maybeSingle()
   return { supabase, user, profile }
+}
+
+function normalizeRegistration(value: unknown) {
+  return String(value ?? "").trim().toUpperCase().replace(/[\s-]+/g, "")
 }
 
 async function resolveFleetScope(supabase: any, profile: any) {
@@ -49,18 +53,39 @@ export async function POST(request: Request) {
   if (Array.isArray(body.rows)) {
     if (body.rows.length < 1 || body.rows.length > 1000) return NextResponse.json({ error: "Upload between 1 and 1,000 vehicle rows." }, { status: 400 })
     const scopedLocationIds = await resolveFleetScope(supabase, profile)
-    let imported = 0; const errors: string[] = []
+    let imported = 0; const errors: string[] = []; const skippedDuplicates: string[] = []
+    const { data: locations } = await supabase.from("geofence_locations").select("id, name").eq("is_active", true)
+    const locationByName = new Map((locations ?? []).map((location) => [String(location.name).trim().toLowerCase(), location.id]))
+    const allowedVehicleTypes = ["saloon", "bus", "truck", "pickup", "van"]
+    const { data: existingVehicles } = await supabase.from("transport_vehicles").select("registration_number")
+    const existingRegistrationNumbers = new Map((existingVehicles ?? []).map((vehicle) => [normalizeRegistration(vehicle.registration_number), String(vehicle.registration_number ?? "").trim()]))
+    const importedRegistrationNumbers = new Set<string>()
     for (let index = 0; index < body.rows.length; index += 1) {
-      const row = body.rows[index] ?? {}; const registrationNumber = String(row.registration_number ?? "").trim().toUpperCase(); const assignedLocationId = String(row.assigned_location_id ?? "").trim(); const capacity = Number(row.capacity)
-      const vehicleType = String(row.vehicle_type ?? "saloon").trim().toLowerCase()
-      if (!registrationNumber || !String(row.make ?? "").trim() || !String(row.model ?? "").trim() || !assignedLocationId || !String(row.chassis_number ?? "").trim() || !String(row.vehicle_colour ?? "").trim() || !["saloon", "bus", "truck", "pickup", "van"].includes(vehicleType) || !Number.isInteger(capacity) || capacity < 1) { errors.push(`Row ${index + 2}: required vehicle details are missing or invalid.`); continue }
-      if (scopedLocationIds && !scopedLocationIds.includes(assignedLocationId)) { errors.push(`Row ${index + 2}: location is outside your assigned fleet scope.`); continue }
-      const { error } = await supabase.from("transport_vehicles").insert({ registration_number: registrationNumber, make: String(row.make).trim(), model: String(row.model).trim(), capacity, vehicle_type: vehicleType, assigned_region_id: profile.region_id ?? null, assigned_location_id: assignedLocationId, status: ["available", "assigned", "maintenance", "inactive"].includes(String(row.status)) ? String(row.status) : "available", chassis_number: String(row.chassis_number).trim().toUpperCase(), vehicle_colour: String(row.vehicle_colour).trim(), insurance_expiry_date: String(row.insurance_expiry_date ?? "") || null, roadworthy_expiry_date: String(row.roadworthy_expiry_date ?? "") || null, notes: String(row.notes ?? "").trim() || null, created_by: user.id })
-      if (error) errors.push(`Row ${index + 2}: ${error.code === "23505" ? "registration number already exists." : "could not be imported."}`); else imported += 1
+      const row = body.rows[index] ?? {}
+      const registrationNumber = String(row.registration_number ?? "").trim().toUpperCase()
+      const registrationKey = normalizeRegistration(registrationNumber)
+      if (!registrationNumber) { errors.push(`Row ${index + 2}: registration_number is required.`); continue }
+      const existingValue = existingRegistrationNumbers.get(registrationKey)
+      if (existingValue || importedRegistrationNumbers.has(registrationKey)) { skippedDuplicates.push(`Row ${index + 2}: ${registrationNumber}${existingValue ? ` matches existing registration ${existingValue}` : " is repeated in this file"}.`); continue }
+      importedRegistrationNumbers.add(registrationKey)
+      const vehicleTypeValue = String(row.vehicle_type ?? "").trim().toLowerCase()
+      const vehicleType = allowedVehicleTypes.includes(vehicleTypeValue) ? vehicleTypeValue : null
+      const locationValue = String(row.assigned_location_id ?? row.location ?? "").trim()
+      const assignedLocationId = locations?.some((location) => location.id === locationValue) ? locationValue : locationByName.get(locationValue.toLowerCase()) ?? null
+      if (vehicleTypeValue && !vehicleType) errors.push(`Row ${index + 2}: vehicle_type must be one of ${allowedVehicleTypes.join(", ")}.`)
+      if (locationValue && !assignedLocationId) errors.push(`Row ${index + 2}: location was not found: ${locationValue}.`)
+      if (assignedLocationId && scopedLocationIds && !scopedLocationIds.includes(assignedLocationId)) errors.push(`Row ${index + 2}: location is outside your assigned fleet scope.`)
+      const capacityValue = String(row.capacity ?? "").trim()
+      const capacity = capacityValue ? Number(capacityValue) : null
+      if (capacityValue && (!Number.isInteger(capacity) || capacity < 1)) errors.push(`Row ${index + 2}: capacity must be a positive whole number.`)
+      if ((vehicleTypeValue && !vehicleType) || (locationValue && !assignedLocationId) || (assignedLocationId && scopedLocationIds && !scopedLocationIds.includes(assignedLocationId)) || (capacityValue && (!Number.isInteger(capacity) || capacity < 1))) continue
+      const { error } = await supabase.from("transport_vehicles").insert({ registration_number: registrationNumber, make: String(row.make ?? "").trim() || null, model: String(row.model ?? "").trim() || null, capacity, vehicle_type: vehicleType, assigned_region_id: profile.region_id ?? null, assigned_location_id: assignedLocationId, status: ["available", "assigned", "maintenance", "inactive"].includes(String(row.status).toLowerCase()) ? String(row.status).toLowerCase() : "available", chassis_number: String(row.chassis_number ?? "").trim().toUpperCase() || null, vehicle_colour: String(row.vehicle_colour ?? "").trim() || null, insurance_expiry_date: String(row.insurance_expiry_date ?? "") || null, roadworthy_expiry_date: String(row.roadworthy_expiry_date ?? "") || null, notes: String(row.notes ?? "").trim() || null, created_by: user.id })
+      if (error) errors.push(`Row ${index + 2}: ${error.code === "23505" ? "registration number already exists." : error.message || "could not be imported."}`); else imported += 1
     }
-    return NextResponse.json({ ok: errors.length === 0, imported, errors })
+    return NextResponse.json({ ok: errors.length === 0, imported, skippedDuplicates, errors })
   }
   const registrationNumber = String(body.registration_number ?? "").trim().toUpperCase()
+  const registrationKey = normalizeRegistration(registrationNumber)
   const make = String(body.make ?? "").trim()
   const model = String(body.model ?? "").trim()
   const capacity = Number(body.capacity)
@@ -72,6 +97,9 @@ export async function POST(request: Request) {
   if (!registrationNumber || !make || !model || !assignedLocationId || !chassisNumber || !vehicleColour || !allowedVehicleTypes.includes(vehicleType) || !Number.isInteger(capacity) || capacity < 1) return NextResponse.json({ error: "Registration, chassis number, colour, make, model, location, valid vehicle type, and a positive capacity are required." }, { status: 400 })
   const scopedLocationIds = await resolveFleetScope(supabase, profile)
   if (scopedLocationIds && !scopedLocationIds.includes(assignedLocationId)) return NextResponse.json({ error: "You can register vehicles only at locations assigned to your office." }, { status: 403 })
+  const { data: duplicateVehicles } = await supabase.from("transport_vehicles").select("id, registration_number")
+  const duplicateVehicle = (duplicateVehicles ?? []).find((vehicle) => normalizeRegistration(vehicle.registration_number) === registrationKey)
+  if (duplicateVehicle) return NextResponse.json({ error: `Registration number ${registrationNumber} matches the existing fleet registration ${String(duplicateVehicle.registration_number).trim()}. Check spaces and hyphens, then use a different number.` }, { status: 409 })
   const { data, error } = await supabase.from("transport_vehicles").insert({
     registration_number: registrationNumber, make, model, capacity,
     vehicle_type: vehicleType,
@@ -87,6 +115,25 @@ export async function POST(request: Request) {
   }).select("*").single()
   if (error) return NextResponse.json({ error: error.code === "23505" ? "That registration number already exists." : "Unable to register vehicle." }, { status: 500 })
   return NextResponse.json({ vehicle: data }, { status: 201 })
+}
+
+export async function DELETE(request: Request) {
+  const { supabase, user, profile } = await actor()
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!profile?.is_active || !canEditFleetInventory(profile.role)) return NextResponse.json({ error: "Only administrators or Transport Managers can delete vehicles." }, { status: 403 })
+  const id = String(new URL(request.url).searchParams.get("id") ?? "")
+  if (!id) return NextResponse.json({ error: "Vehicle id is required." }, { status: 400 })
+  const scopedLocationIds = isAdminRole(profile.role) ? null : await resolveFleetScope(supabase, profile)
+  if (scopedLocationIds?.length === 0) return NextResponse.json({ error: "No fleet locations are assigned to this account." }, { status: 403 })
+  let query = supabase.from("transport_vehicles").select("id, registration_number").eq("id", id)
+  if (scopedLocationIds) query = query.in("assigned_location_id", scopedLocationIds)
+  const { data: vehicle } = await query.maybeSingle()
+  if (!vehicle) return NextResponse.json({ error: "Vehicle not found in your assigned scope." }, { status: 404 })
+  const { count: bookingCount } = await supabase.from("transport_vehicle_bookings").select("id", { count: "exact", head: true }).eq("vehicle_id", id).neq("status", "cancelled")
+  if (bookingCount) return NextResponse.json({ error: "This vehicle has active bookings and cannot be deleted. Mark it inactive instead." }, { status: 409 })
+  const { error } = await supabase.from("transport_vehicles").delete().eq("id", id)
+  if (error) return NextResponse.json({ error: "Unable to delete vehicle." }, { status: 500 })
+  return NextResponse.json({ ok: true, id })
 }
 
 export async function PATCH(request: Request) {

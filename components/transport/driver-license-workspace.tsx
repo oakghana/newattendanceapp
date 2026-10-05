@@ -1,10 +1,11 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
-import { ArrowLeft, CalendarClock, Car, CheckCircle2, Clock, Download, FileText, FileSpreadsheet, Loader2, MapPin, Pencil, Play, Route, Search, ShieldCheck, TriangleAlert, Upload, Users } from "lucide-react"
+import { ArrowLeft, CalendarClock, Car, CheckCircle2, Clock, Download, FileText, FileSpreadsheet, Loader2, MapPin, Pencil, Play, Route, Search, ShieldCheck, Trash2, TriangleAlert, Upload, Users } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -26,6 +27,7 @@ export function DriverLicenseWorkspace({ initialDrivers, canEdit, role = "manage
   const fileInput = useRef<HTMLInputElement>(null)
   const importInput = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
+  const [importErrors, setImportErrors] = useState<string[]>([])
   const [tasks, setTasks] = useState<any[]>(assignedTasks)
   const [tripBusy, setTripBusy] = useState<string | null>(null)
   const [remindedIds, setRemindedIds] = useState<Set<string>>(new Set())
@@ -100,7 +102,7 @@ export function DriverLicenseWorkspace({ initialDrivers, canEdit, role = "manage
     setImporting(true)
     try {
       const text = await file.text()
-      const lines = text.split(/\r?\n/).filter(Boolean)
+      const lines = text.split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith("#"))
       const headers = lines.shift()?.split(",").map((value) => value.trim().replace(/^"|"$/g, "")) ?? []
       const rows = lines.map((line) => {
         const values = line.match(/(?:"(?:[^"]|"")*"|[^,])+/g)?.map((value) => value.trim().replace(/^"|"$/g, "").replaceAll('""', '"')) ?? []
@@ -109,14 +111,16 @@ export function DriverLicenseWorkspace({ initialDrivers, canEdit, role = "manage
       const response = await fetch("/api/transport/drivers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows }) })
       const result = await response.json().catch(() => null)
       if (!response.ok) throw new Error(result?.error ?? "Import failed")
-      toast({ title: "Driver import complete", description: `${result.imported} driver record(s) imported${result.errors?.length ? `; ${result.errors.length} row(s) need attention.` : "."}` })
-      window.location.reload()
+      const errors = Array.isArray(result?.errors) ? result.errors : []
+      setImportErrors(errors)
+      toast({ title: errors.length ? "Driver import completed with errors" : "Driver import complete", description: `${result.imported ?? 0} driver record(s) imported${errors.length ? `; ${errors.length} issue(s) need attention.` : "."}`, variant: errors.length ? "destructive" : "default" })
+      if (result.imported) window.location.reload()
     } catch (error) { toast({ title: "Driver import failed", description: error instanceof Error ? error.message : "Please check the CSV template.", variant: "destructive" }) }
     finally { setImporting(false) }
   }
 
   function downloadTemplate() {
-    const csv = 'employee_id,full_name,license_number,license_type,issue_date,expiry_date,status,notes\nEMP001,Example Driver,DL-0001,Class C,2026-01-01,2029-12-31,active,"Sample record - replace this row with your driver details"'
+    const csv = '# Driver import guide: employee_id or profile_id must match an active driver account. license_number and expiry_date are required.\r\n# Optional columns: full_name, license_type, issue_date, issuing_authority, obtained_at, production_year, status, verification_status, notes.\r\n# expiry_date and issue_date format: YYYY-MM-DD.\r\nemployee_id,full_name,license_number,license_type,issue_date,expiry_date,status,notes\r\nEMP001,Example Driver,DL-0001,Class C,2026-01-01,2029-12-31,active,"Replace this example with your driver details"'
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = "transport-drivers-template.csv"; link.click(); URL.revokeObjectURL(url)
   }
 
@@ -141,6 +145,15 @@ export function DriverLicenseWorkspace({ initialDrivers, canEdit, role = "manage
       toast({ title: "License uploaded", description: "Your document is awaiting verification." })
     } catch (error) { toast({ title: "Upload failed", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" }) }
     finally { setUploading(false) }
+  }
+
+  async function deleteDriver(driver: Driver) {
+    if (!window.confirm(`Delete ${driver.full_name}'s driver record? This cannot be undone.`)) return
+    const response = await fetch(`/api/transport/drivers?id=${encodeURIComponent(driver.id)}`, { method: "DELETE" })
+    const body = await response.json().catch(() => null)
+    if (!response.ok) return toast({ title: "Unable to delete driver", description: body?.error ?? "Please try again.", variant: "destructive" })
+    setDrivers((current) => current.filter((item) => item.id !== driver.id))
+    toast({ title: "Driver deleted", description: `${driver.full_name}'s record was removed.` })
   }
 
   async function save(status: string) {
@@ -206,6 +219,7 @@ export function DriverLicenseWorkspace({ initialDrivers, canEdit, role = "manage
   </div>
 
   return <div className="flex flex-col gap-6">
+    <Dialog open={importErrors.length > 0} onOpenChange={(open) => !open && setImportErrors([])}><DialogContent><DialogHeader><DialogTitle>Driver import issues</DialogTitle></DialogHeader><p className="text-sm text-muted-foreground">Rows with issues were not imported. Use these messages to correct the file and upload it again.</p><ul className="max-h-72 list-disc space-y-2 overflow-y-auto rounded-md border p-4 text-sm">{importErrors.map((error, index) => <li key={`${error}-${index}`}>{error}</li>)}</ul><DialogFooter><Button variant="outline" onClick={() => setImportErrors([])}>Close</Button></DialogFooter></DialogContent></Dialog>
     <header className="flex flex-col gap-3 border-b pb-5"><div className="flex flex-wrap items-start justify-between gap-3"><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><ShieldCheck /></div><div><h1 className="text-3xl font-semibold tracking-tight">Driver licenses</h1><p className="text-muted-foreground leading-6">Review license evidence and keep regional transport assignments compliant.</p></div></div><Button variant="outline" asChild><a href="/dashboard/transport"><ArrowLeft data-icon="inline-start" /> Back to transport</a></Button></div><p className="text-sm text-muted-foreground">{canEdit ? "Your results are limited to the locations and region assigned to your role." : "Read-only view — limited to the locations and region assigned to your role."}</p></header>
     <div className="grid gap-3 sm:grid-cols-3"><Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Scoped drivers</p><p className="mt-1 text-2xl font-semibold">{drivers.length}</p></CardContent></Card><Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Awaiting verification</p><p className="mt-1 text-2xl font-semibold">{pending}</p></CardContent></Card><Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Expiring within 90 days</p><p className="mt-1 text-2xl font-semibold">{expiring}</p></CardContent></Card></div>
     <Card><CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4"><CardTitle>Regional driver register</CardTitle><div className="flex flex-wrap items-center gap-2"><div className="relative w-full max-w-sm"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input className="pl-9" placeholder="Search driver or license" value={search} onChange={(event) => setSearch(event.target.value)} /></div>{canEdit && <><input ref={importInput} type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importDrivers(file); event.currentTarget.value = "" }} /><Button size="sm" variant="outline" onClick={downloadTemplate}><FileSpreadsheet className="mr-1 size-4" />Template</Button><Button size="sm" variant="outline" disabled={importing} onClick={() => importInput.current?.click()}><Upload className="mr-1 size-4" />{importing ? "Importing…" : "Import CSV"}</Button><Button size="sm" variant="outline" onClick={exportDrivers}><Download className="mr-1 size-4" />Export CSV</Button></>}{canEdit && notSubmitted.length > 0 && <Button size="sm" variant="outline" disabled={reminding !== null} onClick={() => sendReminder("all")}>{reminding === "all" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <TriangleAlert className="mr-1 size-4 text-amber-600" />}Remind all ({notSubmitted.length})</Button>}</div></CardHeader><CardContent className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="p-3">Driver</th><th className="p-3">License</th><th className="p-3">Expiry</th><th className="p-3">Verification</th><th className="p-3 text-right">Action</th></tr></thead><tbody>{visible.map((driver) => {
@@ -221,7 +235,7 @@ export function DriverLicenseWorkspace({ initialDrivers, canEdit, role = "manage
           ) : (
             <>
               {driver.license_document_url && <Button variant="outline" size="sm" asChild><a href={driver.license_document_url} target="_blank" rel="noreferrer"><FileText className="mr-1 size-4" /> Evidence</a></Button>}
-              {canEdit && <Button size="sm" variant="outline" onClick={() => setEditing(driver)}><Pencil className="mr-1 size-4" /> Edit</Button>}
+              {canEdit && <><Button size="sm" variant="outline" onClick={() => setEditing(driver)}><Pencil className="mr-1 size-4" /> Edit</Button><Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => void deleteDriver(driver)}><Trash2 className="mr-1 size-4" /> Delete</Button></>}
             </>
           )}
         </div></td>
