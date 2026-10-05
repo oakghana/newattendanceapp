@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { canEditFleetInventory, canViewFleetInventory, hasNationwideFleetScope, isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
+import { canEditFleetInventory, canViewFleetInventory, hasNationwideFleetScope, isAdminRole, isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
 async function actor() {
@@ -115,7 +115,7 @@ export async function DELETE(request: Request) {
   if (!profile?.is_active || !canEditFleetInventory(profile.role)) return NextResponse.json({ error: "Only administrators or Transport Managers can delete vehicles." }, { status: 403 })
   const id = String(new URL(request.url).searchParams.get("id") ?? "")
   if (!id) return NextResponse.json({ error: "Vehicle id is required." }, { status: 400 })
-  const scopedLocationIds = await resolveFleetScope(supabase, profile)
+  const scopedLocationIds = isAdminRole(profile.role) ? null : await resolveFleetScope(supabase, profile)
   if (scopedLocationIds?.length === 0) return NextResponse.json({ error: "No fleet locations are assigned to this account." }, { status: 403 })
   let query = supabase.from("transport_vehicles").select("id, registration_number").eq("id", id)
   if (scopedLocationIds) query = query.in("assigned_location_id", scopedLocationIds)
