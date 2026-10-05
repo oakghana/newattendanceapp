@@ -54,7 +54,11 @@ export async function POST(request: Request) {
     if (body.rows.length < 1 || body.rows.length > 1000) return NextResponse.json({ error: "Upload between 1 and 1,000 vehicle rows." }, { status: 400 })
     const scopedLocationIds = await resolveFleetScope(supabase, profile)
     let imported = 0; const errors: string[] = []; const skippedDuplicates: string[] = []
-    const { data: locations } = await supabase.from("geofence_locations").select("id, name").eq("is_active", true)
+    // Import rows may reference a valid location that is no longer active. Resolve
+    // spreadsheet IDs against the full location catalogue; fleet visibility remains
+    // controlled by the caller's assigned scope and the normal GET query.
+    const { data: locations } = await supabase.from("geofence_locations").select("id, name")
+    const locationById = new Map((locations ?? []).map((location) => [String(location.id).trim().toLowerCase(), location.id]))
     const locationByName = new Map((locations ?? []).map((location) => [String(location.name).trim().toLowerCase(), location.id]))
     const allowedVehicleTypes = ["saloon", "bus", "truck", "pickup", "van"]
     const { data: existingVehicles } = await supabase.from("transport_vehicles").select("registration_number")
@@ -71,7 +75,7 @@ export async function POST(request: Request) {
       const vehicleTypeValue = String(row.vehicle_type ?? "").trim().toLowerCase()
       const vehicleType = allowedVehicleTypes.includes(vehicleTypeValue) ? vehicleTypeValue : null
       const locationValue = String(row.assigned_location_id ?? row.location ?? "").trim()
-      const assignedLocationId = locations?.some((location) => location.id === locationValue) ? locationValue : locationByName.get(locationValue.toLowerCase()) ?? null
+      const assignedLocationId = locationById.get(locationValue.toLowerCase()) ?? locationByName.get(locationValue.toLowerCase()) ?? null
       if (vehicleTypeValue && !vehicleType) errors.push(`Row ${index + 2}: vehicle_type must be one of ${allowedVehicleTypes.join(", ")}.`)
       if (locationValue && !assignedLocationId) errors.push(`Row ${index + 2}: location was not found: ${locationValue}.`)
       if (assignedLocationId && scopedLocationIds && !scopedLocationIds.includes(assignedLocationId)) errors.push(`Row ${index + 2}: location is outside your assigned fleet scope.`)
