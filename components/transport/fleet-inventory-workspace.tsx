@@ -60,7 +60,8 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
   const importInput = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
   const [importErrors, setImportErrors] = useState<string[]>([])
-  const visibleVehicles = useMemo(() => vehicles.filter((vehicle) => `${vehicle.registration_number} ${vehicle.chassis_number || ""} ${vehicle.vehicle_colour || ""} ${vehicle.make} ${vehicle.model} ${vehicle.vehicle_type} ${vehicle.assigned_location?.name || ""}`.toLowerCase().includes(query.toLowerCase())), [vehicles, query])
+  const uniqueVehicles = useMemo(() => Array.from(new Map(vehicles.map((vehicle) => [vehicle.registration_number.trim().toUpperCase(), vehicle])).values()), [vehicles])
+  const visibleVehicles = useMemo(() => uniqueVehicles.filter((vehicle) => `${vehicle.registration_number} ${vehicle.chassis_number || ""} ${vehicle.vehicle_colour || ""} ${vehicle.make} ${vehicle.model} ${vehicle.vehicle_type} ${vehicle.assigned_location?.name || ""}`.toLowerCase().includes(query.toLowerCase())), [uniqueVehicles, query])
   const today = new Date().toISOString().slice(0, 10)
   const expiring = vehicles.filter((vehicle) => [vehicle.insurance_expiry_date, vehicle.roadworthy_expiry_date].some((date) => date && date <= new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10))).length
 

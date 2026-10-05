@@ -53,10 +53,15 @@ export async function POST(request: Request) {
     const { data: locations } = await supabase.from("geofence_locations").select("id, name").eq("is_active", true)
     const locationByName = new Map((locations ?? []).map((location) => [String(location.name).trim().toLowerCase(), location.id]))
     const allowedVehicleTypes = ["saloon", "bus", "truck", "pickup", "van"]
+    const { data: existingVehicles } = await supabase.from("transport_vehicles").select("registration_number")
+    const existingRegistrationNumbers = new Set((existingVehicles ?? []).map((vehicle) => String(vehicle.registration_number ?? "").trim().toUpperCase()))
+    const importedRegistrationNumbers = new Set<string>()
     for (let index = 0; index < body.rows.length; index += 1) {
       const row = body.rows[index] ?? {}
       const registrationNumber = String(row.registration_number ?? "").trim().toUpperCase()
       if (!registrationNumber) { errors.push(`Row ${index + 2}: registration_number is required.`); continue }
+      if (existingRegistrationNumbers.has(registrationNumber) || importedRegistrationNumbers.has(registrationNumber)) { errors.push(`Row ${index + 2}: registration number ${registrationNumber} already exists in the fleet or appears earlier in this file.`); continue }
+      importedRegistrationNumbers.add(registrationNumber)
       const vehicleTypeValue = String(row.vehicle_type ?? "").trim().toLowerCase()
       const vehicleType = allowedVehicleTypes.includes(vehicleTypeValue) ? vehicleTypeValue : null
       const locationValue = String(row.assigned_location_id ?? row.location ?? "").trim()
@@ -85,6 +90,8 @@ export async function POST(request: Request) {
   if (!registrationNumber || !make || !model || !assignedLocationId || !chassisNumber || !vehicleColour || !allowedVehicleTypes.includes(vehicleType) || !Number.isInteger(capacity) || capacity < 1) return NextResponse.json({ error: "Registration, chassis number, colour, make, model, location, valid vehicle type, and a positive capacity are required." }, { status: 400 })
   const scopedLocationIds = await resolveFleetScope(supabase, profile)
   if (scopedLocationIds && !scopedLocationIds.includes(assignedLocationId)) return NextResponse.json({ error: "You can register vehicles only at locations assigned to your office." }, { status: 403 })
+  const { data: duplicateVehicle } = await supabase.from("transport_vehicles").select("id").ilike("registration_number", registrationNumber).maybeSingle()
+  if (duplicateVehicle) return NextResponse.json({ error: `Registration number ${registrationNumber} already exists in the fleet.` }, { status: 409 })
   const { data, error } = await supabase.from("transport_vehicles").insert({
     registration_number: registrationNumber, make, model, capacity,
     vehicle_type: vehicleType,
