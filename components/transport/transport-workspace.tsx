@@ -211,7 +211,9 @@ export function TransportWorkspace({
       const uploaded = await uploadResponse.json()
       documents.push({ name: file.name, url: uploaded.url, type: file.type, size: file.size })
     }
-    const isNonRegionalRequester = isNonRegionalStaff || isActingHod
+    // Workflow is determined by the requester's assigned location. HOD linkage
+    // alone must not turn a regional/district request into Head Office transport.
+    const isNonRegionalRequester = isNonRegionalStaff || (isActingHod && isNonRegionalLocation)
     const submittedLocation = String(requesterLocation || "").trim()
     const approvedLocation = NON_REGIONAL_TRANSPORT_LOCATIONS.includes(submittedLocation as (typeof NON_REGIONAL_TRANSPORT_LOCATIONS)[number])
       ? submittedLocation
@@ -566,7 +568,42 @@ export function TransportWorkspace({
           { label: "Assigned", value: assignedCount, note: "Trips with transport allocated", icon: Route, tone: "slate" as const },
         ]
 
-  const modules = isRegionalOnlyWorkspace
+  const modules = canManage
+    ? [
+        {
+          title: "Nationwide request board",
+          description: "See every regional, district, and Head Office transport request nationwide.",
+          icon: Bus,
+          href: "/dashboard/transport/requests",
+          cta: "Open national board",
+          badge: "National",
+        },
+        {
+          title: "Driver licenses",
+          description: "View and manage the full nationwide driver license register.",
+          icon: IdCard,
+          href: "/dashboard/transport/drivers",
+          cta: "Open driver register",
+          badge: "National",
+        },
+        {
+          title: "Fleet management",
+          description: "View and manage the full nationwide vehicle fleet.",
+          icon: Truck,
+          href: "/dashboard/transport/fleet",
+          cta: "Open fleet register",
+          badge: "National",
+        },
+        {
+          title: "Head Office requests",
+          description: "Review and track all Head Office transport requisitions.",
+          icon: Route,
+          href: "/dashboard/transport/nonregional",
+          cta: "Open Head Office requests",
+          badge: "National",
+        },
+      ]
+    : isRegionalOnlyWorkspace
     ? [
         {
           title: "Regional transport request",
