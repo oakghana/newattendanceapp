@@ -6,6 +6,7 @@ import { TransportRequestRegister } from "@/components/transport/transport-reque
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { canManageTransport, isChiefDriverRole, isDistrictOfficerRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
+import { moveMisfiledRegionalRequests } from "@/lib/transport-reclassify"
 
 export default async function TransportRequestsPage() {
   const supabase = await createClient()
@@ -56,6 +57,9 @@ export default async function TransportRequestsPage() {
   const rawRegionalName = locationRegionName || (assignedLocationName && !/accra|head office/i.test(assignedLocationName) ? assignedLocationName : "") || profileRegion?.name?.trim() || ""
   const regionalOfficeName = rawRegionalName ? rawRegionalName.replace(/\s+Regional\s+Office$/i, "").replace(/\s+Region$/i, "").trim() + " Regional Office" : "Regional Office"
   const requestFields = "id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments, regional_manager_signer_id, regional_manager_signed_at, hr_records_amended_at, hr_executive_signer_id, hr_executive_signed_at, hr_executive_signature_data_url, assigned_region:geofence_locations!transport_requests_assigned_region_id_fkey(name, districts(region_id, regions(name)))"
+  await moveMisfiledRegionalRequests(await createAdminClient()).catch((error) => {
+    console.error("[v0] Could not re-file misclassified transport requests:", error?.message)
+  })
   const regionalHrDataClient = canRegionalHr ? await createAdminClient() : supabase
   const { data: regionalHrAssignments } = canRegionalHr
     ? await regionalHrDataClient.from("regional_hr_office_locations").select("location_id, region_id").eq("regional_hr_user_id", user.id).eq("is_active", true)
