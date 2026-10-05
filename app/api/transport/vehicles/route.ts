@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { canEditFleetInventory, canViewFleetInventory, hasNationwideFleetScope, isAdminRole, isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
+import { canEditFleetInventory, canViewFleetInventory, hasNationwideFleetScope, isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
 async function actor() {
@@ -83,7 +83,10 @@ export async function POST(request: Request) {
       const capacity = capacityValue ? Number(capacityValue) : null
       if (capacityValue && (!Number.isInteger(capacity) || capacity < 1)) errors.push(`Row ${index + 2}: capacity must be a positive whole number.`)
       if ((vehicleTypeValue && !vehicleType) || (locationValue && !assignedLocationId) || (assignedLocationId && scopedLocationIds && !scopedLocationIds.includes(assignedLocationId)) || (capacityValue && (!Number.isInteger(capacity) || capacity < 1))) continue
-      const { error } = await supabase.from("transport_vehicles").insert({ registration_number: registrationNumber, make: String(row.make ?? "").trim() || null, model: String(row.model ?? "").trim() || null, capacity, vehicle_type: vehicleType, assigned_region_id: profile.region_id ?? null, assigned_location_id: assignedLocationId, status: ["available", "assigned", "maintenance", "inactive"].includes(String(row.status).toLowerCase()) ? String(row.status).toLowerCase() : "available", chassis_number: String(row.chassis_number ?? "").trim().toUpperCase() || null, vehicle_colour: String(row.vehicle_colour ?? "").trim() || null, insurance_expiry_date: String(row.insurance_expiry_date ?? "") || null, roadworthy_expiry_date: String(row.roadworthy_expiry_date ?? "") || null, notes: String(row.notes ?? "").trim() || null, created_by: user.id })
+      const make = String(row.make ?? "").trim()
+      const model = String(row.model ?? "").trim()
+      if (!make || !model) { errors.push(`Row ${index + 2}: make and model are required; assigned_location_id may be blank.`); continue }
+      const { error } = await supabase.from("transport_vehicles").insert({ registration_number: registrationNumber, make, model, capacity, vehicle_type: vehicleType, assigned_region_id: profile.region_id ?? null, assigned_location_id: assignedLocationId, status: ["available", "assigned", "maintenance", "inactive"].includes(String(row.status).toLowerCase()) ? String(row.status).toLowerCase() : "available", chassis_number: String(row.chassis_number ?? "").trim().toUpperCase() || null, vehicle_colour: String(row.vehicle_colour ?? "").trim() || null, insurance_expiry_date: String(row.insurance_expiry_date ?? "") || null, roadworthy_expiry_date: String(row.roadworthy_expiry_date ?? "") || null, notes: String(row.notes ?? "").trim() || null, created_by: user.id })
       if (error) errors.push(`Row ${index + 2}: ${error.code === "23505" ? "registration number already exists." : error.message || "could not be imported."}`); else imported += 1
     }
     return NextResponse.json({ ok: errors.length === 0, imported, skippedDuplicates, errors })
@@ -124,10 +127,10 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const { supabase, user, profile } = await actor()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!profile?.is_active || !canEditFleetInventory(profile.role)) return NextResponse.json({ error: "Only administrators or Transport Managers can delete vehicles." }, { status: 403 })
+  if (!profile?.is_active || !canEditFleetInventory(profile.role)) return NextResponse.json({ error: "Only administrators, IT administrators, or Transport Managers can delete vehicles." }, { status: 403 })
   const id = String(new URL(request.url).searchParams.get("id") ?? "")
   if (!id) return NextResponse.json({ error: "Vehicle id is required." }, { status: 400 })
-  const scopedLocationIds = isAdminRole(profile.role) ? null : await resolveFleetScope(supabase, profile)
+  const scopedLocationIds = hasNationwideFleetScope(profile.role) ? null : await resolveFleetScope(supabase, profile)
   if (scopedLocationIds?.length === 0) return NextResponse.json({ error: "No fleet locations are assigned to this account." }, { status: 403 })
   let query = supabase.from("transport_vehicles").select("id, registration_number").eq("id", id)
   if (scopedLocationIds) query = query.in("assigned_location_id", scopedLocationIds)

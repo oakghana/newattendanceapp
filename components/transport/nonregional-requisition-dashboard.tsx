@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { ArrowLeft, Check, X, UserPlus, Plus, Route, Search, Clock3, CheckCircle2, ClipboardCheck, Truck, Users, ArrowRight, Download, FileText } from "lucide-react"
+import { ArrowLeft, Check, X, UserPlus, Plus, Route, Search, Clock3, CheckCircle2, ClipboardCheck, Truck, Users, ArrowRight, Download, FileText, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -120,6 +120,20 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
   useEffect(() => {
     load()
   }, [])
+
+  async function deleteRequest(id: string) {
+    if (!window.confirm("Delete this transport requisition permanently? This cannot be undone.")) return
+    setBusy(id)
+    const response = await fetch(`/api/transport/nonregional?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+    const body = await response.json().catch(() => null)
+    setBusy(null)
+    if (!response.ok) {
+      toast({ title: "Delete failed", description: body?.error ?? "Please try again.", variant: "destructive" })
+      return
+    }
+    toast({ title: "Requisition deleted", description: "The duplicate requisition was removed." })
+    await load()
+  }
 
   async function decide(id: string, decision: string, extra: Record<string, unknown> = {}) {
     setBusy(id)
@@ -420,6 +434,15 @@ export function NonRegionalRequisitionDashboard({ role }: { role: string }) {
                   <Button variant="outline" onClick={() => setPreviewRequest(request)}>
                     <FileText data-icon="inline-start" /> View / save PDF
                   </Button>
+                  {String(role).toLowerCase().trim().replace(/[\s-]+/g, "_") === "admin" && (
+                    <Button
+                      variant="destructive"
+                      disabled={busy === request.id}
+                      onClick={() => void deleteRequest(request.id)}
+                    >
+                      <Trash2 data-icon="inline-start" /> {busy === request.id ? "Deleting…" : "Delete duplicate"}
+                    </Button>
+                  )}
                 </div>
                 <div className="text-sm text-muted-foreground">
                   <strong className="text-foreground">Requester:</strong>{" "}
