@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
-import { ArrowLeft, CalendarClock, Car, CheckCircle2, Clock, Download, FileText, FileSpreadsheet, Loader2, MapPin, Pencil, Play, Route, Search, ShieldCheck, TriangleAlert, Upload, Users } from "lucide-react"
+import { ArrowLeft, CalendarClock, Car, CheckCircle2, Clock, Download, FileText, FileSpreadsheet, Loader2, MapPin, Pencil, Play, Route, Search, ShieldCheck, Trash2, TriangleAlert, Upload, Users } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -147,6 +147,15 @@ export function DriverLicenseWorkspace({ initialDrivers, canEdit, role = "manage
     finally { setUploading(false) }
   }
 
+  async function deleteDriver(driver: Driver) {
+    if (!window.confirm(`Delete ${driver.full_name}'s driver record? This cannot be undone.`)) return
+    const response = await fetch(`/api/transport/drivers?id=${encodeURIComponent(driver.id)}`, { method: "DELETE" })
+    const body = await response.json().catch(() => null)
+    if (!response.ok) return toast({ title: "Unable to delete driver", description: body?.error ?? "Please try again.", variant: "destructive" })
+    setDrivers((current) => current.filter((item) => item.id !== driver.id))
+    toast({ title: "Driver deleted", description: `${driver.full_name}'s record was removed.` })
+  }
+
   async function save(status: string) {
     if (!editing) return
     setSaving(true)
@@ -226,7 +235,7 @@ export function DriverLicenseWorkspace({ initialDrivers, canEdit, role = "manage
           ) : (
             <>
               {driver.license_document_url && <Button variant="outline" size="sm" asChild><a href={driver.license_document_url} target="_blank" rel="noreferrer"><FileText className="mr-1 size-4" /> Evidence</a></Button>}
-              {canEdit && <Button size="sm" variant="outline" onClick={() => setEditing(driver)}><Pencil className="mr-1 size-4" /> Edit</Button>}
+              {canEdit && <><Button size="sm" variant="outline" onClick={() => setEditing(driver)}><Pencil className="mr-1 size-4" /> Edit</Button><Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => void deleteDriver(driver)}><Trash2 className="mr-1 size-4" /> Delete</Button></>}
             </>
           )}
         </div></td>

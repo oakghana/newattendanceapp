@@ -109,6 +109,25 @@ export async function POST(request: Request) {
   return NextResponse.json({ vehicle: data }, { status: 201 })
 }
 
+export async function DELETE(request: Request) {
+  const { supabase, user, profile } = await actor()
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!profile?.is_active || !canEditFleetInventory(profile.role)) return NextResponse.json({ error: "Only administrators or Transport Managers can delete vehicles." }, { status: 403 })
+  const id = String(new URL(request.url).searchParams.get("id") ?? "")
+  if (!id) return NextResponse.json({ error: "Vehicle id is required." }, { status: 400 })
+  const scopedLocationIds = await resolveFleetScope(supabase, profile)
+  if (scopedLocationIds?.length === 0) return NextResponse.json({ error: "No fleet locations are assigned to this account." }, { status: 403 })
+  let query = supabase.from("transport_vehicles").select("id, registration_number").eq("id", id)
+  if (scopedLocationIds) query = query.in("assigned_location_id", scopedLocationIds)
+  const { data: vehicle } = await query.maybeSingle()
+  if (!vehicle) return NextResponse.json({ error: "Vehicle not found in your assigned scope." }, { status: 404 })
+  const { count: bookingCount } = await supabase.from("transport_vehicle_bookings").select("id", { count: "exact", head: true }).eq("vehicle_id", id).neq("status", "cancelled")
+  if (bookingCount) return NextResponse.json({ error: "This vehicle has active bookings and cannot be deleted. Mark it inactive instead." }, { status: 409 })
+  const { error } = await supabase.from("transport_vehicles").delete().eq("id", id)
+  if (error) return NextResponse.json({ error: "Unable to delete vehicle." }, { status: 500 })
+  return NextResponse.json({ ok: true, id })
+}
+
 export async function PATCH(request: Request) {
   const { supabase, user, profile } = await actor()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

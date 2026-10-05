@@ -99,6 +99,19 @@ export async function POST(request: Request) {
   return NextResponse.json({ ok: errors.length === 0, imported, errors })
 }
 
+export async function DELETE(request: Request) {
+  const { supabase, user, profile } = await actor()
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!profile?.is_active || !canEditDriverLicenses(profile.role) || !hasNationwideFleetScope(profile.role)) return NextResponse.json({ error: "Only administrators or Transport Managers can delete drivers." }, { status: 403 })
+  const id = String(new URL(request.url).searchParams.get("id") ?? "")
+  if (!id) return NextResponse.json({ error: "Driver id is required." }, { status: 400 })
+  const { data: driver } = await supabase.from("transport_drivers").select("id, full_name").eq("id", id).maybeSingle()
+  if (!driver) return NextResponse.json({ error: "Driver record not found." }, { status: 404 })
+  const { error } = await supabase.from("transport_drivers").delete().eq("id", id)
+  if (error) return NextResponse.json({ error: "Unable to delete driver record." }, { status: 500 })
+  return NextResponse.json({ ok: true, id })
+}
+
 export async function PATCH(request: Request) {
   const { supabase, user, profile } = await actor()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
