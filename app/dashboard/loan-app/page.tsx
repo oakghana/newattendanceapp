@@ -3640,7 +3640,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     <div className="font-medium">{row.request_number} - {row.loan_type_label}</div>
                     <Badge className={statusBadgeClass(row.status, "soft")}>{statusText(row.status)}</Badge>
                   </div>
-                  {row.staff_full_name && <div className="text-sm font-semibold text-purple-900">Staff: {row.staff_full_name}</div>}
+                  {row.staff_full_name && <div className="text-sm font-semibold uppercase text-purple-900">Staff: {row.staff_full_name}</div>}
                   <div className="text-sm text-muted-foreground">Amount: {isSalaryAdvanceLoan(row) && !row.salary_advance_amount ? displayLoanAmount(row) : `GHc ${displayLoanAmount(row)}`}</div>
                   <div className="text-xs text-muted-foreground">Current handler: <strong>{stageOwner(row.status)}</strong></div>
                   <div className="flex flex-wrap gap-1">
@@ -3740,7 +3740,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   <div className={`px-5 py-4 flex flex-wrap items-center justify-between gap-3 ${isApproved ? "bg-emerald-600" : isDenied ? "bg-red-600" : "bg-gradient-to-r from-violet-700 to-purple-600"} text-white`}>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-widest opacity-80">{req.request_number}</p>
-                      <h3 className="text-lg font-bold leading-tight">{req.loan_type_label} - {req.staff_full_name || "REQUESTING STAFF"}</h3>
+                      <h3 className="text-lg font-bold uppercase leading-tight">{req.loan_type_label} - {req.staff_full_name || "REQUESTING STAFF"}</h3>
                       <p className="text-sm opacity-90 mt-0.5">GHc {fmtAmount(req.fixed_amount || req.requested_amount)}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
@@ -4067,7 +4067,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
   <TableRow key={row.id} className={`align-top ${isOverdueForReviewer ? "bg-red-50 text-red-950 hover:bg-red-100" : ""}`}>
 
   <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
-  <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
+  <TableCell className="whitespace-nowrap font-medium uppercase">{row.staff_full_name || "—"}</TableCell>
   <TableCell className="whitespace-nowrap text-xs">{row.staff_location_name || row.staff_district_name || "—"}</TableCell>
   <TableCell className="whitespace-nowrap text-xs">{row.staff_region_name || "—"}</TableCell>
   <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
@@ -4336,7 +4336,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       <tr key={row.id} className={`transition-colors ${isFdApproved ? 'bg-emerald-50/70 hover:bg-emerald-50/90 border-l-4 border-l-emerald-500' : isPending ? 'bg-yellow-50/40 hover:bg-yellow-50/60 border-l-4 border-l-yellow-400' : 'hover:bg-slate-50/70'}`}>
                         <td className="px-5 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</td>
                         <td className="px-4 py-3 whitespace-nowrap">
-                          <p className="font-medium text-slate-900 text-xs">{row.staff_full_name || "—"}</p>
+                          <p className="font-medium uppercase text-slate-900 text-xs">{row.staff_full_name || "—"}</p>
                           <p className="text-[11px] text-slate-400">{row.staff_number || ""} {row.staff_rank ? `· ${row.staff_rank}` : ""}</p>
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">{row.staff_location_name || row.staff_district_name || "—"}</td>
@@ -4493,7 +4493,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       <tr key={row.id} className="hover:bg-slate-50/70 transition-colors">
                         <td className="px-5 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</td>
                         <td className="px-4 py-3 whitespace-nowrap">
-                          <p className="font-medium text-slate-900 text-xs">{row.staff_full_name || "—"}</p>
+                          <p className="font-medium uppercase text-slate-900 text-xs">{row.staff_full_name || "—"}</p>
                           <p className="text-[11px] text-slate-400">{row.staff_number || ""}{row.staff_rank ? ` · ${row.staff_rank}` : ""}</p>
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">{row.staff_location_name || row.staff_district_name || "—"}</td>
@@ -4890,7 +4890,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       return (
                         <TableRow key={row.id} className="align-top">
                           <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
-                          <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
+                          <TableCell className="whitespace-nowrap font-medium uppercase">{row.staff_full_name || "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "�����"}</TableCell>
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
@@ -4954,7 +4954,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               {(data?.inbox.accountsSigned || []).map((row) => (
                 <div key={row.id} className="border rounded p-3 text-sm space-y-1">
                   <div className="font-medium">{row.request_number} - {row.loan_type_label}</div>
-                  {row.staff_full_name && <div className="font-semibold text-purple-900">Staff: {row.staff_full_name} {row.staff_number ? `(${row.staff_number})` : ""}</div>}
+                  {row.staff_full_name && <div className="font-semibold uppercase text-purple-900">Staff: {row.staff_full_name} {row.staff_number ? `(${row.staff_number})` : ""}</div>}
                   <div>Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)} | Disbursement: {row.disbursement_date || "TBD"} | Recovery: {row.recovery_start_date || "TBD"} ({row.recovery_months || "?"} months)</div>
                   <div>Status: <strong>{statusText(row.status)}</strong></div>
                   <div className="flex gap-2 flex-wrap pt-1">
@@ -5133,7 +5133,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
                         return (
                           <tr key={record.staffId} className="border-b border-slate-100 hover:bg-slate-50">
-                            <td className="px-4 py-3 font-medium text-slate-900">{record.name}</td>
+                            <td className="px-4 py-3 font-medium uppercase text-slate-900">{record.name}</td>
                             <td className="px-4 py-3 text-slate-600">{record.staffNo}</td>
                             <td className="px-4 py-3">
                               {currentLoan ? (
@@ -5801,7 +5801,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     {pagedCommittee.map((row) => (
                       <TableRow key={row.id} className="align-top">
                         <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
-                        <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap font-medium uppercase">{row.staff_full_name || "—"}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
@@ -6068,7 +6068,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               {(data?.inbox?.directorGoodFd || []).map((row) => (
                 <div key={`good-fd-${row.id}`} className="rounded border p-2 text-sm">
                   <div className="font-medium">{row.request_number} - {row.loan_type_label}</div>
-                  {row.staff_full_name && <div className="font-semibold text-purple-900">Staff: {row.staff_full_name}</div>}
+                  {row.staff_full_name && <div className="font-semibold uppercase text-purple-900">Staff: {row.staff_full_name}</div>}
                   <div>FD: {row.fd_score ?? "N/A"} | FD Reviewer: {row.accounts_reviewer_name || "—"} | Status: {statusText(row.status)}</div>
                   <div>Staff No: {row.staff_number || "N/A"} | Rank: {row.staff_rank || "N/A"}</div>
                 </div>
@@ -6153,7 +6153,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     {pagedDirector.map((row) => (
                       <TableRow key={row.id} className="align-top">
                         <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
-                        <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap font-medium uppercase">{row.staff_full_name || "—"}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
@@ -6291,7 +6291,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           className={row.status === "pending_hod" ? "cursor-pointer hover:bg-emerald-50 transition-colors" : ""}
                         >
                           <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
-  <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
+  <TableCell className="whitespace-nowrap font-medium uppercase">{row.staff_full_name || "—"}</TableCell>
   <TableCell className="whitespace-nowrap text-xs">{row.staff_region_name || "—"}</TableCell>
   <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
   <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
@@ -6355,7 +6355,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     <div className="font-medium">{row.request_number} - {row.loan_type_label}</div>
                     <Badge className={statusBadgeClass(row.status, "soft")}>{statusText(row.status)}</Badge>
                   </div>
-                  {row.staff_full_name && <div className="font-semibold text-purple-900">Staff: {row.staff_full_name}</div>}
+                  {row.staff_full_name && <div className="font-semibold uppercase text-purple-900">Staff: {row.staff_full_name}</div>}
                   <div>Staff No: {row.staff_number || "N/A"} | Rank: {row.staff_rank || "N/A"}</div>
                   <div>Location: {row.staff_location_name || "N/A"} | District: {row.staff_district_name || "N/A"}</div>
                   <div>Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)}</div>
@@ -6619,7 +6619,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   >
                     <div className="flex-1 text-left">
                       <div className="text-sm font-bold text-white">{row.request_number}</div>
-                      <div className="text-xs text-purple-200 font-medium">{row.staff_full_name}</div>
+                      <div className="text-xs uppercase text-purple-200 font-medium">{row.staff_full_name}</div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <div className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
@@ -6671,7 +6671,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
                   {/* Staff Information */}
                   <div className="space-y-2 mb-3 pb-3 border-b">
-                    {row.staff_full_name && <div className="font-semibold text-slate-900">{row.staff_full_name}</div>}
+                    {row.staff_full_name && <div className="font-semibold uppercase text-slate-900">{row.staff_full_name}</div>}
                     <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
                       <div><span className="text-slate-500">Position:</span> {row.staff_rank || "—"}</div>
                       <div><span className="text-slate-500">Staff No:</span> {row.staff_number || "—"}</div>
@@ -6860,7 +6860,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       />
                       <div className="flex-1">
                         <div className="text-sm font-bold text-slate-900">{row.request_number}</div>
-                        <div className="text-xs text-slate-600">{row.staff_full_name}</div>
+                        <div className="text-xs uppercase text-slate-600">{row.staff_full_name}</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">

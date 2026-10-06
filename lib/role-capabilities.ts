@@ -142,7 +142,8 @@ export function canViewFleetInventory(role?: string | null): boolean {
   return (
   isTransportManagerRole(role) ||
   isAdminRole(role) ||
-  normalizedRole === "it-admin"
+  normalizedRole === "it-admin" ||
+  normalizedRole === "managing_director"
   )
   }
 
