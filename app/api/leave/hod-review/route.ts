@@ -165,8 +165,9 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -176,18 +177,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid request parameters" }, { status: 400 })
     }
 
-    const admin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-      process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-      { auth: { persistSession: false } }
-    )
+    const admin = await createAdminClient()
 
     // Verify the user is a reviewer for this request
     const { data: reviewRow, error: reviewError } = await admin
       .from("leave_plan_reviews")
       .select("id")
       .eq("leave_plan_request_id", request_id)
-      .eq("reviewer_id", session.user.id)
+      .eq("reviewer_id", user.id)
       .single()
 
     if (reviewError || !reviewRow) {
