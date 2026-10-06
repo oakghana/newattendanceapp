@@ -113,14 +113,14 @@ export function canManageTransport(role?: string | null): boolean {
 /** Driver license register edit/verify: Transport Manager (nationwide) and Chief Driver (their location/region) only.
  *  Regional Manager / Regional HR get read-only access via canManageTransport. */
 export function canEditDriverLicenses(role?: string | null): boolean {
-  return isTransportManagerRole(role) || isAdminRole(role) || normalizeAppRole(role) === "it-admin"
+  return isTransportManagerRole(role) || isAdminRole(role) || normalizeAppRole(role) === "it-admin" || isChiefDriverRole(role)
 }
 
   /** Fleet inventory edit: Transport Manager, IT administrators, and administrators have nationwide visibility. */
-  export function canEditFleetInventory(role?: string | null): boolean {
+export function canEditFleetInventory(role?: string | null): boolean {
   const normalizedRole = normalizeAppRole(role)
-  return isTransportManagerRole(role) || isAdminRole(role) || normalizedRole === "it-admin"
-  }
+  return isTransportManagerRole(role) || isAdminRole(role) || normalizedRole === "it-admin" || isChiefDriverRole(role)
+}
 
 /** Fleet dashboards / read: editors + MD + department heads */
 export function canViewFleetInventory(role?: string | null): boolean {
