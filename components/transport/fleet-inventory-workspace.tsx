@@ -96,13 +96,12 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
   const expiring = vehicles.filter((vehicle) => [vehicle.insurance_expiry_date, vehicle.roadworthy_expiry_date].some((date) => date && date <= new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10))).length
 
   function downloadFleetTemplate() {
-    const locationList = locations.length ? locations.map((location) => `${location.name} (${location.id})`).join("; ") : "No active locations available"
     const rows = [
-      [`# Fleet import guide: registration_number, vehicle_type, make, model, and capacity are required. assigned_location_id is optional and may be left blank for later assignment.`],
+      [`# Fleet import guide: registration_number, vehicle_type, make, model, and capacity are required. location_name is optional and may be left blank for later assignment.`],
       [`# vehicle_type options: ${vehicleTypes.join(", ")}`],
-      [`# assigned_location_id options: ${locationList}`],
-      [`# assigned_location_id may be blank. Use a location ID or exact location name only when assigning now; blank vehicles can be assigned later.`],
-      ["registration_number", "vehicle_type", "assigned_location_id", "make", "model", "capacity", "chassis_number", "vehicle_colour", "insurance_expiry_date", "roadworthy_expiry_date", "notes"],
+      [`# location_name options: ${locations.map((location) => location.name).join("; ") || "No active locations available"}`],
+      [`# Use the exact human-readable location name from the Locations sheet. Existing location IDs are also accepted for compatibility.`],
+      ["registration_number", "vehicle_type", "location_name", "make", "model", "capacity", "chassis_number", "vehicle_colour", "insurance_expiry_date", "roadworthy_expiry_date", "notes"],
       ["GR-0001", "saloon", "", "Toyota", "Corolla", "5", "", "", "2027-12-31", "2027-12-31", "Replace this example with your vehicle details"],
     ]
     const workbook = XLSX.utils.book_new()
@@ -122,7 +121,7 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
 
   function exportFleet() {
     const headings = ["Registration number", "Vehicle type", "Location", "Make", "Model", "Capacity", "Chassis number", "Colour", "Insurance expiry", "Roadworthy expiry", "Status", "Notes"]
-    const values = vehicles.map((vehicle) => [vehicle.registration_number, vehicle.vehicle_type, vehicle.assigned_location?.name ?? vehicle.assigned_location_id, vehicle.make, vehicle.model, vehicle.capacity, vehicle.chassis_number, vehicle.vehicle_colour, vehicle.insurance_expiry_date, vehicle.roadworthy_expiry_date, vehicle.status, vehicle.notes])
+    const values = vehicles.map((vehicle) => [vehicle.registration_number, vehicle.vehicle_type, vehicle.assigned_location?.name ?? locations.find((location) => location.id === vehicle.assigned_location_id)?.name ?? "Not recorded", vehicle.make, vehicle.model, vehicle.capacity, vehicle.chassis_number, vehicle.vehicle_colour, vehicle.insurance_expiry_date, vehicle.roadworthy_expiry_date, vehicle.status, vehicle.notes])
     const escape = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""').replaceAll("\r", " ").replaceAll("\n", " ")}"`
     const rows = [["QCC ELECTRONIC TRANSPORT REGISTER"], ["Fleet Vehicle Export"], [`Generated: ${new Date().toLocaleString()}`], [], headings, ...values].map((row) => row.map(escape).join(","))
     const csv = `\uFEFF${rows.join("\r\n")}\r\n`
@@ -152,7 +151,7 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
       const errors = Array.isArray(body?.errors) ? body.errors : []
       const skippedDuplicates = Array.isArray(body?.skippedDuplicates) ? body.skippedDuplicates : []
       setImportErrors(errors)
-      toast( title: body.imported ? "Fleet import completed" : skippedDuplicates.length && !errors.length ? "Fleet already up to date" : "No new vehicles imported", description: `${body.imported ?? 0} unique vehicle(s) imported${skippedDuplicates.length ? `; ${skippedDuplicates.length} existing duplicate(s) skipped` : ""}${errors.length ? `; ${errors.length} row(s) need attention.` : "."}`, variant: errors.length ? "destructive" : "default" }); if (body.imported) window.location.reload()
+      toast({ title: body.imported ? "Fleet import completed" : skippedDuplicates.length && !errors.length ? "Fleet already up to date" : "No new vehicles imported", description: `${body.imported ?? 0} unique vehicle(s) imported${skippedDuplicates.length ? `; ${skippedDuplicates.length} existing duplicate(s) skipped` : ""}${errors.length ? `; ${errors.length} row(s) need attention.` : "."}`, variant: errors.length ? "destructive" : "default" }); if (body.imported) window.location.reload()
     } catch (error) { toast({ title: "Fleet import failed", description: error instanceof Error ? error.message : "Please use the fleet template.", variant: "destructive" }) } finally { setImporting(false) }
   }
 

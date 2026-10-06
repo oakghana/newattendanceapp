@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       importedRegistrationNumbers.add(registrationKey)
       const vehicleTypeValue = String(row.vehicle_type ?? "").trim().toLowerCase()
       const vehicleType = allowedVehicleTypes.includes(vehicleTypeValue) ? vehicleTypeValue : null
-      const locationValue = String(row.assigned_location_id ?? row.location ?? "").trim()
+      const locationValue = String(row.location_name ?? row.assigned_location_id ?? row.location ?? "").normalize("NFKC").replace(/[\r\n\u00a0]+/g, " ").trim()
       const assignedLocationId = locationById.get(locationValue.toLowerCase()) ?? locationByName.get(locationValue.toLowerCase()) ?? null
       if (vehicleTypeValue && !vehicleType) errors.push(`Row ${index + 2}: vehicle_type must be one of ${allowedVehicleTypes.join(", ")}.`)
       if (locationValue && !assignedLocationId) errors.push(`Row ${index + 2}: location was not found: ${locationValue}.`)
