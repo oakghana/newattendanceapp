@@ -22,7 +22,8 @@ export default async function FleetInventoryPage() {
     else vehiclesQuery = vehiclesQuery.eq("id", "00000000-0000-0000-0000-000000000000")
   }
   const { data: vehicles } = await vehiclesQuery
-  let locationsQuery = supabase.from("geofence_locations").select("id, name").eq("is_active", true).order("name")
+  // Include inactive locations so historical fleet exports can still resolve their names.
+  let locationsQuery = supabase.from("geofence_locations").select("id, name").order("name")
   if (!hasNationwideFleetScope(profile.role)) locationsQuery = locationsQuery.in("id", scopedLocationIds)
   const { data: locations } = await locationsQuery
   const vehicleIds = (vehicles ?? []).map((vehicle) => vehicle.id)
