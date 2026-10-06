@@ -169,40 +169,14 @@ export async function GET(request: NextRequest) {
       query = query.eq("status", safeStatus)
     }
 
-    // Department scoping via user_profiles sub-query
-    // Use adminClient for department scoping lookups to bypass RLS
+    // Department filtering is applied after profile enrichment below. Avoid a
+    // large PostgREST `user_id in (...)` predicate here: it can return a generic
+    // 400 for departments with many staff members even though the base report
+    // query is valid.
     const scopedDepartmentId =
       normalizedRole === "department_head" || normalizedRole === "accounts_executive"
         ? profile.department_id
         : safeDepartmentId
-
-    if (scopedDepartmentId && normalizedRole !== "staff") {
-      const { data: deptUsers, error: deptUsersError } = await adminClientForScope
-        .from("user_profiles")
-        .select("id")
-        .eq("department_id", scopedDepartmentId)
-
-      if (deptUsersError) {
-        console.error("[v0] Reports API - Department user lookup error:", deptUsersError)
-        return NextResponse.json({ error: "Failed to fetch attendance report", details: deptUsersError.message }, { status: 500 })
-      }
-
-      const deptUserIds = (deptUsers || []).map((u: any) => u.id).filter(Boolean)
-      query = deptUserIds.length > 0
-        ? query.in("user_id", deptUserIds)
-        : query.eq("user_id", "00000000-0000-0000-0000-000000000000")
-    } else if (normalizedRole === "department_head" || normalizedRole === "accounts_executive") {
-      const { data: deptUsers } = await adminClientForScope
-        .from("user_profiles")
-        .select("id")
-        .eq("department_id", safeDepartmentId)
-      const deptUserIds = (deptUsers || []).map((u: any) => u.id)
-      if (deptUserIds.length > 0) {
-        query = query.in("user_id", deptUserIds)
-      } else {
-        query = query.eq("user_id", "00000000-0000-0000-0000-000000000000")
-      }
-    }
 
     // Apply ordering and pagination
     const pageParam = searchParams.get("page")
@@ -334,6 +308,10 @@ export async function GET(request: NextRequest) {
     // Post-fetch we only need district filtering (no DB column to filter on directly)
     // and global search, because search depends on enriched profile/location fallbacks.
     let filteredRecords = safeAttendanceRecords
+
+    if (scopedDepartmentId && normalizedRole !== "staff") {
+      filteredRecords = filteredRecords.filter((record) => userMap.get(record.user_id)?.department_id === scopedDepartmentId)
+    }
 
     if (safeDistrictId) {
       filteredRecords = filteredRecords.filter((record) => {
