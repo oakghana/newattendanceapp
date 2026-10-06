@@ -568,7 +568,34 @@ export function TransportWorkspace({
           { label: "Assigned", value: assignedCount, note: "Trips with transport allocated", icon: Route, tone: "slate" as const },
         ]
 
-  const modules = canManage
+  const modules = isChiefDriver
+    ? [
+        {
+          title: "Regional driver allocation",
+          description: "Assign approved regional and district requests to drivers within your assigned scope.",
+          icon: Bus,
+          href: "/dashboard/transport/requests",
+          cta: "Open allocation board",
+          badge: "Regional / District",
+        },
+        {
+          title: "Regional driver register",
+          description: "View and update driver records within your assigned regional and district locations.",
+          icon: IdCard,
+          href: "/dashboard/transport/drivers",
+          cta: "Open driver register",
+          badge: "Regional / District",
+        },
+        {
+          title: "Regional fleet management",
+          description: "View and update vehicles assigned to your regional and district locations.",
+          icon: Truck,
+          href: "/dashboard/transport/fleet",
+          cta: "Open fleet register",
+          badge: "Regional / District",
+        },
+      ]
+    : canManage
     ? [
         {
           title: "Nationwide request board",
@@ -750,16 +777,16 @@ export function TransportWorkspace({
                 </Link>
               </Button>
             )}
-            {(isTransportManager || canManage) && (
+            {(isTransportManager || canManage || isChiefDriver) && (
               <>
                 <Button variant="outline" className="bg-background/80" asChild>
                   <Link href="/dashboard/transport/drivers">
-                    <IdCard data-icon="inline-start" /> Drivers
+                    <IdCard data-icon="inline-start" /> {isChiefDriver ? "Regional drivers" : "Drivers"}
                   </Link>
                 </Button>
                 <Button variant="outline" className="bg-background/80" asChild>
                   <Link href="/dashboard/transport/fleet">
-                    <Truck data-icon="inline-start" /> Fleet
+                    <Truck data-icon="inline-start" /> {isChiefDriver ? "Regional fleet" : "Fleet"}
                   </Link>
                 </Button>
               </>
