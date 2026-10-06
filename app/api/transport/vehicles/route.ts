@@ -12,7 +12,10 @@ async function actor() {
 }
 
 function normalizeRegistration(value: unknown) {
-  return String(value ?? "").trim().toUpperCase().replace(/[\s-]+/g, "")
+  return String(value ?? "")
+    .normalize("NFKC")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
 }
 
 async function resolveFleetScope(supabase: any, profile: any) {
@@ -66,9 +69,9 @@ export async function POST(request: Request) {
     const importedRegistrationNumbers = new Set<string>()
     for (let index = 0; index < body.rows.length; index += 1) {
       const row = body.rows[index] ?? {}
-      const registrationNumber = String(row.registration_number ?? "").trim().toUpperCase()
+      const registrationNumber = String(row.registration_number ?? "").normalize("NFKC").replace(/[\r\n\u00a0]+/g, " ").trim().toUpperCase()
       const registrationKey = normalizeRegistration(registrationNumber)
-      if (!registrationNumber) { errors.push(`Row ${index + 2}: registration_number is required.`); continue }
+      if (!registrationNumber) continue
       const existingValue = existingRegistrationNumbers.get(registrationKey)
       if (existingValue || importedRegistrationNumbers.has(registrationKey)) { skippedDuplicates.push(`Row ${index + 2}: ${registrationNumber}${existingValue ? ` matches existing registration ${existingValue}` : " is repeated in this file"}.`); continue }
       importedRegistrationNumbers.add(registrationKey)
@@ -81,8 +84,9 @@ export async function POST(request: Request) {
       if (assignedLocationId && scopedLocationIds && !scopedLocationIds.includes(assignedLocationId)) errors.push(`Row ${index + 2}: location is outside your assigned fleet scope.`)
       const capacityValue = String(row.capacity ?? "").trim()
       const capacity = capacityValue ? Number(capacityValue) : null
-      if (capacityValue && (!Number.isInteger(capacity) || capacity < 1)) errors.push(`Row ${index + 2}: capacity must be a positive whole number.`)
-      if ((vehicleTypeValue && !vehicleType) || (locationValue && !assignedLocationId) || (assignedLocationId && scopedLocationIds && !scopedLocationIds.includes(assignedLocationId)) || (capacityValue && (!Number.isInteger(capacity) || capacity < 1))) continue
+      const invalidCapacity = Boolean(capacityValue) && (capacity === null || !Number.isInteger(capacity) || capacity < 1)
+      if (invalidCapacity) errors.push(`Row ${index + 2}: capacity must be a positive whole number.`)
+      if ((vehicleTypeValue && !vehicleType) || (locationValue && !assignedLocationId) || (assignedLocationId && scopedLocationIds && !scopedLocationIds.includes(assignedLocationId)) || invalidCapacity) continue
       const make = String(row.make ?? "").trim()
       const model = String(row.model ?? "").trim()
       if (!make || !model) { errors.push(`Row ${index + 2}: make and model are required; assigned_location_id may be blank.`); continue }
