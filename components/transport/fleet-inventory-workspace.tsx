@@ -121,7 +121,7 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
 
   function exportFleet() {
     const headings = ["Registration number", "Vehicle type", "Location", "Make", "Model", "Capacity", "Chassis number", "Colour", "Insurance expiry", "Roadworthy expiry", "Status", "Notes"]
-    const values = vehicles.map((vehicle) => [vehicle.registration_number, vehicle.vehicle_type, vehicle.assigned_location?.name ?? locations.find((location) => location.id === vehicle.assigned_location_id)?.name ?? "Not recorded", vehicle.make, vehicle.model, vehicle.capacity, vehicle.chassis_number, vehicle.vehicle_colour, vehicle.insurance_expiry_date, vehicle.roadworthy_expiry_date, vehicle.status, vehicle.notes])
+    const values = vehicles.map((vehicle) => [vehicle.registration_number, vehicle.vehicle_type, vehicle.assigned_location?.name ?? locations.find((location) => String(location.id) === String(vehicle.assigned_location_id))?.name ?? "Not recorded", vehicle.make, vehicle.model, vehicle.capacity, vehicle.chassis_number, vehicle.vehicle_colour, vehicle.insurance_expiry_date, vehicle.roadworthy_expiry_date, vehicle.status, vehicle.notes])
     const escape = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""').replaceAll("\r", " ").replaceAll("\n", " ")}"`
     const rows = [["QCC ELECTRONIC TRANSPORT REGISTER"], ["Fleet Vehicle Export"], [`Generated: ${new Date().toLocaleString()}`], [], headings, ...values].map((row) => row.map(escape).join(","))
     const csv = `\uFEFF${rows.join("\r\n")}\r\n`

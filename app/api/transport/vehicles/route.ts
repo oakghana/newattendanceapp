@@ -42,7 +42,8 @@ export async function GET() {
   const { data: bookings } = vehicleIds.length
     ? await supabase.from("transport_vehicle_bookings").select("*").in("vehicle_id", vehicleIds).neq("status", "cancelled").order("starts_at", { ascending: false }).limit(100)
     : { data: [] }
-  let locationsQuery = supabase.from("geofence_locations").select("id, name").eq("is_active", true).order("name")
+  // Include inactive locations so historical fleet exports can still resolve their names.
+  let locationsQuery = supabase.from("geofence_locations").select("id, name").order("name")
   if (scopedLocationIds) locationsQuery = locationsQuery.in("id", scopedLocationIds)
   const { data: locations } = await locationsQuery
   return NextResponse.json({ vehicles: vehicles ?? [], bookings: bookings ?? [], locations: locations ?? [] })
