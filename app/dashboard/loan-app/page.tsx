@@ -9087,8 +9087,26 @@ function StageCard({ row, children, hideFdScore = false }: { row: LoanRequest; c
           </div>
         )}
       </CardHeader>
-      <CardContent className="space-y-3">
-        {row.reason ? <p className="text-sm">{row.reason}</p> : <p className="text-sm text-muted-foreground">No reason added by staff.</p>}
+  <CardContent className="space-y-4">
+  <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 sm:grid-cols-2 lg:grid-cols-4">
+  <div className="flex items-start gap-2">
+  <Wallet className="mt-0.5 h-4 w-4 text-violet-600" />
+  <div><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Loan type</p><p className="text-sm font-semibold text-slate-900">{row.loan_type_label || row.loan_type_key || "Not recorded"}</p></div>
+  </div>
+  <div className="flex items-start gap-2">
+  <Calendar className="mt-0.5 h-4 w-4 text-violet-600" />
+  <div><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Application date</p><p className="text-sm font-semibold text-slate-900">{fmtDateTime(row.submitted_at || row.created_at)}</p><p className="text-[11px] text-slate-500">Application year: {new Date(row.submitted_at || row.created_at).getFullYear()}</p></div>
+  </div>
+  <div className="flex items-start gap-2">
+  <UserCheck className="mt-0.5 h-4 w-4 text-violet-600" />
+  <div><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">HOD / RM approval</p><p className="text-sm font-semibold text-slate-900">{row.hod_name || "Pending reviewer"}</p><p className="text-[11px] text-slate-500">{row.hod_rank || "HOD / Regional Manager"}{row.hod_location ? ` · ${row.hod_location}` : ""}</p></div>
+  </div>
+  <div className="flex items-start gap-2">
+  <Clock className="mt-0.5 h-4 w-4 text-violet-600" />
+  <div><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Approval detail</p><p className="text-sm font-semibold text-slate-900">{row.status === "hod_approved" || row.status === "approved_director" ? "Approved / endorsed" : statusText(row.status)}</p><p className="text-[11px] text-slate-500">{row.hod_review_note || "No reviewer note recorded"}</p></div>
+  </div>
+  </div>
+  {row.reason ? <p className="text-sm">{row.reason}</p> : <p className="text-sm text-muted-foreground">No reason added by staff.</p>}
         {row.supporting_document_url && (
           <p className="text-sm">
             Attachment: <a href={row.supporting_document_url} className="underline" target="_blank" rel="noreferrer">Open document</a>
