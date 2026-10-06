@@ -92,10 +92,12 @@ export async function POST(request: Request) {
       const model = String(row.model ?? "").trim()
       if (!make || !model) { errors.push(`Row ${index + 2}: make and model are required; assigned_location_id may be blank.`); continue }
       const { error } = await supabase.from("transport_vehicles").insert({ registration_number: registrationNumber, make, model, capacity, vehicle_type: vehicleType, assigned_region_id: profile.region_id ?? null, assigned_location_id: assignedLocationId, status: ["available", "assigned", "maintenance", "inactive"].includes(String(row.status).toLowerCase()) ? String(row.status).toLowerCase() : "available", chassis_number: String(row.chassis_number ?? "").trim().toUpperCase() || null, vehicle_colour: String(row.vehicle_colour ?? "").trim() || null, insurance_expiry_date: String(row.insurance_expiry_date ?? "") || null, roadworthy_expiry_date: String(row.roadworthy_expiry_date ?? "") || null, notes: String(row.notes ?? "").trim() || null, created_by: user.id })
-      if (error) {
-        if (error.code === "23505") skippedDuplicates.push(`Row ${index + 2}: ${registrationNumber} already exists in the fleet.`)
-        else errors.push(`Row ${index + 2}: ${error.message || "could not be imported."}`)
-      } else imported += 1
+  if (error) {
+  const constraint = (error as typeof error & { constraint?: string }).constraint
+  if (error.code === "23505" && constraint === "transport_vehicles_registration_number_key") skippedDuplicates.push(`Row ${index + 2}: ${registrationNumber} already exists in the fleet.`)
+  else if (error.code === "23505" && constraint === "transport_vehicles_chassis_number_unique") errors.push(`Row ${index + 2}: chassis number ${String(row.chassis_number ?? "").trim()} is already assigned to another vehicle.`)
+  else errors.push(`Row ${index + 2}: ${error.message || "could not be imported."}`)
+  } else imported += 1
     }
     return NextResponse.json({ ok: errors.length === 0, imported, skippedDuplicates, errors })
   }
