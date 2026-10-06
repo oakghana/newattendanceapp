@@ -256,6 +256,7 @@ export function AttendanceRecorder({
 
   const [showSuccessPopup, setShowSuccessPopup] = useState(false)
   const [successMessage, setSuccessMessage] = useState("")
+  const [showAnnualLeavePrompt, setShowAnnualLeavePrompt] = useState(false)
 
   const [detectedLocationName, setDetectedLocationName] = useState<string | null>(null)
 
@@ -500,6 +501,23 @@ export function AttendanceRecorder({
       }
     } catch (error) {
       console.error("[v0] Error in fetchTodayAttendance:", error)
+    }
+  }
+
+  const promptAnnualLeaveAfterCheckIn = async () => {
+    try {
+      const response = await fetch("/api/leave/compliance/check")
+      if (!response.ok) return
+      const compliance = await response.json()
+      const leaveCompliance = compliance.compliance
+      const hasSubmittedAnnualLeave = leaveCompliance?.hasSubmitted === true || Boolean(leaveCompliance?.submissionStatus)
+      const isEligibleForReminder = leaveCompliance?.isAnnualLeaveReminder === true && !hasSubmittedAnnualLeave && leaveCompliance?.isLocked !== true
+
+      if (isEligibleForReminder) {
+        setShowAnnualLeavePrompt(true)
+      }
+    } catch (error) {
+      console.warn("[v0] Could not load annual leave prompt after check-in:", error)
     }
   }
 
@@ -2714,6 +2732,7 @@ export function AttendanceRecorder({
 
       // Refresh attendance data
       await fetchTodayAttendance()
+      await promptAnnualLeaveAfterCheckIn()
 
       // Clear attendance cache
       clearAttendanceCache()
@@ -3127,6 +3146,32 @@ export function AttendanceRecorder({
 
   return (
     <div className={cn("space-y-6", className)}>
+      {showAnnualLeavePrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="annual-leave-prompt-title">
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+            <div className="flex items-center gap-4 bg-primary px-6 py-5 text-primary-foreground">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary-foreground/15">
+                <CheckCircle2 className="size-6" aria-hidden="true" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-primary-foreground/75">Attendance recorded</p>
+                <h2 id="annual-leave-prompt-title" className="text-xl font-semibold">Plan your annual leave</h2>
+              </div>
+            </div>
+            <div className="flex flex-col gap-5 p-6">
+              <p className="text-sm leading-6 text-muted-foreground">Your check-in is complete. Annual leave submissions are now open—submit your plan early to support timely review and leave grant payment processing.</p>
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                <p className="font-semibold">Annual leave submission reminder</p>
+                <p className="mt-1 leading-5">Please submit your annual leave plan before the deadline shown in the leave planning workspace.</p>
+              </div>
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={() => setShowAnnualLeavePrompt(false)}>Remind me later</Button>
+                <Button onClick={() => router.push("/dashboard/leave-management?tab=leave-planning")} className="bg-amber-600 text-white hover:bg-amber-700">Submit annual leave plan</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {flashMessage && (
         <Card className={cn("mb-4 shadow-sm", flashMessage.type === 'success' ? 'border-l-4 border-l-emerald-500 bg-emerald-50 dark:bg-emerald-900/40' : flashMessage.type === 'error' ? 'border-l-4 border-l-rose-500 bg-rose-50 dark:bg-rose-900/40' : flashMessage.type === 'warning' ? 'border-l-4 border-l-amber-500 bg-amber-50 dark:bg-amber-900/40' : 'border-l-4 border-l-blue-400 bg-blue-50 dark:bg-blue-900/30')}>
           <CardContent className="p-4">
