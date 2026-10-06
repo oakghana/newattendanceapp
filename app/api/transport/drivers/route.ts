@@ -43,8 +43,8 @@ export async function GET() {
 export async function POST(request: Request) {
   const { supabase, user, profile } = await actor()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!profile?.is_active || !canEditDriverLicenses(profile.role) || !hasNationwideFleetScope(profile.role)) {
-    return NextResponse.json({ error: "Only Transport Managers or administrators can import driver records." }, { status: 403 })
+  if (!profile?.is_active || !canEditDriverLicenses(profile.role)) {
+    return NextResponse.json({ error: "You do not have permission to import driver records." }, { status: 403 })
   }
 
   const body = await request.json().catch(() => null)
@@ -53,12 +53,13 @@ export async function POST(request: Request) {
 
   const { data: profiles, error: profilesError } = await supabase
     .from("user_profiles")
-    .select("id, employee_id, first_name, last_name")
+    .select("id, employee_id, first_name, last_name, region_id, assigned_location_id")
     .in("role", ["driver", "regional_driver", "regional_drivers", "chief_driver", "regional_chief_driver"])
     .eq("is_active", true)
   if (profilesError) return NextResponse.json({ error: "Unable to resolve driver profiles." }, { status: 500 })
 
-  const profileById = new Map((profiles ?? []).map((row: any) => [String(row.id), row]))
+  const scopedLocationIds = hasNationwideFleetScope(profile.role) ? null : await resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id, profile.region_id)
+  const profileById = new Map((profiles ?? []).filter((row: any) => !scopedLocationIds || scopedLocationIds.includes(row.assigned_location_id)).map((row: any) => [String(row.id), row]))
   const profileByEmployee = new Map((profiles ?? []).filter((row: any) => row.employee_id).map((row: any) => [String(row.employee_id).trim().toLowerCase(), row]))
   let imported = 0
   const errors: string[] = []
@@ -102,11 +103,13 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const { supabase, user, profile } = await actor()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!profile?.is_active || !canEditDriverLicenses(profile.role) || !hasNationwideFleetScope(profile.role)) return NextResponse.json({ error: "Only administrators or Transport Managers can delete drivers." }, { status: 403 })
+  if (!profile?.is_active || !canEditDriverLicenses(profile.role)) return NextResponse.json({ error: "You do not have permission to delete driver records." }, { status: 403 })
   const id = String(new URL(request.url).searchParams.get("id") ?? "")
   if (!id) return NextResponse.json({ error: "Driver id is required." }, { status: 400 })
-  const { data: driver } = await supabase.from("transport_drivers").select("id, full_name").eq("id", id).maybeSingle()
-  if (!driver) return NextResponse.json({ error: "Driver record not found." }, { status: 404 })
+  const scopedLocationIds = hasNationwideFleetScope(profile.role) ? null : await resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id, profile.region_id)
+  const { data: driver } = await supabase.from("transport_drivers").select("id, full_name, profile:user_profiles!profile_id(assigned_location_id)").eq("id", id).maybeSingle()
+  const driverLocationId = (driver?.profile as { assigned_location_id?: string | null } | null)?.assigned_location_id
+  if (!driver || (scopedLocationIds && !driverLocationId || scopedLocationIds && !scopedLocationIds.includes(driverLocationId))) return NextResponse.json({ error: "Driver record not found in your assigned scope." }, { status: 404 })
   const { error } = await supabase.from("transport_drivers").delete().eq("id", id)
   if (error) return NextResponse.json({ error: "Unable to delete driver record." }, { status: 500 })
   return NextResponse.json({ ok: true, id })

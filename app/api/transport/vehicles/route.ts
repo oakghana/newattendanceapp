@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { canEditFleetInventory, canViewFleetInventory, hasNationwideFleetScope, isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
+import { isNonRegionalLocation } from "@/lib/location-mappings"
 
 async function actor() {
   const supabase = await createClient()
@@ -20,6 +21,10 @@ function normalizeRegistration(value: unknown) {
 
 async function resolveFleetScope(supabase: any, profile: any) {
   if (hasNationwideFleetScope(profile.role)) return null
+  if (String(profile.role ?? "").toLowerCase().includes("chief_driver")) {
+    const { data: location } = await supabase.from("geofence_locations").select("name").eq("id", profile.assigned_location_id).maybeSingle()
+    if (isNonRegionalLocation(location?.name)) return null
+  }
   if (isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role)) {
     return resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id, profile.region_id)
   }

@@ -3,6 +3,8 @@ import { FleetInventoryWorkspace } from "@/components/transport/fleet-inventory-
 import { createClient } from "@/lib/supabase/server"
 import { canEditFleetInventory, canViewFleetInventory, hasNationwideFleetScope, isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
+import { isChiefDriverRole } from "@/lib/role-capabilities"
+import { isNonRegionalLocation } from "@/lib/location-mappings"
 
 export default async function FleetInventoryPage() {
   const supabase = await createClient()
@@ -12,11 +14,13 @@ export default async function FleetInventoryPage() {
   if (!profile?.is_active || !canViewFleetInventory(profile.role)) redirect("/dashboard")
 
   let vehiclesQuery = supabase.from("transport_vehicles").select("*").order("registration_number")
-  const scopedLocationIds = hasNationwideFleetScope(profile.role)
-    ? []
-    : (isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role))
-      ? await resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id, profile.region_id)
-      : profile.assigned_location_id ? [profile.assigned_location_id] : []
+  const { data: assignedLocation } = await supabase.from("geofence_locations").select("name").eq("id", profile.assigned_location_id).maybeSingle()
+  const chiefDriverNationwide = isChiefDriverRole(profile.role) && isNonRegionalLocation(assignedLocation?.name)
+  const scopedLocationIds = hasNationwideFleetScope(profile.role) || chiefDriverNationwide
+  ? []
+  : (isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role) || isChiefDriverRole(profile.role))
+  ? await resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id, profile.region_id)
+  : profile.assigned_location_id ? [profile.assigned_location_id] : []
   if (!hasNationwideFleetScope(profile.role)) {
     if (scopedLocationIds.length) vehiclesQuery = vehiclesQuery.in("assigned_location_id", scopedLocationIds)
     else vehiclesQuery = vehiclesQuery.eq("id", "00000000-0000-0000-0000-000000000000")
