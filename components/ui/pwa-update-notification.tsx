@@ -114,7 +114,7 @@ export function PWAUpdateNotification() {
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-sm">New Update Available!</h3>
                 <Badge variant="secondary" className="bg-green-500/10 text-green-700 text-xs">
-                  v.1.8. 14/10/25
+                  V.3.2|26/27
                 </Badge>
               </div>
               <p className="text-muted-foreground text-xs leading-relaxed">
