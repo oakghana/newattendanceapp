@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 import { FleetInventoryWorkspace } from "@/components/transport/fleet-inventory-workspace"
 import { createClient } from "@/lib/supabase/server"
-import { canEditFleetInventory, canViewFleetInventory, hasNationwideFleetScope, isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
+import { canEditFleetInventory, canViewFleetInventory, hasNationwideFleetScope, isAdminRole, isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 import { isChiefDriverRole } from "@/lib/role-capabilities"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
@@ -34,5 +34,5 @@ export default async function FleetInventoryPage() {
   const { data: bookings } = vehicleIds.length
     ? await supabase.from("transport_vehicle_bookings").select("*").in("vehicle_id", vehicleIds).neq("status", "cancelled").order("starts_at", { ascending: false }).limit(100)
     : { data: [] }
-  return <FleetInventoryWorkspace initialVehicles={vehicles ?? []} initialBookings={bookings ?? []} locations={locations ?? []} canEdit={canEditFleetInventory(profile.role)} />
+  return <FleetInventoryWorkspace initialVehicles={vehicles ?? []} initialBookings={bookings ?? []} locations={locations ?? []} canEdit={canEditFleetInventory(profile.role)} canDelete={isAdminRole(profile.role)} />
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { canEditDriverLicenses, canManageTransport, hasNationwideFleetScope, isChiefDriverRole, isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
+import { canEditDriverLicenses, canManageTransport, hasNationwideFleetScope, isAdminRole, isChiefDriverRole, isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const { supabase, user, profile } = await actor()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!profile?.is_active || !canEditDriverLicenses(profile.role)) return NextResponse.json({ error: "You do not have permission to delete driver records." }, { status: 403 })
+  if (!profile?.is_active || !isAdminRole(profile.role)) return NextResponse.json({ error: "Only administrators can delete driver records." }, { status: 403 })
   const id = String(new URL(request.url).searchParams.get("id") ?? "")
   if (!id) return NextResponse.json({ error: "Driver id is required." }, { status: 400 })
   const scopedLocationIds = hasNationwideFleetScope(profile.role) ? null : await resolveOwnedLocationIdsForRegionalOffice(supabase, profile.assigned_location_id, profile.region_id)

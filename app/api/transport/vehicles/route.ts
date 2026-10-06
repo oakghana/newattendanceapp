@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { canEditFleetInventory, canViewFleetInventory, hasNationwideFleetScope, isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
+import { canEditFleetInventory, canViewFleetInventory, hasNationwideFleetScope, isAdminRole, isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
 
@@ -142,7 +142,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const { supabase, user, profile } = await actor()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!profile?.is_active || !canEditFleetInventory(profile.role)) return NextResponse.json({ error: "Only administrators, IT administrators, or Transport Managers can delete vehicles." }, { status: 403 })
+  if (!profile?.is_active || !isAdminRole(profile.role)) return NextResponse.json({ error: "Only administrators can delete vehicles." }, { status: 403 })
   const id = String(new URL(request.url).searchParams.get("id") ?? "")
   if (!id) return NextResponse.json({ error: "Vehicle id is required." }, { status: 400 })
   const scopedLocationIds = hasNationwideFleetScope(profile.role) ? null : await resolveFleetScope(supabase, profile)

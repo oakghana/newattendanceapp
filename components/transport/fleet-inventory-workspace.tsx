@@ -56,7 +56,7 @@ function VehicleFields({ vehicle, locations }: { vehicle?: Vehicle; locations: F
   </div>
 }
 
-export function FleetInventoryWorkspace({ initialVehicles, initialBookings, locations, canEdit }: { initialVehicles: Vehicle[]; initialBookings: Booking[]; locations: FleetLocation[]; canEdit: boolean }) {
+export function FleetInventoryWorkspace({ initialVehicles, initialBookings, locations, canEdit, canDelete = false }: { initialVehicles: Vehicle[]; initialBookings: Booking[]; locations: FleetLocation[]; canEdit: boolean; canDelete?: boolean }) {
   const [vehicles, setVehicles] = useState(initialVehicles)
   const [bookings] = useState(initialBookings)
   const [query, setQuery] = useState("")
