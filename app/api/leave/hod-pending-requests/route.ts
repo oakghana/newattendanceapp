@@ -29,6 +29,7 @@ export async function GET(_request: NextRequest) {
       `)
       .or('hod_decision.is.null,hod_decision.eq.pending')
       .in('status', ['pending_hod_review', 'pending_hod', 'pending', 'submitted', 'pending_review'])
+      .in('leave_type_key', ['annual', 'annual_leave'])
       .order('created_at', { ascending: true })
 
     if (error) {
@@ -73,9 +74,12 @@ export async function GET(_request: NextRequest) {
       : { data: [] as any[] }
     const profileMap = new Map((profiles || []).map((profile: any) => [profile.id, profile]))
     const locationIds = [...new Set((profiles || []).map((profile: any) => profile.assigned_location_id).filter(Boolean))]
-    const { data: locations } = locationIds.length
-      ? await admin.from('locations').select('id, name, code, region_id').in('id', locationIds)
-      : { data: [] as any[] }
+    const { data: locations, error: locationsError } = locationIds.length
+      ? await admin.from('geofence_locations').select('id, name, code, region_id').in('id', locationIds)
+      : { data: [] as any[], error: null }
+    if (locationsError) {
+      console.error('[v0] Failed to load staff locations for HOD pending requests:', locationsError.message)
+    }
     const locationMap = new Map((locations || []).map((location: any) => [location.id, location]))
     const { data: linkages } = profileIds.length
       ? await admin.from('loan_hod_linkages').select('staff_user_id, hod_user_id').in('staff_user_id', profileIds)

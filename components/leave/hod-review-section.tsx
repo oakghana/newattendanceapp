@@ -68,7 +68,10 @@ export function HODReviewSection({ userDepartmentId, viewerRole }: HODReviewSect
         throw new Error(`HTTP ${res.status}: ${res.statusText}`)
       }
 
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
+      if (!data || typeof data !== 'object') {
+        throw new Error('The HOD review response was invalid')
+      }
 
       // The API already scopes requests to the authenticated HOD (by explicit
       // hod_user_id assignment or active staff-to-HOD linkage), so no further
