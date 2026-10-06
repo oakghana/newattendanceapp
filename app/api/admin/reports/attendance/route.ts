@@ -95,25 +95,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from("attendance_records")
-      .select(`
-        *,
-        check_in_location:geofence_locations!check_in_location_id (
-          id,
-          name,
-          address,
-          district_id,
-          location_type,
-          parent_location_id
-        ),
-        check_out_location:geofence_locations!check_out_location_id (
-          id,
-          name,
-          address,
-          district_id,
-          location_type,
-          parent_location_id
-        )
-      `)
+      .select("*")
       .gte("check_in_time", `${startDate}T00:00:00`)
       .lte("check_in_time", `${endDate}T23:59:59`)
 
@@ -229,9 +211,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to fetch attendance report", details: error.message }, { status: 500 })
     }
 
-    console.log("[v0] Reports API - Found", attendanceRecords.length, "attendance records")
+    const safeAttendanceRecords = attendanceRecords || []
+    console.log("[v0] Reports API - Found", safeAttendanceRecords.length, "attendance records")
 
-    const userIds = [...new Set(attendanceRecords.map((record) => record.user_id))]
+    const userIds = [...new Set(safeAttendanceRecords.map((record) => record.user_id))]
 
     // Ensure we have a non-empty array to query
     let userProfiles: any[] = []
@@ -338,7 +321,7 @@ export async function GET(request: NextRequest) {
     // All department and location filtering is now done at the DB query level above.
     // Post-fetch we only need district filtering (no DB column to filter on directly)
     // and global search, because search depends on enriched profile/location fallbacks.
-    let filteredRecords = attendanceRecords
+    let filteredRecords = safeAttendanceRecords
 
     if (safeDistrictId) {
       filteredRecords = filteredRecords.filter((record) => {
