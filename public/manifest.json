@@ -1,6 +1,8 @@
 {
+  "id": "/dashboard/attendance",
   "name": "QCC Electronic Attendance System",
   "short_name": "QCC Attendance",
+  "prefer_related_applications": false,
   "description": "Quality Control Company Limited Electronic Attendance System - Intranet Portal with Real-time Location Tracking",
   "start_url": "/dashboard/attendance",
   "display": "standalone",

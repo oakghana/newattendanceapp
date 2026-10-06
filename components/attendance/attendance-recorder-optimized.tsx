@@ -70,7 +70,7 @@ export const AttendanceRecorderOptimized = memo(function AttendanceRecorderOptim
   // Ref for preventing duplicate requests
   const requestInProgressRef = useRef(false)
   const lastRequestTimeRef = useRef(0)
-  const DEBOUNCE_TIME = 2000 // Prevent requests within 2 seconds
+  const DEBOUNCE_TIME = 500 // Prevent accidental double taps without delaying normal attendance actions
 
   // Memoized computed values
   const isOnLeave = useMemo(() => {
@@ -102,6 +102,8 @@ export const AttendanceRecorderOptimized = memo(function AttendanceRecorderOptim
     lastRequestTimeRef.current = now
 
     try {
+      setError(null)
+      setSuccess(null)
       setIsLoading(true)
       const response = await fetch(endpoint, {
         method,

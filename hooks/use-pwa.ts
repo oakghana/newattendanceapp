@@ -122,12 +122,14 @@ export function usePWA() {
       }
     } else {
       console.log("[PWA] No install prompt available, showing manual instructions")
-      alert(
-        "To install this app:\n\n" +
-          "Chrome/Edge: Click the menu (⋮) → 'Install app'\n" +
-          "Safari: Click Share → 'Add to Home Screen'\n" +
-          "Firefox: Click the menu → 'Install'",
-      )
+      const userAgent = navigator.userAgent.toLowerCase()
+      const instructions = /android/.test(userAgent)
+        ? "Android (Chrome): Tap the menu (⋮) → 'Install app' or 'Add to Home screen' → 'Install'"
+        : /iphone|ipad|ipod/.test(userAgent)
+          ? "iPhone/iPad (Safari): Tap Share → 'Add to Home Screen' → 'Add'"
+          : "Chrome/Edge: Click the menu (⋮) → 'Install app'\nSafari: Click Share → 'Add to Home Screen'\nFirefox: Click the menu → 'Install'"
+
+      alert(`To install QCC Attendance:\n\n${instructions}`)
     }
   }
 
