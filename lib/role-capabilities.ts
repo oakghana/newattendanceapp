@@ -116,11 +116,11 @@ export function canEditDriverLicenses(role?: string | null): boolean {
   return isTransportManagerRole(role) || isAdminRole(role) || normalizeAppRole(role) === "it-admin"
 }
 
-/** Fleet inventory edit: Transport Manager nationwide; administrators retain emergency control. */
-export function canEditFleetInventory(role?: string | null): boolean {
+  /** Fleet inventory edit: Transport Manager, IT administrators, and administrators have nationwide visibility. */
+  export function canEditFleetInventory(role?: string | null): boolean {
   const normalizedRole = normalizeAppRole(role)
-  return isTransportManagerRole(role) || isAdminRole(role)
-}
+  return isTransportManagerRole(role) || isAdminRole(role) || normalizedRole === "it-admin"
+  }
 
 /** Fleet dashboards / read: editors + MD + department heads */
 export function canViewFleetInventory(role?: string | null): boolean {
@@ -136,14 +136,15 @@ export function canViewFleetInventory(role?: string | null): boolean {
   )
 }
 
-/** Nationwide fleet (no location filter): Transport Manager and administrators only. */
-export function hasNationwideFleetScope(role?: string | null): boolean {
+  /** Nationwide fleet (no location filter): Transport Manager, IT administrators, and administrators. */
+  export function hasNationwideFleetScope(role?: string | null): boolean {
   const normalizedRole = normalizeAppRole(role)
   return (
-    isTransportManagerRole(role) ||
-    isAdminRole(role)
+  isTransportManagerRole(role) ||
+  isAdminRole(role) ||
+  normalizedRole === "it-admin"
   )
-}
+  }
 
 export function canCreateTransportRequest(role?: string | null, isLinkedHod?: boolean | null): boolean {
   // Every active non-regional staff member may submit a request. Approval, driver,
