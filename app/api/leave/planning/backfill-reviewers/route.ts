@@ -28,6 +28,13 @@ const HOD_ROLES = [
   "transport_manager",
 ]
 const PENDING_STATUSES = ["pending_hod_review", "hod_pending", "submitted", "pending"]
+const REVIEWER_ROLES = new Set(["regional_manager", "department_head"])
+
+function normalizeReviewerRole(role: string) {
+  if (role === "regional_manager") return "regional_manager"
+  if (role === "department_head" || role === "manager_hr") return "department_head"
+  return null
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -82,18 +89,28 @@ export async function POST(req: NextRequest) {
       .in("role", HOD_ROLES)
       .eq("is_active", true)
 
-    const validHodSet = new Set((hodProfiles || []).map((h: any) => String(h.id)))
-    const hodRoleMap = new Map((hodProfiles || []).map((h: any) => [String(h.id), String(h.role)]))
-
-    // Build staff_user_id -> valid hod array map
-    const staffToHods = new Map<string, Array<{ id: string; role: string }>>()
-    for (const link of linkages as any[]) {
-      const staffId = String(link.staff_user_id)
-      const hodId = String(link.hod_user_id)
-      if (!validHodSet.has(hodId)) continue
-      if (!staffToHods.has(staffId)) staffToHods.set(staffId, [])
-      staffToHods.get(staffId)!.push({ id: hodId, role: hodRoleMap.get(hodId) || "department_head" })
+  const validHodSet = new Set((hodProfiles || []).map((h: any) => String(h.id)))
+  const hodRoleMap = new Map<string, string>()
+  for (const hod of hodProfiles || []) {
+    const reviewerRole = normalizeReviewerRole(String((hod as any).role || ""))
+    if (reviewerRole && REVIEWER_ROLES.has(reviewerRole)) {
+      hodRoleMap.set(String((hod as any).id), reviewerRole)
     }
+  }
+
+  // Build staff_user_id -> valid hod array map. The database constraint only
+  // permits department_head and regional_manager reviewer rows; other profile
+  // roles may be HOD-like for access purposes but must not be inserted here.
+  const staffToHods = new Map<string, Array<{ id: string; role: string }>>()
+  for (const link of linkages as any[]) {
+    const staffId = String(link.staff_user_id)
+    const hodId = String(link.hod_user_id)
+    const reviewerRole = hodRoleMap.get(hodId)
+    if (!validHodSet.has(hodId) || !reviewerRole) continue
+    if (!staffToHods.has(staffId)) staffToHods.set(staffId, [])
+    staffToHods.get(staffId)!.push({ id: hodId, role: reviewerRole })
+  }
+
 
     // Fetch existing leave_plan_reviews for these requests to avoid duplicates
     const requestIds = (pendingRequests as any[]).map((r) => String(r.id))

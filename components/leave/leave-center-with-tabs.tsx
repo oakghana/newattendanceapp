@@ -9,6 +9,7 @@ import { AllRequestsViewSection } from './all-requests-view-section'
 import { PaymentAdviceClient } from './payment-advice-client'
 import { HrExecutiveApprovalDashboard } from './hr-executive-approval-dashboard'
 import { HrApprovalsTab } from './hr-approvals-tab'
+import { ErrorBoundary } from '@/components/error-boundary'
 
 interface LeaveCenterWithTabsProps {
   userDepartmentId: string
@@ -75,7 +76,18 @@ export function LeaveCenterWithTabs({ userDepartmentId, userName }: LeaveCenterW
             </CardHeader>
           </Card>
 
-          <HODReviewSection userDepartmentId={userDepartmentId} />
+          <ErrorBoundary
+            fallback={
+              <Card>
+                <CardContent className="py-8 text-center">
+                  <p className="font-medium text-destructive">HOD review could not be loaded.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Refresh the tab and try again. Your other Leave Center tabs remain available.</p>
+                </CardContent>
+              </Card>
+            }
+          >
+            <HODReviewSection userDepartmentId={userDepartmentId} />
+          </ErrorBoundary>
         </TabsContent>
 
         <TabsContent value="all-requests" className="space-y-4">
