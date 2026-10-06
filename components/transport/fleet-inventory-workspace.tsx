@@ -70,11 +70,25 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
   const [importing, setImporting] = useState(false)
   const [importErrors, setImportErrors] = useState<string[]>([])
   const uniqueVehicles = useMemo(() => Array.from(new Map(vehicles.map((vehicle) => [normalizeRegistration(vehicle.registration_number), vehicle])).values()), [vehicles])
-  const filteredVehicles = useMemo(() => uniqueVehicles.filter((vehicle) => {
-    if (activeType !== "all" && vehicle.vehicle_type !== activeType) return false
-    const searchable = `${vehicle.registration_number} ${vehicle.chassis_number || ""} ${vehicle.vehicle_colour || ""} ${vehicle.make} ${vehicle.model} ${vehicle.vehicle_type} ${vehicle.assigned_location?.name || ""}`.toLowerCase()
-    return searchable.includes(query.toLowerCase()) || normalizeRegistration(vehicle.registration_number).includes(normalizeRegistration(query))
-  }), [uniqueVehicles, activeType, query])
+  const filteredVehicles = useMemo(() => {
+    const rawQuery = query.trim().toLocaleLowerCase()
+    const normalizedQuery = normalizeRegistration(query)
+    return uniqueVehicles.filter((vehicle) => {
+      if (activeType !== "all" && vehicle.vehicle_type !== activeType) return false
+      const searchableText = [
+        vehicle.registration_number,
+        vehicle.chassis_number,
+        vehicle.vehicle_colour,
+        vehicle.make,
+        vehicle.model,
+        vehicle.vehicle_type,
+        vehicle.assigned_location?.name,
+        vehicle.assigned_location_id,
+      ].filter(Boolean).join(" ")
+      const searchable = searchableText.toLocaleLowerCase()
+      return !rawQuery || searchable.includes(rawQuery) || normalizeRegistration(searchableText).includes(normalizedQuery)
+    })
+  }, [uniqueVehicles, activeType, query])
   const pageSize = 10
   const pageCount = Math.max(1, Math.ceil(filteredVehicles.length / pageSize))
   const visibleVehicles = filteredVehicles.slice((page - 1) * pageSize, page * pageSize)
@@ -138,7 +152,7 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
       const errors = Array.isArray(body?.errors) ? body.errors : []
       const skippedDuplicates = Array.isArray(body?.skippedDuplicates) ? body.skippedDuplicates : []
       setImportErrors(errors)
-      toast({ title: body.imported ? "Fleet import completed" : "No new vehicles imported", description: `${body.imported ?? 0} unique vehicle(s) imported${skippedDuplicates.length ? `; ${skippedDuplicates.length} existing duplicate(s) skipped` : ""}${errors.length ? `; ${errors.length} row(s) need attention.` : "."}`, variant: errors.length ? "destructive" : "default" }); if (body.imported) window.location.reload()
+      toast( title: body.imported ? "Fleet import completed" : skippedDuplicates.length && !errors.length ? "Fleet already up to date" : "No new vehicles imported", description: `${body.imported ?? 0} unique vehicle(s) imported${skippedDuplicates.length ? `; ${skippedDuplicates.length} existing duplicate(s) skipped` : ""}${errors.length ? `; ${errors.length} row(s) need attention.` : "."}`, variant: errors.length ? "destructive" : "default" }); if (body.imported) window.location.reload()
     } catch (error) { toast({ title: "Fleet import failed", description: error instanceof Error ? error.message : "Please use the fleet template.", variant: "destructive" }) } finally { setImporting(false) }
   }
 
