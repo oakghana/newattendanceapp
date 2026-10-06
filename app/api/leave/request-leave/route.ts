@@ -8,17 +8,6 @@ import { getAssignmentGuidance, isRegionalHrLeaveOfficeRole, resolveRegionalHrOf
 import { hasAssignedReviewer, REVIEWER_LINKAGE_REQUIRED_MESSAGE } from "@/lib/reviewer-linkage"
 import { sendWebPushToUsers } from "@/lib/web-push"
 
-const NON_ANNUAL_REQUIRES_APPROVED_ANNUAL = new Set([
-  "sick",
-  "maternity",
-  "paternity",
-  "study_with_pay",
-  "study_without_pay",
-  "casual",
-  "compassionate",
-  "special_unpaid",
-])
-
 const LEAVE_TYPE_DISPLAY_NAME: Record<string, string> = {
   annual: "Annual",
   sick: "Sick",
@@ -194,7 +183,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (NON_ANNUAL_REQUIRES_APPROVED_ANNUAL.has(leaveTypeKey)) {
+    if (leaveTypeKey !== "annual" && leaveTypeKey !== "annual_leave") {
       try {
         const { data: annualApproval, error: annualError } = await supabase
           .from("leave_requests")

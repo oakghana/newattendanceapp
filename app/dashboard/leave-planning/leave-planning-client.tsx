@@ -2454,9 +2454,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
     const requestForReview = (data?.requests || []).find((request: any) => request.id === requestId)
     const isRegionalManagerReview = normalizedRole === "regional_manager" && String(requestForReview?.workflow_route || "").toLowerCase() === "regional"
     const reviewMemoReference = String(hodMemoReference[reviewId] || requestForReview?.memo_reference || requestForReview?.reference_number || "").trim()
-    if (isRegionalManagerReview && action === "approve" && !reviewMemoReference) {
-      toast({ title: "Official memo reference required", description: "Regional HR Office should enter the reference first. If it was omitted, the Regional Manager may enter it here before approval.", variant: "destructive" }); return
-    }
+
     // Only pre-check the signature client-side when we actually have a user id
     // to check. Without it, the request would 404/undefined and incorrectly
     // block approval even when a signature is saved. The API route performs
@@ -4224,7 +4222,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                               }) || templateOptions[0]
                               setOfficeAdjStart((p) => ({ ...p, [req.id]: req.preferred_start_date || "" }))
                               // Annual leave defaults to the auto-calculated end date (derived from the
-                              // breakdown fields below), so it's left unset here — only a manual edit to
+                              // breakdown fields below), so it's left unset here �� only a manual edit to
                               // the field should populate an override. Non-annual leave types have no
                               // auto-calculation, so they start from the request's own end date.
                               if (String(req.leave_type_key || "").toLowerCase() !== "annual") {
@@ -4473,14 +4471,14 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
 
                               {isRegionalHr && String(req.workflow_route || "").toLowerCase() === "regional" ? (
                                 <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                                  <Label className="text-xs font-semibold text-amber-900">Official leave memo reference <span className="text-red-600">*</span></Label>
+                                  <Label className="text-xs font-semibold text-amber-900">Official leave memo reference <span className="font-normal text-amber-700">(optional)</span></Label>
                                   <Input
                                     value={officeRefNumber[req.id] || req.memo_reference || req.reference_number || ""}
                                     onChange={(e) => setOfficeRefNumber((p) => ({ ...p, [req.id]: e.target.value }))}
                                     placeholder="Enter the official leave memo number"
                                     className="h-9 bg-white font-mono text-sm"
                                   />
-                                  <p className="text-[10px] text-amber-800">Regional HR Office must enter this reference before the request can reach the Regional Manager leave center.</p>
+                                  <p className="text-[10px] text-amber-800">Enter the official reference when available. You may leave this blank and continue the workflow; HR Records can complete it later.</p>
                                 </div>
                               ) : (
                                 <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
