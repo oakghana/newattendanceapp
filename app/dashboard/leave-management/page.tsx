@@ -40,12 +40,15 @@ export default async function LeaveManagementPage() {
   let isAssignedHod = false
   let userLocationName: string | null = null
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+  const isAdmin = normalizedRole === "admin" || normalizedRole === "administrator"
   const isItAdmin = normalizedRole === "it_admin"
   const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole) || (normalizedRole.includes("regional") && normalizedRole.includes("hr"))
   const isRegionalManager = normalizedRole === "regional_manager" || normalizedRole === "regional_manager_officer"
   // A linkage row is not permission by itself. Only explicit manager/HOD roles
   // may review other staff leave; ordinary staff must never see HOD Review.
   const canReviewLeaveAsHod = [
+    "admin",
+    "administrator",
     "department_head",
     "accounts_executive",
     "regional_manager",
@@ -99,7 +102,51 @@ export default async function LeaveManagementPage() {
     userLocationName = (locationRes?.data as any)?.name || null
     const selfLeaveResolution = resolveSelfLeaveRoute({ role: profile.role, locationName: userLocationName })
 
-    if (canReviewLeaveAsHod && !isRegionalHr && !isRegionalManager && !isItAdmin) {
+    if (isAdmin) {
+      const { data: adminRequests } = await admin
+        .from("leave_plan_requests")
+        .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, workflow_route, workflow_stage, created_at, hod_decision, memo_token, memo_reference, reference_number, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id)")
+        .in("status", ["pending_hod_review", "pending_hod", "pending_manager_review", "pending_regional_hr_review", "pending_regional_manager_approval", "pending_review", "submitted"])
+        .order("created_at", { ascending: true })
+        .limit(500)
+
+      const adminLocationIds = Array.from(new Set((adminRequests || []).map((request: any) => request.user_profiles?.assigned_location_id).filter(Boolean)))
+      const { data: adminLocations } = adminLocationIds.length
+        ? await admin.from("geofence_locations").select("id, name, code").in("id", adminLocationIds)
+        : { data: [] }
+      const adminLocationMap = new Map((adminLocations || []).map((location: any) => [location.id, location]))
+      managerNotifications = (adminRequests || []).map((request: any) => {
+        const staff = request.user_profiles || {}
+        const location = adminLocationMap.get(staff.assigned_location_id)
+        return {
+          id: request.id,
+          status: request.status || "pending_review",
+          workflow_route: request.workflow_route,
+          workflow_stage: request.workflow_stage,
+          review_decision: request.hod_decision || "pending",
+          requester_name: `${staff.first_name || ""} ${staff.last_name || ""}`.trim(),
+          requester_role: "staff",
+          staff_location_name: location?.name || null,
+          staff_location_code: location?.code || null,
+          leave_requests: {
+            id: request.id,
+            user_id: request.user_id,
+            start_date: request.preferred_start_date,
+            end_date: request.preferred_end_date,
+            reason: request.reason || "",
+            leave_type: request.leave_type_key || "",
+            status: request.status || "pending_review",
+            workflow_route: request.workflow_route,
+            workflow_stage: request.workflow_stage,
+            created_at: request.created_at,
+            memo_token: request.memo_token || null,
+            memo_reference: request.memo_reference || null,
+            reference_number: request.reference_number || null,
+            user_name: `${staff.first_name || ""} ${staff.last_name || ""}`.trim(),
+          },
+        }
+      })
+    } else if (canReviewLeaveAsHod && !isRegionalHr && !isRegionalManager && !isItAdmin) {
       // Legacy/non-regional workflow: HODs receive only requests explicitly
       // linked to them. Regional requests never enter this queue.
         const { data: hodLinks } = await admin

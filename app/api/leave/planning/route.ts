@@ -150,8 +150,8 @@ const LEAVE_APPROVED_BY_HOD_OR_RM_STATUSES = [
   "approved",
 ]
 
-async function validateDependentLeaveEligibility(admin: any, userId: string, leaveTypeKey: string, leaveYearPeriod: string) {
-  if (!["casual", "casual_leave", "part_leave", "part-leave"].includes(leaveTypeKey)) return null
+  async function validateDependentLeaveEligibility(admin: any, userId: string, leaveTypeKey: string, leaveYearPeriod: string) {
+  if (["annual", "annual_leave"].includes(leaveTypeKey)) return null
 
   const { data: annualRequests, error } = await admin
     .from("leave_plan_requests")
@@ -164,40 +164,14 @@ async function validateDependentLeaveEligibility(admin: any, userId: string, lea
   if (error) throw error
 
   const approvedAnnualRequests = (annualRequests || []).filter((request: any) =>
-    ["annual", "annual_leave"].includes(String(request.leave_type_key || "").toLowerCase()),
+  ["annual", "annual_leave"].includes(String(request.leave_type_key || "").toLowerCase()),
   )
-
-  if (leaveTypeKey === "part_leave" || leaveTypeKey === "part-leave") {
-    if (approvedAnnualRequests.length === 0) {
-      return {
-        code: "ANNUAL_LEAVE_APPROVAL_REQUIRED",
-        error: "Part Leave cannot be requested until your Annual Leave has been submitted and approved by your HOD or Regional Manager.",
-      }
-    }
-    return null
-  }
-
-  const annualEntitlement = approvedAnnualRequests.reduce((total: number, request: any) => {
-    const entitlement = Number(request.entitlement_days || 0)
-    return Math.max(total, entitlement)
-  }, 0)
-  const approvedAnnualDays = approvedAnnualRequests.reduce(
-    (total: number, request: any) => total + Number(request.adjusted_days || request.requested_days || 0),
-    0,
-  )
-
-  if (annualEntitlement > 0 && approvedAnnualDays < annualEntitlement) {
-    return {
-      code: "ANNUAL_LEAVE_ENTITLEMENT_NOT_EXHAUSTED",
-      error: `Casual Leave cannot be requested yet. You must first exhaust your Annual Leave entitlement (${approvedAnnualDays} of ${annualEntitlement} day(s) approved).`,
-    }
-  }
 
   if (approvedAnnualRequests.length === 0) {
-    return {
-      code: "ANNUAL_LEAVE_ENTITLEMENT_NOT_EXHAUSTED",
-      error: "Casual Leave cannot be requested until your Annual Leave entitlement has been exhausted through an approved Annual Leave request.",
-    }
+  return {
+  code: "ANNUAL_LEAVE_APPROVAL_REQUIRED",
+  error: "Annual Leave must be submitted and approved by your HOD or Regional Manager before you can request any other leave type.",
+  }
   }
 
   return null
@@ -833,8 +807,9 @@ export async function GET(request: NextRequest) {
     const role = normalizeRoleValue(profile.role)
     const departmentName = (profile as any)?.departments?.name || null
     const departmentCode = (profile as any)?.departments?.code || null
+    const isAdmin = role === "admin" || role === "administrator"
     const isRegionalHr = isRegionalHrOfficerRole(role)
-    const isHrOffice = isHrLeaveOfficeRole(role) || isRegionalHr
+    const isHrOffice = isHrLeaveOfficeRole(role) || isRegionalHr || isAdmin
     const isHrApprover = isHrApproverRole(role, departmentName, departmentCode)
     const isHr = isHrOffice || isHrApprover || isHrPlanningRole(role, departmentName, departmentCode)
 
@@ -859,7 +834,7 @@ export async function GET(request: NextRequest) {
     // are also linked as a HOD. The HOD review queue is loaded separately; using
     // the linkage as a reason to skip this branch made their HR Office queue
     // appear empty while requests were still waiting at HR Leave Office.
-    if (isHrOffice && !isHrApprover) {
+    if (isHrOffice && (!isHrApprover || isAdmin)) {
       let officeQuery = admin
         .from("leave_plan_requests")
         .select(`
@@ -885,7 +860,7 @@ export async function GET(request: NextRequest) {
       if (isRegionalHr) {
         officeQuery = officeQuery
           .eq("workflow_route", "regional")
-          .in("status", ["pending_regional_hr_review", "pending_regional_manager_approval"])
+          .in("status", ["pending_regional_hr_office_review", "pending_regional_hr_review", "pending_regional_manager_approval"])
 
         let scopedStaffQuery = admin.from("user_profiles").select("id").neq("id", user.id)
         if (profile.assigned_location_id) {
@@ -904,8 +879,8 @@ export async function GET(request: NextRequest) {
       const { data: requests, error: reqError } = await officeQuery
 
       let allRegionalRequests: any[] = []
-      if (isRegionalHr && regionalScopedStaffIds.length > 0) {
-        const { data: regionalRows, error: regionalRowsError } = await admin
+      if (isAdmin || (isRegionalHr && regionalScopedStaffIds.length > 0)) {
+        let allRequestsQuery = admin
           .from("leave_plan_requests")
           .select(`
             *,
@@ -916,9 +891,15 @@ export async function GET(request: NextRequest) {
               geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
             )
           `)
-          .eq("workflow_route", "regional")
-          .in("user_id", regionalScopedStaffIds)
           .order("created_at", { ascending: false })
+
+        if (!isAdmin) {
+          allRequestsQuery = allRequestsQuery
+            .eq("workflow_route", "regional")
+            .in("user_id", regionalScopedStaffIds)
+        }
+
+        const { data: regionalRows, error: regionalRowsError } = await allRequestsQuery
         if (regionalRowsError) throw regionalRowsError
         allRegionalRequests = regionalRows || []
       }
@@ -978,7 +959,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         mode: "hr_office",
         requests: requests || [],
-        allRequests: isRegionalHr ? allRegionalRequests : requests || [],
+        allRequests: isAdmin || isRegionalHr ? allRegionalRequests : requests || [],
         myRequests: myRequests || [],
         analytics,
         outstandingLeaveMap: Object.fromEntries(outstandingLeaveMap),
@@ -1042,9 +1023,8 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Admin sees ALL HOD reviews nationwide; regular managers see only their assigned reviews
-    const isAdmin = role === "admin"
-    if ((isAdmin || isHodRole(role) || isLinkedHodEarly)) {
+  // Admin sees ALL HOD reviews nationwide; regular managers see only their assigned reviews
+  if ((isAdmin || isHodRole(role) || isLinkedHodEarly)) {
       let nonArchivedReviews: any[] = []
 
       // Admin sees ALL pending HOD requests nationwide (directly from leave_plan_requests)
@@ -1803,16 +1783,30 @@ export async function POST(request: NextRequest) {
     const staffName = staffProfile.data
       ? `${staffProfile.data.first_name || ""} ${staffProfile.data.last_name || ""}`.trim()
       : "Staff Member"
-    notifyLeaveSubmitted(admin, {
-      leavePlanRequestId: requestRow.id,
-      staffName,
-      leaveType: leaveTypeKey,
-      startDate: preferred_start_date,
-      endDate: preferred_end_date,
-      requestedDays,
-    }).catch(() => {})
+  notifyLeaveSubmitted(admin, {
+  leavePlanRequestId: requestRow.id,
+  staffName,
+  leaveType: leaveTypeKey,
+  startDate: preferred_start_date,
+  endDate: preferred_end_date,
+  requestedDays,
+  }).catch(() => {})
 
-    return NextResponse.json({ success: true, request: requestRow }, { status: 201 })
+  if (leaveTypeKey === "annual" || leaveTypeKey === "annual_leave") {
+  const regionalHrRecipient = regionalHrOffice?.user_id
+  if (regionalHrRecipient) {
+  await admin.from("staff_notifications").insert({
+  recipient_id: regionalHrRecipient,
+  type: "annual_leave_submitted_regional_hr",
+  title: "Annual Leave Submitted",
+  message: `${staffName} submitted Annual Leave for ${preferred_start_date}. If approved, the leave can take effect from 1 January 2027.`,
+  data: { leave_plan_request_id: requestRow.id, leave_type: leaveTypeKey, start_date: preferred_start_date, effective_date: "2027-01-01" },
+  is_read: false,
+  }).then(() => {}).catch(() => {})
+  }
+  }
+
+  return NextResponse.json({ success: true, request: requestRow }, { status: 201 })
   } catch (error) {
     console.error("[v0] Leave planning POST error:", error)
     const errMsg =

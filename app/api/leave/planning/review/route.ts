@@ -73,7 +73,9 @@ export async function POST(request: NextRequest) {
       .trim()
       .replace(/[-\s]+/g, "_")
 
-    if (!["regional_manager", "department_head", "transport_manager", "hr", "hr_office", "hr_leave_office", "hr_executive", "manager_hr", "director_hr", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)) {
+    const isAdmin = role === "admin" || role === "administrator"
+
+    if (!["admin", "administrator", "regional_manager", "department_head", "transport_manager", "hr", "hr_office", "hr_leave_office", "hr_executive", "manager_hr", "director_hr", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)) {
       return NextResponse.json({ error: "Only regional managers and department heads can review this request." }, { status: 403 })
     }
 
@@ -89,7 +91,7 @@ export async function POST(request: NextRequest) {
       ? await resolveOwnedLocationIdsForRegionalOffice(admin, profile.assigned_location_id, profile.region_id)
       : []
     const isRegionalForward = action === "forward_to_regional_manager"
-    if (isRegionalForward && !isRegionalHr) {
+    if (isRegionalForward && !isRegionalHr && !isAdmin) {
       return NextResponse.json({ error: "Only the assigned Regional HR Office can forward a regional leave request to the Regional Manager." }, { status: 403 })
     }
     const decision = isRegionalForward ? "approved" : normalizeDecision(action)
@@ -115,7 +117,7 @@ export async function POST(request: NextRequest) {
     // not authoritative and older review cards do not include workflow_route.
     const { data: workflowRequest, error: workflowRequestError } = await admin
       .from("leave_plan_requests")
-      .select("workflow_route, memo_reference, status")
+      .select("workflow_route, leave_type_key, memo_reference, status")
       .eq("id", leave_plan_request_id)
       .maybeSingle()
     if (workflowRequestError && isSchemaIssue(workflowRequestError)) return schemaIssueResponse(workflowRequestError)
@@ -125,6 +127,18 @@ export async function POST(request: NextRequest) {
     const normalizedMemoReference = persistedMemoReference || suppliedMemoReference
 
     const isRegionalManagerApproval = role === "regional_manager"
+    const isAdminApproval = isAdmin
+    const isAnnualRegionalManagerApprovalBlocked =
+      isRegionalManagerApproval &&
+      String((workflowRequest as any).workflow_route || "").toLowerCase() === "regional" &&
+      isAnnualLeave(String((workflowRequest as any).leave_type_key || "")) &&
+      !(new Date().getFullYear() === 2027 && new Date().getMonth() === 0)
+    if (isAnnualRegionalManagerApprovalBlocked) {
+      return NextResponse.json(
+        { error: "Regional Manager endorsement and approval for annual leave is disabled until January 2027." },
+        { status: 423 },
+      )
+    }
     const isRegionalRequest = action === "forward_to_regional_manager"
       || String(workflowRequest.workflow_route || "").toLowerCase() === "regional"
 
@@ -136,7 +150,7 @@ export async function POST(request: NextRequest) {
     // right before doing anything else.
     const currentStatus = String((workflowRequest as any).status || "")
     const stillActionableForThisStage = isRegionalForward
-      ? currentStatus === "pending_regional_hr_review"
+      ? ["pending_regional_hr_office_review", "pending_regional_hr_review"].includes(currentStatus)
       : isRegionalManagerApproval
         ? currentStatus === "pending_regional_manager_approval"
         : ["pending_hod_review", "pending_manager_review"].includes(currentStatus)
@@ -146,7 +160,7 @@ export async function POST(request: NextRequest) {
         { status: 409 },
       )
     }
-    if (isRegionalManagerApproval && isRegionalRequest && decision === "approved" && !isRegionalForward) {
+    if (isRegionalManagerApproval && !isAdminApproval && isRegionalRequest && decision === "approved" && !isRegionalForward) {
       const profileHasSignature = Boolean(String((profile as any).signature_data_url || "").trim())
       const { data: registeredSignature } = await admin
         .from("approval_signature_registry")
@@ -161,16 +175,6 @@ export async function POST(request: NextRequest) {
       if (!profileHasSignature && !String(registeredSignature?.signature_data_url || "").trim()) {
         return NextResponse.json({ error: "Save your Regional Manager signature in your profile before approving this regional leave request." }, { status: 400 })
       }
-    }
-
-    // Non-regional HR Executive forwarding intentionally does not require a
-    // memo reference. HR Records assigns the official reference after final
-    // approval, so this validation applies only to Regional Manager approval.
-    if (isRegionalManagerApproval && isRegionalRequest && decision === "approved" && !isRegionalForward && !normalizedMemoReference) {
-      return NextResponse.json({
-        error: "This regional leave request cannot be approved until Regional HR Office enters the official memo reference.",
-        code: "REGIONAL_MEMO_REFERENCE_REQUIRED",
-      }, { status: 400 })
     }
 
     if (decision === "recommend_change" && !isRegionalForward && (!adjusted_preferred_start_date || !adjusted_preferred_end_date)) {
@@ -195,12 +199,13 @@ export async function POST(request: NextRequest) {
       const isRegionalManager = role === "regional_manager"
       const isDepartmentHeadReviewer = role === "department_head"
       const isHrExecutiveReviewer = ["hr_executive", "manager_hr", "director_hr"].includes(role)
+      const isAdminReviewer = isAdmin
       // Older/forwarded requests can be visible in a manager's queue without
       // a matching leave_plan_reviews row yet (regional hand-off, or a
       // department head reached via loan_hod_linkages rather than a
       // pre-seeded review row). Validate the request scope below, then
       // create this manager's own assignment before applying the decision.
-      if (!isRegionalHr && !isRegionalManager && !isDepartmentHeadReviewer && !isHrExecutiveReviewer) {
+      if (!isAdminReviewer && !isRegionalHr && !isRegionalManager && !isDepartmentHeadReviewer && !isHrExecutiveReviewer) {
         return NextResponse.json({ error: "Review assignment not found for this manager." }, { status: 404 })
       }
 
@@ -220,7 +225,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Regional Managers can review only regional leave requests." }, { status: 403 })
       }
 
-      if (isDepartmentHeadReviewer) {
+      if (isAdminReviewer) {
+        // Admin is a nationwide leave reviewer and may act on any current stage.
+      } else if (isDepartmentHeadReviewer) {
         // Department heads are scoped by an explicit staff-to-HOD linkage
         // (a staff member can be linked to more than one HOD), not by
         // location/region — that scoping is for the regional pipeline only.
@@ -306,14 +313,14 @@ export async function POST(request: NextRequest) {
     // Cross-route guard: HOD Review, HR Leave Office, and HR Executive never
     // touch regional requests, and Regional HR/Regional Manager actions never
     // touch non-regional requests. Each route runs its own separate pipeline.
-    if (role === "department_head" && !canNonRegionalPipelineAct((leavePlan as any).workflow_route)) {
+    if (!isAdmin && role === "department_head" && !canNonRegionalPipelineAct((leavePlan as any).workflow_route)) {
       return NextResponse.json({ error: "Regional leave requests do not go through HOD Review." }, { status: 403 })
     }
-    if ((isRegionalForward || isRegionalManagerApproval) && !canRegionalPipelineAct((leavePlan as any).workflow_route)) {
+    if (!isAdmin && (isRegionalForward || isRegionalManagerApproval) && !canRegionalPipelineAct((leavePlan as any).workflow_route)) {
       return NextResponse.json({ error: "Regional HR Office and Regional Manager actions only apply to regional leave requests." }, { status: 403 })
     }
 
-    if (isRegionalManagerApproval && isRegionalRequest) {
+    if (!isAdmin && isRegionalManagerApproval && isRegionalRequest) {
       const staffProfile = Array.isArray((leavePlan as any).user_profiles) ? (leavePlan as any).user_profiles[0] : (leavePlan as any).user_profiles
       const sameScope = isRegionalManagerScopeMatch(
         profile.region_id,
