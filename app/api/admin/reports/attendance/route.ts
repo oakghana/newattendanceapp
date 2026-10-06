@@ -168,18 +168,27 @@ export async function GET(request: NextRequest) {
 
     // Department scoping via user_profiles sub-query
     // Use adminClient for department scoping lookups to bypass RLS
-    if ((normalizedRole === "department_head" || normalizedRole === "accounts_executive") || normalizedRole === "transport_manager") {
-      const { data: deptUsers } = await adminClientForScope
+    const scopedDepartmentId =
+      normalizedRole === "department_head" || normalizedRole === "accounts_executive"
+        ? profile.department_id
+        : safeDepartmentId
+
+    if (scopedDepartmentId && normalizedRole !== "staff") {
+      const { data: deptUsers, error: deptUsersError } = await adminClientForScope
         .from("user_profiles")
         .select("id")
-        .eq("department_id", profile.department_id)
-      const deptUserIds = (deptUsers || []).map((u: any) => u.id)
-      if (deptUserIds.length > 0) {
-        query = query.in("user_id", deptUserIds)
-      } else {
-        query = query.eq("user_id", "00000000-0000-0000-0000-000000000000")
+        .eq("department_id", scopedDepartmentId)
+
+      if (deptUsersError) {
+        console.error("[v0] Reports API - Department user lookup error:", deptUsersError)
+        return NextResponse.json({ error: "Failed to fetch attendance report", details: deptUsersError.message }, { status: 500 })
       }
-    } else if (safeDepartmentId && normalizedRole !== "staff") {
+
+      const deptUserIds = (deptUsers || []).map((u: any) => u.id).filter(Boolean)
+      query = deptUserIds.length > 0
+        ? query.in("user_id", deptUserIds)
+        : query.eq("user_id", "00000000-0000-0000-0000-000000000000")
+    } else if (normalizedRole === "department_head" || normalizedRole === "accounts_executive") {
       const { data: deptUsers } = await adminClientForScope
         .from("user_profiles")
         .select("id")
