@@ -509,7 +509,11 @@ export function AttendanceRecorder({
       const response = await fetch("/api/leave/compliance/check")
       if (!response.ok) return
       const compliance = await response.json()
-      if (compliance.compliance?.isAnnualLeaveReminder && !compliance.compliance?.hasSubmitted && !compliance.compliance?.isLocked) {
+      const leaveCompliance = compliance.compliance
+      const hasSubmittedAnnualLeave = leaveCompliance?.hasSubmitted === true || Boolean(leaveCompliance?.submissionStatus)
+      const isEligibleForReminder = leaveCompliance?.isAnnualLeaveReminder === true && !hasSubmittedAnnualLeave && leaveCompliance?.isLocked !== true
+
+      if (isEligibleForReminder) {
         setShowAnnualLeavePrompt(true)
       }
     } catch (error) {
