@@ -93,8 +93,12 @@ export async function GET(request: NextRequest) {
       status,
     })
 
-    let query = supabase
-      .from("attendance_records")
+  // Use the privileged server client for report reads. The authenticated client
+  // can return a generic PostgREST 400 when an admin applies a department
+  // user-id filter under restrictive attendance RLS policies.
+  const adminClientForScope = await createAdminClient()
+  let query = adminClientForScope
+    .from("attendance_records")
       .select("*")
       .gte("check_in_time", `${startDate}T00:00:00`)
       .lte("check_in_time", `${endDate}T23:59:59`)
@@ -117,8 +121,7 @@ export async function GET(request: NextRequest) {
     // regional_manager → restricted to their own assigned_location_id
     // department_head  → restricted to their own department_id
 
-    const adminClientForScope = await createAdminClient()
-    let regionalScopedLocationIds: string[] | null = null
+  let regionalScopedLocationIds: string[] | null = null
     let scopedQueryLocationIds: string[] | null = null
     if ((normalizedRole === "regional_manager" || normalizedRole === "regional_hr") && profile.assigned_location_id) {
       const { data: linkedDistricts } = await adminClientForScope
