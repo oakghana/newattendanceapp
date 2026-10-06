@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
     // right before doing anything else.
     const currentStatus = String((workflowRequest as any).status || "")
     const stillActionableForThisStage = isRegionalForward
-      ? currentStatus === "pending_regional_hr_review"
+      ? ["pending_regional_hr_office_review", "pending_regional_hr_review"].includes(currentStatus)
       : isRegionalManagerApproval
         ? currentStatus === "pending_regional_manager_approval"
         : ["pending_hod_review", "pending_manager_review"].includes(currentStatus)
@@ -164,16 +164,6 @@ export async function POST(request: NextRequest) {
       if (!profileHasSignature && !String(registeredSignature?.signature_data_url || "").trim()) {
         return NextResponse.json({ error: "Save your Regional Manager signature in your profile before approving this regional leave request." }, { status: 400 })
       }
-    }
-
-    // Non-regional HR Executive forwarding intentionally does not require a
-    // memo reference. HR Records assigns the official reference after final
-    // approval, so this validation applies only to Regional Manager approval.
-    if (isRegionalManagerApproval && !isAdminApproval && isRegionalRequest && decision === "approved" && !isRegionalForward && !normalizedMemoReference) {
-      return NextResponse.json({
-        error: "This regional leave request cannot be approved until Regional HR Office enters the official memo reference.",
-        code: "REGIONAL_MEMO_REFERENCE_REQUIRED",
-      }, { status: 400 })
     }
 
     if (decision === "recommend_change" && !isRegionalForward && (!adjusted_preferred_start_date || !adjusted_preferred_end_date)) {

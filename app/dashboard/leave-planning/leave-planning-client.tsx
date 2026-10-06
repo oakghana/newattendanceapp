@@ -736,7 +736,7 @@ function WorkflowStages({ status }: { status: string }) {
   const stageIndex = isRegional
     ? status === "approved" ? 4
       : status === "pending_hr_leave_processing" || status === "pending_hr_records_reference" ? 3
-      : status === "pending_regional_hr_review" || status === "pending_regional_manager_approval" ? 2
+      : status === "pending_regional_hr_office_review" || status === "pending_regional_hr_review" || status === "pending_regional_manager_approval" ? 2
       : 1
     : status === "hr_approved" || hrRejected ? 4
       : status === "hr_office_forwarded" || status === "pending_hr_leave_processing" ? 3
@@ -955,7 +955,7 @@ const EMPTY_HR_ANALYTICS = {
   monthly_leave_counts: [],
   records: [],
 }
-// ─── Leave Request Card ───────────────────────────────────────────────────────
+// ─── Leave Request Card ───────────────────────────────────────────────���───────
 function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
   req: any; onEdit?: () => void; onDelete?: () => void; onViewMemo?: () => void; canEdit: boolean
 }) {
@@ -2163,7 +2163,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
         leaveType: r?.leave_type_key,
         locationName: r?.location_name || r?.user?.location_name,
       })
-  const isRegionalActionableStatus = status === "pending_regional_hr_review"
+  const isRegionalActionableStatus = status === "pending_regional_hr_office_review" || status === "pending_regional_hr_review"
   const isForwardedToHrExecutive = status.toLowerCase() === "hr_office_forwarded"
   if (!((HR_OFFICE_PENDING_STATUSES as string[]).includes(status) || isForwardedToHrExecutive || (isRegionalHr && workflow.route === "regional" && isRegionalActionableStatus))) return false
   // Regional HR owns only the Regional HR review stage. Once forwarded, the
@@ -4213,7 +4213,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                           )}
                         </div>
                         <Button size="sm" variant="outline"
-                          disabled={!((HR_OFFICE_PENDING_STATUSES as string[]).includes(String(req.status || "")) || (isRegionalHr && String(req.status || "") === "pending_regional_hr_review"))}
+                          disabled={!((HR_OFFICE_PENDING_STATUSES as string[]).includes(String(req.status || "")) || (isRegionalHr && ["pending_regional_hr_office_review", "pending_regional_hr_review"].includes(String(req.status || ""))))}
                           onClick={async () => {
                             setOfficeExpanded(isExpanded ? null : req.id)
                             if (!isExpanded) {
@@ -5299,7 +5299,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All statuses</SelectItem>
-                        <SelectItem value={isRegionalHr ? "pending_regional_hr_review" : "pending_manager_review"}>{isRegionalHr ? "Pending Regional HR Review" : "Pending HOD Review"}</SelectItem>
+                        <SelectItem value={isRegionalHr ? "pending_regional_hr_office_review" : "pending_manager_review"}>{isRegionalHr ? "Pending Regional HR Review" : "Pending HOD Review"}</SelectItem>
                         <SelectItem value="hod_approved">{isRegionalHr ? "Regional HR Review Complete" : "HOD Approved"}</SelectItem>
                         <SelectItem value="manager_confirmed">Manager Confirmed</SelectItem>
                         <SelectItem value="hod_changes_requested">HOD Changes Requested</SelectItem>

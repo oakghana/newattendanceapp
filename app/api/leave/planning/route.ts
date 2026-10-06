@@ -833,8 +833,9 @@ export async function GET(request: NextRequest) {
     const role = normalizeRoleValue(profile.role)
     const departmentName = (profile as any)?.departments?.name || null
     const departmentCode = (profile as any)?.departments?.code || null
+    const isAdmin = role === "admin" || role === "administrator"
     const isRegionalHr = isRegionalHrOfficerRole(role)
-    const isHrOffice = isHrLeaveOfficeRole(role) || isRegionalHr
+    const isHrOffice = isHrLeaveOfficeRole(role) || isRegionalHr || isAdmin
     const isHrApprover = isHrApproverRole(role, departmentName, departmentCode)
     const isHr = isHrOffice || isHrApprover || isHrPlanningRole(role, departmentName, departmentCode)
 
@@ -859,7 +860,7 @@ export async function GET(request: NextRequest) {
     // are also linked as a HOD. The HOD review queue is loaded separately; using
     // the linkage as a reason to skip this branch made their HR Office queue
     // appear empty while requests were still waiting at HR Leave Office.
-    if (isHrOffice && !isHrApprover) {
+    if (isHrOffice && (!isHrApprover || isAdmin)) {
       let officeQuery = admin
         .from("leave_plan_requests")
         .select(`
@@ -885,7 +886,7 @@ export async function GET(request: NextRequest) {
       if (isRegionalHr) {
         officeQuery = officeQuery
           .eq("workflow_route", "regional")
-          .in("status", ["pending_regional_hr_review", "pending_regional_manager_approval"])
+          .in("status", ["pending_regional_hr_office_review", "pending_regional_hr_review", "pending_regional_manager_approval"])
 
         let scopedStaffQuery = admin.from("user_profiles").select("id").neq("id", user.id)
         if (profile.assigned_location_id) {
@@ -904,8 +905,8 @@ export async function GET(request: NextRequest) {
       const { data: requests, error: reqError } = await officeQuery
 
       let allRegionalRequests: any[] = []
-      if (isRegionalHr && regionalScopedStaffIds.length > 0) {
-        const { data: regionalRows, error: regionalRowsError } = await admin
+      if (isAdmin || (isRegionalHr && regionalScopedStaffIds.length > 0)) {
+        let allRequestsQuery = admin
           .from("leave_plan_requests")
           .select(`
             *,
@@ -916,9 +917,15 @@ export async function GET(request: NextRequest) {
               geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
             )
           `)
-          .eq("workflow_route", "regional")
-          .in("user_id", regionalScopedStaffIds)
           .order("created_at", { ascending: false })
+
+        if (!isAdmin) {
+          allRequestsQuery = allRequestsQuery
+            .eq("workflow_route", "regional")
+            .in("user_id", regionalScopedStaffIds)
+        }
+
+        const { data: regionalRows, error: regionalRowsError } = await allRequestsQuery
         if (regionalRowsError) throw regionalRowsError
         allRegionalRequests = regionalRows || []
       }
@@ -978,7 +985,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         mode: "hr_office",
         requests: requests || [],
-        allRequests: isRegionalHr ? allRegionalRequests : requests || [],
+        allRequests: isAdmin || isRegionalHr ? allRegionalRequests : requests || [],
         myRequests: myRequests || [],
         analytics,
         outstandingLeaveMap: Object.fromEntries(outstandingLeaveMap),
