@@ -1049,9 +1049,8 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Admin sees ALL HOD reviews nationwide; regular managers see only their assigned reviews
-    const isAdmin = role === "admin"
-    if ((isAdmin || isHodRole(role) || isLinkedHodEarly)) {
+  // Admin sees ALL HOD reviews nationwide; regular managers see only their assigned reviews
+  if ((isAdmin || isHodRole(role) || isLinkedHodEarly)) {
       let nonArchivedReviews: any[] = []
 
       // Admin sees ALL pending HOD requests nationwide (directly from leave_plan_requests)
