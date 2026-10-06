@@ -34,7 +34,10 @@ type FleetLocation = { id: string; name: string }
 const vehicleTypes = ["saloon", "bus", "truck", "pickup", "van"]
 
 function normalizeRegistration(value: unknown) {
-  return String(value ?? "").trim().toUpperCase().replace(/[\s-]+/g, "")
+  return String(value ?? "")
+    .normalize("NFKC")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
 }
 const statusTone: Record<Vehicle["status"], "default" | "secondary" | "destructive" | "outline"> = { available: "default", assigned: "secondary", maintenance: "destructive", inactive: "outline" }
 
@@ -66,7 +69,7 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
   const importInput = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
   const [importErrors, setImportErrors] = useState<string[]>([])
-  const uniqueVehicles = useMemo(() => Array.from(new Map(vehicles.map((vehicle) => [vehicle.registration_number.trim().toUpperCase(), vehicle])).values()), [vehicles])
+  const uniqueVehicles = useMemo(() => Array.from(new Map(vehicles.map((vehicle) => [normalizeRegistration(vehicle.registration_number), vehicle])).values()), [vehicles])
   const filteredVehicles = useMemo(() => uniqueVehicles.filter((vehicle) => {
     if (activeType !== "all" && vehicle.vehicle_type !== activeType) return false
     const searchable = `${vehicle.registration_number} ${vehicle.chassis_number || ""} ${vehicle.vehicle_colour || ""} ${vehicle.make} ${vehicle.model} ${vehicle.vehicle_type} ${vehicle.assigned_location?.name || ""}`.toLowerCase()
@@ -134,8 +137,8 @@ export function FleetInventoryWorkspace({ initialVehicles, initialBookings, loca
       const body = await response.json().catch(() => null); if (!response.ok) throw new Error(body?.error ?? "Import failed")
       const errors = Array.isArray(body?.errors) ? body.errors : []
       const skippedDuplicates = Array.isArray(body?.skippedDuplicates) ? body.skippedDuplicates : []
-      setImportErrors([...skippedDuplicates.map((message: string) => `Skipped duplicate: ${message}`), ...errors])
-      toast({ title: body.imported ? "Fleet import completed" : "No new vehicles imported", description: `${body.imported ?? 0} unique vehicle(s) imported${skippedDuplicates.length ? `; ${skippedDuplicates.length} duplicate(s) skipped` : ""}${errors.length ? `; ${errors.length} other issue(s) need attention.` : "."}`, variant: errors.length ? "destructive" : "default" }); if (body.imported) window.location.reload()
+      setImportErrors(errors)
+      toast({ title: body.imported ? "Fleet import completed" : "No new vehicles imported", description: `${body.imported ?? 0} unique vehicle(s) imported${skippedDuplicates.length ? `; ${skippedDuplicates.length} existing duplicate(s) skipped` : ""}${errors.length ? `; ${errors.length} row(s) need attention.` : "."}`, variant: errors.length ? "destructive" : "default" }); if (body.imported) window.location.reload()
     } catch (error) { toast({ title: "Fleet import failed", description: error instanceof Error ? error.message : "Please use the fleet template.", variant: "destructive" }) } finally { setImporting(false) }
   }
 
