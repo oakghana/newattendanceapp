@@ -4,7 +4,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { TransportRequestRegister } from "@/components/transport/transport-request-register"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
-import { canManageTransport, isChiefDriverRole, isDistrictOfficerRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
+import { canManageTransport, isChiefDriverRole, isDistrictOfficerRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, isTransportManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 import { moveMisfiledRegionalRequests } from "@/lib/transport-reclassify"
 
@@ -30,6 +30,7 @@ export default async function TransportRequestsPage() {
     "nsawam archive",
   ]).has(assignedLocationName)
   const isRegionalRequester = ["staff", "contract", "audit_staff", "it-admin", "it_admin"].includes(normalizedRole) && Boolean(locationId) && !isExplicitNonRegionalLocation
+  const isTransportManager = isTransportManagerRole(profile.role)
   const canViewRegionalRegister = ["admin", "administrator"].includes(normalizedRole) || isRegionalRequester || isDistrictOfficerRole(profile.role) || isRegionalHrRole(profile.role) || isRegionalManagerRole(profile.role) || canManageTransport(profile.role) || normalizedRole === "managing_director" || ["hr_records", "hr_records_officer", "hr_records_manager", "hr_executive", "hr_executive_officer"].includes(normalizedRole)
   if (!canViewRegionalRegister) redirect("/dashboard")
   const isRegionalDriver = isRegionalDriverRole(profile.role)
@@ -61,6 +62,7 @@ export default async function TransportRequestsPage() {
     console.error("[v0] Could not re-file misclassified transport requests:", error?.message)
   })
   const regionalHrDataClient = canRegionalHr ? await createAdminClient() : supabase
+  const requestDataClient = canRegionalHr || isTransportManager || ["admin", "administrator", "managing_director"].includes(normalizedRole) ? await createAdminClient() : supabase
   const { data: regionalHrAssignments } = canRegionalHr
     ? await regionalHrDataClient.from("regional_hr_office_locations").select("location_id, region_id").eq("regional_hr_user_id", user.id).eq("is_active", true)
     : { data: [] as { location_id: string; region_id?: string | null }[] }
@@ -86,7 +88,7 @@ export default async function TransportRequestsPage() {
     regionalHrScopeLocationIds = scopedLocations.map((location: any) => location.id).filter(Boolean)
     regionalHrScopeDistrictIds = scopedLocations.map((location: any) => location.district_id).filter(Boolean)
   }
-  let requestsQuery = (canRegionalHr ? regionalHrDataClient : supabase).from("transport_requests").select(requestFields).order("created_at", { ascending: false }).limit(200)
+  let requestsQuery = requestDataClient.from("transport_requests").select(requestFields).order("created_at", { ascending: false }).limit(200)
   if (isRegionalRequester) requestsQuery = requestsQuery.eq("id", "00000000-0000-0000-0000-000000000000")
   if (canHrExecutive) requestsQuery = requestsQuery.eq("request_type", "regional_transport")
   const regionalHrStages = ["submitted", "district_officer_review", "regional_hr_review", "regional_hr_correction", "awaiting_do_regional_hr_endorsement", "regional_manager_endorsement", "hr_records_review", "hr_executive_signing", "approved", "referenced", "completed", "closed"]
@@ -250,7 +252,7 @@ export default async function TransportRequestsPage() {
     requests = [...scopedRequests, ...allPersonalRows.filter((request: any) => !scopedRequests.some((scopedRequest) => scopedRequest.id === request.id))]
       .sort((left, right) => new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime())
   }
-  if (["admin", "administrator"].includes(normalizedRole)) {
+  if (["admin", "administrator"].includes(normalizedRole) || isTransportManager) {
     const { data: allNonregionalRequests } = await (await createAdminClient())
       .from("nonregional_transport_requisitions")
       .select("id, requester_id, purpose, origin, destination, required_at, persons_requiring_transport, status, created_at, reference_number")
@@ -295,7 +297,7 @@ export default async function TransportRequestsPage() {
   }
   if (requestsError) {
     console.error("[v0] Transport request query failed:", requestsError.message)
-    let fallbackQuery = supabase.from("transport_requests").select("id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments").order("created_at", { ascending: false }).limit(200)
+    let fallbackQuery = requestDataClient.from("transport_requests").select("id, requester_id, request_type, purpose, origin, destination, event_date, passenger_count, status, workflow_stage, reference_number, supporting_documents, created_at, assigned_region_id, linked_district_id, origin_location_id, memo_reference, memo_date, memo_subject, memo_body, memo_amendments").order("created_at", { ascending: false }).limit(200)
     if (canHrExecutive) fallbackQuery = fallbackQuery.eq("request_type", "regional_transport")
     if (isRegionalManagerRole(profile.role)) {
       if (locationId) fallbackQuery = fallbackQuery.or(`origin_location_id.eq.${locationId},origin_location_id.is.null`)
