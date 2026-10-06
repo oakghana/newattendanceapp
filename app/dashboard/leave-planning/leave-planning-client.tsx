@@ -3203,6 +3203,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                   if (!req) return null
                   const rId = review.id
                   const action = hodAction[rId]
+                  const annualRegionalManagerHold = normalizedRole === "regional_manager" && String(req.workflow_route || "").toLowerCase() === "regional" && ["annual", "annual_leave"].includes(String(req.leave_type_key || "").toLowerCase())
                   return (
                     <Card key={rId} className="border shadow-sm">
                       <CardContent className="p-5">
@@ -3244,7 +3245,11 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                           history={staffHistoryByUser[String(req.user?.id || "")] || []}
                           currentRequestId={req.id}
                         />
-                        {canAct ? (
+                        {annualRegionalManagerHold ? (
+                          <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                            Annual leave endorsement and approval by Regional Managers is disabled until January 2027. The request remains read-only for now.
+                          </p>
+                        ) : canAct ? (
                         <div className="space-y-3">
                           <div className="flex gap-2 flex-wrap">
                             {(["approve", "recommend_change", "reject"] as const).map((act) => (

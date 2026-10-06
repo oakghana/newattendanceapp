@@ -436,9 +436,15 @@ export async function GET(
     }
 
   const leaveWorkflowRoute = String((leaveRequest as any).workflow_route || "").toLowerCase()
-  const isRegionalLeave = leaveWorkflowRoute === "regional" || leaveWorkflowRoute === "regional_hr"
+const isRegionalLeave = leaveWorkflowRoute === "regional" || leaveWorkflowRoute === "regional_hr"
+  const isAnnualLeaveRequest = ["annual", "annual_leave"].includes(String((leaveRequest as any).leave_type_key || "").toLowerCase())
+  const isJanuary2027 = new Date().getFullYear() === 2027 && new Date().getMonth() === 0
 
-  // The official HR Records reference is required before any memo can be rendered.
+  if (isAnnualLeaveRequest && !isJanuary2027) {
+    return NextResponse.json({ error: "Annual leave memos will be generated and available for download only in January 2027." }, { status: 423 })
+  }
+
+  // The official reference is required before any memo can be rendered.
   if (!String((leaveRequest as any).memo_reference || "").trim() || !(leaveRequest as any).memo_reference_locked) {
     return NextResponse.json({ error: "This leave memo cannot be downloaded until HR Records enters and locks the official reference." }, { status: 409 })
   }

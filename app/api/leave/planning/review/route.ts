@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
     // not authoritative and older review cards do not include workflow_route.
     const { data: workflowRequest, error: workflowRequestError } = await admin
       .from("leave_plan_requests")
-      .select("workflow_route, memo_reference, status")
+      .select("workflow_route, leave_type_key, memo_reference, status")
       .eq("id", leave_plan_request_id)
       .maybeSingle()
     if (workflowRequestError && isSchemaIssue(workflowRequestError)) return schemaIssueResponse(workflowRequestError)
@@ -128,6 +128,17 @@ export async function POST(request: NextRequest) {
 
     const isRegionalManagerApproval = role === "regional_manager"
     const isAdminApproval = isAdmin
+    const isAnnualRegionalManagerApprovalBlocked =
+      isRegionalManagerApproval &&
+      String((workflowRequest as any).workflow_route || "").toLowerCase() === "regional" &&
+      isAnnualLeave(String((workflowRequest as any).leave_type_key || "")) &&
+      !(new Date().getFullYear() === 2027 && new Date().getMonth() === 0)
+    if (isAnnualRegionalManagerApprovalBlocked) {
+      return NextResponse.json(
+        { error: "Regional Manager endorsement and approval for annual leave is disabled until January 2027." },
+        { status: 423 },
+      )
+    }
     const isRegionalRequest = action === "forward_to_regional_manager"
       || String(workflowRequest.workflow_route || "").toLowerCase() === "regional"
 
