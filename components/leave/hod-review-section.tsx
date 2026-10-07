@@ -315,7 +315,7 @@ export function HODReviewSection({ userDepartmentId, viewerRole }: HODReviewSect
                   onClick={() => openEditDatesDialog(req.id, req.start_date, req.end_date)}
                 >
                   <Edit2 className="h-4 w-4 mr-1" />
-                  Edit Dates
+                  Edit Annual Leave Dates
                 </Button>
                 <Button
                   size="sm"
