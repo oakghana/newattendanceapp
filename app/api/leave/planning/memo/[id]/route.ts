@@ -780,7 +780,8 @@ const isRegionalLeave = leaveWorkflowRoute === "regional" || leaveWorkflowRoute 
     const safeDraftBody = looksLikeInterimWorkflowMemo ? "" : rawDraftBody
 
     // Subject (use memo_draft_subject override if present, else per-type heading)
-    const subject = getMemoSubject(leaveTypeKey, String(lr.leave_year_period || "2026/2027"), safeDraftSubject)
+    const memoYear = leaveTypeKey === "annual" ? String(new Date().getFullYear() + 1) : String(lr.leave_year_period || "").split("/")[0]
+    const subject = getMemoSubject(leaveTypeKey, memoYear, safeDraftSubject)
 
     // Body paragraphs
     const templateData = {

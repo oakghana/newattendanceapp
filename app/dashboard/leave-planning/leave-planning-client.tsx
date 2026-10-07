@@ -376,7 +376,7 @@ function buildMemoTemplateData(req: any): Record<string, string> {
     approved_months_text: `${approvedMonths} (${approvedMonths}) month${approvedMonths === 1 ? "" : "s"}`,
     return_to_work_date: returnDateIso ? fmtLongDate(returnDateIso) : "—",
     return_to_work_date_formal: returnDateIso ? fmtFormalDateWithWeekday(returnDateIso) : "—",
-    leave_year_period: String(req.leave_year_period || getActiveLeaveYearPeriod()).split("/")[0],
+    leave_year_period: req.leave_type_key === "annual" ? String(new Date().getFullYear() + 1) : String(req.leave_year_period || getActiveLeaveYearPeriod()).split("/")[0],
     outstanding_leave_days: String(outstandingLeaveDays),
     travelling_days_balance_sentence: travellingDays > 0 ? ` plus ${travellingDays} travelling day(s)` : "",
     staff_name: String(req.staff_name || ""),
@@ -946,7 +946,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
             <p className="font-semibold text-slate-800 text-sm">
-              {leaveTypeLabelShort(req.leave_type_key)} — {String(req.leave_year_period || getActiveLeaveYearPeriod()).split("/")[0]}
+              {leaveTypeLabelShort(req.leave_type_key)} — {req.leave_type_key === "annual" ? String(new Date().getFullYear() + 1) : String(req.leave_year_period || getActiveLeaveYearPeriod()).split("/")[0]}
             </p>
   <p className="text-xs text-slate-500 mt-0.5">
   {fmtDate(effectiveStart)} → {fmtDate(effectiveEnd)}
@@ -4777,7 +4777,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                 <div className="px-5 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600 bg-slate-50/50">
                                   <span><span className="text-slate-400">Leave Type:</span> {leaveTypeLabelShort(req.leave_type_key)}</span>
                                   <span><span className="text-slate-400">Period:</span> {fmtDate(effectiveStart)} – {fmtDate(effectiveEnd)} ({effectiveDays}d)</span>
-                                  <span><span className="text-slate-400">Year:</span> {req.leave_year_period || "—"}</span>
+                                  <span><span className="text-slate-400">Year:</span> {req.leave_type_key === "annual" ? String(new Date().getFullYear() + 1) : String(req.leave_year_period || "—").split("/")[0]}</span>
                                   <span><span className="text-slate-400">Submitted:</span> {fmtDate(req.submitted_at || req.created_at)}</span>
                                 </div>
                                 {/* Adjustment notice */}
@@ -5014,7 +5014,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                               </div>
                               <div className="px-5 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600 bg-slate-50/50">
                                 <span><span className="text-slate-400">Period:</span> {fmtDate(effectiveStart)} – {fmtDate(effectiveEnd)} ({effectiveDays}d)</span>
-                                <span><span className="text-slate-400">Year:</span> {req.leave_year_period || "—"}</span>
+                                <span><span className="text-slate-400">Year:</span> {req.leave_type_key === "annual" ? String(new Date().getFullYear() + 1) : String(req.leave_year_period || "—").split("/")[0]}</span>
                                 <span><span className="text-slate-400">Submitted:</span> {fmtDate(req.submitted_at || req.created_at)}</span>
                               </div>
                               {req.memo_token && (

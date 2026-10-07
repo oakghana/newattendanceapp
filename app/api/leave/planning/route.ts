@@ -373,7 +373,8 @@ function buildInitialLeaveMemoDraft(payload: {
     .replace(/_/g, " ")
     .replace(/\b\w/g, (m) => m.toUpperCase())
 
-  const subject = `LEAVE REQUEST RECEIVED - ${leaveTypeLabel} (${payload.leaveYearPeriod})`
+  const memoYear = leaveTypeLabel.toLowerCase() === "annual" ? String(new Date().getFullYear() + 1) : String(payload.leaveYearPeriod || "")
+  const subject = `LEAVE REQUEST RECEIVED - ${leaveTypeLabel} (${memoYear})`
   const body = [
     "Your leave request has been received and is now in workflow review.",
     "",
