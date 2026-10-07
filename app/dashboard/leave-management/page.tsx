@@ -3,7 +3,8 @@ import { LeaveManagementModuleClient } from "./leave-management-module-client"
 import { LeaveManagementPageWrapper } from "@/components/leave/leave-management-page-wrapper"
 import { isExcludedLocation, resolveSelfLeaveRoute } from "@/lib/hr-workflow"
 import { Suspense } from "react"
-import { AnnualLeaveOverlapPanel, buildAnnualLeaveOverlapGroups } from "@/components/leave/annual-leave-overlap-panel"
+import { AnnualLeaveOverlapPanel } from "@/components/leave/annual-leave-overlap-panel"
+import { buildAnnualLeaveOverlapGroups } from "@/lib/annual-leave-overlaps"
 
 
 export default async function LeaveManagementPage() {
