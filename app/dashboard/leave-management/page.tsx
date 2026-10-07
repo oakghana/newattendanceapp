@@ -154,7 +154,7 @@ export default async function LeaveManagementPage() {
           .eq("hod_user_id", user.id)
         const staffIds = Array.from(new Set((hodLinks || []).map((row: any) => row.staff_user_id).filter(Boolean)))
       // Query direct request assignment even when legacy linkage tables are empty.
-      if (staffIds.length >= 0) {
+      {
         const requestSelect = "id, user_id, hod_user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, workflow_route, workflow_stage, created_at, hod_decision, memo_token, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id)"
         const baseHodQuery = (query: any) => query
           .or("workflow_route.is.null,workflow_route.eq.legacy")
@@ -162,16 +162,16 @@ export default async function LeaveManagementPage() {
           .or("hod_decision.is.null,hod_decision.eq.pending")
           .order("created_at", { ascending: true })
           .limit(100)
-        const [{ data: linkedRequests }, { data: directlyAssignedRequests }] = await Promise.all([
-          baseHodQuery(
-            admin.from("leave_plan_requests").select(requestSelect).in("user_id", staffIds),
-          ),
-          baseHodQuery(
-            admin.from("leave_plan_requests").select(requestSelect).eq("hod_user_id", user.id),
-          ),
-        ])
+        const linkedRequests = staffIds.length > 0
+          ? (await baseHodQuery(
+              admin.from("leave_plan_requests").select(requestSelect).in("user_id", staffIds),
+            )).data || []
+          : []
+        const directlyAssignedRequests = (await baseHodQuery(
+          admin.from("leave_plan_requests").select(requestSelect).eq("hod_user_id", user.id),
+        )).data || []
         const hodRequests = Array.from(new Map(
-          [...(linkedRequests || []), ...(directlyAssignedRequests || [])].map((request: any) => [request.id, request]),
+          [...linkedRequests, ...directlyAssignedRequests].map((request: any) => [request.id, request]),
         ).values())
         const hodLocationIds = Array.from(new Set((hodRequests || []).map((request: any) => request.user_profiles?.assigned_location_id).filter(Boolean)))
         const { data: hodLocations } = hodLocationIds.length
