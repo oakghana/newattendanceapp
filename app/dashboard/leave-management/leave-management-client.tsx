@@ -680,7 +680,17 @@ export function LeaveManagementClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "forward_to_regional_manager", leave_plan_request_id: requestId, recommendation, adjusted_preferred_start_date: adjustedStart, adjusted_preferred_end_date: adjustedEnd }),
       })
-      if (!response.ok) throw new Error((await response.json().catch(() => ({})))?.error || "Could not forward request")
+      if (!response.ok) {
+        const raw = await response.text()
+        let message = raw.trim()
+        try {
+          const payload = JSON.parse(raw)
+          message = payload?.error || payload?.message || message
+        } catch {
+          // Some platform failures return plain text instead of JSON.
+        }
+        throw new Error(message || `Could not forward request (${response.status})`)
+      }
       toast({ title: "Request forwarded", description: "The Regional Manager can now review and approve this request." })
       window.location.reload()
     } catch (error) {
