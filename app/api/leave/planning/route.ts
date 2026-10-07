@@ -1120,6 +1120,7 @@ export async function GET(request: NextRequest) {
               first_name,
               last_name,
               employee_id,
+              position,
               departments(name, code),
               geofence_locations!user_profiles_assigned_location_id_fkey(name)
             )
@@ -1169,6 +1170,7 @@ export async function GET(request: NextRequest) {
                 first_name,
                 last_name,
                 employee_id,
+                position,
                 departments(name, code),
                 geofence_locations!user_profiles_assigned_location_id_fkey(name)
               )
@@ -1215,6 +1217,7 @@ export async function GET(request: NextRequest) {
                 first_name,
                 last_name,
                 employee_id,
+                position,
                 departments(name, code),
                 assigned_location_id,
                 region_id,

@@ -640,6 +640,8 @@ async function downloadLeaveRequestsExcel(rows: any[], fileName: string, sheetNa
       "Staff Name": [user?.first_name, user?.last_name].filter(Boolean).join(" ") || String(r?.staff_name || req?.staff_name || ""),
       "Employee ID": String(user?.employee_id || req?.employee_id || ""),
       Rank: String(
+        r?.rank ||
+        r?.position ||
         user?.rank ||
         user?.position ||
         user?.job_title ||
