@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createClientAndGetUser } from '@/lib/supabase/server';
+import { resolveOwnedLocationIdsForRegionalOffice } from '@/lib/regional-manager-scope';
 
 /**
  * GET /api/leave/regional-office/leaves
@@ -36,10 +37,16 @@ export async function GET(request: NextRequest) {
     }
 
     const locationIds = userProfile.assigned_location_id ? [userProfile.assigned_location_id] : [];
-const regionIds = userProfile.region_id ? [userProfile.region_id] : [];
- const locationStaffIds = locationIds.length
-   ? (await admin.from('user_profiles').select('id').in('assigned_location_id', locationIds).neq('id', userId)).data?.map((row: any) => row.id).filter(Boolean) || []
-   : [];
+    const regionIds = userProfile.region_id ? [userProfile.region_id] : [];
+    // A Regional HR Office owns its office plus every district office linked
+    // through the parent location or through the same region's districts.
+    const ownedLocationIds = isAdmin
+      ? []
+      : await resolveOwnedLocationIdsForRegionalOffice(admin, userProfile.assigned_location_id, userProfile.region_id);
+    const locationScopeIds = isAdmin ? locationIds : ownedLocationIds;
+    const locationStaffIds = locationScopeIds.length
+      ? (await admin.from('user_profiles').select('id').in('assigned_location_id', locationScopeIds).neq('id', userId)).data?.map((row: any) => row.id).filter(Boolean) || []
+      : [];
  // Administrators see every regional request nationwide — they are never scoped
  // to a single assigned location/region the way Regional HR staff are.
  let scopedStaffIds: string[] = [];
@@ -47,10 +54,10 @@ const regionIds = userProfile.region_id ? [userProfile.region_id] : [];
       const { data: allStaff, error: allStaffError } = await admin.from('user_profiles').select('id').neq('id', userId);
       if (allStaffError) return NextResponse.json({ error: 'Failed to resolve nationwide staff scope' }, { status: 500 });
       scopedStaffIds = (allStaff || []).map((row: any) => row.id).filter(Boolean);
-    } else if (locationIds.length > 0 || regionIds.length > 0) {
+    } else if (locationScopeIds.length > 0 || regionIds.length > 0) {
       let staffQuery = admin.from('user_profiles').select('id').neq('id', userId);
-      if (locationIds.length > 0) {
-        staffQuery = staffQuery.in('assigned_location_id', locationIds);
+      if (locationScopeIds.length > 0) {
+        staffQuery = staffQuery.in('assigned_location_id', locationScopeIds);
       } else {
         staffQuery = staffQuery.in('region_id', regionIds);
       }
@@ -58,7 +65,7 @@ const regionIds = userProfile.region_id ? [userProfile.region_id] : [];
       if (scopedStaffError) return NextResponse.json({ error: 'Failed to resolve regional staff scope' }, { status: 500 });
       scopedStaffIds = [...new Set([...(scopedStaff || []).map((row: any) => row.id), ...locationStaffIds].filter(Boolean))];
     }
-    if (!isAdmin && locationIds.length === 0 && regionIds.length === 0) {
+    if (!isAdmin && locationScopeIds.length === 0 && regionIds.length === 0) {
       return NextResponse.json(
         { leaves: [], summary: { total: 0, pending: 0, approved: 0 } },
         { status: 200 }
@@ -129,7 +136,7 @@ const regionIds = userProfile.region_id ? [userProfile.region_id] : [];
     // Calculate summary statistics
     const summary = {
       total: count || 0,
-      pending: leaves?.filter(l => l.status === 'pending_regional_hr_review').length || 0,
+      pending: leaves?.filter(l => ['pending_regional_hr_office_review', 'pending_regional_hr_review'].includes(l.status)).length || 0,
       approved: leaves?.filter(l => l.status === 'pending_regional_manager_approval').length || 0,
       rejected: leaves?.filter(l => l.status === 'rejected').length || 0,
       byType: {} as Record<string, number>,

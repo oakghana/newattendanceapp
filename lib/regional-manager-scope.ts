@@ -172,6 +172,27 @@ export async function resolveOwnedLocationIdsForRegionalOffice(
   const ids = new Set<string>()
   if (regionalOfficeLocationId) ids.add(String(regionalOfficeLocationId))
 
+  // Regional HR profiles may have a location but no region_id. Derive the
+  // region from the office location's district before resolving its districts.
+  let resolvedRegionId = regionId || null
+  if (!resolvedRegionId && regionalOfficeLocationId) {
+    const { data: office, error: officeError } = await admin
+      .from("geofence_locations")
+      .select("district_id")
+      .eq("id", regionalOfficeLocationId)
+      .maybeSingle()
+    if (officeError) throw officeError
+    if (office?.district_id) {
+      const { data: district, error: districtError } = await admin
+        .from("districts")
+        .select("region_id")
+        .eq("id", office.district_id)
+        .maybeSingle()
+      if (districtError) throw districtError
+      resolvedRegionId = district?.region_id || null
+    }
+  }
+
   if (regionalOfficeLocationId) {
     const { data, error } = await admin
       .from("geofence_locations")
@@ -181,11 +202,11 @@ export async function resolveOwnedLocationIdsForRegionalOffice(
     for (const row of data || []) ids.add(String((row as any).id))
   }
 
-  if (regionId) {
+  if (resolvedRegionId) {
     const { data: districts, error: districtsError } = await admin
       .from("districts")
       .select("id")
-      .eq("region_id", regionId)
+      .eq("region_id", resolvedRegionId)
     if (districtsError) throw districtsError
     const districtIds = (districts || []).map((district: any) => String(district.id))
     if (districtIds.length) {

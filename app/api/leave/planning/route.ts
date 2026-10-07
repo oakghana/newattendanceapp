@@ -882,8 +882,11 @@ export async function GET(request: NextRequest) {
           .in("status", ["pending_regional_hr_office_review", "pending_regional_hr_review", "pending_regional_manager_approval"])
 
         let scopedStaffQuery = admin.from("user_profiles").select("id").neq("id", user.id)
-        if (profile.assigned_location_id) {
-          scopedStaffQuery = scopedStaffQuery.eq("assigned_location_id", profile.assigned_location_id)
+        const regionalOwnedLocationIds = isAdmin
+          ? []
+          : await resolveOwnedLocationIdsForRegionalOffice(admin, profile.assigned_location_id, profile.region_id)
+        if (regionalOwnedLocationIds.length > 0) {
+          scopedStaffQuery = scopedStaffQuery.in("assigned_location_id", regionalOwnedLocationIds)
         } else if (profile.region_id) {
           scopedStaffQuery = scopedStaffQuery.eq("region_id", profile.region_id)
         } else {
@@ -1120,6 +1123,7 @@ export async function GET(request: NextRequest) {
               first_name,
               last_name,
               employee_id,
+              position,
               departments(name, code),
               geofence_locations!user_profiles_assigned_location_id_fkey(name)
             )
@@ -1169,6 +1173,7 @@ export async function GET(request: NextRequest) {
                 first_name,
                 last_name,
                 employee_id,
+                position,
                 departments(name, code),
                 geofence_locations!user_profiles_assigned_location_id_fkey(name)
               )
@@ -1215,6 +1220,7 @@ export async function GET(request: NextRequest) {
                 first_name,
                 last_name,
                 employee_id,
+                position,
                 departments(name, code),
                 assigned_location_id,
                 region_id,
