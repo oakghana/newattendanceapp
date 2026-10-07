@@ -72,6 +72,25 @@ const OVERLAP_BLOCKING_STATUSES = [
 
 const DUPLICATE_BLOCKING_STATUSES = OVERLAP_BLOCKING_STATUSES
 
+async function findDuplicateLeaveRequestForYear(
+  admin: any,
+  userId: string,
+  leaveTypeKey: string,
+  leaveYearPeriod: string,
+) {
+  const normalizedYear = normalizeLeaveYearPeriod(leaveYearPeriod)
+  const { data, error } = await admin
+    .from("leave_plan_requests")
+    .select("id, reference_number, status, leave_type_key, leave_year_period")
+    .eq("user_id", userId)
+    .in("leave_type_key", leaveTypeKey === "annual" ? ["annual", "annual_leave"] : [leaveTypeKey])
+    .in("status", DUPLICATE_BLOCKING_STATUSES)
+    .limit(50)
+
+  if (error) throw error
+  return (data || []).find((request: any) => normalizeLeaveYearPeriod(request.leave_year_period) === normalizedYear) || null
+}
+
 /**
  * Fetch an existing user profile or create a minimal one on first access.
  * Staff signature is not mandatory — a user can exist in Supabase Auth without

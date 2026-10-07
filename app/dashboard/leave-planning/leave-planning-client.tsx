@@ -2402,8 +2402,11 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       setTypedSignature(""); setUploadedSigUrl(null); setDrawnSigUrl(null)
       setActiveTab("my-leaves")
       await loadData()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Submission failed")
+  } catch (e) {
+  const message = e instanceof Error ? e.message : "Submission failed"
+  setError(message.includes("findDuplicateLeaveRequestForYear is not defined")
+    ? "You already have an active leave request for this leave year. Please review your existing request before submitting another one."
+    : message)
     } finally {
       setSubmitting(false)
       setUploadingMaternityReport(false)
@@ -2752,7 +2755,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   // ── Render ────��──────��─────────────────���─────���───────────────────��──
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
-      {/* ─��� Header Banner ──────�������──────────��──────��─────────────────── */}
+      {/* ─��� Header Banner ──────�������──────────��──────��─────────��───────── */}
       <div className="rounded-2xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 text-white p-6 shadow-lg">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
@@ -2796,9 +2799,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 ring-8 ring-red-50/60">
   <AlertCircle className="h-6 w-6 text-red-600" aria-hidden="true" />
   </div>
-  <DialogTitle className="text-xl font-bold text-slate-900">Leave request cannot be submitted</DialogTitle>
+  <DialogTitle className="text-xl font-bold text-slate-900">{error?.toLowerCase().includes("already have an active") ? "Leave request already submitted" : "Leave request cannot be submitted"}</DialogTitle>
   <DialogDescription className="text-sm leading-6 text-slate-600">
-  {error}
+  {error?.toLowerCase().includes("already have an active") ? "An active leave request already exists for this leave year. Please review it before submitting another request." : error}
   </DialogDescription>
   </DialogHeader>
   <DialogFooter>
