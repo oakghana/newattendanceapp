@@ -639,7 +639,17 @@ async function downloadLeaveRequestsExcel(rows: any[], fileName: string, sheetNa
     return {
       "Staff Name": [user?.first_name, user?.last_name].filter(Boolean).join(" ") || String(r?.staff_name || req?.staff_name || ""),
       "Employee ID": String(user?.employee_id || req?.employee_id || ""),
-      Rank: String(user?.rank || user?.position || req?.rank || req?.position || ""),
+      Rank: String(
+        user?.rank ||
+        user?.position ||
+        user?.job_title ||
+        user?.jobTitle ||
+        req?.rank ||
+        req?.position ||
+        req?.job_title ||
+        req?.jobTitle ||
+        "",
+      ),
       Department: String(user?.departments?.name || user?.department_name || req?.department_name || ""),
       Location: String(user?.geofence_locations?.name || user?.location_name || req?.location_name || ""),
       "Leave Type": leaveTypeLabelShort(String(req?.leave_type_key || "")),

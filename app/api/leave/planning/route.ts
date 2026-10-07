@@ -700,11 +700,12 @@ async function fetchHrOfficeAnalytics(admin: any) {
       created_at,
       is_archived,
       user:user_profiles!leave_plan_requests_user_id_fkey (
-        id,
-        first_name,
-        last_name,
-        employee_id,
-        departments(name, code),
+  id,
+  first_name,
+  last_name,
+  employee_id,
+  position,
+  departments(name, code),
         geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
       )
     `)
