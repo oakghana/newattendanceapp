@@ -83,7 +83,7 @@ export function AnnualLeaveCompliancePanel() {
           </AlertTitle>
           <AlertDescription className="text-amber-800 mt-2">
             <p className="mb-3">
-              You have until <strong>30th November 2027</strong> to submit your annual leave plan for the <strong>2027</strong> year.
+              You have until the end of <strong>November 2026</strong> to submit your annual leave plan for the <strong>2027</strong> year.
             </p>
             <p className="mb-3 text-sm">
               🔔 Your leave payment processing depends on submitting an approved leave plan. Submit now to ensure timely processing.
@@ -114,7 +114,7 @@ export function AnnualLeaveCompliancePanel() {
             🔒 Annual Leave Planning is Locked
           </AlertTitle>
           <AlertDescription className="text-red-800 text-sm mt-2">
-            Annual leave submission closed on 20th October. You cannot modify leave plans for this year.
+            Annual leave submission closed at the end of November 2026. You cannot modify leave plans for the 2027 leave year.
             Planning will re-open on 1st January for the next year.
           </AlertDescription>
         </Alert>

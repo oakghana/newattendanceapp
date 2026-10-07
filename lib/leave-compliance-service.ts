@@ -21,20 +21,17 @@ interface LeaveComplianceCheckResult {
   escalationDue: boolean
 }
 
-/**
- * Check if today is within 14 days before 20th October
- * (Annual leave submission period)
- */
-export function isAnnualLeaveReminderPeriod(): boolean {
+  /**
+  * Keep the 2027 annual leave reminder visible from the opening of the
+  * submission period through November 30, 2026.
+  */
+  export function isAnnualLeaveReminderPeriod(): boolean {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  
-// Annual leave plans for the 2027 leave year close on November 30, 2027.
-  const deadline = new Date(today.getFullYear() + 1, 10, 30)
-  const reminderStart = subDays(deadline, 14)
-
-  return today >= reminderStart && today <= deadline
-}
+  const periodStart = new Date(2026, 0, 1)
+  const deadline = new Date(2026, 10, 30)
+  return today >= periodStart && today <= deadline
+  }
 
 /**
  * Calculate days remaining until annual leave submission deadline
@@ -43,8 +40,8 @@ export function daysUntilAnnualLeaveDeadline(): number {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-// The 2027 annual leave plan deadline is November 30, 2027.
-  const deadline = new Date(today.getFullYear() + 1, 10, 30)
+  // The 2027 annual leave plan must be submitted by November 30, 2026.
+  const deadline = new Date(2026, 10, 30)
   const diff = differenceInDays(deadline, today)
   
   return Math.max(0, diff)
@@ -59,10 +56,10 @@ export async function isAnnualLeaveLocked(
   admin: any
 ): Promise<boolean> {
   const today = new Date()
-  const currentYear = today.getFullYear() + 1
+  const currentYear = 2027
   
-  // Check if past the November 30 deadline.
-  const deadline = new Date(currentYear, 10, 30)
+  // Check if past the November 30, 2026 submission deadline.
+  const deadline = new Date(2026, 10, 30)
   deadline.setHours(0, 0, 0, 0)
   
   if (today > deadline) {
@@ -166,7 +163,7 @@ export async function getAnnualLeaveReminders(userId: string, admin: any) {
   return {
     reminders: [{
       type: 'annual_leave_deadline',
-      message: `📅 You have ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left to submit your Annual Leave Plan for the ${new Date().getFullYear() + 1} Leave Year. Submissions close on 30th November 2027.`,
+      message: `You have until the end of November 2026 to submit your Annual Leave Plan for the 2027 Leave Year.`,
       severity: daysLeft <= 3 ? 'high' : daysLeft <= 7 ? 'medium' : 'low',
       action_url: '/dashboard/leave-management?tab=leave-planning',
       action_label: 'Submit Now',

@@ -3162,7 +3162,7 @@ export function AttendanceRecorder({
               <p className="text-sm leading-6 text-muted-foreground">Your check-in is complete. Annual leave submissions are now open—submit your plan early to support timely review and leave grant payment processing.</p>
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
                 <p className="font-semibold">Annual leave submission reminder</p>
-                <p className="mt-1 leading-5">Please submit your annual leave plan before the deadline shown in the leave planning workspace.</p>
+                <p className="mt-1 leading-5">Please submit your 2027 annual leave plan by the end of November 2026.</p>
               </div>
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <Button variant="outline" onClick={() => setShowAnnualLeavePrompt(false)}>Remind me later</Button>
