@@ -68,6 +68,11 @@ const OVERLAP_BLOCKING_STATUSES = [
   "manager_confirmed",
   "hod_approved",
   "hr_office_forwarded",
+  "pending_hr_records_reference",
+  "pending_hr_leave_processing",
+  "pending_regional_hr_review",
+  "pending_regional_hr_office_review",
+  "pending_regional_manager_approval",
   "approved",
   "hr_approved",
 ] as const
@@ -1588,10 +1593,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid leave date range." }, { status: 400 })
     }
 
+    const normalizedDuplicateType = ["annual", "annual_leave"].includes(leaveTypeKey) ? "annual" : leaveTypeKey
+    const yearlyDuplicateRequest = await findDuplicateLeaveRequestForYear(
+      admin,
+      user.id,
+      normalizedDuplicateType,
+      selectedLeaveYearPeriod,
+    )
+    if (yearlyDuplicateRequest) {
+      return NextResponse.json(
+        {
+          error: `You already have an active ${leaveTypeKey.replace(/_/g, " ")} request for the ${selectedLeaveYearPeriod} leave year. Staff cannot submit the same leave type more than once in the same leave year.`,
+          code: "YEARLY_LEAVE_REQUEST",
+          duplicate: yearlyDuplicateRequest,
+        },
+        { status: 409 },
+      )
+    }
+
     const duplicateRequest = await findDuplicateLeaveRequest(
       admin,
       user.id,
-      leaveTypeKey,
+      normalizedDuplicateType,
       preferred_start_date,
       preferred_end_date,
     )

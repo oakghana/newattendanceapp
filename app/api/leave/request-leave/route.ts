@@ -24,53 +24,52 @@ function leaveTypeDisplayName(leaveTypeKey: string): string {
   return LEAVE_TYPE_DISPLAY_NAME[leaveTypeKey] || leaveTypeKey.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-// Prevents a staff member from being approved twice for the same leave type
-// within the same calendar year, and warns them off resubmitting while an
-// earlier request of the same type is still open.
+// The leave-planning workflow stores requests in leave_plan_requests. A duplicate
+// check against the legacy leave_requests table allows the same staff member to
+// submit Annual leave repeatedly because the active row is never found.
 async function findYearlyDuplicateLeaveRequest(
   admin: any,
   userId: string,
   leaveTypeKey: string,
+  leaveYearPeriod: string,
   excludeId?: string,
 ) {
-  const year = new Date().getFullYear()
-  const yearStart = `${year}-01-01T00:00:00.000Z`
-  const yearEnd = `${year}-12-31T23:59:59.999Z`
-
+  const normalizedType = ["annual", "annual_leave"].includes(leaveTypeKey) ? "annual" : leaveTypeKey
   let query = admin
-    .from("leave_requests")
-    .select("id, status, reference_number, leave_type")
+    .from("leave_plan_requests")
+    .select("id, status, reference_number, leave_type_key, leave_year_period")
     .eq("user_id", userId)
-    .eq("leave_type", leaveTypeKey)
-    .gte("created_at", yearStart)
-    .lte("created_at", yearEnd)
+    .eq("leave_type_key", normalizedType)
+    .eq("leave_year_period", leaveYearPeriod)
+    .eq("is_archived", false)
+    .not("status", "in", "(rejected,withdrawn,cancelled)")
     .order("created_at", { ascending: false })
 
   if (excludeId) query = query.neq("id", excludeId)
 
   const { data, error } = await query.limit(20)
-  if (error) return null
+  if (error) {
+    console.error("[v0] Active leave duplicate check failed:", error)
+    throw error
+  }
 
   const rows = data || []
   if (rows.length === 0) return null
 
   const typeLabel = leaveTypeDisplayName(leaveTypeKey)
-
-  const approvedRow = rows.find((row: any) => ["approved", "hr_approved"].includes(String(row.status || "")))
+  const approvedRow = rows.find((row: any) =>
+    ["approved", "hr_approved", "hod_approved", "manager_confirmed"].includes(String(row.status || "")),
+  )
   if (approvedRow) {
     return {
-      error: `You already have an approved ${typeLabel} leave request this calendar year (${year}) (Ref: ${approvedRow.reference_number || approvedRow.id}). The same leave type cannot be approved twice in one calendar year. Please do not resubmit this request.`,
+      error: `You already have an approved ${typeLabel} leave request for the ${leaveYearPeriod} leave year (Ref: ${approvedRow.reference_number || approvedRow.id}). The same leave type cannot be approved twice in one leave year.`,
     }
   }
 
-  const openRow = rows.find((row: any) => !["rejected", "withdrawn"].includes(String(row.status || "")))
-  if (openRow) {
-    return {
-      error: `You already submitted a ${typeLabel} leave request this calendar year (Ref: ${openRow.reference_number || openRow.id}). Please wait for that request to be decided before submitting another one of the same type.`,
-    }
+  const openRow = rows[0]
+  return {
+    error: `You already submitted a ${typeLabel} leave request for the ${leaveYearPeriod} leave year (Ref: ${openRow.reference_number || openRow.id}). Please wait for that request to be decided before submitting another one of the same type.`,
   }
-
-  return null
 }
 
 export async function POST(request: NextRequest) {
@@ -93,7 +92,7 @@ export async function POST(request: NextRequest) {
     const requested_days_raw = formData.get("requested_days") as string | null
     const requested_days = requested_days_raw ? Number(requested_days_raw) : null
     const leave_type = formData.get("leave_type") as string
-    const leave_year_period = (formData.get("leave_year_period") as string) || "2026/2027"
+    const leave_year_period = normalizeLeaveYearPeriod(formData.get("leave_year_period") as string | null)
     const document = formData.get("document") as File | null
     const maternity_delivery_type = formData.get("maternity_delivery_type") as string | null
     const delivery_date = formData.get("delivery_date") as string | null
@@ -155,7 +154,7 @@ export async function POST(request: NextRequest) {
     // Prevent the same staff member from being approved twice for the same
     // leave type within one calendar year, and warn them off resubmitting.
     if (normalizedRole !== "admin") {
-      const duplicateLeave = await findYearlyDuplicateLeaveRequest(admin, user.id, leaveTypeKey)
+      const duplicateLeave = await findYearlyDuplicateLeaveRequest(admin, user.id, leaveTypeKey, leave_year_period)
       if (duplicateLeave) {
         return NextResponse.json({ error: duplicateLeave.error, code: "LEAVE_YEARLY_DUPLICATE" }, { status: 409 })
       }
