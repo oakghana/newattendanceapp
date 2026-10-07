@@ -2737,7 +2737,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
     const t: { value: string; label: string; Icon: any; count?: number }[] = []
     if (canSelfApply) t.push({ value: "my-leaves", label: "Request", Icon: CalendarDays, count: myRequests.length })
     if (canSelfApply) t.push({ value: "apply", label: editingId ? "Edit Request" : "Apply", Icon: Plus })
-    if (isHod || isAdmin) t.push({ value: "hod-review", label: normalizedRole === "regional_manager" ? "Regional Manager Review" : "HOD Review", Icon: UserCheck, count: hodAssignedReviews.length })
+    if (isHod || isAdmin) t.push({ value: "hod-review", label: normalizedRole === "regional_manager" ? "Regional Manager Review" : "HOD Review", Icon: UserCheck, count: hodPendingReviews.length })
     // HR Executive HOD Review tab: for HR managers (manager_hr, director_hr) who are NOT also HODs
   if (isHrOffice && !isRegionalHr && !isHod && !isAdmin) t.push({ value: "hr-exec-hod-review", label: "HOD Review", Icon: UserCheck, count: hodReviewRequests.length })
   if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: isRegionalHr ? "Regional Leave Office" : "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
@@ -2750,9 +2750,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
     if (isHrApprover || isAdmin) t.push({ value: "hr-approval-queue", label: "Approval Queue", Icon: ClipboardList, count: (hrApproverData?.requests || []).length })
     if (canSeeAllRequests && !isRegionalHr) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.requests || []).length })
     return t
-  }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hodReviewRequests.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests, normalizedRole])
+  }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodPendingReviews.length, hodReviewRequests.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests, normalizedRole])
 
-  // ── Render ────��──────��─────────────────���─────���───────────────────��──
+  // ── Render ────��──────��─────────────────���─────���────────────────����──��──
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
       {/* ─��� Header Banner ──────�������──────────��──────��─────────��───────── */}
@@ -3191,7 +3191,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                   if (!req) return null
                   const rId = review.id
                   const action = hodAction[rId]
-                  const annualRegionalManagerHold = normalizedRole === "regional_manager" && String(req.workflow_route || "").toLowerCase() === "regional" && ["annual", "annual_leave"].includes(String(req.leave_type_key || "").toLowerCase())
+                  const isRegionalRoute = String(req.workflow_route || "").toLowerCase() === "regional"
+                  const annualRegionalManagerHold = normalizedRole === "regional_manager" && isRegionalRoute && ["annual", "annual_leave"].includes(String(req.leave_type_key || "").toLowerCase())
+                  const canAct = !isRegionalRoute || normalizedRole === "regional_manager"
                   return (
                     <Card key={rId} className="border shadow-sm">
                       <CardContent className="p-5">
