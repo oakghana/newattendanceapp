@@ -1493,6 +1493,14 @@ export async function POST(request: NextRequest) {
   }
   
   const leaveTypeKey = String(leave_type || "annual").toLowerCase().replace(/[-\s]+/g, "_")
+  const annualPlanningYear = new Date().getFullYear() + 1
+  if (leaveTypeKey === "annual") {
+    const annualStart = `${annualPlanningYear}-01-01`
+    const annualEnd = `${annualPlanningYear}-12-31`
+    if (preferred_start_date < annualStart || preferred_start_date > annualEnd || preferred_end_date < annualStart || preferred_end_date > annualEnd) {
+      return NextResponse.json({ error: `Annual leave dates must be within ${annualPlanningYear}.` }, { status: 400 })
+    }
+  }
   const dependentLeaveEligibility = await validateDependentLeaveEligibility(
     admin,
     user.id,

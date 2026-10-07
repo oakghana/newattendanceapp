@@ -1128,6 +1128,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const canManageLeaveTypePolicy = isHrOffice || isAdmin
   const isLoanOffice = normalizedRole === "loan_office" || normalizedRole === "hr_loan_office" || normalizedRole === "accounts_loan_office"
   const todayIsoDate = useMemo(() => toIsoDate(new Date()), [])
+  const annualPlanningYear = useMemo(() => new Date().getFullYear() + 1, [])
+  const annualPlanningYearStart = `${annualPlanningYear}-01-01`
+  const annualPlanningYearEnd = `${annualPlanningYear}-12-31`
   const canBackdateLeaveApplication = isHrOffice || ["regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   // Every authenticated role may submit a leave request. Role and location
   // continue to control the downstream review route and reviewer permissions.
@@ -2313,6 +2316,10 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       toast({ title: "Missing date", description: "Please select a start date.", variant: "destructive" })
       return
     }
+    if (leaveType === "annual" && (startDate < annualPlanningYearStart || startDate > annualPlanningYearEnd)) {
+      toast({ title: "Annual leave date restricted", description: `Annual leave dates must be within ${annualPlanningYear}.`, variant: "destructive" })
+      return
+    }
     if (!canBackdateLeaveApplication && startDate < todayIsoDate) {
       toast({ title: "Backdating restricted", description: "Staff cannot select past leave dates. Contact the HR Leave Office for backdated leave entry.", variant: "destructive" })
       return
@@ -3019,7 +3026,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
 
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date (Date of Delivery)</Label>
-                  <Input type="date" value={startDate} min={canBackdateLeaveApplication ? undefined : todayIsoDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" readOnly={leaveType === "maternity" || leaveType === "paternity"} disabled={leaveType === "maternity" || leaveType === "paternity"} />
+                  <Input type="date" value={startDate} min={leaveType === "annual" ? annualPlanningYearStart : (canBackdateLeaveApplication ? undefined : todayIsoDate)} max={leaveType === "annual" ? annualPlanningYearEnd : undefined} onChange={(e) => { const value = e.target.value; if (leaveType === "annual" && (value < annualPlanningYearStart || value > annualPlanningYearEnd)) return; setStartDate(value) }} className="h-10" readOnly={leaveType === "maternity" || leaveType === "paternity"} disabled={leaveType === "maternity" || leaveType === "paternity"} />
                   {calculatingEndDate && (
                     <p className="text-xs text-blue-600">Calculating leave duration...</p>
                   )}

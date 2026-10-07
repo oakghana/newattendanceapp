@@ -69,7 +69,7 @@ export function AnnualLeaveCompliancePanel() {
           <Info className="h-5 w-5 text-emerald-600" />
           <AlertTitle className="font-semibold text-emerald-900">Annual Leave Plan submitted</AlertTitle>
           <AlertDescription className="mt-1 text-emerald-800">
-            Your annual leave request has been submitted successfully and is {submissionStatusLabel}. You will be notified when the next action is completed.
+            Your 2027 annual leave request has been submitted successfully and is {submissionStatusLabel}. You will be notified when the next action is completed.
           </AlertDescription>
         </Alert>
       )}
