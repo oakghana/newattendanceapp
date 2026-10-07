@@ -29,15 +29,11 @@ export function isAnnualLeaveReminderPeriod(): boolean {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   
-  // Calculate October 20th of the current or next year
-  let octoberFirst = new Date(today.getFullYear(), 9, 20) // Month is 0-indexed, so 8 = October
-  if (today > octoberFirst) {
-    octoberFirst = new Date(today.getFullYear() + 1, 9, 1)
-  }
-  
-  const reminderStart = subDays(octoberFirst, 14)
-  
-  return today >= reminderStart && today < octoberFirst
+// Annual leave plans for the 2027 leave year close on November 30, 2027.
+  const deadline = new Date(today.getFullYear() + 1, 10, 30)
+  const reminderStart = subDays(deadline, 14)
+
+  return today >= reminderStart && today <= deadline
 }
 
 /**
@@ -47,13 +43,9 @@ export function daysUntilAnnualLeaveDeadline(): number {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  // Calculate October 20th of current or next year (same logic as isAnnualLeaveReminderPeriod)
-  let octoberFirst = new Date(today.getFullYear(), 9, 20) // Month 8 = October (0-indexed)
-  if (today >= octoberFirst) {
-    octoberFirst = new Date(today.getFullYear() + 1, 9, 1)
-  }
-  
-  const diff = differenceInDays(octoberFirst, today)
+// The 2027 annual leave plan deadline is November 30, 2027.
+  const deadline = new Date(today.getFullYear() + 1, 10, 30)
+  const diff = differenceInDays(deadline, today)
   
   return Math.max(0, diff)
 }
@@ -69,11 +61,11 @@ export async function isAnnualLeaveLocked(
   const today = new Date()
   const currentYear = today.getFullYear() + 1
   
-  // Check if past October 20
-  const octoberFirst = new Date(currentYear, 9, 20) // Month is 0-indexed
-  octoberFirst.setHours(0, 0, 0, 0)
+  // Check if past the November 30 deadline.
+  const deadline = new Date(currentYear, 10, 30)
+  deadline.setHours(0, 0, 0, 0)
   
-  if (today >= octoberFirst) {
+  if (today > deadline) {
     return true
   }
   
@@ -174,7 +166,7 @@ export async function getAnnualLeaveReminders(userId: string, admin: any) {
   return {
     reminders: [{
       type: 'annual_leave_deadline',
-      message: `📅 You have ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left to submit your Annual Leave Plan for the ${new Date().getFullYear() + 1} Leave Year. Submissions close on 20th October.`,
+      message: `📅 You have ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left to submit your Annual Leave Plan for the ${new Date().getFullYear() + 1} Leave Year. Submissions close on 30th November 2027.`,
       severity: daysLeft <= 3 ? 'high' : daysLeft <= 7 ? 'medium' : 'low',
       action_url: '/dashboard/leave-management?tab=leave-planning',
       action_label: 'Submit Now',

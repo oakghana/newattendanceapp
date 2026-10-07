@@ -251,8 +251,8 @@ function getDefaultSelectedLeaveYearPeriod(referenceDate: Date = new Date()) {
   return String(referenceDate.getFullYear() + 1)
 }
 
-function isOctoberPlanningWindow(referenceDate: Date = new Date()) {
-  return referenceDate.getMonth() === 9 && referenceDate.getDate() <= 20
+function isNovemberPlanningWindow(referenceDate: Date = new Date()) {
+  return referenceDate.getMonth() === 10 && referenceDate.getDate() <= 30
 }
 
 function pickSavedLeaveSignature(signatures: RegistrySignature[]): RegistrySignature | null {
@@ -1372,7 +1372,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
     void calculateEndDate()
   }, [startDate, leaveType, leaveYearPeriod, selectedLeaveType])
   const leaveYearPeriodOptions = useMemo(() => getLeaveYearPeriodOptions(), [])
-  const inOctoberPlanningWindow = useMemo(() => isOctoberPlanningWindow(), [])
+  const inNovemberPlanningWindow = useMemo(() => isNovemberPlanningWindow(), [])
 
   // ── Real-time same-month conflict warning ────────────────────────────
   const sameMonthConflict = useMemo(() => {
