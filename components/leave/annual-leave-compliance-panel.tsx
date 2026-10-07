@@ -83,7 +83,7 @@ export function AnnualLeaveCompliancePanel() {
           </AlertTitle>
           <AlertDescription className="text-amber-800 mt-2">
             <p className="mb-3">
-              You have until <strong>20th October</strong> to submit your annual leave plan for the <strong>{new Date().getFullYear()}</strong> year.
+              You have until <strong>20th October</strong> to submit your annual leave plan for the <strong>{new Date().getFullYear() + 1}</strong> year.
             </p>
             <p className="mb-3 text-sm">
               🔔 Your leave payment processing depends on submitting an approved leave plan. Submit now to ensure timely processing.

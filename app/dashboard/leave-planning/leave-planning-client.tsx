@@ -248,7 +248,11 @@ function getLeaveYearPeriodOptions(referenceDate: Date = new Date(), forwardCoun
 }
 
 function getDefaultSelectedLeaveYearPeriod(referenceDate: Date = new Date()) {
-  return getActiveLeaveYearPeriod(referenceDate)
+  return String(referenceDate.getFullYear() + 1)
+}
+
+function isOctoberPlanningWindow(referenceDate: Date = new Date()) {
+  return referenceDate.getMonth() === 9 && referenceDate.getDate() <= 20
 }
 
 function pickSavedLeaveSignature(signatures: RegistrySignature[]): RegistrySignature | null {
@@ -1212,7 +1216,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
     tierLabel: string
   } | null>(annualEntitlement)
   const [leaveYearPeriod, setLeaveYearPeriod] = useState(() => getDefaultSelectedLeaveYearPeriod())
-  const [policyActivePeriod, setPolicyActivePeriod] = useState(() => String(new Date().getFullYear()))
+  const [policyActivePeriod, setPolicyActivePeriod] = useState(() => String(new Date().getFullYear() + 1))
   const [leaveTypeDrafts, setLeaveTypeDrafts] = useState<Record<string, { leaveTypeLabel: string; entitlementDays: string; isActive: boolean }>>({})
   const [newLeaveTypeKey, setNewLeaveTypeKey] = useState("")
   const [newLeaveTypeLabel, setNewLeaveTypeLabel] = useState("")
@@ -1428,7 +1432,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
         const outstandingMap: Record<string, string> = {}
         for (const req of hrRequests) {
           try {
-            const outRes = await fetch(`/api/leave/hr-admin/outstanding?userId=${String(req.user_id || req.user?.id || "")}&leaveYearPeriod=${req.leave_year_period || "2026/2027"}`, {
+            const outRes = await fetch(`/api/leave/hr-admin/outstanding?userId=${String(req.user_id || req.user?.id || "")}&leaveYearPeriod=${req.leave_year_period || String(new Date().getFullYear() + 1)}`, {
               cache: "no-store",
             })
             if (outRes.ok) {
@@ -1539,7 +1543,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       const res = await fetch("/api/leave/policy", { cache: "no-store" })
       const json = await res.json()
       if (!res.ok) return
-      setPolicyActivePeriod(String(json.activePeriod || new Date().getFullYear()).split("/")[0])
+      setPolicyActivePeriod(String(json.activePeriod || new Date().getFullYear() + 1).split("/")[0])
       // Include all leave types (active and inactive), excluding only Sick Leave
       const types: LeaveTypeOption[] = Array.isArray(json.leaveTypes)
         ? json.leaveTypes.filter((t: any) => 
