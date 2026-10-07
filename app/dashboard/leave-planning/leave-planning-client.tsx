@@ -239,42 +239,16 @@ function normalizeLeaveTypeKey(value: string) {
 }
 
 function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
-  const year = referenceDate.getFullYear()
-  const month = referenceDate.getMonth()
-  // Leave cycle runs October -> September.
-  if (month >= 9) return `${year}/${year + 1}`
-  return `${year - 1}/${year}`
+  return String(referenceDate.getFullYear())
 }
 
 function getLeaveYearPeriodOptions(referenceDate: Date = new Date(), forwardCount = 10) {
-  const active = getActiveLeaveYearPeriod(referenceDate)
-  const [startYearRaw, endYearRaw] = active.split("/")
-  let endYear = Number(endYearRaw)
-  
-  // Ensure we never show 2025 or earlier - minimum is 2026
-  if (endYear < 2026) {
-    endYear = 2026
-  }
-  
-  const options: string[] = []
-  for (let i = 0; i <= forwardCount; i += 1) {
-    const year = endYear + i
-    options.push(`${year}`)
-  }
-  return options
-}
-
-function isOctoberPlanningWindow(referenceDate: Date = new Date()) {
-  // First week of October drives planning for the next leave cycle.
-  return referenceDate.getMonth() === 9 && referenceDate.getDate() <= 20
+  const year = Math.max(referenceDate.getFullYear(), 2026)
+  return Array.from({ length: forwardCount + 1 }, (_, index) => String(year + index))
 }
 
 function getDefaultSelectedLeaveYearPeriod(referenceDate: Date = new Date()) {
-  const active = getActiveLeaveYearPeriod(referenceDate)
-  if (!isOctoberPlanningWindow(referenceDate)) return active
-  const [startYearRaw] = active.split("/")
-  const nextStartYear = Number(startYearRaw) + 1
-  return `${nextStartYear}/${nextStartYear + 1}`
+  return getActiveLeaveYearPeriod(referenceDate)
 }
 
 function pickSavedLeaveSignature(signatures: RegistrySignature[]): RegistrySignature | null {
@@ -398,7 +372,7 @@ function buildMemoTemplateData(req: any): Record<string, string> {
     approved_months_text: `${approvedMonths} (${approvedMonths}) month${approvedMonths === 1 ? "" : "s"}`,
     return_to_work_date: returnDateIso ? fmtLongDate(returnDateIso) : "—",
     return_to_work_date_formal: returnDateIso ? fmtFormalDateWithWeekday(returnDateIso) : "—",
-    leave_year_period: String(req.leave_year_period || getActiveLeaveYearPeriod()),
+    leave_year_period: String(req.leave_year_period || getActiveLeaveYearPeriod()).split("/")[0],
     outstanding_leave_days: String(outstandingLeaveDays),
     travelling_days_balance_sentence: travellingDays > 0 ? ` plus ${travellingDays} travelling day(s)` : "",
     staff_name: String(req.staff_name || ""),
@@ -968,7 +942,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
             <p className="font-semibold text-slate-800 text-sm">
-              {leaveTypeLabelShort(req.leave_type_key)} — {req.leave_year_period}
+              {leaveTypeLabelShort(req.leave_type_key)} — {String(req.leave_year_period || getActiveLeaveYearPeriod()).split("/")[0]}
             </p>
   <p className="text-xs text-slate-500 mt-0.5">
   {fmtDate(effectiveStart)} → {fmtDate(effectiveEnd)}
@@ -1238,7 +1212,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
     tierLabel: string
   } | null>(annualEntitlement)
   const [leaveYearPeriod, setLeaveYearPeriod] = useState(() => getDefaultSelectedLeaveYearPeriod())
-  const [policyActivePeriod, setPolicyActivePeriod] = useState("2026/2027")
+  const [policyActivePeriod, setPolicyActivePeriod] = useState(() => String(new Date().getFullYear()))
   const [leaveTypeDrafts, setLeaveTypeDrafts] = useState<Record<string, { leaveTypeLabel: string; entitlementDays: string; isActive: boolean }>>({})
   const [newLeaveTypeKey, setNewLeaveTypeKey] = useState("")
   const [newLeaveTypeLabel, setNewLeaveTypeLabel] = useState("")
@@ -1565,7 +1539,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       const res = await fetch("/api/leave/policy", { cache: "no-store" })
       const json = await res.json()
       if (!res.ok) return
-      setPolicyActivePeriod(String(json.activePeriod || "2026/2027"))
+      setPolicyActivePeriod(String(json.activePeriod || new Date().getFullYear()).split("/")[0])
       // Include all leave types (active and inactive), excluding only Sick Leave
       const types: LeaveTypeOption[] = Array.isArray(json.leaveTypes)
         ? json.leaveTypes.filter((t: any) => 
@@ -1576,7 +1550,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const hasPartLeave = types.some((t) => t.leaveTypeKey === "part_leave")
   setLeaveTypes(hasPartLeave ? types : [
   ...types,
-  { leaveTypeKey: "part_leave", leaveTypeLabel: "Part Leave", entitlementDays: 15, leaveYearPeriod: "2026/2027", is_active: true },
+  { leaveTypeKey: "part_leave", leaveTypeLabel: "Part Leave", entitlementDays: 15, leaveYearPeriod: String(new Date().getFullYear()), is_active: true },
   ])
   } catch { /* silent */ }
   }, [])
