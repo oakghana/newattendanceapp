@@ -1096,7 +1096,7 @@ function HrExecRejectForm({
   )
 }
 
-// ─── Main Component ──────────���───────────────────────────────────────────────�����
+// ─── Main Component ──────────���───────────────────���───────────────────────────�����
 // SINGLE SOURCE OF TRUTH for the annual leave End Date shown/saved anywhere in the
 // HR Office review panel. Uses the exact same formula as the printed memo
 // (lib/annual-leave-calculator): granted = entitlement - enjoyed + outstanding + travel,
@@ -2596,8 +2596,14 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
             },
           }),
         })
-        const json = await res.json()
-        if (!res.ok) throw new Error(json.error || "Could not forward request")
+        const raw = await res.text()
+        let json: any = {}
+        try {
+          json = raw ? JSON.parse(raw) : {}
+        } catch {
+          throw new Error(raw.trim() || `Could not forward request (${res.status})`)
+        }
+        if (!res.ok) throw new Error(json.error || json.message || "Could not forward request")
         if (json.warning) {
           toast({ title: "Forwarded — entitlement exceeded", description: json.warning, variant: "destructive" })
         } else {

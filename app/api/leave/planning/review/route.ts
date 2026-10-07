@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
     }
 
     const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
-    const regionalOwnedLocationIds = role === "regional_manager"
+    const regionalOwnedLocationIds = (role === "regional_manager" || isRegionalHr)
       ? await resolveOwnedLocationIdsForRegionalOffice(admin, profile.assigned_location_id, profile.region_id)
       : []
     const isRegionalForward = action === "forward_to_regional_manager"
