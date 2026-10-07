@@ -894,7 +894,37 @@ export async function GET(request: NextRequest) {
         officeQuery = officeQuery.in("user_id", regionalScopedStaffIds.length ? regionalScopedStaffIds : ["00000000-0000-0000-0000-000000000000"])
       }
 
-      const { data: requests, error: reqError } = await officeQuery
+      let requests: any[] | null = null
+      let reqError: any = null
+      try {
+        const result = await officeQuery
+        requests = result.data || []
+        reqError = result.error
+      } catch (error) {
+        // A large nested PostgREST response can surface as a generic
+        // `TypeError: fetch failed` before Supabase returns a structured error.
+        // Retry with the request rows only so Leave Center remains usable; the
+        // reviewer queues still use the explicit user/location filters above.
+        console.error("[v0] Leave planning nested query failed; retrying without profile embed", error)
+        try {
+          let fallbackQuery = admin
+            .from("leave_plan_requests")
+            .select("*")
+            .order("created_at", { ascending: false })
+          if (!includeArchived) fallbackQuery = fallbackQuery.eq("is_archived", false)
+          if (isRegionalHr) {
+            fallbackQuery = fallbackQuery
+              .eq("workflow_route", "regional")
+              .in("status", ["pending_regional_hr_office_review", "pending_regional_hr_review", "pending_regional_manager_approval"])
+              .in("user_id", regionalScopedStaffIds.length ? regionalScopedStaffIds : ["00000000-0000-0000-0000-000000000000"])
+          }
+          const fallbackResult = await fallbackQuery
+          requests = fallbackResult.data || []
+          reqError = fallbackResult.error
+        } catch (fallbackError) {
+          reqError = fallbackError
+        }
+      }
 
       // Admins already received the complete request set from officeQuery.
       // Re-fetching the same wide relation tree here doubled the Supabase
