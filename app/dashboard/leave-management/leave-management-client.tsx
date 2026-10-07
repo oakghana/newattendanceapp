@@ -30,6 +30,7 @@ import { PaymentAdviceClient } from "@/components/leave/payment-advice-client"
 import StaffPaymentAdviceStatus from "@/components/leave/staff-payment-advice-status"
 import { StaffApprovedDeferments } from "@/components/leave/staff-approved-deferments"
 import { PaymentAdviceErrorBoundary } from "@/components/leave/payment-advice-error-boundary"
+import { SectionErrorBoundary, DeferredRender } from "@/components/leave/section-error-boundary"
 import { DefermentRecallTracker } from "@/components/leave/deferment-recall-tracker"
 import { HRExecutiveApprovalDashboard } from "@/components/leave/hr-executive-approval-dashboard"
 import { SubmitNewDefermentRequest } from "@/components/leave-management/submit-new-deferment-request"
@@ -3275,7 +3276,9 @@ export function LeaveManagementClient({
                 {isRegionalManager ? "Regional non-annual requests forwarded by Regional HR are ready for your review and approval." : `Requests pending for ${inactivityDays} days or more are marked as delayed and should be actioned immediately to avoid automatic supervisor timeout approvals.`}
               </AlertDescription>
             </Alert>
-            {renderManagerNotifications(isRegionalManager ? pendingNotifications.filter((n) => String(n.status || n.leave_requests?.status || "") === "pending_regional_manager_approval") : adminAllPending, isRegionalManager ? "No regional non-annual requests pending" : "No pending leave requests to approve", isRegionalHr)}
+            <SectionErrorBoundary title="HOD Review queue">
+              <DeferredRender render={() => renderManagerNotifications(isRegionalManager ? pendingNotifications.filter((n) => String(n.status || n.leave_requests?.status || "") === "pending_regional_manager_approval") : adminAllPending, isRegionalManager ? "No regional non-annual requests pending" : "No pending leave requests to approve", isRegionalHr)} />
+            </SectionErrorBoundary>
           </>
         )}
 
