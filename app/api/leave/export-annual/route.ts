@@ -118,6 +118,7 @@ export async function GET(request: NextRequest) {
       return {
         "Employee ID": profile.employee_id || "",
         "Staff Name": `${profile.first_name || ""} ${profile.last_name || ""}`.trim(),
+        Rank: profile.position || "",
         Email: profile.email || "",
         Position: profile.position || "",
         Department: department?.name || "",

@@ -639,7 +639,7 @@ function downloadLeaveRequestsCsv(rows: any[], fileName: string) {
     return [
       [user?.first_name, user?.last_name].filter(Boolean).join(" ") || String(r?.staff_name || ""),
       String(user?.employee_id || ""),
-      String(user?.rank || req?.rank || ""),
+      String(user?.rank || user?.position || req?.rank || req?.position || ""),
       String(user?.departments?.name || user?.department_name || req?.department_name || ""),
       String(user?.geofence_locations?.name || user?.location_name || req?.location_name || ""),
       leaveTypeLabelShort(String(req?.leave_type_key || "")),
