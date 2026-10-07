@@ -24,6 +24,11 @@ function leaveTypeDisplayName(leaveTypeKey: string): string {
   return LEAVE_TYPE_DISPLAY_NAME[leaveTypeKey] || leaveTypeKey.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
+function normalizeLeaveYearPeriod(value: string | null | undefined): string {
+  const match = String(value || "").trim().match(/^(\d{4})(?:\/\d{4})?$/)
+  return match?.[1] || String(new Date().getFullYear())
+}
+
 // The leave-planning workflow stores requests in leave_plan_requests. A duplicate
 // check against the legacy leave_requests table allows the same staff member to
 // submit Annual leave repeatedly because the active row is never found.

@@ -22,29 +22,22 @@ import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager
 import { hasAssignedReviewer, REVIEWER_LINKAGE_REQUIRED_MESSAGE } from "@/lib/reviewer-linkage"
 
 function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
-  const year = referenceDate.getFullYear()
-  const month = referenceDate.getMonth()
-  // Leave cycle runs October -> September.
-  if (month >= 9) return `${year}/${year + 1}`
-  return `${year - 1}/${year}`
+  return String(referenceDate.getFullYear())
 }
 
 function getAllowedLeaveYearPeriods(referenceDate: Date = new Date(), forwardCount = 10) {
-  const active = getActiveLeaveYearPeriod(referenceDate)
-  const [startYearRaw] = active.split("/")
-  const startYear = Number(startYearRaw)
+  const startYear = Number(getActiveLeaveYearPeriod(referenceDate))
   const periods: string[] = []
   for (let i = 0; i <= forwardCount; i += 1) {
-    const y = startYear + i
-    periods.push(`${y}/${y + 1}`)
+    periods.push(String(startYear + i))
   }
   return periods
 }
 
 function normalizeLeaveYearPeriod(value: string | null | undefined) {
   const input = String(value || "").trim()
-  if (/^\d{4}\/\d{4}$/.test(input)) return input
-  return getActiveLeaveYearPeriod()
+  const singleYear = input.match(/^(\d{4})(?:\/\d{4})?$/)
+  return singleYear ? singleYear[1] : getActiveLeaveYearPeriod()
 }
 
 const EDITABLE_STATUSES = [

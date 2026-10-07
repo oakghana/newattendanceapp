@@ -83,7 +83,7 @@ export async function isAnnualLeaveLocked(
     .select('id')
     .eq('user_id', userId)
     .eq('leave_type_key', 'annual')
-    .eq('leave_year_period', `${currentYear}/${currentYear + 1}`)
+    .eq('leave_year_period', `${currentYear}`)
     .in('status', ['pending_hod_review', 'hod_approved', 'manager_confirmed', 'hr_approved'])
     .limit(1)
   
@@ -97,7 +97,7 @@ async function getAnnualLeaveSubmission(userId: string, admin: any) {
     .select('status')
     .eq('user_id', userId)
     .eq('leave_type_key', 'annual')
-    .eq('leave_year_period', `${currentYear}/${currentYear + 1}`)
+    .eq('leave_year_period', `${currentYear}`)
     .not('status', 'in', '(draft,rejected,cancelled)')
     .order('created_at', { ascending: false })
     .limit(1)
