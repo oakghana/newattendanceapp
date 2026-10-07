@@ -1179,28 +1179,19 @@ export async function GET(request: NextRequest) {
             profile.assigned_location_id,
             profile.region_id,
           )
-          let scopedStaffIds: string[] = []
           if (ownedLocationIds.length > 0) {
             const { data: scopedStaff } = await admin
               .from("user_profiles")
               .select("id")
               .in("assigned_location_id", ownedLocationIds)
-            scopedStaffIds = (scopedStaff || []).map((row: any) => row.id).filter(Boolean)
+            regionalPendingQuery = regionalPendingQuery.in("user_id", (scopedStaff || []).map((row: any) => row.id))
           } else if (profile.region_id) {
             const { data: scopedStaff } = await admin
               .from("user_profiles")
               .select("id")
               .eq("region_id", profile.region_id)
-            scopedStaffIds = (scopedStaff || []).map((row: any) => row.id).filter(Boolean)
+            regionalPendingQuery = regionalPendingQuery.in("user_id", (scopedStaff || []).map((row: any) => row.id))
           }
-          const { data: directlyAssigned } = await admin
-            .from("leave_plan_requests")
-            .select("user_id")
-            .eq("workflow_route", "regional")
-            .eq("status", "pending_regional_manager_approval")
-            .or(`regional_manager_user_id.eq.${user.id},regional_manager_id.eq.${user.id}`)
-          scopedStaffIds = [...new Set([...scopedStaffIds, ...(directlyAssigned || []).map((row: any) => row.user_id).filter(Boolean)])]
-          regionalPendingQuery = regionalPendingQuery.in("user_id", scopedStaffIds.length ? scopedStaffIds : ["00000000-0000-0000-0000-000000000000"])
 
           const { data: regionalPending, error: regionalPendingError } = await regionalPendingQuery
           if (regionalPendingError) throw regionalPendingError

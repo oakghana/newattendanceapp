@@ -58,18 +58,7 @@ const regionIds = userProfile.region_id ? [userProfile.region_id] : [];
       if (scopedStaffError) return NextResponse.json({ error: 'Failed to resolve regional staff scope' }, { status: 500 });
       scopedStaffIds = [...new Set([...(scopedStaff || []).map((row: any) => row.id), ...locationStaffIds].filter(Boolean))];
     }
-    // Include requests explicitly assigned to this Regional HR user as a safety
-    // net for district locations whose profile location/region is incomplete.
-    const { data: directlyAssignedRequests } = await admin
-      .from('leave_plan_requests')
-      .select('user_id')
-      .eq('workflow_route', 'regional')
-      .eq('regional_hr_office_user_id', userId)
-      .in('status', ['pending_regional_hr_office_review', 'pending_regional_hr_review', 'pending_regional_manager_approval'])
-    const directlyAssignedStaffIds = (directlyAssignedRequests || []).map((row: any) => row.user_id).filter(Boolean)
-    scopedStaffIds = [...new Set([...scopedStaffIds, ...directlyAssignedStaffIds])]
-
-    if (!isAdmin && locationIds.length === 0 && regionIds.length === 0 && directlyAssignedStaffIds.length === 0) {
+    if (!isAdmin && locationIds.length === 0 && regionIds.length === 0) {
       return NextResponse.json(
         { leaves: [], summary: { total: 0, pending: 0, approved: 0 } },
         { status: 200 }

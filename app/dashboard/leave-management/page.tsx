@@ -3,9 +3,6 @@ import { LeaveManagementModuleClient } from "./leave-management-module-client"
 import { LeaveManagementPageWrapper } from "@/components/leave/leave-management-page-wrapper"
 import { isExcludedLocation, resolveSelfLeaveRoute } from "@/lib/hr-workflow"
 import { Suspense } from "react"
-import { AnnualLeaveOverlapPanel } from "@/components/leave/annual-leave-overlap-panel"
-import { buildAnnualLeaveOverlapGroups } from "@/lib/annual-leave-overlaps"
-
 
 export default async function LeaveManagementPage() {
   const supabase = await createClient()
@@ -331,34 +328,10 @@ export default async function LeaveManagementPage() {
     ? "regional_hr_leave_office"
     : profile.role
 
-  let annualLeaveOverlapGroups: any[] = []
-  const canSeeAnnualLeaveOverlaps = isAdmin || canReviewLeaveAsHod || isRegionalHr || isRegionalManager
-  if (canSeeAnnualLeaveOverlaps) {
-    const { data: annualRequests } = await admin
-      .from("leave_plan_requests")
-      .select("id, user_id, hod_user_id, leave_type_key, leave_year_period, status, preferred_start_date, preferred_end_date, adjusted_preferred_start_date, adjusted_preferred_end_date, user_profiles:user_id(id, first_name, last_name, department_id, assigned_location_id, hod_id, region_id, departments(name, code), geofence_locations!user_profiles_assigned_location_id_fkey(name))")
-      .eq("leave_type_key", "annual")
-      .eq("leave_year_period", "2027")
-      .eq("is_archived", false)
-      .not("status", "in", "(rejected,hr_rejected,withdrawn)")
-      .limit(1000)
-
-    const scopedRequests = (annualRequests || []).filter((request: any) => {
-      const staff = Array.isArray(request.user_profiles) ? request.user_profiles[0] : request.user_profiles || {}
-      if (isAdmin) return true
-      if (isRegionalHr || isRegionalManager) {
-        return Boolean((profile as any).region_id && staff.region_id === (profile as any).region_id) || Boolean((profile as any).assigned_location_id && staff.assigned_location_id === (profile as any).assigned_location_id)
-      }
-      return Boolean((profile as any).department_id && staff.department_id === (profile as any).department_id && (staff.hod_id === user.id || request.hod_user_id === user.id))
-    })
-    annualLeaveOverlapGroups = buildAnnualLeaveOverlapGroups(scopedRequests)
-  }
-
   try {
     return (
       <LeaveManagementPageWrapper>
       <div className="leave-theme">
-        <AnnualLeaveOverlapPanel groups={annualLeaveOverlapGroups} />
         <Suspense fallback={<div className="p-8 text-center text-slate-500">Loading leave management...</div>}>
           <LeaveManagementModuleClient
             userId={user.id}
