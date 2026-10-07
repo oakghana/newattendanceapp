@@ -81,7 +81,7 @@ async function findDuplicateLeaveRequestForYear(
   const normalizedYear = normalizeLeaveYearPeriod(leaveYearPeriod)
   const { data, error } = await admin
     .from("leave_plan_requests")
-    .select("id, reference_number, status, leave_type_key, leave_year_period")
+    .select("id, status, leave_type_key, leave_year_period")
     .eq("user_id", userId)
     .in("leave_type_key", leaveTypeKey === "annual" ? ["annual", "annual_leave"] : [leaveTypeKey])
     .in("status", DUPLICATE_BLOCKING_STATUSES)
