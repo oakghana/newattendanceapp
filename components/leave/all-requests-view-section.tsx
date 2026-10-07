@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
-import { AlertCircle, CheckCircle2, Loader2, Search, XCircle, AlertTriangle, Clock, User, Calendar, Building2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Loader2, Search, XCircle, AlertTriangle, Clock, User, Calendar, Building2, Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -74,6 +74,9 @@ export function AllRequestsViewSection() {
     notes: '',
     isSubmitting: false,
   })
+  const [dateEditor, setDateEditor] = useState<{ request: LeaveRequest; startDate: string; endDate: string } | null>(null)
+  const [savingDates, setSavingDates] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchAllRequests()
@@ -128,6 +131,54 @@ export function AllRequestsViewSection() {
       setError(err instanceof Error ? err.message : 'Failed to load requests')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const openDateEditor = (request: LeaveRequest) => {
+    setDateEditor({
+      request,
+      startDate: request.preferred_start_date || request.start_date || '',
+      endDate: request.preferred_end_date || request.end_date || '',
+    })
+  }
+
+  const saveDates = async () => {
+    if (!dateEditor) return
+    setSavingDates(true)
+    try {
+      const response = await fetch('/api/leave/admin-request', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: dateEditor.request.id, startDate: dateEditor.startDate, endDate: dateEditor.endDate }),
+      })
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error || 'Unable to update leave dates')
+      setRequests((current) => current.map((item) => item.id === dateEditor.request.id
+        ? { ...item, preferred_start_date: dateEditor.startDate, preferred_end_date: dateEditor.endDate, start_date: dateEditor.startDate, end_date: dateEditor.endDate }
+        : item))
+      setDateEditor(null)
+      toast({ title: 'Leave dates updated', description: 'The staff request now shows the updated annual leave period.' })
+    } catch (error) {
+      toast({ title: 'Update failed', description: error instanceof Error ? error.message : 'Unable to update leave dates', variant: 'destructive' })
+    } finally {
+      setSavingDates(false)
+    }
+  }
+
+  const deleteRequest = async (request: LeaveRequest) => {
+    const staffName = request.user_profiles?.full_name || request.staff_name || 'this staff member'
+    if (!window.confirm(`Permanently delete the leave request for ${staffName}?`)) return
+    setDeletingId(request.id)
+    try {
+      const response = await fetch(`/api/leave/delete-request?id=${encodeURIComponent(request.id)}`, { method: 'DELETE' })
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error || 'Unable to delete leave request')
+      setRequests((current) => current.filter((item) => item.id !== request.id))
+      toast({ title: 'Leave request deleted', description: 'The request was removed from the database and will no longer appear for the staff member.' })
+    } catch (error) {
+      toast({ title: 'Delete failed', description: error instanceof Error ? error.message : 'Unable to delete leave request', variant: 'destructive' })
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -352,8 +403,17 @@ export function AllRequestsViewSection() {
                       </div>
                     </div>
 
+                    <div className="pt-2 border-t border-slate-200/60 flex gap-2">
+                      <Button size="sm" variant="outline" className="flex-1 gap-1 text-xs" onClick={() => openDateEditor(req)}>
+                        <Pencil className="h-3.5 w-3.5" /> Edit dates
+                      </Button>
+                      <Button size="sm" variant="destructive" className="gap-1 text-xs" disabled={deletingId === req.id} onClick={() => deleteRequest(req)}>
+                        {deletingId === req.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Delete
+                      </Button>
+                    </div>
+
                     {isHrApproved && (req.confirmation_status === 'pending_hod_rm' || (daysOver > 0 && !isHodConfirmed)) && (
-                      <div className="pt-2 border-t border-slate-200/60 flex gap-2">
+                      <div className="pt-2 flex gap-2">
                         <Button
                           size="sm"
                           className="w-full gap-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs h-8"
@@ -474,7 +534,15 @@ export function AllRequestsViewSection() {
                           <Badge className="bg-gray-100 text-gray-600 border border-gray-200 text-xs">—</Badge>
                         )}
                       </TableCell>
-                      <TableCell className="text-right space-x-2 whitespace-nowrap">
+                      <TableCell className="text-right whitespace-nowrap">
+                        <div className="flex justify-end gap-1">
+                          <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => openDateEditor(req)}>
+                            <Pencil className="h-3.5 w-3.5" /> Edit dates
+                          </Button>
+                          <Button size="sm" variant="destructive" className="gap-1 text-xs" disabled={deletingId === req.id} onClick={() => deleteRequest(req)}>
+                            {deletingId === req.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Delete
+                          </Button>
+                        </div>
                         {isHrApproved && (req.confirmation_status === 'pending_hod_rm' || (daysOver > 0 && !isHodConfirmed)) && (
                           <Button
                             size="sm"
@@ -529,6 +597,33 @@ export function AllRequestsViewSection() {
           </div>
         </div>
       )}
+
+      <Dialog open={Boolean(dateEditor)} onOpenChange={(open) => !open && setDateEditor(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit annual leave dates</DialogTitle>
+            <DialogDescription>Update the staff member&apos;s leave period before it continues through the workflow.</DialogDescription>
+          </DialogHeader>
+          {dateEditor && (
+            <div className="space-y-4">
+              <div className="grid gap-2">
+                <label htmlFor="admin-leave-start" className="text-sm font-medium">Start date</label>
+                <Input id="admin-leave-start" type="date" value={dateEditor.startDate} onChange={(event) => setDateEditor({ ...dateEditor, startDate: event.target.value })} />
+              </div>
+              <div className="grid gap-2">
+                <label htmlFor="admin-leave-end" className="text-sm font-medium">End date</label>
+                <Input id="admin-leave-end" type="date" value={dateEditor.endDate} onChange={(event) => setDateEditor({ ...dateEditor, endDate: event.target.value })} />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setDateEditor(null)}>Cancel</Button>
+                <Button onClick={saveDates} disabled={savingDates || !dateEditor.startDate || !dateEditor.endDate}>
+                  {savingDates ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Save dates
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Resumption Confirmation Modal */}
       <Dialog open={confirmationModal.isOpen} onOpenChange={(open) => {

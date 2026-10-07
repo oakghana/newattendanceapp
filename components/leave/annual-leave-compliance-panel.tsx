@@ -69,7 +69,7 @@ export function AnnualLeaveCompliancePanel() {
           <Info className="h-5 w-5 text-emerald-600" />
           <AlertTitle className="font-semibold text-emerald-900">Annual Leave Plan submitted</AlertTitle>
           <AlertDescription className="mt-1 text-emerald-800">
-            Your annual leave request has been submitted successfully and is {submissionStatusLabel}. You will be notified when the next action is completed.
+            Your 2027 annual leave request has been submitted successfully and is {submissionStatusLabel}. You will be notified when the next action is completed.
           </AlertDescription>
         </Alert>
       )}
@@ -83,7 +83,7 @@ export function AnnualLeaveCompliancePanel() {
           </AlertTitle>
           <AlertDescription className="text-amber-800 mt-2">
             <p className="mb-3">
-              You have until <strong>20th October</strong> to submit your annual leave plan for the {new Date().getFullYear()}/{new Date().getFullYear() + 1} year.
+              You have until <strong>20th October</strong> to submit your annual leave plan for the <strong>{new Date().getFullYear() + 1}</strong> year.
             </p>
             <p className="mb-3 text-sm">
               🔔 Your leave payment processing depends on submitting an approved leave plan. Submit now to ensure timely processing.

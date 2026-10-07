@@ -67,7 +67,7 @@ export async function isAnnualLeaveLocked(
   admin: any
 ): Promise<boolean> {
   const today = new Date()
-  const currentYear = today.getFullYear()
+  const currentYear = today.getFullYear() + 1
   
   // Check if past October 20
   const octoberFirst = new Date(currentYear, 9, 20) // Month is 0-indexed
@@ -83,7 +83,7 @@ export async function isAnnualLeaveLocked(
     .select('id')
     .eq('user_id', userId)
     .eq('leave_type_key', 'annual')
-    .eq('leave_year_period', `${currentYear}/${currentYear + 1}`)
+    .eq('leave_year_period', `${currentYear}`)
     .in('status', ['pending_hod_review', 'hod_approved', 'manager_confirmed', 'hr_approved'])
     .limit(1)
   
@@ -91,13 +91,13 @@ export async function isAnnualLeaveLocked(
 }
 
 async function getAnnualLeaveSubmission(userId: string, admin: any) {
-  const currentYear = new Date().getFullYear()
+  const currentYear = new Date().getFullYear() + 1
   const { data } = await admin
     .from('leave_plan_requests')
     .select('status')
     .eq('user_id', userId)
     .eq('leave_type_key', 'annual')
-    .eq('leave_year_period', `${currentYear}/${currentYear + 1}`)
+    .eq('leave_year_period', `${currentYear}`)
     .not('status', 'in', '(draft,rejected,cancelled)')
     .order('created_at', { ascending: false })
     .limit(1)
@@ -174,7 +174,7 @@ export async function getAnnualLeaveReminders(userId: string, admin: any) {
   return {
     reminders: [{
       type: 'annual_leave_deadline',
-      message: `📅 You have ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left to submit your Annual Leave Plan for the ${new Date().getFullYear()} Leave Year. Submissions close on 20th October.`,
+      message: `📅 You have ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left to submit your Annual Leave Plan for the ${new Date().getFullYear() + 1} Leave Year. Submissions close on 20th October.`,
       severity: daysLeft <= 3 ? 'high' : daysLeft <= 7 ? 'medium' : 'low',
       action_url: '/dashboard/leave-management?tab=leave-planning',
       action_label: 'Submit Now',

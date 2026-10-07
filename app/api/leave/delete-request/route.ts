@@ -54,9 +54,12 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Get the leave request details first for audit logging
-    const { data: leaveRequest, error: fetchError } = await getAdmin()
-      .from('leave_requests')
+    const admin = getAdmin()
+
+    // All Requests and the staff request tab use leave_plan_requests.
+    // Load the active workflow row before removing its dependent records.
+    const { data: leaveRequest, error: fetchError } = await admin
+      .from('leave_plan_requests')
       .select('*')
       .eq('id', leaveRequestId)
       .single()
@@ -72,44 +75,29 @@ export async function DELETE(request: NextRequest) {
 
     // Delete related records in dependency order
     // 1. Delete from leave_balance_transactions (if any)
-    await getAdmin()
-      .from('leave_balance_transactions')
-      .delete()
-      .eq('leave_request_id', leaveRequestId)
+    const dependentDeletes = [
+      ['leave_balance_transactions', 'leave_request_id'],
+      ['leave_status', 'leave_request_id'],
+      ['leave_payment_memos', 'leave_plan_request_id'],
+      ['leave_notifications', 'leave_request_id'],
+      ['leave_archive_log', 'leave_request_id'],
+      ['leave_plan_reviews', 'leave_plan_request_id'],
+      ['leave_plan_stagger_requests', 'leave_plan_request_id'],
+      ['leave_office_work_log', 'leave_plan_request_id'],
+      ['leave_resumption_notifications', 'leave_request_id'],
+      ['leave_recall_requests', 'leave_plan_request_id'],
+    ] as const
 
-    // 2. Delete from leave_status (if any)
-    await getAdmin()
-      .from('leave_status')
-      .delete()
-      .eq('leave_request_id', leaveRequestId)
+    for (const [table, column] of dependentDeletes) {
+      const { error } = await admin.from(table).delete().eq(column, leaveRequestId)
+      if (error && !error.message.includes('does not exist')) {
+        console.error(`[v0] Failed deleting ${table} for ${leaveRequestId}:`, error)
+        return NextResponse.json({ error: `Failed to delete related leave data: ${error.message}` }, { status: 500 })
+      }
+    }
 
-    // 3. Delete from leave_payment_memos (if any)
-    await getAdmin()
-      .from('leave_payment_memos')
-      .delete()
-      .eq('leave_request_id', leaveRequestId)
-
-    // 4. Delete from leave_notifications (if any)
-    await getAdmin()
-      .from('leave_notifications')
-      .delete()
-      .eq('leave_request_id', leaveRequestId)
-
-    // 5. Delete from leave_archive_log (if any)
-    await getAdmin()
-      .from('leave_archive_log')
-      .delete()
-      .eq('leave_request_id', leaveRequestId)
-
-    // 6. Delete from leave_change_proposals (if any)
-    await getAdmin()
-      .from('leave_change_proposals')
-      .delete()
-      .eq('leave_request_id', leaveRequestId)
-
-    // 7. Finally, delete the leave request itself
-    const { error: deleteError } = await getAdmin()
-      .from('leave_requests')
+    const { error: deleteError } = await admin
+      .from('leave_plan_requests')
       .delete()
       .eq('id', leaveRequestId)
 
@@ -161,8 +149,8 @@ export async function GET(request: NextRequest) {
 
     // Check if the leave request exists
     const { data: leaveRequest, error: fetchError } = await getAdmin()
-      .from('leave_requests')
-      .select('id, staff_name, status, preferred_start_date')
+      .from('leave_plan_requests')
+      .select('id, user_id, status, preferred_start_date')
       .eq('id', leaveRequestId)
       .single()
 
@@ -191,7 +179,7 @@ export async function GET(request: NextRequest) {
       getAdmin()
         .from('leave_payment_memos')
         .select('id', { count: 'exact', head: true })
-        .eq('leave_request_id', leaveRequestId),
+        .eq('leave_plan_request_id', leaveRequestId),
       getAdmin()
         .from('leave_notifications')
         .select('id', { count: 'exact', head: true })

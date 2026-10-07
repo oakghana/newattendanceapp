@@ -62,12 +62,13 @@ function daysLeftToResume(startDate: string, endDate: string) {
 
 function downloadCsv(rows: any[], fileName: string) {
   if (!rows.length) return
-  const headers = ["Staff Name", "Employee ID", "Department", "Location", "Leave Type", "Start Date", "End Date", "Days", "Submitted"]
+  const headers = ["Staff Name", "Employee ID", "Rank", "Department", "Location", "Leave Type", "Start Date", "End Date", "Days", "Submitted"]
   const lines = [
     headers.join(","),
     ...rows.map(r => [
       `"${r.staff_name || ""}"`,
       r.employee_id || "",
+      `"${r.rank || ""}"`,
       `"${r.department_name || ""}"`,
       `"${r.location_name || ""}"`,
       leaveLabel(r.leave_type_key || ""),
@@ -110,10 +111,11 @@ async function downloadPdf(rows: any[], fileName: string, title: string, rangeSt
 
   autoTable(doc, {
     startY: 44,
-    head: [["Staff Name", "Emp. ID", "Department", "Location", "Leave Type", "Start", "End", "Days"]],
+    head: [["Staff Name", "Emp. ID", "Rank", "Department", "Location", "Leave Type", "Start", "End", "Days"]],
     body: rows.map(r => [
       r.staff_name || "",
       r.employee_id || "",
+      r.rank || "",
       r.department_name || "",
       r.location_name || "",
       leaveLabel(r.leave_type_key || ""),

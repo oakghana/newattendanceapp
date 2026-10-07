@@ -389,7 +389,20 @@ export async function POST(request: NextRequest) {
     // early reference. It always proceeds straight to nextStatus (hod_approved),
     // handing off to HR Leave Office immediately.
     const requestUpdatePayload: Record<string, any> = {
-      status: isRegionalForward ? "pending_regional_manager_approval" : isRegionalManagerApprovalComplete ? "approved" : nextStatus,
+      // Older deployments still enforce the original leave status constraint,
+      // which accepts manager_rejected but not the newer hod_rejected value.
+      // Keep rejection compatible while the review decision remains rejected.
+      // Do not write a new status for rejection. Some deployed databases still
+      // have the original status CHECK constraint, while the rejected decision
+      // is already persisted in leave_plan_reviews and hod_decision below.
+      // Keeping the current status makes denial work safely on both schemas.
+      status: decision === "rejected"
+        ? String((leavePlan as any).status || "pending_manager_review")
+        : isRegionalForward
+          ? "pending_regional_manager_approval"
+          : isRegionalManagerApprovalComplete
+            ? "approved"
+            : nextStatus,
       ...(isRegionalManagerApprovalComplete ? { workflow_stage: "completed", memo_generated: true, memo_generated_at: new Date().toISOString(), hr_approver_id: user.id } : {}),
       manager_recommendation: mergedRecommendations || null,
       ...(isRegionalForward && isAnnualLeave((leavePlan as any).leave_type_key) ? {

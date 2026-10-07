@@ -22,29 +22,22 @@ import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager
 import { hasAssignedReviewer, REVIEWER_LINKAGE_REQUIRED_MESSAGE } from "@/lib/reviewer-linkage"
 
 function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
-  const year = referenceDate.getFullYear()
-  const month = referenceDate.getMonth()
-  // Leave cycle runs October -> September.
-  if (month >= 9) return `${year}/${year + 1}`
-  return `${year - 1}/${year}`
+  return String(referenceDate.getFullYear())
 }
 
 function getAllowedLeaveYearPeriods(referenceDate: Date = new Date(), forwardCount = 10) {
-  const active = getActiveLeaveYearPeriod(referenceDate)
-  const [startYearRaw] = active.split("/")
-  const startYear = Number(startYearRaw)
+  const startYear = Number(getActiveLeaveYearPeriod(referenceDate))
   const periods: string[] = []
   for (let i = 0; i <= forwardCount; i += 1) {
-    const y = startYear + i
-    periods.push(`${y}/${y + 1}`)
+    periods.push(String(startYear + i))
   }
   return periods
 }
 
 function normalizeLeaveYearPeriod(value: string | null | undefined) {
   const input = String(value || "").trim()
-  if (/^\d{4}\/\d{4}$/.test(input)) return input
-  return getActiveLeaveYearPeriod()
+  const singleYear = input.match(/^(\d{4})(?:\/\d{4})?$/)
+  return singleYear ? singleYear[1] : getActiveLeaveYearPeriod()
 }
 
 const EDITABLE_STATUSES = [
@@ -68,11 +61,35 @@ const OVERLAP_BLOCKING_STATUSES = [
   "manager_confirmed",
   "hod_approved",
   "hr_office_forwarded",
+  "pending_hr_records_reference",
+  "pending_hr_leave_processing",
+  "pending_regional_hr_review",
+  "pending_regional_hr_office_review",
+  "pending_regional_manager_approval",
   "approved",
   "hr_approved",
 ] as const
 
 const DUPLICATE_BLOCKING_STATUSES = OVERLAP_BLOCKING_STATUSES
+
+async function findDuplicateLeaveRequestForYear(
+  admin: any,
+  userId: string,
+  leaveTypeKey: string,
+  leaveYearPeriod: string,
+) {
+  const normalizedYear = normalizeLeaveYearPeriod(leaveYearPeriod)
+  const { data, error } = await admin
+    .from("leave_plan_requests")
+    .select("id, reference_number, status, leave_type_key, leave_year_period")
+    .eq("user_id", userId)
+    .in("leave_type_key", leaveTypeKey === "annual" ? ["annual", "annual_leave"] : [leaveTypeKey])
+    .in("status", DUPLICATE_BLOCKING_STATUSES)
+    .limit(50)
+
+  if (error) throw error
+  return (data || []).find((request: any) => normalizeLeaveYearPeriod(request.leave_year_period) === normalizedYear) || null
+}
 
 /**
  * Fetch an existing user profile or create a minimal one on first access.
@@ -375,7 +392,8 @@ function buildInitialLeaveMemoDraft(payload: {
     .replace(/_/g, " ")
     .replace(/\b\w/g, (m) => m.toUpperCase())
 
-  const subject = `LEAVE REQUEST RECEIVED - ${leaveTypeLabel} (${payload.leaveYearPeriod})`
+  const memoYear = leaveTypeLabel.toLowerCase() === "annual" ? String(new Date().getFullYear() + 1) : String(payload.leaveYearPeriod || "")
+  const subject = `LEAVE REQUEST RECEIVED - ${leaveTypeLabel} (${memoYear})`
   const body = [
     "Your leave request has been received and is now in workflow review.",
     "",
@@ -1494,6 +1512,14 @@ export async function POST(request: NextRequest) {
   }
   
   const leaveTypeKey = String(leave_type || "annual").toLowerCase().replace(/[-\s]+/g, "_")
+  const annualPlanningYear = new Date().getFullYear() + 1
+  if (leaveTypeKey === "annual") {
+    const annualStart = `${annualPlanningYear}-01-01`
+    const annualEnd = `${annualPlanningYear}-12-31`
+    if (preferred_start_date < annualStart || preferred_start_date > annualEnd || preferred_end_date < annualStart || preferred_end_date > annualEnd) {
+      return NextResponse.json({ error: `Annual leave dates must be within ${annualPlanningYear}.` }, { status: 400 })
+    }
+  }
   const dependentLeaveEligibility = await validateDependentLeaveEligibility(
     admin,
     user.id,
@@ -1588,10 +1614,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid leave date range." }, { status: 400 })
     }
 
+    const normalizedDuplicateType = ["annual", "annual_leave"].includes(leaveTypeKey) ? "annual" : leaveTypeKey
+    const yearlyDuplicateRequest = await findDuplicateLeaveRequestForYear(
+      admin,
+      user.id,
+      normalizedDuplicateType,
+      selectedLeaveYearPeriod,
+    )
+    if (yearlyDuplicateRequest) {
+      return NextResponse.json(
+        {
+          error: `You already have an active ${leaveTypeKey.replace(/_/g, " ")} request for the ${selectedLeaveYearPeriod} leave year. Staff cannot submit the same leave type more than once in the same leave year.`,
+          code: "YEARLY_LEAVE_REQUEST",
+          duplicate: yearlyDuplicateRequest,
+        },
+        { status: 409 },
+      )
+    }
+
     const duplicateRequest = await findDuplicateLeaveRequest(
       admin,
       user.id,
-      leaveTypeKey,
+      normalizedDuplicateType,
       preferred_start_date,
       preferred_end_date,
     )

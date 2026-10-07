@@ -239,42 +239,20 @@ function normalizeLeaveTypeKey(value: string) {
 }
 
 function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
-  const year = referenceDate.getFullYear()
-  const month = referenceDate.getMonth()
-  // Leave cycle runs October -> September.
-  if (month >= 9) return `${year}/${year + 1}`
-  return `${year - 1}/${year}`
+  return String(referenceDate.getFullYear())
 }
 
 function getLeaveYearPeriodOptions(referenceDate: Date = new Date(), forwardCount = 10) {
-  const active = getActiveLeaveYearPeriod(referenceDate)
-  const [startYearRaw, endYearRaw] = active.split("/")
-  let endYear = Number(endYearRaw)
-  
-  // Ensure we never show 2025 or earlier - minimum is 2026
-  if (endYear < 2026) {
-    endYear = 2026
-  }
-  
-  const options: string[] = []
-  for (let i = 0; i <= forwardCount; i += 1) {
-    const year = endYear + i
-    options.push(`${year}`)
-  }
-  return options
-}
-
-function isOctoberPlanningWindow(referenceDate: Date = new Date()) {
-  // First week of October drives planning for the next leave cycle.
-  return referenceDate.getMonth() === 9 && referenceDate.getDate() <= 20
+  const year = Math.max(referenceDate.getFullYear(), 2026)
+  return Array.from({ length: forwardCount + 1 }, (_, index) => String(year + index))
 }
 
 function getDefaultSelectedLeaveYearPeriod(referenceDate: Date = new Date()) {
-  const active = getActiveLeaveYearPeriod(referenceDate)
-  if (!isOctoberPlanningWindow(referenceDate)) return active
-  const [startYearRaw] = active.split("/")
-  const nextStartYear = Number(startYearRaw) + 1
-  return `${nextStartYear}/${nextStartYear + 1}`
+  return String(referenceDate.getFullYear() + 1)
+}
+
+function isOctoberPlanningWindow(referenceDate: Date = new Date()) {
+  return referenceDate.getMonth() === 9 && referenceDate.getDate() <= 20
 }
 
 function pickSavedLeaveSignature(signatures: RegistrySignature[]): RegistrySignature | null {
@@ -398,7 +376,7 @@ function buildMemoTemplateData(req: any): Record<string, string> {
     approved_months_text: `${approvedMonths} (${approvedMonths}) month${approvedMonths === 1 ? "" : "s"}`,
     return_to_work_date: returnDateIso ? fmtLongDate(returnDateIso) : "—",
     return_to_work_date_formal: returnDateIso ? fmtFormalDateWithWeekday(returnDateIso) : "—",
-    leave_year_period: String(req.leave_year_period || getActiveLeaveYearPeriod()),
+    leave_year_period: req.leave_type_key === "annual" ? String(new Date().getFullYear() + 1) : String(req.leave_year_period || getActiveLeaveYearPeriod()).split("/")[0],
     outstanding_leave_days: String(outstandingLeaveDays),
     travelling_days_balance_sentence: travellingDays > 0 ? ` plus ${travellingDays} travelling day(s)` : "",
     staff_name: String(req.staff_name || ""),
@@ -968,7 +946,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
             <p className="font-semibold text-slate-800 text-sm">
-              {leaveTypeLabelShort(req.leave_type_key)} — {req.leave_year_period}
+              {leaveTypeLabelShort(req.leave_type_key)} — {req.leave_type_key === "annual" ? String(new Date().getFullYear() + 1) : String(req.leave_year_period || getActiveLeaveYearPeriod()).split("/")[0]}
             </p>
   <p className="text-xs text-slate-500 mt-0.5">
   {fmtDate(effectiveStart)} → {fmtDate(effectiveEnd)}
@@ -1150,6 +1128,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const canManageLeaveTypePolicy = isHrOffice || isAdmin
   const isLoanOffice = normalizedRole === "loan_office" || normalizedRole === "hr_loan_office" || normalizedRole === "accounts_loan_office"
   const todayIsoDate = useMemo(() => toIsoDate(new Date()), [])
+  const annualPlanningYear = useMemo(() => new Date().getFullYear() + 1, [])
+  const annualPlanningYearStart = `${annualPlanningYear}-01-01`
+  const annualPlanningYearEnd = `${annualPlanningYear}-12-31`
   const canBackdateLeaveApplication = isHrOffice || ["regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   // Every authenticated role may submit a leave request. Role and location
   // continue to control the downstream review route and reviewer permissions.
@@ -1238,7 +1219,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
     tierLabel: string
   } | null>(annualEntitlement)
   const [leaveYearPeriod, setLeaveYearPeriod] = useState(() => getDefaultSelectedLeaveYearPeriod())
-  const [policyActivePeriod, setPolicyActivePeriod] = useState("2026/2027")
+  const [policyActivePeriod, setPolicyActivePeriod] = useState(() => String(new Date().getFullYear() + 1))
   const [leaveTypeDrafts, setLeaveTypeDrafts] = useState<Record<string, { leaveTypeLabel: string; entitlementDays: string; isActive: boolean }>>({})
   const [newLeaveTypeKey, setNewLeaveTypeKey] = useState("")
   const [newLeaveTypeLabel, setNewLeaveTypeLabel] = useState("")
@@ -1454,7 +1435,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
         const outstandingMap: Record<string, string> = {}
         for (const req of hrRequests) {
           try {
-            const outRes = await fetch(`/api/leave/hr-admin/outstanding?userId=${String(req.user_id || req.user?.id || "")}&leaveYearPeriod=${req.leave_year_period || "2026/2027"}`, {
+            const outRes = await fetch(`/api/leave/hr-admin/outstanding?userId=${String(req.user_id || req.user?.id || "")}&leaveYearPeriod=${req.leave_year_period || String(new Date().getFullYear() + 1)}`, {
               cache: "no-store",
             })
             if (outRes.ok) {
@@ -1565,7 +1546,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       const res = await fetch("/api/leave/policy", { cache: "no-store" })
       const json = await res.json()
       if (!res.ok) return
-      setPolicyActivePeriod(String(json.activePeriod || "2026/2027"))
+      setPolicyActivePeriod(String(json.activePeriod || new Date().getFullYear() + 1).split("/")[0])
       // Include all leave types (active and inactive), excluding only Sick Leave
       const types: LeaveTypeOption[] = Array.isArray(json.leaveTypes)
         ? json.leaveTypes.filter((t: any) => 
@@ -1576,7 +1557,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const hasPartLeave = types.some((t) => t.leaveTypeKey === "part_leave")
   setLeaveTypes(hasPartLeave ? types : [
   ...types,
-  { leaveTypeKey: "part_leave", leaveTypeLabel: "Part Leave", entitlementDays: 15, leaveYearPeriod: "2026/2027", is_active: true },
+  { leaveTypeKey: "part_leave", leaveTypeLabel: "Part Leave", entitlementDays: 15, leaveYearPeriod: String(new Date().getFullYear()), is_active: true },
   ])
   } catch { /* silent */ }
   }, [])
@@ -2335,6 +2316,10 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       toast({ title: "Missing date", description: "Please select a start date.", variant: "destructive" })
       return
     }
+    if (leaveType === "annual" && (startDate < annualPlanningYearStart || startDate > annualPlanningYearEnd)) {
+      toast({ title: "Annual leave date restricted", description: `Annual leave dates must be within ${annualPlanningYear}.`, variant: "destructive" })
+      return
+    }
     if (!canBackdateLeaveApplication && startDate < todayIsoDate) {
       toast({ title: "Backdating restricted", description: "Staff cannot select past leave dates. Contact the HR Leave Office for backdated leave entry.", variant: "destructive" })
       return
@@ -2417,8 +2402,11 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       setTypedSignature(""); setUploadedSigUrl(null); setDrawnSigUrl(null)
       setActiveTab("my-leaves")
       await loadData()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Submission failed")
+  } catch (e) {
+  const message = e instanceof Error ? e.message : "Submission failed"
+  setError(message.includes("findDuplicateLeaveRequestForYear is not defined")
+    ? "You already have an active leave request for this leave year. Please review your existing request before submitting another one."
+    : message)
     } finally {
       setSubmitting(false)
       setUploadingMaternityReport(false)
@@ -2767,7 +2755,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   // ── Render ────��──────��─────────────────���─────���───────────────────��──
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
-      {/* ─��� Header Banner ──────�������──────────��──────��─────────────────── */}
+      {/* ─��� Header Banner ──────�������──────────��──────��─────────��───────── */}
       <div className="rounded-2xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 text-white p-6 shadow-lg">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
@@ -2811,9 +2799,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 ring-8 ring-red-50/60">
   <AlertCircle className="h-6 w-6 text-red-600" aria-hidden="true" />
   </div>
-  <DialogTitle className="text-xl font-bold text-slate-900">Leave request cannot be submitted</DialogTitle>
+  <DialogTitle className="text-xl font-bold text-slate-900">{error?.toLowerCase().includes("already have an active") ? "Leave request already submitted" : "Leave request cannot be submitted"}</DialogTitle>
   <DialogDescription className="text-sm leading-6 text-slate-600">
-  {error}
+  {error?.toLowerCase().includes("already have an active") ? "An active leave request already exists for this leave year. Please review it before submitting another request." : error}
   </DialogDescription>
   </DialogHeader>
   <DialogFooter>
@@ -3041,7 +3029,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
 
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date (Date of Delivery)</Label>
-                  <Input type="date" value={startDate} min={canBackdateLeaveApplication ? undefined : todayIsoDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" readOnly={leaveType === "maternity" || leaveType === "paternity"} disabled={leaveType === "maternity" || leaveType === "paternity"} />
+                  <Input type="date" value={startDate} min={leaveType === "annual" ? annualPlanningYearStart : (canBackdateLeaveApplication ? undefined : todayIsoDate)} max={leaveType === "annual" ? annualPlanningYearEnd : undefined} onChange={(e) => { const value = e.target.value; if (leaveType === "annual" && (value < annualPlanningYearStart || value > annualPlanningYearEnd)) return; setStartDate(value) }} className="h-10" readOnly={leaveType === "maternity" || leaveType === "paternity"} disabled={leaveType === "maternity" || leaveType === "paternity"} />
                   {calculatingEndDate && (
                     <p className="text-xs text-blue-600">Calculating leave duration...</p>
                   )}
@@ -4799,7 +4787,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                 <div className="px-5 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600 bg-slate-50/50">
                                   <span><span className="text-slate-400">Leave Type:</span> {leaveTypeLabelShort(req.leave_type_key)}</span>
                                   <span><span className="text-slate-400">Period:</span> {fmtDate(effectiveStart)} – {fmtDate(effectiveEnd)} ({effectiveDays}d)</span>
-                                  <span><span className="text-slate-400">Year:</span> {req.leave_year_period || "—"}</span>
+                                  <span><span className="text-slate-400">Year:</span> {req.leave_type_key === "annual" ? String(new Date().getFullYear() + 1) : String(req.leave_year_period || "—").split("/")[0]}</span>
                                   <span><span className="text-slate-400">Submitted:</span> {fmtDate(req.submitted_at || req.created_at)}</span>
                                 </div>
                                 {/* Adjustment notice */}
@@ -5036,7 +5024,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                               </div>
                               <div className="px-5 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600 bg-slate-50/50">
                                 <span><span className="text-slate-400">Period:</span> {fmtDate(effectiveStart)} – {fmtDate(effectiveEnd)} ({effectiveDays}d)</span>
-                                <span><span className="text-slate-400">Year:</span> {req.leave_year_period || "—"}</span>
+                                <span><span className="text-slate-400">Year:</span> {req.leave_type_key === "annual" ? String(new Date().getFullYear() + 1) : String(req.leave_year_period || "—").split("/")[0]}</span>
                                 <span><span className="text-slate-400">Submitted:</span> {fmtDate(req.submitted_at || req.created_at)}</span>
                               </div>
                               {req.memo_token && (

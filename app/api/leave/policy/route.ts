@@ -24,8 +24,8 @@ function isSchemaMissing(error: any) {
 
 function fallbackPolicy() {
   return {
-    activePeriod: "2026",
-    periods: getLeaveYearPeriods(2026, 10),
+    activePeriod: String(new Date().getFullYear() + 1),
+    periods: getLeaveYearPeriods(new Date().getFullYear() + 1, 10),
     leaveTypes: DEFAULT_LEAVE_TYPES,
     readOnly: true,
   }
@@ -70,8 +70,9 @@ export async function GET() {
       return NextResponse.json(fallbackPolicy())
     }
 
-    const periods = getLeaveYearPeriods(2026, 10)
-  const activePeriodFromDb = rows.find((r: any) => r.is_active_period)?.leave_year_period || "2026"
+    const planningYear = new Date().getFullYear() + 1
+  const periods = getLeaveYearPeriods(planningYear, 10)
+  const activePeriodFromDb = rows.find((r: any) => r.is_active_period)?.leave_year_period || String(planningYear)
   const activePeriod = String(activePeriodFromDb).split("/")[0] || String(activePeriodFromDb)
   const periodMap = new Map(periods.map((p) => [p.value, { ...p, active: p.value === activePeriod }]))
   

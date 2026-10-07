@@ -13,7 +13,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { Clock, User, Calendar, CheckCircle2, XCircle, Loader2, AlertCircle } from 'lucide-react'
+import { Clock, User, Calendar, CheckCircle2, XCircle, Loader2, AlertCircle, Edit2 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import { useToast } from '@/hooks/use-toast'
 import { HODResumptionConfirmations } from './hod-resumption-confirmations'
 
@@ -50,6 +51,9 @@ export function HODReviewSection({ userDepartmentId, viewerRole }: HODReviewSect
   const [actingId, setActingId] = useState<string | null>(null)
   const [rejectTarget, setRejectTarget] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+  const [editTarget, setEditTarget] = useState<string | null>(null)
+  const [editStartDate, setEditStartDate] = useState('')
+  const [editEndDate, setEditEndDate] = useState('')
   const { toast } = useToast()
 
   useEffect(() => {
@@ -149,6 +153,49 @@ export function HODReviewSection({ userDepartmentId, viewerRole }: HODReviewSect
     const requestId = rejectTarget
     setRejectTarget(null)
     await submitDecision(requestId, 'reject', rejectReason.trim())
+  }
+
+  const openEditDatesDialog = (requestId: string, currentStartDate?: string, currentEndDate?: string) => {
+    setEditTarget(requestId)
+    setEditStartDate(currentStartDate ? new Date(currentStartDate).toISOString().split('T')[0] : '')
+    setEditEndDate(currentEndDate ? new Date(currentEndDate).toISOString().split('T')[0] : '')
+  }
+
+  const submitDateUpdate = async () => {
+    if (!editTarget || !editStartDate || !editEndDate) return
+
+    setActingId(editTarget)
+    try {
+      const res = await fetch('/api/leave/planning/hod-update-dates', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leave_plan_request_id: editTarget,
+          start_date: editStartDate,
+          end_date: editEndDate,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to update dates')
+      }
+
+      toast({
+        title: 'Success',
+        description: `Leave dates updated: ${editStartDate} to ${editEndDate}`,
+      })
+      setEditTarget(null)
+      fetchDepartmentRequests()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to update dates',
+        variant: 'destructive',
+      })
+    } finally {
+      setActingId(null)
+    }
   }
 
   if (loading) {
@@ -260,7 +307,16 @@ export function HODReviewSection({ userDepartmentId, viewerRole }: HODReviewSect
                 </div>
               </div>
 
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={actingId === req.id}
+                  onClick={() => openEditDatesDialog(req.id, req.start_date, req.end_date)}
+                >
+                  <Edit2 className="h-4 w-4 mr-1" />
+                  Edit Annual Leave Dates
+                </Button>
                 <Button
                   size="sm"
                   variant="default"
@@ -291,6 +347,55 @@ export function HODReviewSection({ userDepartmentId, viewerRole }: HODReviewSect
       })}
         </div>
       </div>
+
+      <Dialog open={Boolean(editTarget)} onOpenChange={(open) => !open && setEditTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Leave Dates</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Start Date</label>
+              <Input
+                type="date"
+                value={editStartDate}
+                onChange={(e) => setEditStartDate(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">End Date</label>
+              <Input
+                type="date"
+                value={editEndDate}
+                onChange={(e) => setEditEndDate(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!editStartDate || !editEndDate || actingId === editTarget}
+              onClick={submitDateUpdate}
+            >
+              {actingId === editTarget ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <Edit2 className="h-4 w-4 mr-1" />
+                  Update Dates
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(rejectTarget)} onOpenChange={(open) => !open && setRejectTarget(null)}>
         <DialogContent>

@@ -166,7 +166,7 @@ export async function GET(request: NextRequest) {
     if (approvedUserIds.length > 0) {
       const { data, error } = await admin
         .from("user_profiles")
-        .select("id, first_name, last_name, employee_id, position, department_id, assigned_location_id")
+        .select("id, first_name, last_name, employee_id, rank, position, department_id, assigned_location_id")
         .in("id", approvedUserIds)
       if (error) throw error
       profileRows = data || []
@@ -223,7 +223,7 @@ export async function GET(request: NextRequest) {
         user_id: String(row.user_id || ""),
         staff_name: [profileRow?.first_name, profileRow?.last_name].filter(Boolean).join(" ") || profileRow?.employee_id || "Staff",
         employee_id: profileRow?.employee_id || null,
-        rank: profileRow?.position || null,
+        rank: profileRow?.rank || profileRow?.position || null,
         leave_type_key: String(row?.leave_type_key || "annual"),
         start_date: effectiveStart,
         end_date: effectiveEnd,
