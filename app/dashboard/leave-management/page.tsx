@@ -20,7 +20,7 @@ export default async function LeaveManagementPage() {
   // Get user profile
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("role, department_id, assigned_location_id, region_id, first_name, last_name, departments(name, code)")
+    .select("role, department_id, assigned_location_id, region_id, first_name, last_name")
     .eq("id", user.id)
     .maybeSingle()
 
@@ -31,6 +31,13 @@ export default async function LeaveManagementPage() {
       </div>
     )
   }
+
+  // Load department metadata separately so a schema relationship change cannot
+  // crash the entire leave-management route before the review queue renders.
+  const { data: department } = profile.department_id
+    ? await admin.from("departments").select("name, code").eq("id", profile.department_id).maybeSingle()
+    : { data: null }
+  const profileWithDepartment = { ...profile, departments: department }
 
   // Fetch only essential fast queries first
   let staffRequests: any[] = []
@@ -306,7 +313,7 @@ export default async function LeaveManagementPage() {
       hod_decision: request.hod_decision,
       memo_token: request.memo_token || null,
       user_name: `${request.user_profiles?.first_name || profile.first_name || ""} ${request.user_profiles?.last_name || profile.last_name || ""}`.trim() || user.email || "Staff member",
-      department: (Array.isArray(profile.departments) ? profile.departments[0]?.name : (profile.departments as any)?.name) || "",
+      department: (profileWithDepartment.departments as any)?.name || "",
       location: userLocationName || "",
       rank: (request.user_profiles as any)?.position || "",
     }))
@@ -341,8 +348,8 @@ export default async function LeaveManagementPage() {
             userFirstName={(profile as any)?.first_name || null}
             userLastName={(profile as any)?.last_name || null}
             inactivityDays={Math.max(1, inactivityDays)}
-            userDepartmentName={(profile as any)?.departments?.name || null}
-            userDepartmentCode={(profile as any)?.departments?.code || null}
+            userDepartmentName={(profileWithDepartment as any)?.departments?.name || null}
+            userDepartmentCode={(profileWithDepartment as any)?.departments?.code || null}
             userLocationName={userLocationName}
             hasHodLinkage={hasHodLinkage}
             isAssignedHod={isAssignedHod}
