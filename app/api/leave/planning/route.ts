@@ -896,9 +896,12 @@ export async function GET(request: NextRequest) {
 
       const { data: requests, error: reqError } = await officeQuery
 
-      let allRegionalRequests: any[] = []
-      if (isAdmin || (isRegionalHr && regionalScopedStaffIds.length > 0)) {
-        let allRequestsQuery = admin
+      // Admins already received the complete request set from officeQuery.
+      // Re-fetching the same wide relation tree here doubled the Supabase
+      // payload and caused Leave Center to fail with `TypeError: fetch failed`.
+      let allRegionalRequests: any[] = isAdmin ? requests || [] : []
+      if (!isAdmin && isRegionalHr && regionalScopedStaffIds.length > 0) {
+        const { data: regionalRows, error: regionalRowsError } = await admin
           .from("leave_plan_requests")
           .select(`
             *,
@@ -909,15 +912,10 @@ export async function GET(request: NextRequest) {
               geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
             )
           `)
+          .eq("workflow_route", "regional")
+          .in("user_id", regionalScopedStaffIds)
           .order("created_at", { ascending: false })
 
-        if (!isAdmin) {
-          allRequestsQuery = allRequestsQuery
-            .eq("workflow_route", "regional")
-            .in("user_id", regionalScopedStaffIds)
-        }
-
-        const { data: regionalRows, error: regionalRowsError } = await allRequestsQuery
         if (regionalRowsError) throw regionalRowsError
         allRegionalRequests = regionalRows || []
       }
