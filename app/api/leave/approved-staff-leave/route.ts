@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
     // Find the staff pool this actor may act on.
     let staffQuery = supabase
       .from("user_profiles")
-      .select("id, first_name, last_name, position, employee_id, department_id, assigned_location_id, departments(name)")
+      .select("id, first_name, last_name, position, employee_id, department_id, assigned_location_id")
       .neq("id", userId)
 
     if (isDepartmentHead && scopeDepartmentId) {
@@ -105,6 +105,11 @@ export async function GET(request: NextRequest) {
     }
 
     const profileMap = new Map((staffProfiles || []).map((p: any) => [p.id, p]))
+    const departmentIds = [...new Set((staffProfiles || []).map((p: any) => p.department_id).filter(Boolean))]
+    const { data: departmentsData } = departmentIds.length
+      ? await supabase.from("departments").select("id, name").in("id", departmentIds)
+      : { data: [] as any[] }
+    const departmentMap = new Map((departmentsData || []).map((department: any) => [department.id, department.name]))
     const locationIds = [...new Set((staffProfiles || []).map((p: any) => p.assigned_location_id).filter(Boolean))]
     const { data: locationsData } = locationIds.length
       ? await supabase.from("geofence_locations").select("id, name, location_code").in("id", locationIds)
@@ -140,7 +145,7 @@ export async function GET(request: NextRequest) {
         user_id: String(req.user_id),
         user_name: `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Unknown",
         rank: profile.position || "",
-        department: (profile as any).departments?.name || "",
+        department: departmentMap.get(profile.department_id) || "",
         location: locationMap.get((profile as any).assigned_location_id) || "",
         leave_type: req.leave_type_key || "annual",
         start_date: req.adjusted_start_date || req.preferred_start_date,
