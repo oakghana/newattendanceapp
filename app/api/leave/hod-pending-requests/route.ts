@@ -28,8 +28,17 @@ export async function GET(_request: NextRequest) {
         submitted_at
       `)
       .or('hod_decision.is.null,hod_decision.eq.pending')
-      .in('status', ['pending_hod_review', 'pending_hod', 'pending', 'submitted', 'pending_review'])
-      .in('leave_type_key', ['annual', 'annual_leave'])
+      .in('status', [
+        'pending_hod_review',
+        'pending_hod',
+        'pending',
+        'submitted',
+        'pending_review',
+        'pending_regional_hr_office_review',
+        'pending_regional_hr_review',
+        'pending_regional_manager_approval',
+      ])
+      .in('leave_type_key', ['annual', 'annual_leave', 'annual leave'])
       .order('created_at', { ascending: true })
 
     if (error) {
@@ -37,7 +46,10 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const planRequests = (requests || []).filter((request: any) => request.workflow_route !== "regional")
+    // Keep both legacy HOD requests and regional requests in the same review
+    // endpoint. Regional managers use this queue for the final endorsement;
+    // excluding regional routes here made their requests disappear entirely.
+    const planRequests = requests || []
 
     // Enrich with user details, staff location, and HOD linkage details.
     // Query user_profiles + departments directly instead of the

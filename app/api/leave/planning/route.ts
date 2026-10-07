@@ -700,11 +700,12 @@ async function fetchHrOfficeAnalytics(admin: any) {
       created_at,
       is_archived,
       user:user_profiles!leave_plan_requests_user_id_fkey (
-        id,
-        first_name,
-        last_name,
-        employee_id,
-        departments(name, code),
+  id,
+  first_name,
+  last_name,
+  employee_id,
+  position,
+  departments(name, code),
         geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
       )
     `)
@@ -858,7 +859,7 @@ export async function GET(request: NextRequest) {
         .select(`
           *,
           user:user_profiles!leave_plan_requests_user_id_fkey (
-            id, first_name, last_name, employee_id,
+            id, first_name, last_name, employee_id, position,
             departments(name, code),
             assigned_location_id, region_id,
             geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
@@ -894,30 +895,61 @@ export async function GET(request: NextRequest) {
         officeQuery = officeQuery.in("user_id", regionalScopedStaffIds.length ? regionalScopedStaffIds : ["00000000-0000-0000-0000-000000000000"])
       }
 
-      const { data: requests, error: reqError } = await officeQuery
+      let requests: any[] | null = null
+      let reqError: any = null
+      try {
+        const result = await officeQuery
+        requests = result.data || []
+        reqError = result.error
+        if (reqError) {
+          throw reqError
+        }
+      } catch (error) {
+        // A large nested PostgREST response can surface as a generic
+        // `TypeError: fetch failed` before Supabase returns a structured error.
+        // Retry with the request rows only so Leave Center remains usable; the
+        // reviewer queues still use the explicit user/location filters above.
+        console.error("[v0] Leave planning nested query failed; retrying without profile embed", error)
+        try {
+          let fallbackQuery = admin
+            .from("leave_plan_requests")
+            .select("*")
+            .order("created_at", { ascending: false })
+          if (!includeArchived) fallbackQuery = fallbackQuery.eq("is_archived", false)
+          if (isRegionalHr) {
+            fallbackQuery = fallbackQuery
+              .eq("workflow_route", "regional")
+              .in("status", ["pending_regional_hr_office_review", "pending_regional_hr_review", "pending_regional_manager_approval"])
+              .in("user_id", regionalScopedStaffIds.length ? regionalScopedStaffIds : ["00000000-0000-0000-0000-000000000000"])
+          }
+          const fallbackResult = await fallbackQuery
+          requests = fallbackResult.data || []
+          reqError = fallbackResult.error
+        } catch (fallbackError) {
+          reqError = fallbackError
+        }
+      }
 
-      let allRegionalRequests: any[] = []
-      if (isAdmin || (isRegionalHr && regionalScopedStaffIds.length > 0)) {
-        let allRequestsQuery = admin
+      // Admins already received the complete request set from officeQuery.
+      // Re-fetching the same wide relation tree here doubled the Supabase
+      // payload and caused Leave Center to fail with `TypeError: fetch failed`.
+      let allRegionalRequests: any[] = isAdmin ? requests || [] : []
+      if (!isAdmin && isRegionalHr && regionalScopedStaffIds.length > 0) {
+        const { data: regionalRows, error: regionalRowsError } = await admin
           .from("leave_plan_requests")
           .select(`
             *,
             user:user_profiles!leave_plan_requests_user_id_fkey (
-              id, first_name, last_name, employee_id,
+              id, first_name, last_name, employee_id, position,
               departments(name, code),
               assigned_location_id, region_id,
               geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
             )
           `)
+          .eq("workflow_route", "regional")
+          .in("user_id", regionalScopedStaffIds)
           .order("created_at", { ascending: false })
 
-        if (!isAdmin) {
-          allRequestsQuery = allRequestsQuery
-            .eq("workflow_route", "regional")
-            .in("user_id", regionalScopedStaffIds)
-        }
-
-        const { data: regionalRows, error: regionalRowsError } = await allRequestsQuery
         if (regionalRowsError) throw regionalRowsError
         allRegionalRequests = regionalRows || []
       }
@@ -933,11 +965,30 @@ export async function GET(request: NextRequest) {
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
 
-      const analytics = await fetchHrOfficeAnalytics(admin)
+      let analytics: any = {
+        totals: { outstanding_requests: 0, approved_total: 0, staff_on_leave_now: 0, staff_yet_to_enjoy: 0, staff_completed_leave: 0, completed_leave_requests: 0 },
+        outstanding_by_status: [],
+        leave_type_breakdown: [],
+        location_ranking: [],
+        current_leave_roster: [],
+        records: [],
+        daily_leave_counts: [],
+        monthly_leave_counts: [],
+      }
+      try {
+        analytics = await fetchHrOfficeAnalytics(admin)
+      } catch (analyticsError) {
+        console.error("[v0] Leave planning analytics unavailable; continuing with empty analytics", analyticsError)
+      }
 
       // Fetch staff leave history so HR office can review prior leave taken
       const requestUserIds = Array.from(new Set((requests || []).map((r: any) => String(r.user_id || r.user?.id || "")).filter(Boolean)))
-      const staffHistoryByUser = await fetchStaffLeaveHistory(admin, requestUserIds)
+      let staffHistoryByUser: Record<string, any[]> = {}
+      try {
+        staffHistoryByUser = await fetchStaffLeaveHistory(admin, requestUserIds)
+      } catch (historyError) {
+        console.error("[v0] Leave planning staff history unavailable; continuing without history", historyError)
+      }
 
       // Fetch outstanding leave balances for all staff with pending requests
       // Get current and previous leave year periods

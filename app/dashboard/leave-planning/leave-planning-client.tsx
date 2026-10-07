@@ -631,37 +631,44 @@ function downloadLeaveAnalyticsCsv(rows: LeaveAnalyticsRecord[], fileName: strin
   URL.revokeObjectURL(url)
 }
 
-function downloadLeaveRequestsCsv(rows: any[], fileName: string) {
-  const headers = ["Staff Name", "Employee ID", "Rank", "Department", "Location", "Leave Type", "Start Date", "End Date", "Days", "Status", "Submitted At"]
+async function downloadLeaveRequestsExcel(rows: any[], fileName: string, sheetName = "Leave Requests") {
+  const XLSX = await import("xlsx")
   const body = rows.map((r: any) => {
-    const user = r?.user || r?.leave_plan_request?.user
     const req = r?.leave_plan_request || r
-    return [
-      [user?.first_name, user?.last_name].filter(Boolean).join(" ") || String(r?.staff_name || ""),
-      String(user?.employee_id || ""),
-      String(user?.rank || req?.rank || ""),
-      String(user?.departments?.name || user?.department_name || req?.department_name || ""),
-      String(user?.geofence_locations?.name || user?.location_name || req?.location_name || ""),
-      leaveTypeLabelShort(String(req?.leave_type_key || "")),
-      String(req?.adjusted_start_date || req?.preferred_start_date || ""),
-      String(req?.adjusted_end_date || req?.preferred_end_date || ""),
-      String(req?.adjusted_days || req?.requested_days || ""),
-      getStatusLabel(String(req?.status || ""), Boolean(req?.memo_reference_locked)),
-      req?.submitted_at ? fmtDate(req.submitted_at) : req?.created_at ? fmtDate(req.created_at) : "",
-    ]
+    const user = r?.user || req?.user
+    return {
+      "Staff Name": [user?.first_name, user?.last_name].filter(Boolean).join(" ") || String(r?.staff_name || req?.staff_name || ""),
+      "Employee ID": String(user?.employee_id || req?.employee_id || ""),
+      Rank: String(
+        user?.rank ||
+        user?.position ||
+        user?.job_title ||
+        user?.jobTitle ||
+        req?.rank ||
+        req?.position ||
+        req?.job_title ||
+        req?.jobTitle ||
+        "",
+      ),
+      Department: String(user?.departments?.name || user?.department_name || req?.department_name || ""),
+      Location: String(user?.geofence_locations?.name || user?.location_name || req?.location_name || ""),
+      "Leave Type": leaveTypeLabelShort(String(req?.leave_type_key || "")),
+      "Start Date": String(req?.adjusted_start_date || req?.preferred_start_date || ""),
+      "End Date": String(req?.adjusted_end_date || req?.preferred_end_date || ""),
+      Days: Number(req?.adjusted_days || req?.requested_days || 0),
+      Status: getStatusLabel(String(req?.status || ""), Boolean(req?.memo_reference_locked)),
+      "Review Decision": r?.leave_plan_request ? String(r?.decision || "") : "",
+      "Reviewer Note": r?.leave_plan_request ? String(r?.recommendation || "") : "",
+      "Memo Reference": String(req?.memo_reference || req?.reference_number || ""),
+      "Submitted At": req?.submitted_at ? fmtDate(req.submitted_at) : req?.created_at ? fmtDate(req.created_at) : "",
+    }
   })
-  const csv = [headers, ...body]
-    .map((line) => line.map((cell) => `"${String(cell).replaceAll("\"", "\"\"")}"`).join(","))
-    .join("\n")
-  const blob = new Blob([csv], { type: "text/csv" })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement("a")
-  link.href = url
-  link.download = fileName
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
+  const columns = ["Staff Name", "Employee ID", "Rank", "Department", "Location", "Leave Type", "Start Date", "End Date", "Days", "Status", "Review Decision", "Reviewer Note", "Memo Reference", "Submitted At"]
+  const worksheet = XLSX.utils.json_to_sheet(body, { header: columns })
+  worksheet["!cols"] = columns.map((col) => ({ wch: Math.min(40, Math.max(col.length + 2, ...body.map((row: any) => String(row[col] ?? "").length + 2))) }))
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31))
+  XLSX.writeFile(workbook, fileName)
 }
 
 async function downloadLeaveAnalyticsPdf(rows: LeaveAnalyticsRecord[], fileName: string, title: string) {
@@ -2072,6 +2079,16 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
     return rows
   }, [hodPendingReviews, hodLocationFilter, hodDeptFilter])
 
+  const hodAllReviewsFiltered: any[] = useMemo(() => {
+    return hodAssignedReviews.filter((r: any) => {
+      if (!r?.leave_plan_request) return false
+      const u = r.leave_plan_request.user || r.user
+      const loc = String(u?.geofence_locations?.name || u?.location_name || "")
+      const dept = String(u?.departments?.name || u?.department_name || "")
+      return (hodLocationFilter === "all" || loc === hodLocationFilter) && (hodDeptFilter === "all" || dept === hodDeptFilter)
+    })
+  }, [hodAssignedReviews, hodLocationFilter, hodDeptFilter])
+
   const hrApproverQueue: any[] = useMemo(() => {
     // If the dedicated HR approver API returned data, use it — it includes all statuses
     // (pending, hr_approved, hr_rejected) so the sub-tabs can work correctly.
@@ -2253,6 +2270,26 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
 
     return rows
   }, [hrOfficeQueue, hrOfficeSearch, hrOfficeSortBy, hrOfficeStatusFilter, hrOfficeLocationFilter, hrOfficeDeptFilter])
+
+  const hrOfficeExportRows: any[] = useMemo(() => {
+    if (!data) return []
+    const search = hrOfficeSearch.trim().toLowerCase()
+    const rows = ((isRegionalHr ? data.allRequests : data.requests) || []).filter((r: any) => {
+      const loc = String(r?.user?.geofence_locations?.name || r?.user?.location_name || r?.location_name || "")
+      const rank = String(r?.user?.rank || r?.rank || "")
+      const dept = String(r?.user?.departments?.name || r?.user?.department_name || r?.department_name || "")
+      if (hrOfficeLocationFilter !== "all" && loc !== hrOfficeLocationFilter) return false
+      if (hrOfficeRankFilter !== "all" && rank !== hrOfficeRankFilter) return false
+      if (hrOfficeDeptFilter !== "all" && dept !== hrOfficeDeptFilter) return false
+      if (search) {
+        const haystack = [fmtName(r.user), r?.user?.employee_id, leaveTypeLabelShort(String(r?.leave_type_key || "")), getStatusLabel(String(r?.status || ""))]
+          .map((v) => String(v || "").toLowerCase())
+        if (!haystack.some((v) => v.includes(search))) return false
+      }
+      return true
+    })
+    return rows.sort((a: any, b: any) => new Date(String(b?.created_at || 0)).getTime() - new Date(String(a?.created_at || 0)).getTime())
+  }, [data, isRegionalHr, hrOfficeSearch, hrOfficeLocationFilter, hrOfficeRankFilter, hrOfficeDeptFilter])
 
   const hrOfficeVisibleRows = useMemo(() => {
     const start = (hrOfficePage - 1) * hrOfficePageSize
@@ -2737,7 +2774,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
     const t: { value: string; label: string; Icon: any; count?: number }[] = []
     if (canSelfApply) t.push({ value: "my-leaves", label: "Request", Icon: CalendarDays, count: myRequests.length })
     if (canSelfApply) t.push({ value: "apply", label: editingId ? "Edit Request" : "Apply", Icon: Plus })
-    if (isHod || isAdmin) t.push({ value: "hod-review", label: normalizedRole === "regional_manager" ? "Regional Manager Review" : "HOD Review", Icon: UserCheck, count: hodAssignedReviews.length })
+    if (isHod || isAdmin) t.push({ value: "hod-review", label: normalizedRole === "regional_manager" ? "Regional Manager Review" : "HOD Review", Icon: UserCheck, count: hodPendingReviews.length })
     // HR Executive HOD Review tab: for HR managers (manager_hr, director_hr) who are NOT also HODs
   if (isHrOffice && !isRegionalHr && !isHod && !isAdmin) t.push({ value: "hr-exec-hod-review", label: "HOD Review", Icon: UserCheck, count: hodReviewRequests.length })
   if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: isRegionalHr ? "Regional Leave Office" : "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
@@ -2750,9 +2787,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
     if (isHrApprover || isAdmin) t.push({ value: "hr-approval-queue", label: "Approval Queue", Icon: ClipboardList, count: (hrApproverData?.requests || []).length })
     if (canSeeAllRequests && !isRegionalHr) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.requests || []).length })
     return t
-  }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hodReviewRequests.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests, normalizedRole])
+  }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodPendingReviews.length, hodReviewRequests.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests, normalizedRole])
 
-  // ── Render ────��──────��─────────────────���─────���───────────────────��──
+  // ── Render ────��──────��─────────────────���─────���────────────────������──��──
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
       {/* ─��� Header Banner ──────�������──────────��──────��─────────��───────── */}
@@ -3181,8 +3218,16 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                       {allLeaveDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <Button size="sm" variant="outline" onClick={() => downloadLeaveRequestsCsv(hodPendingReviewsFiltered, "hod-pending-reviews.csv")}>
-                    <Download className="w-3 h-3 mr-1" /> Export CSV
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => downloadLeaveRequestsExcel(
+                      hodAllReviewsFiltered,
+                      `${normalizedRole === "regional_manager" ? "regional-manager" : "hod"}-reviews-${new Date().toISOString().slice(0, 10)}.xlsx`,
+                      normalizedRole === "regional_manager" ? "Regional Manager Reviews" : "HOD Reviews",
+                    )}
+                  >
+                    <Download className="w-3 h-3 mr-1" /> Export Excel ({hodAllReviewsFiltered.length})
                   </Button>
                   <span className="w-full text-xs text-slate-500 sm:ml-auto sm:w-auto">{hodPendingReviewsFiltered.length} of {hodPendingReviews.length} shown</span>
                 </div>
@@ -3191,7 +3236,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                   if (!req) return null
                   const rId = review.id
                   const action = hodAction[rId]
-                  const annualRegionalManagerHold = normalizedRole === "regional_manager" && String(req.workflow_route || "").toLowerCase() === "regional" && ["annual", "annual_leave"].includes(String(req.leave_type_key || "").toLowerCase())
+                  const isRegionalRoute = String(req.workflow_route || "").toLowerCase() === "regional"
+                  const annualRegionalManagerHold = normalizedRole === "regional_manager" && isRegionalRoute && ["annual", "annual_leave"].includes(String(req.leave_type_key || "").toLowerCase())
+                  const canAct = !isRegionalRoute || normalizedRole === "regional_manager"
                   return (
                     <Card key={rId} className="border shadow-sm">
                       <CardContent className="p-5">
@@ -3378,8 +3425,20 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                       {allLeaveDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <Button size="sm" variant="outline" onClick={() => downloadLeaveRequestsCsv(hodReviewRequests, "hod-review-requests.csv")}>
-                    <Download className="w-3 h-3 mr-1" /> Export CSV
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => downloadLeaveRequestsExcel(
+                      hodReviewRequests.filter((r: any) => {
+                        const loc = hrExecHodLocationFilter === "all" ? true : String(r.user?.location?.name || "") === hrExecHodLocationFilter
+                        const dept = hrExecHodDeptFilter === "all" ? true : String(r.user?.departments?.name || "") === hrExecHodDeptFilter
+                        return loc && dept
+                      }),
+                      `hod-review-requests-${new Date().toISOString().slice(0, 10)}.xlsx`,
+                      "HOD Reviews",
+                    )}
+                  >
+                    <Download className="w-3 h-3 mr-1" /> Export Excel
                   </Button>
                   <span className="w-full text-xs text-slate-500 sm:ml-auto sm:w-auto">{hodReviewRequests.filter((r: any) => {
                     const loc = hrExecHodLocationFilter === "all" ? true : String(r.user?.location?.name || "") === hrExecHodLocationFilter
@@ -3634,8 +3693,16 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                         <SelectItem value="longest">Longest leave days</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button size="sm" variant="outline" onClick={() => downloadLeaveRequestsCsv(hrOfficeFilteredQueue, "hr-office-queue.csv")}>
-                      <Download className="w-3 h-3 mr-1" /> Export CSV
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => downloadLeaveRequestsExcel(
+                        hrOfficeExportRows,
+                        `${isRegionalHr ? "regional-leave-office" : "hr-leave-office"}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+                        isRegionalHr ? "Regional Leave Office" : "HR Leave Office",
+                      )}
+                    >
+                      <Download className="w-3 h-3 mr-1" /> Export Excel ({hrOfficeExportRows.length})
                     </Button>
                   </div>
                 </div>
@@ -5270,8 +5337,12 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                       <p className="text-sm font-semibold text-slate-800">All Leave Requests</p>
                       <p className="text-xs text-slate-500 mt-0.5">{allRequestsFiltered.length} of {(data?.requests || []).length} total</p>
                     </div>
-                    <Button size="sm" variant="outline" onClick={() => downloadLeaveRequestsCsv(allRequestsFiltered, "all-leave-requests.csv")}>
-                      <Download className="w-3 h-3 mr-1" /> Export CSV
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => downloadLeaveRequestsExcel(allRequestsFiltered, `all-leave-requests-${new Date().toISOString().slice(0, 10)}.xlsx`, "All Leave Requests")}
+                    >
+                      <Download className="w-3 h-3 mr-1" /> Export Excel
                     </Button>
                   </div>
                   <div className="flex flex-wrap items-end gap-2">

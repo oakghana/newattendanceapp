@@ -50,6 +50,10 @@ interface LeaveRequest {
   hod_decision?: string
   created_at?: string
   staff_category?: string
+  pending_hod_name?: string | null
+  pending_hr_office_name?: string | null
+  pending_regional_hr_name?: string | null
+  pending_regional_manager_name?: string | null
 }
 
 interface ConfirmationModalState {
@@ -367,6 +371,11 @@ export function AllRequestsViewSection() {
                       </div>
                     </div>
 
+                    <div className="rounded-md border border-blue-100 bg-blue-50/60 px-2.5 py-2 text-xs text-blue-900">
+                      <span className="font-medium">Pending with: </span>
+                      {req.status === 'pending_regional_manager_approval' ? (req.pending_regional_manager_name || "Regional Manager") : (req.pending_regional_hr_name || req.pending_hr_office_name || req.pending_hod_name || req.pending_regional_manager_name || "Not assigned")}
+                    </div>
+
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                       <div className="flex items-center gap-1">
                         <span className="text-slate-500 text-[11px]">Staff check-in:</span>
@@ -453,6 +462,7 @@ export function AllRequestsViewSection() {
                   <TableHead className="whitespace-nowrap">End Date</TableHead>
                   <TableHead className="whitespace-nowrap">Status</TableHead>
                   <TableHead className="whitespace-nowrap">HOD Review</TableHead>
+                  <TableHead className="whitespace-nowrap">Pending With</TableHead>
                   <TableHead className="text-center whitespace-nowrap">Staff Confirmed</TableHead>
                   <TableHead className="text-center whitespace-nowrap">HOD Confirmed</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Action</TableHead>
@@ -499,6 +509,9 @@ export function AllRequestsViewSection() {
                       <TableCell className="whitespace-nowrap">{endDate}</TableCell>
                       <TableCell className="whitespace-nowrap">{getStatusBadge(req.status)}</TableCell>
                       <TableCell className="whitespace-nowrap">{getHodStatusBadge(hodStatus)}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <span className="font-medium text-blue-900">{req.status === 'pending_regional_manager_approval' ? (req.pending_regional_manager_name || "Regional Manager") : (req.pending_regional_hr_name || req.pending_hr_office_name || req.pending_hod_name || req.pending_regional_manager_name || "Not assigned")}</span>
+                      </TableCell>
                       <TableCell className="text-center whitespace-nowrap">
                         {isStaffCheckedIn ? (
                           <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-xs">

@@ -4,7 +4,6 @@ import { LeaveManagementPageWrapper } from "@/components/leave/leave-management-
 import { isExcludedLocation, resolveSelfLeaveRoute } from "@/lib/hr-workflow"
 import { Suspense } from "react"
 
-
 export default async function LeaveManagementPage() {
   const supabase = await createClient()
   const admin = await createAdminClient()
@@ -21,7 +20,7 @@ export default async function LeaveManagementPage() {
   // Get user profile
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("role, department_id, assigned_location_id, region_id, first_name, last_name, departments(name, code)")
+    .select("role, department_id, assigned_location_id, region_id, first_name, last_name")
     .eq("id", user.id)
     .maybeSingle()
 
@@ -32,6 +31,13 @@ export default async function LeaveManagementPage() {
       </div>
     )
   }
+
+  // Load department metadata separately so a schema relationship change cannot
+  // crash the entire leave-management route before the review queue renders.
+  const { data: department } = profile.department_id
+    ? await admin.from("departments").select("name, code").eq("id", profile.department_id).maybeSingle()
+    : { data: null }
+  const profileWithDepartment = { ...profile, departments: department }
 
   // Fetch only essential fast queries first
   let staffRequests: any[] = []
@@ -155,7 +161,7 @@ export default async function LeaveManagementPage() {
           .eq("hod_user_id", user.id)
         const staffIds = Array.from(new Set((hodLinks || []).map((row: any) => row.staff_user_id).filter(Boolean)))
       // Query direct request assignment even when legacy linkage tables are empty.
-      if (staffIds.length >= 0) {
+      {
         const requestSelect = "id, user_id, hod_user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, workflow_route, workflow_stage, created_at, hod_decision, memo_token, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id)"
         const baseHodQuery = (query: any) => query
           .or("workflow_route.is.null,workflow_route.eq.legacy")
@@ -163,16 +169,16 @@ export default async function LeaveManagementPage() {
           .or("hod_decision.is.null,hod_decision.eq.pending")
           .order("created_at", { ascending: true })
           .limit(100)
-        const [{ data: linkedRequests }, { data: directlyAssignedRequests }] = await Promise.all([
-          baseHodQuery(
-            admin.from("leave_plan_requests").select(requestSelect).in("user_id", staffIds),
-          ),
-          baseHodQuery(
-            admin.from("leave_plan_requests").select(requestSelect).eq("hod_user_id", user.id),
-          ),
-        ])
+        const linkedRequests = staffIds.length > 0
+          ? (await baseHodQuery(
+              admin.from("leave_plan_requests").select(requestSelect).in("user_id", staffIds),
+            )).data || []
+          : []
+        const directlyAssignedRequests = (await baseHodQuery(
+          admin.from("leave_plan_requests").select(requestSelect).eq("hod_user_id", user.id),
+        )).data || []
         const hodRequests = Array.from(new Map(
-          [...(linkedRequests || []), ...(directlyAssignedRequests || [])].map((request: any) => [request.id, request]),
+          [...linkedRequests, ...directlyAssignedRequests].map((request: any) => [request.id, request]),
         ).values())
         const hodLocationIds = Array.from(new Set((hodRequests || []).map((request: any) => request.user_profiles?.assigned_location_id).filter(Boolean)))
         const { data: hodLocations } = hodLocationIds.length
@@ -307,7 +313,7 @@ export default async function LeaveManagementPage() {
       hod_decision: request.hod_decision,
       memo_token: request.memo_token || null,
       user_name: `${request.user_profiles?.first_name || profile.first_name || ""} ${request.user_profiles?.last_name || profile.last_name || ""}`.trim() || user.email || "Staff member",
-      department: (Array.isArray(profile.departments) ? profile.departments[0]?.name : (profile.departments as any)?.name) || "",
+      department: (profileWithDepartment.departments as any)?.name || "",
       location: userLocationName || "",
       rank: (request.user_profiles as any)?.position || "",
     }))
@@ -342,8 +348,8 @@ export default async function LeaveManagementPage() {
             userFirstName={(profile as any)?.first_name || null}
             userLastName={(profile as any)?.last_name || null}
             inactivityDays={Math.max(1, inactivityDays)}
-            userDepartmentName={(profile as any)?.departments?.name || null}
-            userDepartmentCode={(profile as any)?.departments?.code || null}
+            userDepartmentName={(profileWithDepartment as any)?.departments?.name || null}
+            userDepartmentCode={(profileWithDepartment as any)?.departments?.code || null}
             userLocationName={userLocationName}
             hasHodLinkage={hasHodLinkage}
             isAssignedHod={isAssignedHod}
