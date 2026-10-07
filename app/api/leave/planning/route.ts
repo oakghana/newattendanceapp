@@ -900,6 +900,9 @@ export async function GET(request: NextRequest) {
         const result = await officeQuery
         requests = result.data || []
         reqError = result.error
+        if (reqError) {
+          throw reqError
+        }
       } catch (error) {
         // A large nested PostgREST response can surface as a generic
         // `TypeError: fetch failed` before Supabase returns a structured error.
@@ -961,11 +964,30 @@ export async function GET(request: NextRequest) {
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
 
-      const analytics = await fetchHrOfficeAnalytics(admin)
+      let analytics: any = {
+        totals: { outstanding_requests: 0, approved_total: 0, staff_on_leave_now: 0, staff_yet_to_enjoy: 0, staff_completed_leave: 0, completed_leave_requests: 0 },
+        outstanding_by_status: [],
+        leave_type_breakdown: [],
+        location_ranking: [],
+        current_leave_roster: [],
+        records: [],
+        daily_leave_counts: [],
+        monthly_leave_counts: [],
+      }
+      try {
+        analytics = await fetchHrOfficeAnalytics(admin)
+      } catch (analyticsError) {
+        console.error("[v0] Leave planning analytics unavailable; continuing with empty analytics", analyticsError)
+      }
 
       // Fetch staff leave history so HR office can review prior leave taken
       const requestUserIds = Array.from(new Set((requests || []).map((r: any) => String(r.user_id || r.user?.id || "")).filter(Boolean)))
-      const staffHistoryByUser = await fetchStaffLeaveHistory(admin, requestUserIds)
+      let staffHistoryByUser: Record<string, any[]> = {}
+      try {
+        staffHistoryByUser = await fetchStaffLeaveHistory(admin, requestUserIds)
+      } catch (historyError) {
+        console.error("[v0] Leave planning staff history unavailable; continuing without history", historyError)
+      }
 
       // Fetch outstanding leave balances for all staff with pending requests
       // Get current and previous leave year periods
