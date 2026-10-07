@@ -47,7 +47,14 @@ export async function GET(request: NextRequest) {
       memo_draft_subject,
       memo_draft_body,
       memo_subject,
-      memo_body
+      memo_body,
+      hod_reviewer_id,
+      hod_reviewer_name,
+      hr_office_reviewer_id,
+      hr_office_reviewer_name,
+      regional_hr_office_user_id,
+      regional_manager_user_id,
+      regional_manager_id
     `, { count: "exact" })
 
     if (userId) query = query.eq("user_id", userId)
@@ -155,6 +162,24 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const reviewerIds = [...new Set((planRequests || []).flatMap((request: any) => [
+      request.hod_reviewer_id,
+      request.hr_office_reviewer_id,
+      request.regional_hr_office_user_id,
+      request.regional_manager_user_id,
+      request.regional_manager_id,
+    ]).filter(Boolean))]
+    const reviewerMap: Record<string, string> = {}
+    if (reviewerIds.length > 0) {
+      const { data: reviewers } = await supabase
+        .from("user_profiles")
+        .select("id, first_name, last_name, position")
+        .in("id", reviewerIds)
+      for (const reviewer of reviewers || []) {
+        reviewerMap[reviewer.id] = `${reviewer.first_name || ""} ${reviewer.last_name || ""}`.trim() || reviewer.position || "Assigned reviewer"
+      }
+    }
+
     // Attach resumption state to the leave-plan request. Older records may not
     // have leave_request_id populated, so retain a user/date fallback match.
     const confirmationMap: Record<string, any> = {}
@@ -227,6 +252,10 @@ export async function GET(request: NextRequest) {
         hr_approver_name: resolvedHrName,
         hr_approver_position: hrApprover?.position || null,
         hr_approver_signature_data_url: resolvedSignature,
+        pending_hod_name: reviewerMap[req.hod_reviewer_id] || req.hod_reviewer_name || null,
+        pending_hr_office_name: reviewerMap[req.hr_office_reviewer_id] || req.hr_office_reviewer_name || null,
+        pending_regional_hr_name: reviewerMap[req.regional_hr_office_user_id] || null,
+        pending_regional_manager_name: reviewerMap[req.regional_manager_user_id || req.regional_manager_id] || null,
       }
     })
 
