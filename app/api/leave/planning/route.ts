@@ -1076,10 +1076,46 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false })
 
     if (profile.assigned_location_id) {
+      const { data: officerLocation, error: officerLocationError } = await admin
+        .from("geofence_locations")
+        .select("id, name")
+        .eq("id", profile.assigned_location_id)
+        .maybeSingle()
+      if (officerLocationError) throw officerLocationError
+
+      const locationIds = new Set<string>([String(profile.assigned_location_id)])
+      const { data: childLocations, error: childLocationsError } = await admin
+        .from("geofence_locations")
+        .select("id")
+        .eq("parent_location_id", profile.assigned_location_id)
+      if (childLocationsError) throw childLocationsError
+      for (const location of childLocations || []) locationIds.add(String(location.id))
+
+      // Some legacy facility records (for example KAASE INLAND PORT) were
+      // created as separate regional-office rows without parent_location_id.
+      // Include only same-base-name locations so the DO sees that district's
+      // staff without gaining access to unrelated locations.
+      const baseName = String(officerLocation?.name || "")
+        .replace(/\\b(district|district office)\\b/gi, "")
+        .trim()
+        .split(/\\s+/)[0]
+        ?.toLowerCase()
+      if (baseName) {
+        const { data: relatedLocations, error: relatedLocationsError } = await admin
+          .from("geofence_locations")
+          .select("id, name")
+          .ilike("name", `${baseName}%`)
+        if (relatedLocationsError) throw relatedLocationsError
+        for (const location of relatedLocations || []) {
+          const normalized = String(location.name || "").toLowerCase()
+          if (normalized.startsWith(`${baseName} `)) locationIds.add(String(location.id))
+        }
+      }
+
       const { data: districtStaff, error: districtStaffError } = await admin
         .from("user_profiles")
         .select("id")
-        .eq("assigned_location_id", profile.assigned_location_id)
+        .in("assigned_location_id", Array.from(locationIds))
         .neq("id", user.id)
       if (districtStaffError) throw districtStaffError
       const ids = (districtStaff || []).map((row: any) => String(row.id)).filter(Boolean)
