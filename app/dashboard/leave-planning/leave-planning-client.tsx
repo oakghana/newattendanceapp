@@ -1096,7 +1096,7 @@ function HrExecRejectForm({
   )
 }
 
-// ─── Main Component ──────────���───────────────────���───────────────────────────�����
+// ─── Main Component ──────────���───────────────────�����───────────────────────────�����
 // SINGLE SOURCE OF TRUTH for the annual leave End Date shown/saved anywhere in the
 // HR Office review panel. Uses the exact same formula as the printed memo
 // (lib/annual-leave-calculator): granted = entitlement - enjoyed + outstanding + travel,
@@ -1132,8 +1132,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole) || isRegionalHr
   const isHrApprover = isHrApproverRole(normalizedRole, profile.departmentName, profile.departmentCode) && !isHrOffice
   const isAdmin = normalizedRole === "admin"
+  const isDistrictOfficer = normalizedRole === "district_officer"
   const canViewLeaveAnalytics = isHrApprover || isHrOffice || isAdmin
-  const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin
+  const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin || isDistrictOfficer
   const canManageLeaveTypePolicy = isHrOffice || isAdmin
   const isLoanOffice = normalizedRole === "loan_office" || normalizedRole === "hr_loan_office" || normalizedRole === "accounts_loan_office"
   const todayIsoDate = useMemo(() => toIsoDate(new Date()), [])
@@ -2787,6 +2788,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   if (isHrOffice && !isRegionalHr && !isHod && !isAdmin) t.push({ value: "hr-exec-hod-review", label: "HOD Review", Icon: UserCheck, count: hodReviewRequests.length })
   if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: isRegionalHr ? "Regional Leave Office" : "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
   if (isRegionalHr) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.allRequests || []).length })
+  if (isDistrictOfficer) t.push({ value: "all-requests", label: "District Leave Review", Icon: LayoutList, count: (data?.allRequests || []).length })
   if (isHrApprover || isAdmin) {
       const deferRecallPending = [...hrExecDeferRecallData.deferments, ...hrExecDeferRecallData.recalls]
         .filter((r: any) => !r.hr_office_decision && !r.hr_decision).length
@@ -2795,7 +2797,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
     if (isHrApprover || isAdmin) t.push({ value: "hr-approval-queue", label: "Approval Queue", Icon: ClipboardList, count: (hrApproverData?.requests || []).length })
     if (canSeeAllRequests && !isRegionalHr) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.requests || []).length })
     return t
-  }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodPendingReviews.length, hodReviewRequests.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests, normalizedRole])
+  }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, isDistrictOfficer, canSeeAllRequests, editingId, myRequests.length, hodPendingReviews.length, hodReviewRequests.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests, normalizedRole])
 
   // ── Render ────��──────��─────────────────���─────���────────────────������──��──
   return (
