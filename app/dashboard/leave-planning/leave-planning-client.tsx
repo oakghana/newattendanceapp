@@ -1096,7 +1096,7 @@ function HrExecRejectForm({
   )
 }
 
-// ─── Main Component ──────────���───────────────────�������───────────────────────────�����
+// ─── Main Component ──────────���───────────────────���������───────────────────────────�����
 // SINGLE SOURCE OF TRUTH for the annual leave End Date shown/saved anywhere in the
 // HR Office review panel. Uses the exact same formula as the printed memo
 // (lib/annual-leave-calculator): granted = entitlement - enjoyed + outstanding + travel,
@@ -1265,6 +1265,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const [districtDateEditing, setDistrictDateEditing] = useState<string | null>(null)
   const [districtStart, setDistrictStart] = useState<Record<string, string>>({})
   const [districtEnd, setDistrictEnd] = useState<Record<string, string>>({})
+  const [districtReason, setDistrictReason] = useState<Record<string, string>>({})
   const [districtSaving, setDistrictSaving] = useState<string | null>(null)
   const [officeHolidayDays, setOfficeHolidayDays] = useState<Record<string, string>>({})
   const [officeTravelDays, setOfficeTravelDays] = useState<Record<string, string>>({})
@@ -2532,10 +2533,12 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const saveDistrictDates = async (requestId: string) => {
     const start = districtStart[requestId]
     const end = districtEnd[requestId]
+    const reason = districtReason[requestId]?.trim()
     if (!start || !end) { toast({ title: "Dates required", description: "Enter both start and end dates.", variant: "destructive" }); return }
+    if (!reason) { toast({ title: "Reason required", description: "Explain why the leave dates are being changed.", variant: "destructive" }); return }
     setDistrictSaving(requestId)
     try {
-      const res = await fetch("/api/leave/planning/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leave_plan_request_id: requestId, action: "district_adjust_dates", adjusted_preferred_start_date: start, adjusted_preferred_end_date: end }) })
+      const res = await fetch("/api/leave/planning/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leave_plan_request_id: requestId, action: "district_adjust_dates", adjusted_preferred_start_date: start, adjusted_preferred_end_date: end, adjustment_reason: reason }) })
       const payload = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(payload.error || "Could not save adjusted dates")
       toast({ title: "Leave dates updated", description: "The staff portal and Regional HR queue now show the revised dates." })
@@ -5490,6 +5493,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                           <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-blue-100 bg-blue-50/50 p-3">
                             <div><Label className="text-xs">Start date</Label><Input type="date" className="h-8 w-40 bg-white" value={districtStart[req.id] || ""} onChange={(e) => setDistrictStart((p) => ({ ...p, [req.id]: e.target.value }))} /></div>
                             <div><Label className="text-xs">End date</Label><Input type="date" className="h-8 w-40 bg-white" value={districtEnd[req.id] || ""} onChange={(e) => setDistrictEnd((p) => ({ ...p, [req.id]: e.target.value }))} /></div>
+                            <div className="min-w-64 flex-1"><Label className="text-xs">Reason for change <span className="text-red-600">*</span></Label><Textarea className="min-h-8 bg-white" placeholder="Explain why the dates are changing" value={districtReason[req.id] || ""} onChange={(e) => setDistrictReason((p) => ({ ...p, [req.id]: e.target.value }))} /></div>
                             <Button size="sm" className="h-8" disabled={districtSaving === req.id} onClick={() => saveDistrictDates(req.id)}>{districtSaving === req.id ? "Saving…" : "Save dates"}</Button>
                             <Button size="sm" variant="ghost" className="h-8" onClick={() => setDistrictDateEditing(null)}>Cancel</Button>
                           </div>
