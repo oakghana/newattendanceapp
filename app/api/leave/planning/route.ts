@@ -1059,8 +1059,83 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    if (isStaffRole(role)) {
-      const { data, error } = await admin
+  // District Officers receive a read-only copy of every leave request filed
+  // by staff assigned to their district, regardless of leave type or workflow.
+  if (role === "district_officer") {
+    let districtQuery = admin
+      .from("leave_plan_requests")
+      .select(`
+        *,
+        user:user_profiles!leave_plan_requests_user_id_fkey (
+          id, first_name, last_name, employee_id, position,
+          departments(name, code), assigned_location_id, region_id,
+          geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
+        )
+      `)
+      .eq("is_archived", false)
+      .order("created_at", { ascending: false })
+
+    if (profile.assigned_location_id) {
+      const { data: officerLocation, error: officerLocationError } = await admin
+        .from("geofence_locations")
+        .select("id, name")
+        .eq("id", profile.assigned_location_id)
+        .maybeSingle()
+      if (officerLocationError) throw officerLocationError
+
+      const locationIds = new Set<string>([String(profile.assigned_location_id)])
+      const { data: childLocations, error: childLocationsError } = await admin
+        .from("geofence_locations")
+        .select("id")
+        .eq("parent_location_id", profile.assigned_location_id)
+      if (childLocationsError) throw childLocationsError
+      for (const location of childLocations || []) locationIds.add(String(location.id))
+
+      // Some legacy facility records (for example KAASE INLAND PORT) were
+      // created as separate regional-office rows without parent_location_id.
+      // Include only same-base-name locations so the DO sees that district's
+      // staff without gaining access to unrelated locations.
+      const baseName = String(officerLocation?.name || "")
+        .replace(/\\b(district|district office)\\b/gi, "")
+        .trim()
+        .split(/\\s+/)[0]
+        ?.toLowerCase()
+      if (baseName) {
+        const { data: relatedLocations, error: relatedLocationsError } = await admin
+          .from("geofence_locations")
+          .select("id, name")
+          .ilike("name", `${baseName}%`)
+        if (relatedLocationsError) throw relatedLocationsError
+        for (const location of relatedLocations || []) {
+          const normalized = String(location.name || "").toLowerCase()
+          if (normalized.startsWith(`${baseName} `)) locationIds.add(String(location.id))
+        }
+      }
+
+      const { data: districtStaff, error: districtStaffError } = await admin
+        .from("user_profiles")
+        .select("id")
+        .in("assigned_location_id", Array.from(locationIds))
+        .neq("id", user.id)
+      if (districtStaffError) throw districtStaffError
+      const ids = (districtStaff || []).map((row: any) => String(row.id)).filter(Boolean)
+      districtQuery = districtQuery.in("user_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"])
+    } else {
+      districtQuery = districtQuery.in("user_id", ["00000000-0000-0000-0000-000000000000"])
+    }
+
+    const { data: districtRequests, error: districtRequestsError } = await districtQuery
+    if (districtRequestsError) throw districtRequestsError
+    return NextResponse.json({
+      mode: "district_officer",
+      requests: districtRequests || [],
+      allRequests: districtRequests || [],
+      myRequests: [],
+    })
+  }
+
+  if (isStaffRole(role)) {
+  const { data, error } = await admin
         .from("leave_plan_requests")
         .select("*")
         .eq("user_id", user.id)
