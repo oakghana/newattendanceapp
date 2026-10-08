@@ -1067,7 +1067,7 @@ export async function GET(request: NextRequest) {
       .select(`
         *,
         user:user_profiles!leave_plan_requests_user_id_fkey (
-          id, first_name, last_name, employee_id, position, rank,
+          id, first_name, last_name, employee_id, position,
           departments(name, code), assigned_location_id, region_id,
           geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
         )
