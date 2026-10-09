@@ -27,6 +27,7 @@ import {
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { StaffLeaveHistory } from "@/components/leave/staff-leave-history"
 import { HODResumptionConfirmations } from "@/components/leave/hod-resumption-confirmations"
+import { YetToApplyList } from "@/components/leave/yet-to-apply-list"
 import { TrackedMemoEditor } from "@/components/memo/tracked-memo-editor"
 import {
   isHrApproverRole,
@@ -942,7 +943,7 @@ const EMPTY_HR_ANALYTICS = {
   monthly_leave_counts: [],
   records: [],
 }
-// ─── Leave Request Card ───────────────────────────────────────────────���───────
+// ─── Leave Request Card ───��───────────────────────────────────────────���───────
 function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
   req: any; onEdit?: () => void; onDelete?: () => void; onViewMemo?: () => void; canEdit: boolean
 }) {
@@ -1096,7 +1097,7 @@ function HrExecRejectForm({
   )
 }
 
-// ─── Main Component ──────────���───────────────────���������───────────────────────────�����
+// ─── Main Component ──────────���───────────────────�����������───────────────────────────�����
 // SINGLE SOURCE OF TRUTH for the annual leave End Date shown/saved anywhere in the
 // HR Office review panel. Uses the exact same formula as the printed memo
 // (lib/annual-leave-calculator): granted = entitlement - enjoyed + outstanding + travel,
@@ -1169,6 +1170,8 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const [allRequestsDeptFilter, setAllRequestsDeptFilter] = useState("all")
   const [hodLocationFilter, setHodLocationFilter] = useState("all")
   const [hodDeptFilter, setHodDeptFilter] = useState("all")
+  const [hodReviewView, setHodReviewView] = useState<"requests" | "yet-to-apply">("requests")
+  const [allRequestsView, setAllRequestsView] = useState<"requests" | "yet-to-apply">("requests")
   const [hrOfficeLocationFilter, setHrOfficeLocationFilter] = useState("all")
   const [hrOfficeDeptFilter, setHrOfficeDeptFilter] = useState("all")
   const [hrOfficeRankFilter, setHrOfficeRankFilter] = useState("all")
@@ -3221,6 +3224,33 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
 
           {/* HOD Review ���──────────────────────────────────────────��─���── */}
           {activeTab === "hod-review" && <div>
+            <div className="mb-4 inline-flex rounded-lg border border-slate-200 bg-white p-1" role="tablist" aria-label="Review views">
+              <Button
+                size="sm"
+                role="tab"
+                aria-selected={hodReviewView === "requests"}
+                variant={hodReviewView === "requests" ? "default" : "ghost"}
+                onClick={() => setHodReviewView("requests")}
+              >
+                Assigned Reviews
+              </Button>
+              <Button
+                size="sm"
+                role="tab"
+                aria-selected={hodReviewView === "yet-to-apply"}
+                variant={hodReviewView === "yet-to-apply" ? "default" : "ghost"}
+                onClick={() => setHodReviewView("yet-to-apply")}
+              >
+                Yet to Apply
+              </Button>
+            </div>
+            {hodReviewView === "yet-to-apply" ? (
+              <YetToApplyList
+                scope="hod"
+                title="Staff yet to apply for annual leave"
+                description="Staff linked to you who have not submitted an annual leave request for the upcoming leave year."
+              />
+            ) : <>
             {/* HOD review notice */}
             <div className="mb-4 px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg flex items-start gap-3">
               <Info className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />
@@ -3422,7 +3452,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                 </CardContent>
               </Card>
             )}
-
+            </>}
           </div>}
 
           {/* HR Executive HOD Review ──────────────────────────────────── */}
@@ -5362,7 +5392,35 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
           </div>}
 
           {canSeeAllRequests && activeTab === "all-requests" && <div>
-            <div className="space-y-4">
+            {isRegionalHr && (
+              <div className="mb-4 inline-flex rounded-lg border border-slate-200 bg-white p-1" role="tablist" aria-label="Request views">
+                <Button
+                  size="sm"
+                  role="tab"
+                  aria-selected={allRequestsView === "requests"}
+                  variant={allRequestsView === "requests" ? "default" : "ghost"}
+                  onClick={() => setAllRequestsView("requests")}
+                >
+                  All Requests
+                </Button>
+                <Button
+                  size="sm"
+                  role="tab"
+                  aria-selected={allRequestsView === "yet-to-apply"}
+                  variant={allRequestsView === "yet-to-apply" ? "default" : "ghost"}
+                  onClick={() => setAllRequestsView("yet-to-apply")}
+                >
+                  Yet to Apply
+                </Button>
+              </div>
+            )}
+            {isRegionalHr && allRequestsView === "yet-to-apply" ? (
+              <YetToApplyList
+                scope="regional"
+                title="Regional staff yet to apply for annual leave"
+                description="All active staff in your regional office and its districts who have not submitted an annual leave request for the upcoming leave year."
+              />
+            ) : <div className="space-y-4">
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -5517,7 +5575,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                   ))}
                 </div>
               )}
-            </div>
+            </div>}
           </div>}
         </div>
 
