@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { sendWebPushToUsers } from "@/lib/web-push"
-import { chunk, resolveYetToApply, type YetToApplyScope } from "@/lib/yet-to-apply"
+import { chunk, isYetToApplyScope, resolveYetToApply, type YetToApplyScope } from "@/lib/yet-to-apply"
 
 export const REMINDER_NOTIFICATION_TYPE = "annual_leave_reminder"
 const COOLDOWN_MS = 30 * 60 * 1000
 const MAX_MESSAGE_LENGTH = 400
 
 function senderLabelFor(scope: YetToApplyScope) {
+  if (scope === "admin") return "System Administrator"
   return scope === "regional" ? "Regional HR Office" : "Head of Department"
 }
 
@@ -21,8 +22,8 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => ({}))
     const scope = String(body?.scope || "") as YetToApplyScope
-    if (scope !== "regional" && scope !== "hod") {
-      return NextResponse.json({ error: "scope must be 'regional' or 'hod'" }, { status: 400 })
+    if (!isYetToApplyScope(scope)) {
+      return NextResponse.json({ error: "scope must be 'regional', 'hod' or 'admin'" }, { status: 400 })
     }
 
     const requestedIds: string[] | null = Array.isArray(body?.staff_ids)

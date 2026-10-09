@@ -72,7 +72,7 @@ async function downloadStaffExcel(rows: YetToApplyStaff[], year: string, sheetNa
 }
 
 interface YetToApplyListProps {
-  scope: "regional" | "hod"
+  scope: "regional" | "hod" | "admin"
   title: string
   description: string
 }

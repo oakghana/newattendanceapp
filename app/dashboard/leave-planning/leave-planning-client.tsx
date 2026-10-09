@@ -3528,7 +3528,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
             </>}
           </div>}
 
-          {/* HR Executive HOD Review ──────────────────────────────────── */}
+          {/* HR Executive HOD Review ─────────────────────────��────────── */}
           {activeTab === "hr-exec-hod-review" && <div>
             <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm font-semibold text-blue-900 flex items-center gap-2">
@@ -5465,7 +5465,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
           </div>}
 
           {canSeeAllRequests && activeTab === "all-requests" && <div>
-            {isRegionalHr && (
+            {(isRegionalHr || isAdmin) && (
               <div className="mb-4 inline-flex rounded-lg border border-slate-200 bg-white p-1" role="tablist" aria-label="Request views">
                 <Button
                   size="sm"
@@ -5487,12 +5487,20 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                 </Button>
               </div>
             )}
-            {isRegionalHr && allRequestsView === "yet-to-apply" ? (
-              <YetToApplyList
-                scope="regional"
-                title="Regional staff yet to apply for annual leave"
-                description="All active staff in your regional office and its districts who have not submitted an annual leave request for the upcoming leave year."
-              />
+            {(isRegionalHr || isAdmin) && allRequestsView === "yet-to-apply" ? (
+              isAdmin ? (
+                <YetToApplyList
+                  scope="admin"
+                  title="Staff yet to apply for annual leave"
+                  description="All active staff across every location and department who have not submitted an annual leave request for the upcoming leave year. Send a reminder and they will get a pop-up, a sound and a desktop notification."
+                />
+              ) : (
+                <YetToApplyList
+                  scope="regional"
+                  title="Regional staff yet to apply for annual leave"
+                  description="All active staff in your regional office and its districts who have not submitted an annual leave request for the upcoming leave year."
+                />
+              )
             ) : <div className="space-y-4">
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-col gap-3">
