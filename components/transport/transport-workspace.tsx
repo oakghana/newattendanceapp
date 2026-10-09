@@ -641,6 +641,26 @@ export function TransportWorkspace({
           badge: "Regional / District",
           onClick: () => setRequestOpen(true),
         },
+        ...(isRegionalHr || isRegionalManager
+          ? [
+              {
+                title: "Regional driver register",
+                description: "View every driver at your regional office and its linked districts, including those who have not yet submitted a license.",
+                icon: IdCard,
+                href: "/dashboard/transport/drivers",
+                cta: "Open driver register",
+                badge: "Regional / District",
+              },
+              {
+                title: "Regional fleet register",
+                description: "View every vehicle assigned to your regional office and its linked districts.",
+                icon: Truck,
+                href: "/dashboard/transport/fleet",
+                cta: "Open fleet register",
+                badge: "Regional / District",
+              },
+            ]
+          : []),
       ]
     : isActingHod
       ? [
@@ -777,16 +797,16 @@ export function TransportWorkspace({
                 </Link>
               </Button>
             )}
-            {(isTransportManager || canManage || isChiefDriver) && (
+            {(isTransportManager || canManage || isChiefDriver || isRegionalHr || isRegionalManager) && (
               <>
                 <Button variant="outline" className="bg-background/80" asChild>
                   <Link href="/dashboard/transport/drivers">
-                    <IdCard data-icon="inline-start" /> {isChiefDriver ? "Regional drivers" : "Drivers"}
+                    <IdCard data-icon="inline-start" /> {isTransportManager || canManage ? "Drivers" : "Regional drivers"}
                   </Link>
                 </Button>
                 <Button variant="outline" className="bg-background/80" asChild>
                   <Link href="/dashboard/transport/fleet">
-                    <Truck data-icon="inline-start" /> {isChiefDriver ? "Regional fleet" : "Fleet"}
+                    <Truck data-icon="inline-start" /> {isTransportManager || canManage ? "Fleet" : "Regional fleet"}
                   </Link>
                 </Button>
               </>
@@ -848,7 +868,7 @@ export function TransportWorkspace({
               <div>
                 <p className="font-medium">Regional visibility lock</p>
                 <p className="text-sm text-muted-foreground">
-                  You only see transport requests for {scopeLabel || "your assigned region"}. Approved regional requests can be downloaded from the register; other regions stay hidden.
+                  You only see transport requests, drivers and fleet for {scopeLabel || "your assigned region"} and its linked districts. Approved regional requests can be downloaded from the register; other regions stay hidden.
                 </p>
               </div>
             </div>
