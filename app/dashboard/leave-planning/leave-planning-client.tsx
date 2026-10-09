@@ -943,6 +943,78 @@ const EMPTY_HR_ANALYTICS = {
   monthly_leave_counts: [],
   records: [],
 }
+function DateChangeNotice({ req }: { req: any }) {
+  const { toast } = useToast()
+  const [localStatus, setLocalStatus] = useState<string | null>(null)
+  const [showConcern, setShowConcern] = useState(false)
+  const [note, setNote] = useState("")
+  const [saving, setSaving] = useState(false)
+  const status = localStatus || String(req.date_change_ack_status || "")
+  if (!status) return null
+
+  const respond = async (response: "acknowledged" | "concern") => {
+    setSaving(true)
+    try {
+      const res = await fetch("/api/leave/planning/date-change-ack", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leave_plan_request_id: req.id, response, note }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || "Could not save your response")
+      setLocalStatus(response)
+      setShowConcern(false)
+      toast({ title: response === "acknowledged" ? "Thanks, confirmed" : "Concern sent to your supervisor" })
+    } catch (e) {
+      toast({ title: "Could not save", description: e instanceof Error ? e.message : "Try again", variant: "destructive" })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Alert className="mt-3 border-amber-300 bg-amber-50 py-3">
+      <AlertCircle className="h-4 w-4 text-amber-600" />
+      <AlertDescription className="ml-1 space-y-2 text-xs text-amber-900">
+        <p>
+          <strong>Dates changed by {req.date_change_by_role || "your supervisor"}.</strong>{" "}
+          {req.date_change_original_start && req.date_change_original_end && (
+            <>You asked for {fmtDate(req.date_change_original_start)} to {fmtDate(req.date_change_original_end)}. </>
+          )}
+          The new dates stand.
+          {req.adjustment_reason ? <> Reason: {req.adjustment_reason}</> : null}
+        </p>
+        {status === "pending" && (
+          <>
+            {showConcern ? (
+              <div className="space-y-2">
+                <Textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  rows={2}
+                  placeholder="Briefly tell your supervisor your concern"
+                  className="bg-white text-xs"
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" disabled={saving} onClick={() => respond("concern")}>Send concern</Button>
+                  <Button size="sm" variant="ghost" disabled={saving} onClick={() => setShowConcern(false)}>Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Button size="sm" disabled={saving} onClick={() => respond("acknowledged")}>I am okay with these dates</Button>
+                <Button size="sm" variant="outline" disabled={saving} onClick={() => setShowConcern(true)}>I have a concern</Button>
+              </div>
+            )}
+          </>
+        )}
+        {status === "acknowledged" && <p className="font-medium text-emerald-700">You confirmed these dates.</p>}
+        {status === "concern" && <p className="font-medium">Your concern was sent. The supervisor dates still apply.</p>}
+      </AlertDescription>
+    </Alert>
+  )
+}
+
 // ─── Leave Request Card ───��───────────────────────────────────────────���───────
 function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
   req: any; onEdit?: () => void; onDelete?: () => void; onViewMemo?: () => void; canEdit: boolean
@@ -972,7 +1044,8 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
           </Badge>
         </div>
         <WorkflowStages status={req.status} />
-        {req.adjustment_reason && (
+        <DateChangeNotice req={req} />
+        {req.adjustment_reason && !req.date_change_ack_status && (
           <Alert className="mt-3 py-2 border-blue-200 bg-blue-50">
             <AlertCircle className="h-3 w-3 text-blue-600" />
             <AlertDescription className="text-xs text-blue-800 ml-1">
@@ -2541,10 +2614,10 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
     if (!reason) { toast({ title: "Reason required", description: "Explain why the leave dates are being changed.", variant: "destructive" }); return }
     setDistrictSaving(requestId)
     try {
-      const res = await fetch("/api/leave/planning/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leave_plan_request_id: requestId, action: "district_adjust_dates", adjusted_preferred_start_date: start, adjusted_preferred_end_date: end, adjustment_reason: reason }) })
+      const res = await fetch("/api/leave/planning/adjust-dates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leave_plan_request_id: requestId, start_date: start, end_date: end, reason }) })
       const payload = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(payload.error || "Could not save adjusted dates")
-      toast({ title: "Leave dates updated", description: "The staff portal and Regional HR queue now show the revised dates." })
+      toast({ title: "Leave dates updated", description: "The staff member has been notified. Your dates stand and now show everywhere." })
       setDistrictDateEditing(null)
       await loadData()
     } catch (error) { toast({ title: "Date update failed", description: error instanceof Error ? error.message : "Could not save adjusted dates", variant: "destructive" }) }

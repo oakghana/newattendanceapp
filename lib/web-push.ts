@@ -6,6 +6,8 @@ export type PushPayload = {
   body: string
   url?: string
   tag?: string
+  kind?: "leave-reminder" | "leave-date-change"
+  requireInteraction?: boolean
 }
 
 function configureWebPush() {

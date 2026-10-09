@@ -9,6 +9,7 @@ import { OfflineIndicator } from "@/components/ui/offline-indicator"
 import { PWAUpdateNotification } from "@/components/ui/pwa-update-notification"
 import { FloatingHomeButton } from "./floating-home-button"
 import { MobileBottomNav } from "./mobile-bottom-nav"
+import { LeaveReminderModal } from "@/components/leave/leave-reminder-modal"
 import { toast } from "@/hooks/use-toast"
 import { ToastAction } from "@/components/ui/toast"
 
@@ -235,6 +236,7 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
       <MobileBottomNav profile={profile} />
 
       <PWAUpdateNotification />
+      <LeaveReminderModal />
       <OfflineIndicator />
     </div>
   )

@@ -2,10 +2,21 @@
 
 import { useMemo, useState } from "react"
 import useSWR from "swr"
-import { Download, RefreshCw, Search, UserX, CheckCircle2 } from "lucide-react"
+import { toast } from "sonner"
+import { BellRing, Download, RefreshCw, Search, Send, UserX, CheckCircle2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
@@ -75,8 +86,51 @@ export function YetToApplyList({ scope, title, description }: YetToApplyListProp
   const [search, setSearch] = useState("")
   const [locationFilter, setLocationFilter] = useState("all")
   const [departmentFilter, setDepartmentFilter] = useState("all")
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [remindIds, setRemindIds] = useState<string[] | null>(null)
+  const [remindMessage, setRemindMessage] = useState("")
+  const [sending, setSending] = useState(false)
 
   const staff = data?.staff ?? []
+
+  const toggleSelected = (id: string) =>
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  const sendReminders = async () => {
+    if (!remindIds || remindIds.length === 0) return
+    setSending(true)
+    try {
+      const res = await fetch("/api/leave/yet-to-apply/remind", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope, staff_ids: remindIds, message: remindMessage.trim() || undefined }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || "Could not send reminders")
+      if (json.sent > 0) {
+        toast.success(`Reminder sent to ${json.sent} staff`, {
+          description:
+            json.skipped_recent > 0
+              ? `${json.skipped_recent} were reminded in the last 30 minutes and were skipped.`
+              : "They will see a pop-up and a desktop notification.",
+        })
+      } else {
+        toast.info(json.message || "Nobody to remind right now.")
+      }
+      setRemindIds(null)
+      setRemindMessage("")
+      setSelected(new Set())
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not send reminders")
+    } finally {
+      setSending(false)
+    }
+  }
 
   const locations = useMemo(
     () => Array.from(new Set(staff.map((s) => s.location_name).filter(Boolean))).sort(),
@@ -177,6 +231,17 @@ export function YetToApplyList({ scope, title, description }: YetToApplyListProp
         </Select>
         <Button
           size="sm"
+          disabled={filtered.length === 0}
+          onClick={() => {
+            const chosen = filtered.filter((s) => selected.has(s.id)).map((s) => s.id)
+            setRemindIds(chosen.length > 0 ? chosen : filtered.map((s) => s.id))
+          }}
+        >
+          <BellRing className="mr-1 h-3 w-3" aria-hidden="true" />
+          {selected.size > 0 ? `Remind selected (${selected.size})` : `Remind all (${filtered.length})`}
+        </Button>
+        <Button
+          size="sm"
           variant="outline"
           disabled={filtered.length === 0}
           onClick={() => downloadStaffExcel(filtered, data?.year ?? "", "Yet to Apply")}
@@ -214,6 +279,12 @@ export function YetToApplyList({ scope, title, description }: YetToApplyListProp
           {filtered.map((s) => (
             <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
               <div className="flex min-w-0 items-start gap-3">
+                <Checkbox
+                  checked={selected.has(s.id)}
+                  onCheckedChange={() => toggleSelected(s.id)}
+                  aria-label={`Select ${s.full_name}`}
+                  className="mt-0.5"
+                />
                 <UserX className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" aria-hidden="true" />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-slate-800">{s.full_name}</p>
@@ -224,19 +295,65 @@ export function YetToApplyList({ scope, title, description }: YetToApplyListProp
                   </p>
                 </div>
               </div>
-              {s.previous_request_status ? (
-                <Badge variant="outline" className="border-red-200 bg-red-50 text-xs text-red-700">
-                  Previous: {formatStatus(s.previous_request_status)}
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="border-amber-200 bg-amber-50 text-xs text-amber-700">
-                  Not applied
-                </Badge>
-              )}
+              <div className="flex items-center gap-2">
+                {s.previous_request_status ? (
+                  <Badge variant="outline" className="border-red-200 bg-red-50 text-xs text-red-700">
+                    Previous: {formatStatus(s.previous_request_status)}
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="border-amber-200 bg-amber-50 text-xs text-amber-700">
+                    Not applied
+                  </Badge>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2"
+                  onClick={() => setRemindIds([s.id])}
+                  aria-label={`Send reminder to ${s.full_name}`}
+                >
+                  <BellRing className="h-3 w-3" aria-hidden="true" />
+                </Button>
+              </div>
             </li>
           ))}
         </ul>
       )}
+
+      <Dialog open={remindIds !== null} onOpenChange={(next) => !next && !sending && setRemindIds(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Send reminder to {remindIds?.length ?? 0} staff
+            </DialogTitle>
+            <DialogDescription>
+              Each person gets a pop-up on their screen, a sound, and a desktop notification, even if they are not
+              signed in. The reminder disappears once they apply.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label htmlFor={`remind-message-${scope}`} className="text-sm font-medium text-slate-700">
+              Message (optional)
+            </label>
+            <Textarea
+              id={`remind-message-${scope}`}
+              value={remindMessage}
+              onChange={(e) => setRemindMessage(e.target.value.slice(0, 400))}
+              placeholder={`You have not yet submitted your ${data?.year ?? ""} annual leave request. Please submit it now.`}
+              rows={4}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" disabled={sending} onClick={() => setRemindIds(null)}>
+              Cancel
+            </Button>
+            <Button disabled={sending} onClick={sendReminders}>
+              <Send className="mr-2 h-4 w-4" aria-hidden="true" />
+              {sending ? "Sending..." : "Send reminder"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }
