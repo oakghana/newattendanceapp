@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
-import { chunk, normalizeRole, resolveYetToApply, type YetToApplyScope } from "@/lib/yet-to-apply"
+import { chunk, isYetToApplyScope, normalizeRole, resolveYetToApply, type YetToApplyScope } from "@/lib/yet-to-apply"
 
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url)
     const scope = (url.searchParams.get("scope") || "") as YetToApplyScope
-    if (scope !== "regional" && scope !== "hod") {
-      return NextResponse.json({ error: "scope must be 'regional' or 'hod'" }, { status: 400 })
+    if (!isYetToApplyScope(scope)) {
+      return NextResponse.json({ error: "scope must be 'regional', 'hod' or 'admin'" }, { status: 400 })
     }
 
     const supabase = await createClient()

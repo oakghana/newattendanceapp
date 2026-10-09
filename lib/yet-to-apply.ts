@@ -1,7 +1,11 @@
 import { isRegionalHrOfficerRole } from "@/lib/leave-planning"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
-export type YetToApplyScope = "regional" | "hod"
+export type YetToApplyScope = "regional" | "hod" | "admin"
+
+export function isYetToApplyScope(value: unknown): value is YetToApplyScope {
+  return value === "regional" || value === "hod" || value === "admin"
+}
 
 export const ANNUAL_LEAVE_KEYS = ["annual", "annual_leave", "annual leave"]
 
@@ -84,6 +88,23 @@ async function fetchProfilesByLocations(admin: any, locationIds: string[], selfI
   return rows
 }
 
+async function fetchAllActiveProfiles(admin: any, selfId: string) {
+  const rows: any[] = []
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await admin
+      .from("user_profiles")
+      .select(PROFILE_COLUMNS)
+      .neq("id", selfId)
+      .or("is_active.is.null,is_active.eq.true")
+      .order("id", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1)
+    if (error) throw error
+    rows.push(...(data || []))
+    if (!data || data.length < PAGE_SIZE) break
+  }
+  return rows
+}
+
 async function fetchProfilesByRegion(admin: any, regionId: string, selfId: string) {
   const rows: any[] = []
   for (let from = 0; ; from += PAGE_SIZE) {
@@ -135,7 +156,12 @@ export async function resolveYetToApply(
   const year = normalizeYear(yearInput, defaultPlanningYear())
   let staffRows: any[] = []
 
-  if (scope === "regional") {
+  if (scope === "admin") {
+    if (normalizeRole(profile.role) !== "admin") {
+      return { ok: false, status: 403, error: "Forbidden — requires Admin role" }
+    }
+    staffRows = await fetchAllActiveProfiles(admin, userId)
+  } else if (scope === "regional") {
     if (!isRegionalHrOfficerRole(profile.role)) {
       return { ok: false, status: 403, error: "Forbidden — requires Regional HR Office role" }
     }
