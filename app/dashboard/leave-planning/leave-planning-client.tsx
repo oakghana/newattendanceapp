@@ -28,6 +28,7 @@ import { SignaturePad } from "@/components/leave/signature-pad"
 import { StaffLeaveHistory } from "@/components/leave/staff-leave-history"
 import { HODResumptionConfirmations } from "@/components/leave/hod-resumption-confirmations"
 import { YetToApplyList } from "@/components/leave/yet-to-apply-list"
+import { DepartmentDateConflictNotice } from "@/components/leave/department-date-conflict-notice"
 import { TrackedMemoEditor } from "@/components/memo/tracked-memo-editor"
 import {
   isHrApproverRole,
@@ -3190,6 +3191,13 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                   </div>
                 )}
 
+                <DepartmentDateConflictNotice
+                  startDate={startDate}
+                  endDate={endDate}
+                  leaveType={leaveType}
+                  onUseSuggestedStart={(date) => { setStartDate(date); setEndDate(""); setCalculationResult(null) }}
+                />
+
                 {startDate && endDate && !calculatingEndDate && calculationResult && (
                   <div className="space-y-3">
                     {/* Top summary chips */}
@@ -3528,7 +3536,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
             </>}
           </div>}
 
-          {/* HR Executive HOD Review ─────────────────────────��────────── */}
+          {/* HR Executive HOD Review ─────────────────────────���────────── */}
           {activeTab === "hr-exec-hod-review" && <div>
             <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm font-semibold text-blue-900 flex items-center gap-2">
