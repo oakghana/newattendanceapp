@@ -302,27 +302,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Leave plan request not found." }, { status: 404 })
     }
 
-    if (action === "district_adjust_dates") {
-      if (role !== "district_officer" && !isAdmin) return NextResponse.json({ error: "Only the assigned District Officer can adjust these dates." }, { status: 403 })
-      const start = String(adjusted_preferred_start_date || "")
-      const end = String(adjusted_preferred_end_date || "")
-      const requestedDays = calculateRequestedDays(start, end)
-      const reason = String(adjustment_reason || "").trim()
-      if (!start || !end || requestedDays <= 0) return NextResponse.json({ error: "A valid start and end date are required." }, { status: 400 })
-      if (!reason) return NextResponse.json({ error: "A reason is required when changing leave dates." }, { status: 400 })
-      const staffProfile = Array.isArray((leavePlan as any).user_profiles) ? (leavePlan as any).user_profiles[0] : (leavePlan as any).user_profiles
-      const officerLocationId = String(profile.assigned_location_id || "")
-      const targetLocationId = String(staffProfile?.assigned_location_id || "")
-      const { data: officerLocation } = await admin.from("geofence_locations").select("name").eq("id", officerLocationId).maybeSingle()
-      const { data: targetLocation } = await admin.from("geofence_locations").select("name, parent_location_id").eq("id", targetLocationId).maybeSingle()
-      const base = String(officerLocation?.name || "").toLowerCase().split(/\\s+/)[0]
-      const sameDistrict = targetLocationId === officerLocationId || String(targetLocation?.parent_location_id || "") === officerLocationId || (base && String(targetLocation?.name || "").toLowerCase().startsWith(`${base} `))
-      if (!sameDistrict) return NextResponse.json({ error: "This request is outside your district." }, { status: 403 })
-      const { data: updated, error: updateError } = await admin.from("leave_plan_requests").update({ preferred_start_date: start, preferred_end_date: end, requested_days: requestedDays, adjustment_reason: reason, updated_at: new Date().toISOString() }).eq("id", leave_plan_request_id).select("id, preferred_start_date, preferred_end_date, requested_days").single()
-      if (updateError) throw updateError
-      return NextResponse.json({ success: true, request: updated })
-    }
-
     if (isSelfLeaveWorkflowRoute((leavePlan as any).workflow_route)) {
       return NextResponse.json({ error: "Self-leave requests do not require HOD, Regional HR, or Regional Manager endorsement." }, { status: 403 })
     }

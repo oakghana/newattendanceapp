@@ -27,6 +27,7 @@ import {
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { StaffLeaveHistory } from "@/components/leave/staff-leave-history"
 import { HODResumptionConfirmations } from "@/components/leave/hod-resumption-confirmations"
+import { YetToApplyList } from "@/components/leave/yet-to-apply-list"
 import { TrackedMemoEditor } from "@/components/memo/tracked-memo-editor"
 import {
   isHrApproverRole,
@@ -942,7 +943,79 @@ const EMPTY_HR_ANALYTICS = {
   monthly_leave_counts: [],
   records: [],
 }
-// ─── Leave Request Card ───────────────────────────────────────────────���───────
+function DateChangeNotice({ req }: { req: any }) {
+  const { toast } = useToast()
+  const [localStatus, setLocalStatus] = useState<string | null>(null)
+  const [showConcern, setShowConcern] = useState(false)
+  const [note, setNote] = useState("")
+  const [saving, setSaving] = useState(false)
+  const status = localStatus || String(req.date_change_ack_status || "")
+  if (!status) return null
+
+  const respond = async (response: "acknowledged" | "concern") => {
+    setSaving(true)
+    try {
+      const res = await fetch("/api/leave/planning/date-change-ack", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leave_plan_request_id: req.id, response, note }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || "Could not save your response")
+      setLocalStatus(response)
+      setShowConcern(false)
+      toast({ title: response === "acknowledged" ? "Thanks, confirmed" : "Concern sent to your supervisor" })
+    } catch (e) {
+      toast({ title: "Could not save", description: e instanceof Error ? e.message : "Try again", variant: "destructive" })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Alert className="mt-3 border-amber-300 bg-amber-50 py-3">
+      <AlertCircle className="h-4 w-4 text-amber-600" />
+      <AlertDescription className="ml-1 space-y-2 text-xs text-amber-900">
+        <p>
+          <strong>Dates changed by {req.date_change_by_role || "your supervisor"}.</strong>{" "}
+          {req.date_change_original_start && req.date_change_original_end && (
+            <>You asked for {fmtDate(req.date_change_original_start)} to {fmtDate(req.date_change_original_end)}. </>
+          )}
+          The new dates stand.
+          {req.adjustment_reason ? <> Reason: {req.adjustment_reason}</> : null}
+        </p>
+        {status === "pending" && (
+          <>
+            {showConcern ? (
+              <div className="space-y-2">
+                <Textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  rows={2}
+                  placeholder="Briefly tell your supervisor your concern"
+                  className="bg-white text-xs"
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" disabled={saving} onClick={() => respond("concern")}>Send concern</Button>
+                  <Button size="sm" variant="ghost" disabled={saving} onClick={() => setShowConcern(false)}>Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Button size="sm" disabled={saving} onClick={() => respond("acknowledged")}>I am okay with these dates</Button>
+                <Button size="sm" variant="outline" disabled={saving} onClick={() => setShowConcern(true)}>I have a concern</Button>
+              </div>
+            )}
+          </>
+        )}
+        {status === "acknowledged" && <p className="font-medium text-emerald-700">You confirmed these dates.</p>}
+        {status === "concern" && <p className="font-medium">Your concern was sent. The supervisor dates still apply.</p>}
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+// ─── Leave Request Card ───��───────────────────────────────────────────���───────
 function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
   req: any; onEdit?: () => void; onDelete?: () => void; onViewMemo?: () => void; canEdit: boolean
 }) {
@@ -971,7 +1044,8 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
           </Badge>
         </div>
         <WorkflowStages status={req.status} />
-        {req.adjustment_reason && (
+        <DateChangeNotice req={req} />
+        {req.adjustment_reason && !req.date_change_ack_status && (
           <Alert className="mt-3 py-2 border-blue-200 bg-blue-50">
             <AlertCircle className="h-3 w-3 text-blue-600" />
             <AlertDescription className="text-xs text-blue-800 ml-1">
@@ -1096,7 +1170,7 @@ function HrExecRejectForm({
   )
 }
 
-// ─── Main Component ──────────���───────────────────���������───────────────────────────�����
+// ─── Main Component ──────────���───────────────────�����������───────────────────────────�����
 // SINGLE SOURCE OF TRUTH for the annual leave End Date shown/saved anywhere in the
 // HR Office review panel. Uses the exact same formula as the printed memo
 // (lib/annual-leave-calculator): granted = entitlement - enjoyed + outstanding + travel,
@@ -1169,6 +1243,8 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const [allRequestsDeptFilter, setAllRequestsDeptFilter] = useState("all")
   const [hodLocationFilter, setHodLocationFilter] = useState("all")
   const [hodDeptFilter, setHodDeptFilter] = useState("all")
+  const [hodReviewView, setHodReviewView] = useState<"requests" | "yet-to-apply">("requests")
+  const [allRequestsView, setAllRequestsView] = useState<"requests" | "yet-to-apply">("requests")
   const [hrOfficeLocationFilter, setHrOfficeLocationFilter] = useState("all")
   const [hrOfficeDeptFilter, setHrOfficeDeptFilter] = useState("all")
   const [hrOfficeRankFilter, setHrOfficeRankFilter] = useState("all")
@@ -2538,10 +2614,10 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
     if (!reason) { toast({ title: "Reason required", description: "Explain why the leave dates are being changed.", variant: "destructive" }); return }
     setDistrictSaving(requestId)
     try {
-      const res = await fetch("/api/leave/planning/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leave_plan_request_id: requestId, action: "district_adjust_dates", adjusted_preferred_start_date: start, adjusted_preferred_end_date: end, adjustment_reason: reason }) })
+      const res = await fetch("/api/leave/planning/adjust-dates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leave_plan_request_id: requestId, start_date: start, end_date: end, reason }) })
       const payload = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(payload.error || "Could not save adjusted dates")
-      toast({ title: "Leave dates updated", description: "The staff portal and Regional HR queue now show the revised dates." })
+      toast({ title: "Leave dates updated", description: "The staff member has been notified. Your dates stand and now show everywhere." })
       setDistrictDateEditing(null)
       await loadData()
     } catch (error) { toast({ title: "Date update failed", description: error instanceof Error ? error.message : "Could not save adjusted dates", variant: "destructive" }) }
@@ -3221,6 +3297,33 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
 
           {/* HOD Review ���──────────────────────────────────────────��─���── */}
           {activeTab === "hod-review" && <div>
+            <div className="mb-4 inline-flex rounded-lg border border-slate-200 bg-white p-1" role="tablist" aria-label="Review views">
+              <Button
+                size="sm"
+                role="tab"
+                aria-selected={hodReviewView === "requests"}
+                variant={hodReviewView === "requests" ? "default" : "ghost"}
+                onClick={() => setHodReviewView("requests")}
+              >
+                Assigned Reviews
+              </Button>
+              <Button
+                size="sm"
+                role="tab"
+                aria-selected={hodReviewView === "yet-to-apply"}
+                variant={hodReviewView === "yet-to-apply" ? "default" : "ghost"}
+                onClick={() => setHodReviewView("yet-to-apply")}
+              >
+                Yet to Apply
+              </Button>
+            </div>
+            {hodReviewView === "yet-to-apply" ? (
+              <YetToApplyList
+                scope="hod"
+                title="Staff yet to apply for annual leave"
+                description="Staff linked to you who have not submitted an annual leave request for the upcoming leave year."
+              />
+            ) : <>
             {/* HOD review notice */}
             <div className="mb-4 px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg flex items-start gap-3">
               <Info className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />
@@ -3422,7 +3525,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                 </CardContent>
               </Card>
             )}
-
+            </>}
           </div>}
 
           {/* HR Executive HOD Review ──────────────────────────────────── */}
@@ -5362,7 +5465,35 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
           </div>}
 
           {canSeeAllRequests && activeTab === "all-requests" && <div>
-            <div className="space-y-4">
+            {isRegionalHr && (
+              <div className="mb-4 inline-flex rounded-lg border border-slate-200 bg-white p-1" role="tablist" aria-label="Request views">
+                <Button
+                  size="sm"
+                  role="tab"
+                  aria-selected={allRequestsView === "requests"}
+                  variant={allRequestsView === "requests" ? "default" : "ghost"}
+                  onClick={() => setAllRequestsView("requests")}
+                >
+                  All Requests
+                </Button>
+                <Button
+                  size="sm"
+                  role="tab"
+                  aria-selected={allRequestsView === "yet-to-apply"}
+                  variant={allRequestsView === "yet-to-apply" ? "default" : "ghost"}
+                  onClick={() => setAllRequestsView("yet-to-apply")}
+                >
+                  Yet to Apply
+                </Button>
+              </div>
+            )}
+            {isRegionalHr && allRequestsView === "yet-to-apply" ? (
+              <YetToApplyList
+                scope="regional"
+                title="Regional staff yet to apply for annual leave"
+                description="All active staff in your regional office and its districts who have not submitted an annual leave request for the upcoming leave year."
+              />
+            ) : <div className="space-y-4">
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -5517,7 +5648,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                   ))}
                 </div>
               )}
-            </div>
+            </div>}
           </div>}
         </div>
 
