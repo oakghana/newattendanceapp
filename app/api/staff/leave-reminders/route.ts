@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
-import { hasAppliedForYear } from "@/lib/yet-to-apply"
+import { hasAppliedForYear, isAnnualLeaveEligible } from "@/lib/yet-to-apply"
 
 const REMINDER_TYPE = "annual_leave_reminder"
 
@@ -13,6 +13,14 @@ export async function GET() {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ reminders: [] }, { status: 401 })
+
+    const { data: profile, error: profileError } = await admin
+      .from("user_profiles")
+      .select("role, position, staff_category, employment_type, employee_type")
+      .eq("id", user.id)
+      .maybeSingle()
+    if (profileError) throw profileError
+    if (!isAnnualLeaveEligible(profile || {})) return NextResponse.json({ reminders: [] })
 
     const { data: rows, error } = await admin
       .from("staff_notifications")
