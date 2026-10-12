@@ -1377,7 +1377,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ────���────────────────────────────────────────────────�����������������─
+  // ── Computed ────���─────────────────────────────────────────���──────�����������������─
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -2672,12 +2672,10 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       if (!continueWithoutReason) return
     }
 
-    if (isRegionalHr) {
-      if (!regionalMemoReference) {
-        toast({ title: "Official memo reference required", description: "Regional HR Office must enter the leave request memo number before forwarding it to the Regional Manager.", variant: "destructive" })
-        return
-      }
-      setOfficeSubmitting(requestId)
+  if (isRegionalHr) {
+    // The official memo reference is optional at Regional HR forwarding stage.
+    // HR Records can enter it later after the request completes approval.
+    setOfficeSubmitting(requestId)
       try {
         const res = await fetch("/api/leave/planning/review", {
           method: "POST",
