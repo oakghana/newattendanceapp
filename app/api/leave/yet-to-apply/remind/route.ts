@@ -8,8 +8,13 @@ const COOLDOWN_MS = 30 * 60 * 1000
 const MAX_MESSAGE_LENGTH = 400
 
 function senderLabelFor(scope: YetToApplyScope) {
-  if (scope === "admin") return "System Administrator"
+  if (scope === "admin") return "HR Department"
   return scope === "regional" ? "Regional HR Office" : "Head of Department"
+}
+
+function senderNameFor(scope: YetToApplyScope, sender: any, fallback: string) {
+  if (scope === "admin") return "The HR Department"
+  return `${sender.first_name || ""} ${sender.last_name || ""}`.trim() || fallback
 }
 
 export async function POST(request: NextRequest) {
@@ -67,8 +72,8 @@ export async function POST(request: NextRequest) {
     }
 
     const sender = resolution.senderProfile
-    const senderName = `${sender.first_name || ""} ${sender.last_name || ""}`.trim() || senderLabelFor(scope)
     const senderLabel = senderLabelFor(scope)
+    const senderName = senderNameFor(scope, sender, senderLabel)
     const year = resolution.year
     const message =
       customMessage ||
