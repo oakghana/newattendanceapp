@@ -273,11 +273,13 @@ export function AttendanceRecorder({
   const [localTodayAttendance, setLocalTodayAttendance] = useState(initialTodayAttendance)
   const [attendanceStateResolved, setAttendanceStateResolved] = useState(Boolean(initialTodayAttendance))
 
-  const checkoutDisplayLocation = localTodayAttendance
-    ? localTodayAttendance.is_remote_location === false || localTodayAttendance.different_checkout_location === false
-      ? localTodayAttendance.check_in_location_name || "Assigned premises"
-      : localTodayAttendance.check_out_location_name?.replace("Off‑Premises (reason provided)", "Off-Premises")
-    : null
+  const checkoutDisplayLocation = (() => {
+    const locationName = localTodayAttendance?.check_out_location_name?.trim()
+    if (!locationName) return null
+    if (/^off[-‑ ]premises(?: \(reason provided\))?$/i.test(locationName)) return null
+    if (/^(unknown location|location)$/i.test(locationName)) return null
+    return locationName
+  })()
   // Keep a ref always in sync so async closures see the latest value
   useEffect(() => { localTodayAttendanceRef.current = localTodayAttendance }, [localTodayAttendance])
   const [pendingDeviceSharingWarning, setPendingDeviceSharingWarning] = useState<string | null>(null)
@@ -3260,9 +3262,11 @@ export function AttendanceRecorder({
                   hour12: true,
                 })}
               </p>
-              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
-                📍 {checkoutDisplayLocation}
-              </p>
+              {checkoutDisplayLocation && (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                  {checkoutDisplayLocation}
+                </p>
+              )}
             </div>
 
             <div className="bg-white/50 dark:bg-gray-900/50 rounded-lg p-3">

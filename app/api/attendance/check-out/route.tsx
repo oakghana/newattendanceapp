@@ -875,11 +875,7 @@ export async function POST(request: NextRequest) {
         : willBeRemoteCheckout
           ? "remote_offpremises"
           : (qr_code_used ? "qr_code" : "gps"),
-      check_out_location_name: checkoutLocationData?.name || (auto_checkout
-        ? "Auto Check-out (Out of Range after 4 PM)"
-        : (willBeRemoteCheckout
-          ? (hasWorkedAtLeast8Hours ? "Off-Premises" : "Off‑Premises (reason provided)")
-          : "Unknown Location")),
+      check_out_location_name: checkoutLocationData?.name || null,
       // mark remote checkout if user was approved off‑premises and not within a QCC location
       is_remote_checkout: willBeRemoteCheckout || false,
     }
