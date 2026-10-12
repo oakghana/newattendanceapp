@@ -315,7 +315,7 @@ export async function POST(request: NextRequest) {
     const provisionalWorkHours = (now.getTime() - checkInTimeForPolicy.getTime()) / (1000 * 60 * 60)
     const serverTimeMinutes = now.getHours() * 60 + now.getMinutes()
     const isAfter530PmServerTime = serverTimeMinutes >= 17 * 60 + 30
-    const hasWorkedAtLeast8Hours = provisionalWorkHours >= 9
+    const hasWorkedAtLeast8Hours = provisionalWorkHours >= 8
     const isPrivilegedRole = isExemptFromAttendanceReasons(userProfile?.role)
 
     // Staff policy: minimum 2 hours required for regular checkout.
@@ -801,7 +801,7 @@ export async function POST(request: NextRequest) {
     )
     const isPrivilegedReasonExempt = isExemptFromAttendanceReasons(userProfileData?.role)
     const requiresOutOfLocationReason =
-      willBeRemoteCheckout && !isPrivilegedReasonExempt && !auto_checkout && !allowLocationBypass && workHours < 9
+      willBeRemoteCheckout && !isPrivilegedReasonExempt && !auto_checkout && !allowLocationBypass && workHours < 8
     
     // Parse checkout end time (HH:MM format)
     const [endHour, endMinute] = checkOutEndTime.split(":").map(Number)
@@ -875,9 +875,7 @@ export async function POST(request: NextRequest) {
         : willBeRemoteCheckout
           ? "remote_offpremises"
           : (qr_code_used ? "qr_code" : "gps"),
-      check_out_location_name: checkoutLocationData?.name || (auto_checkout
-        ? "Auto Check-out (Out of Range after 4 PM)"
-        : (willBeRemoteCheckout ? "Off‑Premises (reason provided)" : "Unknown Location")),
+      check_out_location_name: checkoutLocationData?.name || null,
       // mark remote checkout if user was approved off‑premises and not within a QCC location
       is_remote_checkout: willBeRemoteCheckout || false,
     }

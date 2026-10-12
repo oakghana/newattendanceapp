@@ -115,7 +115,7 @@ interface AttendanceRecorderProps {
 type WindowsCapabilities = ReturnType<typeof detectWindowsLocationCapabilities>
 
 const REFRESH_PAUSE_DURATION = 50000 // 50 seconds instead of 120000 (2 minutes)
-  const MINIMUM_OFF_PREMISES_CHECKOUT_HOURS = 9
+  const MINIMUM_OFF_PREMISES_CHECKOUT_HOURS = 8
 
 function isOffPremisesFallbackError(message: string) {
   const normalized = String(message || "").toLowerCase()
@@ -272,6 +272,14 @@ export function AttendanceRecorder({
   const [recentCheckOut, setRecentCheckOut] = useState(false)
   const [localTodayAttendance, setLocalTodayAttendance] = useState(initialTodayAttendance)
   const [attendanceStateResolved, setAttendanceStateResolved] = useState(Boolean(initialTodayAttendance))
+
+  const checkoutDisplayLocation = (() => {
+    const locationName = localTodayAttendance?.check_out_location_name?.trim()
+    if (!locationName) return null
+    if (/^off[-‑ ]premises(?: \(reason provided\))?$/i.test(locationName)) return null
+    if (/^(unknown location|location)$/i.test(locationName)) return null
+    return locationName
+  })()
   // Keep a ref always in sync so async closures see the latest value
   useEffect(() => { localTodayAttendanceRef.current = localTodayAttendance }, [localTodayAttendance])
   const [pendingDeviceSharingWarning, setPendingDeviceSharingWarning] = useState<string | null>(null)
@@ -1987,10 +1995,10 @@ export function AttendanceRecorder({
       const hoursWorkedSoFar = checkInTimeDate
         ? (now.getTime() - checkInTimeDate.getTime()) / (1000 * 60 * 60)
         : 0
-  const workedNinePlusHoursForReason = hoursWorkedSoFar >= 9
+  const workedNinePlusHoursForReason = hoursWorkedSoFar >= 8
   // Nine hours completes the standard workday; shorter shifts need one meaningful reason.
   setEarlyCheckoutReasonRequired(Boolean(effectiveRequireEarlyCheckoutReason) && !workedNinePlusHoursForReason)
-  const workedNinePlusHours = hoursWorkedSoFar >= 9
+  const workedNinePlusHours = hoursWorkedSoFar >= 8
       const isApprovedOffPremisesStarter = Boolean(
         localTodayAttendance?.on_official_duty_outside_premises || localTodayAttendance?.is_remote_location,
       )
@@ -2143,7 +2151,7 @@ export function AttendanceRecorder({
       const checkInTimeForHours = localTodayAttendance && localTodayAttendance.check_in_time ? new Date(localTodayAttendance.check_in_time) : null
       const hoursSinceCheckIn = checkInTimeForHours ? (now.getTime() - checkInTimeForHours.getTime()) / (1000 * 60 * 60) : 0
 
-  if (!isBeforeCheckoutTime || !effectiveRequireEarlyCheckoutReason || hoursSinceCheckIn >= 9 || workedNinePlusHours) {
+  if (!isBeforeCheckoutTime || !effectiveRequireEarlyCheckoutReason || hoursSinceCheckIn >= 8 || workedNinePlusHours) {
   console.log("[v0] SMART CHECKOUT: Checkout time passed, exempt, or worked at least 9 hours - immediate checkout", { hoursSinceCheckIn })
         await performCheckoutAPI(locationData, nearestLocation, "", null, false, loginIssueRecoveryCheckout)
         return
@@ -3254,9 +3262,11 @@ export function AttendanceRecorder({
                   hour12: true,
                 })}
               </p>
-              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
-                📍 {localTodayAttendance.check_out_location_name}
-              </p>
+              {checkoutDisplayLocation && (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                  {checkoutDisplayLocation}
+                </p>
+              )}
             </div>
 
             <div className="bg-white/50 dark:bg-gray-900/50 rounded-lg p-3">
