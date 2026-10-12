@@ -115,7 +115,7 @@ interface AttendanceRecorderProps {
 type WindowsCapabilities = ReturnType<typeof detectWindowsLocationCapabilities>
 
 const REFRESH_PAUSE_DURATION = 50000 // 50 seconds instead of 120000 (2 minutes)
-  const MINIMUM_OFF_PREMISES_CHECKOUT_HOURS = 9
+  const MINIMUM_OFF_PREMISES_CHECKOUT_HOURS = 8
 
 function isOffPremisesFallbackError(message: string) {
   const normalized = String(message || "").toLowerCase()
@@ -1987,10 +1987,10 @@ export function AttendanceRecorder({
       const hoursWorkedSoFar = checkInTimeDate
         ? (now.getTime() - checkInTimeDate.getTime()) / (1000 * 60 * 60)
         : 0
-  const workedNinePlusHoursForReason = hoursWorkedSoFar >= 9
+  const workedNinePlusHoursForReason = hoursWorkedSoFar >= 8
   // Nine hours completes the standard workday; shorter shifts need one meaningful reason.
   setEarlyCheckoutReasonRequired(Boolean(effectiveRequireEarlyCheckoutReason) && !workedNinePlusHoursForReason)
-  const workedNinePlusHours = hoursWorkedSoFar >= 9
+  const workedNinePlusHours = hoursWorkedSoFar >= 8
       const isApprovedOffPremisesStarter = Boolean(
         localTodayAttendance?.on_official_duty_outside_premises || localTodayAttendance?.is_remote_location,
       )
@@ -2143,7 +2143,7 @@ export function AttendanceRecorder({
       const checkInTimeForHours = localTodayAttendance && localTodayAttendance.check_in_time ? new Date(localTodayAttendance.check_in_time) : null
       const hoursSinceCheckIn = checkInTimeForHours ? (now.getTime() - checkInTimeForHours.getTime()) / (1000 * 60 * 60) : 0
 
-  if (!isBeforeCheckoutTime || !effectiveRequireEarlyCheckoutReason || hoursSinceCheckIn >= 9 || workedNinePlusHours) {
+  if (!isBeforeCheckoutTime || !effectiveRequireEarlyCheckoutReason || hoursSinceCheckIn >= 8 || workedNinePlusHours) {
   console.log("[v0] SMART CHECKOUT: Checkout time passed, exempt, or worked at least 9 hours - immediate checkout", { hoursSinceCheckIn })
         await performCheckoutAPI(locationData, nearestLocation, "", null, false, loginIssueRecoveryCheckout)
         return
