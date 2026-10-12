@@ -1397,6 +1397,11 @@ export function AttendanceRecorder({
 
       checkInData.latitude = effectiveLocation.latitude
       checkInData.longitude = effectiveLocation.longitude
+      // The API rejects GPS check-ins without a fresh reading timestamp. Keep this
+      // alongside the coordinates so every check-in path sends the authoritative fix.
+      checkInData.accuracy = effectiveLocation.accuracy ?? null
+      checkInData.location_timestamp = effectiveLocation.timestamp ?? Date.now()
+      checkInData.location_source = "browser_geolocation"
 
       // Reuse the same shared validator that powers the live badge/button so the click action
       // cannot disagree with the on-screen "Within Range" state.
@@ -1534,7 +1539,13 @@ export function AttendanceRecorder({
 
       // Use extracted check-in API function
       await performCheckInAPI(
-        { latitude: checkInData.latitude, longitude: checkInData.longitude, accuracy: 10 },
+        {
+          latitude: checkInData.latitude,
+          longitude: checkInData.longitude,
+          accuracy: checkInData.accuracy,
+          timestamp: checkInData.location_timestamp,
+          source: checkInData.location_source,
+        },
         resolvedNearestLocation,
         ""
       )
