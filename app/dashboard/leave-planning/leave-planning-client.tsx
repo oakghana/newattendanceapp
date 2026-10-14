@@ -4416,8 +4416,10 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                         <Button size="sm" variant="outline"
                           disabled={!((HR_OFFICE_PENDING_STATUSES as string[]).includes(String(req.status || "")) || (isRegionalHr && ["pending_regional_hr_office_review", "pending_regional_hr_review"].includes(String(req.status || ""))))}
                           onClick={async () => {
-                            if (!isExpanded && isHrOffice && String(req.leave_type_key || "").toLowerCase() === "annual") {
-                              const startDate = String(req.preferred_start_date || "")
+                            const requestLeaveType = String(req.leave_type_key || req.leave_type || req.leave_type_name || "").toLowerCase()
+                            const isAnnualRequest = requestLeaveType === "annual" || requestLeaveType.includes("annual")
+                            if (!isExpanded && isHrOffice && isAnnualRequest) {
+                              const startDate = String(req.preferred_start_date || req.original_start_date || req.start_date || "")
                               const parsedStart = startDate ? new Date(`${startDate}T00:00:00`) : null
                               if (parsedStart && !Number.isNaN(parsedStart.getTime())) {
                                 const availableDate = new Date(parsedStart.getFullYear(), parsedStart.getMonth() - 1, 1)
