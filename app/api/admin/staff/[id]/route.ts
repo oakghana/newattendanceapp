@@ -271,7 +271,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     if (role && regionalHrRoles.includes(String(role).trim().toLowerCase()) && !isAdministrator && isHrRoleActuallyChanging) {
       console.error("[v0] Staff API PUT - Non-administrator tried to assign Regional HR Leave Office role")
-      return NextResponse.json({ error: "Only administrators can assign the Regional HR Leave Office role" }, { status: 403 })
+      const isLeaveLoanOfficer = normalizedIncomingHrRole === "leave_loan_officer"
+      return NextResponse.json({ error: isLeaveLoanOfficer ? "Only administrators can assign the Leave & Loan Officer role" : "Only administrators can assign the Regional HR Leave Office role" }, { status: 403 })
     }
 
     const allowedRolesForItAdmin = ["staff", "contract", "intern", "nsp", "regional_manager", "district_officer", "driver", "chief_driver"]

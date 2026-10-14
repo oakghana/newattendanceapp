@@ -421,7 +421,8 @@ export async function POST(request: NextRequest) {
 
     // Regional HR Leave Office is an administrator-only role.
     if (["hr_leave_office", "leave_loan_officer", "hr_records", "hr_records_office", "regional_hr", "regional_hr_leave_office", "regional_hr_office", "regional_hr_officer"].includes(String(role).trim().toLowerCase()) && !isAdministrator) {
-      return createJsonResponse({ success: false, error: "Only administrators can assign the Regional HR Leave Office role" }, 403)
+      const isLeaveLoanOfficer = String(role).trim().toLowerCase() === "leave_loan_officer"
+      return createJsonResponse({ success: false, error: isLeaveLoanOfficer ? "Only administrators can assign the Leave & Loan Officer role" : "Only administrators can assign the Regional HR Leave Office role" }, 403)
     }
 
   const normalizedIncomingRole = String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_")

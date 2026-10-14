@@ -843,7 +843,7 @@ export function StaffManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
-                  {ROLE_OPTIONS.filter(([value]) => !isItAdmin || canItAdminCreateRole(value)).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+                  {ROLE_OPTIONS.filter(([value]) => (!isItAdmin || canItAdminCreateRole(value)) && (value !== "leave_loan_officer" || isAdministrator)).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -1289,6 +1289,7 @@ export function StaffManagement() {
                             {isAdministrator && <SelectItem value="hr_executive">HR Executive</SelectItem>}
                             {isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
                             {isAdministrator && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
+                            {isAdministrator && <SelectItem value="leave_loan_officer">Leave & Loan Officer</SelectItem>}
                             {isAdministrator && <SelectItem value="hr_records">HR Records Office</SelectItem>}
                             <SelectItem value="intern">Intern</SelectItem>
                             {canManageStaffLinks && <SelectItem value="it-admin">IT Admin</SelectItem>}
