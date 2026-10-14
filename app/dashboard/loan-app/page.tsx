@@ -2637,7 +2637,8 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
   const changeLoanTypeAsAdmin = async () => {
     const row = actionModal.row
     if (!row || !changeLoanTypeKey) return
-    const target = (lookupData?.loanTypes || []).find((type) => type.loan_key === changeLoanTypeKey)
+    const availableLoanTypes = lookupData?.loanTypes?.length ? lookupData.loanTypes : (data?.loanTypes || [])
+    const target = availableLoanTypes.find((type) => type.loan_key === changeLoanTypeKey)
     setIsChangingLoanType(true)
     try {
       const res = await fetch("/api/loan/action", {
@@ -7749,7 +7750,8 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               <>
                 {(normalizedRole === "admin" || normalizedRole === "administrator") && actionModal.row && (() => {
                   const currentKey = actionModal.row.loan_type_key
-                  const options = (lookupData?.loanTypes || []).filter((type) => type.is_active !== false && type.loan_key !== currentKey && !/salary[\s_-]*advance/i.test(`${type.loan_key} ${type.loan_label}`))
+                  const availableLoanTypes = lookupData?.loanTypes?.length ? lookupData.loanTypes : (data?.loanTypes || [])
+                  const options = availableLoanTypes.filter((type) => type.is_active !== false && type.loan_key !== currentKey && !/salary[\s_-]*advance/i.test(`${type.loan_key} ${type.loan_label}`))
                   const target = options.find((type) => type.loan_key === changeLoanTypeKey)
                   const currentAmount = Number(actionModal.row.fixed_amount ?? actionModal.row.requested_amount ?? 0)
                   const amountChanges = Boolean(target && Number(target.fixed_amount) > 0 && Number(target.fixed_amount) !== currentAmount)
