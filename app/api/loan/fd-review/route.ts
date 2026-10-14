@@ -31,6 +31,20 @@ function buildCarLoanHoldNotice(loan: any) {
   ].join("\n")
 }
 
+function buildFdRejectionMemo(loan: any, fdScore: number, reason?: string | null) {
+  return [
+    `Reference: ${memoReference(loan)}`,
+    "Loan Request: FD Recommendation Not Met",
+    "",
+    `Loan Type: ${loan.loan_type_label || loan.loan_type_key || "Loan"}`,
+    `FD Score: ${fdScore}%`,
+    `Minimum Required FD Score: ${GOOD_FD_THRESHOLD}%`,
+    `Reason: ${reason || "The FD score did not meet the required threshold."}`,
+    "",
+    "This request was not approved because the FD requirement was not met.",
+  ].join("\n")
+}
+
 async function notifyUsers(admin: any, userIds: string[], title: string, message: string, type = "loan_update", data: any = {}) {
   if (!userIds.length) return
   await admin.from("staff_notifications").insert(
@@ -384,18 +398,10 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Provide a reason when entering a new FD value without recalculation." }, { status: 400 })
     }
 
-    // Block illegal rejections: exempt loan types and scores >= threshold
-    if (!isApproved && !isCorrectionRequest) {
-      const loanType = currentLoan?.loan_type_label || currentLoan?.loan_type_key
-      if (isFdExemptLoanType(currentLoan?.loan_type_key, currentLoan?.loan_type_label)) {
-        return NextResponse.json(
-          {
-            error: `${loanType || "This"} loans (funeral / insurance / repair) cannot be rejected for FD. Approve and forward instead.`,
-          },
-          { status: 400 },
-        )
-      }
-      if (!canRejectFdByScore(normalizedFinalScore, currentLoan?.loan_type_key, normalizedFinalScore >= GOOD_FD_THRESHOLD, currentLoan?.loan_type_label)) {
+  // A failed FD result is allowed for every loan type. Exempted types are not
+  // auto-rejected; they are sent to HR Loan Office for the human decision.
+  if (!isApproved && !isCorrectionRequest && !isFdExemptLoanType(currentLoan?.loan_type_key, currentLoan?.loan_type_label)) {
+  if (!canRejectFdByScore(normalizedFinalScore, currentLoan?.loan_type_key, normalizedFinalScore >= GOOD_FD_THRESHOLD, currentLoan?.loan_type_label)) {
         return NextResponse.json(
           {
             error: `FD score ${normalizedFinalScore}% is at or above the ${GOOD_FD_THRESHOLD}% threshold and cannot be rejected.`,
@@ -430,11 +436,14 @@ export async function PATCH(request: Request) {
 
     // Car loans still need Car Loan Committee sign-off after Accounts Executive clears FD.
     const isCarLoan = Boolean((currentLoan as any)?.committee_required)
+    const isFdExempt = isFdExemptLoanType(currentLoan?.loan_type_key, currentLoan?.loan_type_label)
     const finalStatus = isCorrectionRequest
       ? "sent_to_accounts"
       : isApproved
         ? (isCarLoan ? "awaiting_committee" : "pending_hr_loan_office")
-        : "pending_hr_loan_office"
+        : isFdExempt
+          ? "pending_hr_loan_office"
+          : "fd_rejected"
 
     const correctionNote = [
       "Returned by Accounts Executive for full FD recalculation.",
@@ -475,7 +484,7 @@ export async function PATCH(request: Request) {
         action_key: isCorrectionRequest ? "fd_returned_to_accounts" : isApproved ? "fd_approved" : "fd_failed_hr_decision",
         from_status: "pending_accounts_fd_review",
         to_status: finalStatus,
-        note: [adjustmentMemo, review_decision || (isCorrectionRequest ? "FD returned to Accounts Office for full recalculation" : isApproved ? "FD approved by Accounts Executive" : "FD rejected by Accounts Executive")].filter(Boolean).join(" | "),
+        note: [adjustmentMemo, review_decision || (isCorrectionRequest ? "FD returned to Accounts Office for full recalculation" : isApproved ? "FD approved by Accounts Executive" : isFdExempt ? "FD recommendation failed; routed to HR Loan Office for final decision" : "FD rejected by Accounts Executive")].filter(Boolean).join(" | "),
         metadata: scoreChanged
           ? {
               fd_original_score: normalizedOriginalScore,
@@ -538,30 +547,36 @@ export async function PATCH(request: Request) {
         }
       } else {
         const rejectionReason = review_decision || fd_verification_memo || null
+        const rejectionMemo = buildFdRejectionMemo(loanForMemo, normalizedFinalScore, rejectionReason)
+        const memoPath = staffId ? buildMemoPath(review_id, staffId) : null
         if (staffId) {
           await notifyUsers(
             admin,
             [staffId],
-            "Loan Request Sent to HR Loan Office",
-            `Accounts Executive recorded an FD recommendation of ${normalizedFinalScore}%. HR Loan Office will make the final decision before processing continues.${rejectionReason ? ` Reason: ${rejectionReason}` : ""}`,
-            "loan_fd_pending_hr_decision",
-            { request_id: review_id, fd_score: normalizedFinalScore, threshold: GOOD_FD_THRESHOLD, reason: rejectionReason },
+            isFdExempt ? "Loan Request Sent to HR Loan Office" : "Loan Request Rejected — FD Requirement Not Met",
+            isFdExempt
+              ? `Accounts Executive recorded an FD recommendation of ${normalizedFinalScore}%. HR Loan Office will make the final decision before processing continues.${rejectionReason ? ` Reason: ${rejectionReason}` : ""}`
+              : rejectionMemo,
+            isFdExempt ? "loan_fd_pending_hr_decision" : "loan_fd_rejected",
+            { request_id: review_id, fd_score: normalizedFinalScore, threshold: GOOD_FD_THRESHOLD, reason: rejectionReason, ...(isFdExempt ? {} : { memo: rejectionMemo, memo_path: memoPath }) },
           )
         }
 
-        const { data: hrLoanOfficeUsers } = await admin
-          .from("user_profiles")
-          .select("id")
-          .in("role", ["loan_office", "loan_officer", "hr_loan_office", "hr_officer", "admin"])
-          .eq("is_active", true)
-        await notifyUsers(
-          admin,
-          (hrLoanOfficeUsers || []).map((row: any) => row.id),
-          "FD Failed — HR Loan Office Decision Required",
-          `Request ${loanForMemo.request_number} did not meet the FD recommendation (${normalizedFinalScore}% below ${GOOD_FD_THRESHOLD}%). Review the Accounts Executive recommendation and decide whether to continue processing.${rejectionReason ? ` Reason: ${rejectionReason}` : ""}`,
-          "loan_fd_failed_hr_decision",
-          { request_id: review_id, fd_score: normalizedFinalScore, threshold: GOOD_FD_THRESHOLD, reason: rejectionReason },
-        )
+        if (isFdExempt) {
+          const { data: hrLoanOfficeUsers } = await admin
+            .from("user_profiles")
+            .select("id")
+            .in("role", ["loan_office", "loan_officer", "hr_loan_office", "hr_officer", "admin"])
+            .eq("is_active", true)
+          await notifyUsers(
+            admin,
+            (hrLoanOfficeUsers || []).map((row: any) => row.id),
+            "FD Failed — HR Loan Office Decision Required",
+            `Request ${loanForMemo.request_number} did not meet the FD recommendation (${normalizedFinalScore}% below ${GOOD_FD_THRESHOLD}%). Review the Accounts Executive recommendation and decide whether to continue processing.${rejectionReason ? ` Reason: ${rejectionReason}` : ""}`,
+            "loan_fd_failed_hr_decision",
+            { request_id: review_id, fd_score: normalizedFinalScore, threshold: GOOD_FD_THRESHOLD, reason: rejectionReason },
+          )
+        }
 
         if (approverIds.length > 0) {
           await notifyUsers(
