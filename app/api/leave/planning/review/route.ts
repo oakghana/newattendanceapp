@@ -132,10 +132,10 @@ export async function POST(request: NextRequest) {
       isRegionalManagerApproval &&
       String((workflowRequest as any).workflow_route || "").toLowerCase() === "regional" &&
       isAnnualLeave(String((workflowRequest as any).leave_type_key || "")) &&
-      !(new Date().getFullYear() === 2027 && new Date().getMonth() === 0)
+      new Date().getFullYear() < 2027
     if (isAnnualRegionalManagerApprovalBlocked) {
       return NextResponse.json(
-        { error: "Regional Manager endorsement and approval for annual leave is disabled until January 2027." },
+        { error: "Regional Managers cannot approve annual leave until 2027. Annual leave approvals may resume from 1 January 2027.", code: "REGIONAL_MANAGER_ANNUAL_APPROVAL_LOCKED" },
         { status: 423 },
       )
     }

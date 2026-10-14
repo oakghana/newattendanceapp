@@ -713,6 +713,17 @@ export function LeaveManagementClient({
       return
     }
 
+    const isRegionalManager = normalized === "regional_manager"
+    const isAnnualLeave = String(notification?.leave_requests?.leave_type || notification?.leave_type_key || "").toLowerCase().includes("annual")
+    if (isRegionalManager && isAnnualLeave && new Date().getFullYear() < 2027) {
+      toast({
+        title: "Annual leave approval unavailable",
+        description: "Regional Managers cannot approve annual leave until 2027. Annual leave approvals may resume from 1 January 2027.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setProcessingId(notificationId)
     try {
       const response = await fetch("/api/leave/planning/review", {
