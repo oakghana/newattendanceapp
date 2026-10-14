@@ -1114,6 +1114,7 @@ function resolveCurrentHodForRequest(
 export default function LoanAppPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
+  const loanLoadInFlightRef = useRef(false)
   const [data, setData] = useState<WorkflowResponse | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<string>("")
@@ -2097,7 +2098,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
   }, [directorPage, totalDirectorPages])
 
   const loadData = async (options?: { silent?: boolean }) => {
-    const playQueueAlert = () => {
+  if (loanLoadInFlightRef.current) return
+  loanLoadInFlightRef.current = true
+  const playQueueAlert = () => {
       try {
         if (!audioContextRef.current) {
           audioContextRef.current = new AudioContext()
@@ -2156,9 +2159,10 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     } catch (e: any) {
       toast({ title: "Loan Module Error", description: e?.message || "Failed to load", variant: "destructive" })
       setData(null) // Ensure data is cleared on error
-    } finally {
-      if (shouldShowLoader) setLoading(false)
-    }
+  } finally {
+  if (shouldShowLoader) setLoading(false)
+  loanLoadInFlightRef.current = false
+  }
   }
 
   useEffect(() => {
@@ -2173,7 +2177,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
     const timer = window.setInterval(() => {
       void loadData({ silent: true })
-    }, 15000)
+    }, 60000)
 
     return () => window.clearInterval(timer)
   }, [p?.hod, p?.loanOffice, p?.accounts, p?.committee, p?.hrOffice, p?.directorHr, p?.viewAllTabs])
