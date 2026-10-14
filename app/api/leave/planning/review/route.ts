@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
     // not authoritative and older review cards do not include workflow_route.
     const { data: workflowRequest, error: workflowRequestError } = await admin
       .from("leave_plan_requests")
-      .select("workflow_route, leave_type_key, memo_reference, status")
+      .select("workflow_route, leave_type_key, memo_reference, status, preferred_start_date")
       .eq("id", leave_plan_request_id)
       .maybeSingle()
     if (workflowRequestError && isSchemaIssue(workflowRequestError)) return schemaIssueResponse(workflowRequestError)
@@ -141,6 +141,18 @@ export async function POST(request: NextRequest) {
     }
     const isRegionalRequest = action === "forward_to_regional_manager"
       || String(workflowRequest.workflow_route || "").toLowerCase() === "regional"
+    const isJanuary2027AnnualLeave =
+      isAnnualLeave(String((workflowRequest as any).leave_type_key || "")) &&
+      String((workflowRequest as any).preferred_start_date || "").startsWith("2027-01")
+    const annualLeaveAdjustmentOpensAt = new Date("2026-12-01T00:00:00")
+    const annualLeaveAdjustmentIsClosed =
+      isRegionalRequest && isRegionalHr && isJanuary2027AnnualLeave && new Date() < annualLeaveAdjustmentOpensAt
+    if (annualLeaveAdjustmentIsClosed && (isRegionalForward || action === "recommend_change")) {
+      return NextResponse.json(
+        { error: "Annual leave requests starting in January 2027 have been received. Regional HR should notify the requester that adjustment and forwarding will open in December 2026." },
+        { status: 423 },
+      )
+    }
 
     // A staff member can be linked to more than one HOD/Regional HR/Regional
     // Manager. All of them see the request, but only the first one to act may

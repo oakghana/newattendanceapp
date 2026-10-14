@@ -7915,16 +7915,14 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     <Label className="text-xs">Disbursement Date</Label>
                     <Input type="month" value={modalDisbursement} onChange={(e) => setModalDisbursement(e.target.value)} className="h-7 text-xs" />
                   </div>
-                  {!isFuneralLoan(actionModal.row!) && <>
-                    <div>
-                      <Label className="text-xs">Recovery Start Date</Label>
-                      <Input type="month" value={modalRecovery} onChange={(e) => setModalRecovery(e.target.value)} className="h-7 text-xs" />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Recovery Months</Label>
-                      <Input type="number" value={modalMonths} onChange={(e) => setModalMonths(e.target.value)} placeholder="e.g. 24" className="h-7 text-xs" />
-                    </div>
-                  </>}
+  <div>
+  <Label className="text-xs">Recovery Start Date</Label>
+  <Input type="month" value={modalRecovery} onChange={(e) => setModalRecovery(e.target.value)} className="h-7 text-xs" />
+  </div>
+  <div>
+  <Label className="text-xs">Recovery Months</Label>
+  <Input type="number" value={modalMonths} onChange={(e) => setModalMonths(e.target.value)} placeholder="e.g. 24" className="h-7 text-xs" />
+  </div>
                   <div>
                     <Label className="text-xs">Memo Reference</Label>
                     <Input value={modalMemoRef} onChange={(e) => setModalMemoRef(e.target.value)} placeholder="e.g. QCC/HRD/SWL/V.2/81/oak" className="h-7 text-xs" />

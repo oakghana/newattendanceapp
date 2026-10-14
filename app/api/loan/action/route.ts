@@ -146,12 +146,9 @@ function buildAutoMemo(req: any) {
     ? [`Basic Salary: GHc ${Number(req.basic_salary).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} × ${req.salary_advance_multiplier} month(s)`]
     : []),
   `Disbursement Date: ${req.disbursement_date || "TBD"}`,
-  ...(isFuneralLoan
-    ? ["This funeral support does not require repayment or monthly salary deductions."]
-    : [
-        `Recovery Start Date: ${req.recovery_start_date || "TBD"}`,
-        `Deduction Period: ${req.deduction_period_months || req.recovery_months || "TBD"} month(s)`,
-      ]),
+  `Recovery Start Date: ${req.recovery_start_date || "TBD"}`,
+  `Deduction Period: ${req.deduction_period_months || req.recovery_months || "TBD"} month(s)`,
+  ...(isFuneralLoan ? ["Funeral support recovery terms are recorded for HR/Accounts control."] : []),
   "",
     "Please contact HR/Accounts for processing and disbursement instructions.",
   ].join("\n")
@@ -164,12 +161,9 @@ function buildHrTermsMemo(req: any, disbursementDate: string, recoveryStartDate:
     "Loan Terms Set by HR Office",
     "",
     `Disbursement Date: ${disbursementDate}`,
-  ...(isFuneralLoan
-    ? ["Repayment: Not required. No monthly salary deduction applies."]
-    : [
-        `Recovery Start Date: ${recoveryStartDate}`,
-        `Recovery Duration: ${req.deduction_period_months || recoveryMonths} month(s)`,
-      ]),
+  `Recovery Start Date: ${recoveryStartDate}`,
+  `Recovery Duration: ${req.deduction_period_months || recoveryMonths} month(s)`,
+  ...(isFuneralLoan ? ["Funeral support recovery terms are recorded for HR/Accounts control."] : []),
   ...(isSalaryAdvanceLoanType(req.loan_type_key, req.loan_type_label) && req.salary_advance_amount
     ? [`Approved Salary Advance: GHc ${Number(req.salary_advance_amount).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`]
     : []),
@@ -404,8 +398,11 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: "Only HOD-approved requests can be forwarded to Accounts/HR." }, { status: 400 })
         }
 
-        const requiresFdCheck = req.requires_fd_check !== false
-        toStatus = requiresFdCheck ? "sent_to_accounts" : "awaiting_hr_terms"
+  // Every loan, including legacy FD-exempt and funeral requests, must pass through
+  // Accounts/FD before HR Loan Office terms are set. HR Loan Office remains the
+  // decision point when Accounts Executive reports a failed FD review.
+  const requiresFdCheck = true
+  toStatus = "sent_to_accounts"
         update.status = toStatus
         update.loan_office_forwarded_at = new Date().toISOString()
         if (requiresFdCheck) {
@@ -660,19 +657,19 @@ export async function POST(request: NextRequest) {
       const normalizedDeductionPeriodMonths = Number.isFinite(deductionPeriodMonths) && deductionPeriodMonths > 0 ? Math.trunc(deductionPeriodMonths) : null
       const isFuneralLoan = isFuneralLoanType(req.loan_type_key, req.loan_type_label)
 
-      if (!disbursementDate || (!isFuneralLoan && (!recoveryStartDate || normalizedRecoveryMonths === null))) {
-        return NextResponse.json({ error: isFuneralLoan ? "disbursement_date is required" : "disbursement_date, recovery_start_date, and valid recovery_months are required" }, { status: 400 })
-      }
+  if (!disbursementDate || !recoveryStartDate || normalizedRecoveryMonths === null) {
+  return NextResponse.json({ error: "disbursement_date, recovery_start_date, and valid recovery_months are required for every loan, including funeral loans" }, { status: 400 })
+  }
 
       toStatus = "awaiting_director_hr"
       update.status = toStatus
       update.hr_officer_id = user.id
       update.hr_note = note
-      if (isFuneralLoan) {
-        update.recovery_months = null
-        update.recovery_start_date = null
-        update.deduction_period_months = null
-      } else if (isSalaryAdvanceLoanType(req.loan_type_key, req.loan_type_label)) {
+  if (isFuneralLoan) {
+  update.recovery_months = normalizedRecoveryMonths
+  update.recovery_start_date = recoveryStartDate
+  update.deduction_period_months = normalizedDeductionPeriodMonths ?? normalizedRecoveryMonths
+  } else if (isSalaryAdvanceLoanType(req.loan_type_key, req.loan_type_label)) {
         const checkedMonths = clampSalaryAdvanceRecoveryMonths(req.loan_type_key, normalizedRecoveryMonths)
         if (checkedMonths === null) {
           return NextResponse.json(

@@ -1975,7 +1975,7 @@ export async function POST(request: NextRequest) {
   recipient_id: regionalHrRecipient,
   type: "annual_leave_submitted_regional_hr",
   title: "Annual Leave Submitted",
-  message: `${staffName} submitted Annual Leave for ${preferred_start_date}. If approved, the leave can take effect from 1 January 2027.`,
+  message: `${staffName} submitted Annual Leave for ${preferred_start_date}. Please receive and notify the requester that annual-leave memo adjustment and forwarding will begin in December 2026 for January 2027 leave.`,
   data: { leave_plan_request_id: requestRow.id, leave_type: leaveTypeKey, start_date: preferred_start_date, effective_date: "2027-01-01" },
   is_read: false,
   }).then(() => {}).catch(() => {})

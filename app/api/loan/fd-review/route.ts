@@ -447,7 +447,7 @@ export async function PATCH(request: Request) {
       ? "sent_to_accounts"
       : isApproved
         ? (isCarLoan ? "awaiting_committee" : "pending_hr_loan_office")
-        : "fd_rejected"
+        : "pending_hr_loan_office"
 
     const correctionNote = [
       "Returned by Accounts Executive for full FD recalculation.",
@@ -557,20 +557,34 @@ export async function PATCH(request: Request) {
           await notifyUsers(
             admin,
             [staffId],
-            "Loan Request Rejected by Accounts Executive",
-            rejectionMemo,
-            "loan_fd_rejected",
+            "Loan Request Sent to HR Loan Office",
+            `Accounts Executive recorded an FD recommendation of ${normalizedFinalScore}%. HR Loan Office will make the final decision before processing continues.\n\n${rejectionMemo}`,
+            "loan_fd_pending_hr_decision",
             { request_id: review_id, fd_score: normalizedFinalScore, threshold: GOOD_FD_THRESHOLD, reason: rejectionReason, memo: rejectionMemo, memo_path: memoPath },
           )
         }
+
+        const { data: hrLoanOfficeUsers } = await admin
+          .from("user_profiles")
+          .select("id")
+          .in("role", ["loan_office", "loan_officer", "hr_loan_office", "hr_officer", "admin"])
+          .eq("is_active", true)
+        await notifyUsers(
+          admin,
+          (hrLoanOfficeUsers || []).map((row: any) => row.id),
+          "FD Failed — HR Loan Office Decision Required",
+          `Request ${loanForMemo.request_number} did not meet the FD recommendation (${normalizedFinalScore}% below ${GOOD_FD_THRESHOLD}%). Review the Accounts Executive recommendation and decide whether to continue processing.${rejectionReason ? ` Reason: ${rejectionReason}` : ""}`,
+          "loan_fd_failed_hr_decision",
+          { request_id: review_id, fd_score: normalizedFinalScore, threshold: GOOD_FD_THRESHOLD, reason: rejectionReason },
+        )
 
         if (approverIds.length > 0) {
           await notifyUsers(
             admin,
             Array.from(new Set(approverIds)),
-            "FD Rejection Issued by Accounts Executive",
-            `Request ${loanForMemo.request_number} was rejected by Accounts Executive. FD ${normalizedFinalScore}% below ${GOOD_FD_THRESHOLD}%.${rejectionReason ? ` Reason: ${rejectionReason}` : ""}`,
-            "loan_fd_rejected_approver_notice",
+            "FD Review Sent to HR Loan Office",
+            `Request ${loanForMemo.request_number} was sent to HR Loan Office for a decision after the Accounts Executive FD recommendation of ${normalizedFinalScore}%.`,
+            "loan_fd_pending_hr_decision",
             { request_id: review_id, fd_score: normalizedFinalScore, threshold: GOOD_FD_THRESHOLD, reason: rejectionReason },
           )
         }
