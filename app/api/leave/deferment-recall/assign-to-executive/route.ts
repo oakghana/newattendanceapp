@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     const roleNorm = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const isHrOffice = ["hr_leave_office", "hr_office", "admin", "director_hr", "manager_hr"].includes(roleNorm)
+    const isHrOffice = ["hr_leave_office", "leave_loan_officer", "hr_office", "admin", "director_hr", "manager_hr"].includes(roleNorm)
 
     if (!isHrOffice) {
       return NextResponse.json({ error: "Forbidden - only HR Leave Office can assign to executives" }, { status: 403 })

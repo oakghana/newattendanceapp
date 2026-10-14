@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Only HOD, Regional Manager, and HR can view staff leave
-    const allowedRoles = ["head_of_department", "regional_manager", "hr_executive", "hr_leave_office", "admin"]
+    const allowedRoles = ["head_of_department", "regional_manager", "hr_executive", "hr_leave_office", "leave_loan_officer", "admin"]
     if (!allowedRoles.includes(userProfile.role)) {
       return NextResponse.json(
         { error: "Only HOD, Regional Manager, and HR can view staff leave schedules" },

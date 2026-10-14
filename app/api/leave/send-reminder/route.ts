@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     const userRole = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    if (!["admin", "hr", "hr_office", "hr_officer", "hr_leave_office", "manager_hr", "director_hr"].includes(userRole)) {
+    if (!["admin", "hr", "hr_office", "hr_officer", "hr_leave_office", "leave_loan_officer", "manager_hr", "director_hr"].includes(userRole)) {
       return NextResponse.json({ error: "Only HR staff can send reminders" }, { status: 403 })
     }
 

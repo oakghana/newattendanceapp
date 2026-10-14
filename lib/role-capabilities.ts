@@ -12,7 +12,7 @@ export function normalizeAppRole(role?: string | null): string {
 }
 
 export const REGIONAL_HR_ROLES = ["regional_hr"] as const
-export const HR_LEAVE_OFFICE_ROLES = ["hr_leave_office", "hr_office", "director_hr", "manager_hr"] as const
+export const HR_LEAVE_OFFICE_ROLES = ["hr_leave_office", "leave_loan_officer", "hr_office", "director_hr", "manager_hr"] as const
 export const HR_EXECUTIVE_ROLES = ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"] as const
 export const ADMIN_ROLES = ["admin", "super_admin", "god"] as const
 export const ATTENDANCE_ONLY_ROLES = ["intern", "nsp"] as const
@@ -241,7 +241,7 @@ export function canChangeOwnPassword(): boolean {
 
 export function canManageGlobalPolicies(role?: string | null): boolean {
   const normalized = normalizeAppRole(role)
-  return ["admin", "director_hr", "manager_hr", "hr_leave_office", "hr_office"].includes(normalized)
+  return ["admin", "director_hr", "manager_hr", "hr_leave_office", "leave_loan_officer", "hr_office"].includes(normalized)
 }
 
 export function canManageHolidays(role?: string | null): boolean {

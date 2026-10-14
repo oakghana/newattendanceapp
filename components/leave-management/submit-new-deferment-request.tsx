@@ -55,8 +55,8 @@ export function SubmitNewDefermentRequest({
   const [success, setSuccess] = useState(false)
 
   const roleNorm = userRole?.toLowerCase().replace(/[\s-]+/g, '_') || ''
-  const isStaff = !['admin', 'regional_manager', 'department_head', 'hr_officer', 'hr_leave_office', 'hr_office', 'hr', 'manager_hr', 'director_hr', 'hr_director'].includes(roleNorm)
-  const isManagerRole = ['regional_manager', 'department_head', 'hr_officer', 'hr_leave_office', 'hr_office', 'hr', 'admin', 'manager_hr', 'director_hr', 'hr_director'].includes(roleNorm)
+  const isStaff = !['admin', 'regional_manager', 'department_head', 'hr_officer', 'hr_leave_office', 'leave_loan_officer', 'hr_office', 'hr', 'manager_hr', 'director_hr', 'hr_director'].includes(roleNorm)
+  const isManagerRole = ['regional_manager', 'department_head', 'hr_officer', 'hr_leave_office', 'leave_loan_officer', 'hr_office', 'hr', 'admin', 'manager_hr', 'director_hr', 'hr_director'].includes(roleNorm)
 
   // Filter leaves based on user role
   const filteredLeaves = useMemo(() => {

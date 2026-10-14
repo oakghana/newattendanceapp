@@ -39,6 +39,7 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowRight,
+  ArrowRightLeft,
   Award,
   BadgeCheck,
   BarChart3,
@@ -373,6 +374,7 @@ const ACTION_LABELS: Record<string, string> = {
   hod_auto_approved: "HOD Auto-Forwarded",
   loan_office_update_request: "Loan Office Updated Request",
   loan_office_forward: "Loan Office Forward",
+  admin_change_loan_type: "Loan Type Changed by Administrator",
   accounts_fd_update: "Accounts FD Update",
   committee_decision: "Committee Decision",
   hr_set_terms: "HR Terms Set",
@@ -1112,6 +1114,7 @@ function resolveCurrentHodForRequest(
 export default function LoanAppPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
+  const loanLoadInFlightRef = useRef(false)
   const [data, setData] = useState<WorkflowResponse | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<string>("")
@@ -1154,6 +1157,8 @@ export default function LoanAppPage() {
   // ── Action modal state ──────────────────���───────────────────────────
   type ActionType = "hod" | "loan_office" | "accounts" | "committee" | "hr_terms" | "director" | "payment_completed" | "push_to_hr_executive"
   const [actionModal, setActionModal] = useState<{ open: boolean; row: LoanRequest | null; actionType: ActionType | null }>({ open: false, row: null, actionType: null })
+  const [changeLoanTypeKey, setChangeLoanTypeKey] = useState("")
+  const [isChangingLoanType, setIsChangingLoanType] = useState(false)
   const [restoringLoanId, setRestoringLoanId] = useState<string | null>(null)
   const [isRestoringAll, setIsRestoringAll] = useState(false)
   const [selectedArchivedLoans, setSelectedArchivedLoans] = useState<Set<string>>(new Set())
@@ -1446,7 +1451,7 @@ export default function LoanAppPage() {
   const userDeptIsAccounts = /account|finance/i.test(userDeptName)
   const canAccessLoanOfficeWorkspace =
     isAdmin ||
-    (["loan_office", "hr_loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) ||
+    (["loan_office", "hr_loan_office", "leave_loan_officer", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) ||
     (normalizedRole === "manager_hr" && !userDeptIsAccounts)
   const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
@@ -1528,7 +1533,7 @@ export default function LoanAppPage() {
 
     // Loan Office tab: ONLY for HR department loan office staff to process HOD-approved loans and perform FD checks
     // Supports both new (hr_loan_office) and legacy (loan_office in HR dept) role names
-    const isHRLoanOffice = (["hr_loan_office", "loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) || normalizedRole.includes("hr_loan") || /hr.*loan.*office/i.test(`${normalizedRole} ${userDeptName}`)) && !userDeptIsAccounts || (p?.loanOffice && !userDeptIsAccounts)
+    const isHRLoanOffice = (["hr_loan_office", "leave_loan_officer", "loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) || normalizedRole.includes("hr_loan") || /hr.*loan.*office/i.test(`${normalizedRole} ${userDeptName}`)) && !userDeptIsAccounts || (p?.loanOffice && !userDeptIsAccounts)
     if (isHRLoanOffice || isManagingDirectorUser) {
       tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice})` })
     }
@@ -2000,7 +2005,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
   // Fetch payment records for approval
   useEffect(() => {
     const fetchPaymentRecords = async () => {
-      const isApprover = ["hr_executive", "hr_leave_office", "hr_loan_office", "accounts_loan_office", "accounts_executive", "admin"].includes(data?.profile?.role || "")
+      const isApprover = ["hr_executive", "hr_leave_office", "leave_loan_officer", "hr_loan_office", "accounts_loan_office", "accounts_executive", "admin"].includes(data?.profile?.role || "")
       if (!isApprover) return
 
       setPaymentRecordsLoading(true)
@@ -2093,7 +2098,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
   }, [directorPage, totalDirectorPages])
 
   const loadData = async (options?: { silent?: boolean }) => {
-    const playQueueAlert = () => {
+  if (loanLoadInFlightRef.current) return
+  loanLoadInFlightRef.current = true
+  const playQueueAlert = () => {
       try {
         if (!audioContextRef.current) {
           audioContextRef.current = new AudioContext()
@@ -2152,9 +2159,10 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     } catch (e: any) {
       toast({ title: "Loan Module Error", description: e?.message || "Failed to load", variant: "destructive" })
       setData(null) // Ensure data is cleared on error
-    } finally {
-      if (shouldShowLoader) setLoading(false)
-    }
+  } finally {
+  if (shouldShowLoader) setLoading(false)
+  loanLoadInFlightRef.current = false
+  }
   }
 
   useEffect(() => {
@@ -2169,7 +2177,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
     const timer = window.setInterval(() => {
       void loadData({ silent: true })
-    }, 15000)
+    }, 60000)
 
     return () => window.clearInterval(timer)
   }, [p?.hod, p?.loanOffice, p?.accounts, p?.committee, p?.hrOffice, p?.directorHr, p?.viewAllTabs])
@@ -2628,6 +2636,42 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     }
     toast({ title: result.alreadyForwarded ? "Already forwarded" : "Action completed", description: result.message || "Workflow updated successfully." })
     await loadData()
+  }
+
+  const changeLoanTypeAsAdmin = async () => {
+    const row = actionModal.row
+    if (!row || !changeLoanTypeKey) return
+    const availableLoanTypes = lookupData?.loanTypes?.length ? lookupData.loanTypes : (data?.loanTypes || [])
+    const target = availableLoanTypes.find((type) => type.loan_key === changeLoanTypeKey)
+    setIsChangingLoanType(true)
+    try {
+      const res = await fetch("/api/loan/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "admin_change_loan_type",
+          id: row.id,
+          loan_type_key: changeLoanTypeKey,
+          note: modalNote.trim() || undefined,
+        }),
+      })
+      const result = await res.json()
+      if (!res.ok) {
+        toast({ title: "Could not change loan type", description: result.error || "Try again", variant: "destructive" })
+        return
+      }
+      setActionModal((state) => (state.row ? { ...state, row: { ...state.row, ...(result.data || {}) } } : state))
+      setChangeLoanTypeKey("")
+      toast({
+        title: "Loan type updated",
+        description: `${row.request_number} is now ${target?.loan_label || result.data?.loan_type_label}. Every queue and the staff member's view have been refreshed.`,
+      })
+      await loadData()
+    } catch (error) {
+      toast({ title: "Could not change loan type", description: error instanceof Error ? error.message : "Try again", variant: "destructive" })
+    } finally {
+      setIsChangingLoanType(false)
+    }
   }
 
   const saveMemoChanges = async () => {
@@ -3906,6 +3950,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                               hod_auto_approved: { icon: <Zap className="h-3.5 w-3.5" />, bg: "bg-amber-50 text-amber-700 border-amber-200", text: "text-amber-900" },
                               loan_office_update_request: { icon: <FileCheck className="h-3.5 w-3.5" />, bg: "bg-cyan-50 text-cyan-700 border-cyan-200", text: "text-cyan-900" },
                               loan_office_forward: { icon: <Forward className="h-3.5 w-3.5" />, bg: "bg-indigo-50 text-indigo-700 border-indigo-200", text: "text-indigo-900" },
+                              admin_change_loan_type: { icon: <ArrowRightLeft className="h-3.5 w-3.5" />, bg: "bg-sky-50 text-sky-700 border-sky-200", text: "text-sky-900" },
                               accounts_fd_update: { icon: <Calculator className="h-3.5 w-3.5" />, bg: "bg-emerald-50 text-emerald-700 border-emerald-200", text: "text-emerald-900" },
                               committee_decision: { icon: <Users className="h-3.5 w-3.5" />, bg: "bg-violet-50 text-violet-700 border-violet-200", text: "text-violet-900" },
                               hr_set_terms: { icon: <FileSpreadsheet className="h-3.5 w-3.5" />, bg: "bg-teal-50 text-teal-700 border-teal-200", text: "text-teal-900" },
@@ -5890,9 +5935,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 {(() => {
                   // For HR/Accounts executives, fetch pending payments for their approval
                   const userRole = data?.profile?.role || ""
-                  const isHrApprover = ["hr_executive", "hr_leave_office", "hr_loan_office", "admin"].includes(userRole)
+                  const isHrApprover = ["hr_executive", "hr_leave_office", "leave_loan_officer", "hr_loan_office", "admin"].includes(userRole)
                   const isAccountsApprover = ["accounts_executive", "admin"].includes(userRole)
-                  const isAuditViewer = ["hr_executive", "hr_leave_office", "hr_loan_office", "accounts_loan_office", "accounts_executive", "admin"].includes(userRole)
+                  const isAuditViewer = ["hr_executive", "hr_leave_office", "leave_loan_officer", "hr_loan_office", "accounts_loan_office", "accounts_executive", "admin"].includes(userRole)
                   
                   if (!isAuditViewer) {
                     return (
@@ -6033,7 +6078,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
         {/* ── Repayment Tracking ── */}
 <TabsContent value="running-loans" className="space-y-4">
-  {normalizedRole === "hr_loan_office" && <SettlementInitiationPanel />}
+  {(normalizedRole === "hr_loan_office" || normalizedRole === "leave_loan_officer") && <SettlementInitiationPanel />}
   <RunningLoansReport readOnly={isManagingDirector} />
   </TabsContent>
 
@@ -7640,7 +7685,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           </Card>
         </TabsContent>
 
-      {/* ── Action Modal ──────────────────────��─────────────────────── */}
+      {/* ── Action Modal ──────────────────────��──��──────────────────── */}
       <Dialog open={actionModal.open} onOpenChange={(o) => setActionModal((s) => ({ ...s, open: o }))}>
         <DialogContent className={actionModal.actionType === "accounts" ? "max-w-[96vw] w-[96vw] sm:max-w-[96vw] max-h-[92vh] overflow-y-auto" : "max-w-lg"}>
           <DialogHeader>
@@ -7707,6 +7752,54 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {/* Loan Office — read-only review, forwarding to Accounts only */}
             {actionModal.actionType === "loan_office" && (
               <>
+                {(normalizedRole === "admin" || normalizedRole === "administrator") && actionModal.row && (() => {
+                  const currentKey = actionModal.row.loan_type_key
+                  const availableLoanTypes = lookupData?.loanTypes?.length ? lookupData.loanTypes : (data?.loanTypes || [])
+                  const options = availableLoanTypes.filter((type) => type.is_active !== false && type.loan_key !== currentKey && !/salary[\s_-]*advance/i.test(`${type.loan_key} ${type.loan_label}`))
+                  const target = options.find((type) => type.loan_key === changeLoanTypeKey)
+                  const currentAmount = Number(actionModal.row.fixed_amount ?? actionModal.row.requested_amount ?? 0)
+                  const amountChanges = Boolean(target && Number(target.fixed_amount) > 0 && Number(target.fixed_amount) !== currentAmount)
+                  const locked = /salary[\s_-]*advance/i.test(`${currentKey} ${actionModal.row.loan_type_label}`)
+                  return (
+                    <div className="rounded-lg border border-sky-200 bg-sky-50/70 p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="flex items-center gap-1.5 text-sm font-semibold text-sky-950">
+                          <ArrowRightLeft className="h-4 w-4 text-sky-700" /> Change loan type
+                          <Badge variant="outline" className="border-sky-300 text-[10px] text-sky-800">Admin only</Badge>
+                        </p>
+                        <span className="text-xs text-sky-900/80">Current: <strong>{actionModal.row.loan_type_label}</strong></span>
+                      </div>
+                      {locked ? (
+                        <p className="text-xs text-muted-foreground">Salary advances use a separate calculation and cannot be switched to another loan type.</p>
+                      ) : (
+                        <>
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <Select value={changeLoanTypeKey} onValueChange={setChangeLoanTypeKey}>
+                              <SelectTrigger className="h-8 flex-1 bg-background text-xs"><SelectValue placeholder="Select the correct loan type" /></SelectTrigger>
+                              <SelectContent>
+                                {options.map((type) => (
+                                  <SelectItem key={type.loan_key} value={type.loan_key}>
+                                    {type.loan_label}{Number(type.fixed_amount) > 0 ? ` — GHc ${Number(type.fixed_amount).toLocaleString()}` : ""}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button type="button" size="sm" className="h-8 bg-sky-700 text-xs hover:bg-sky-800" disabled={!changeLoanTypeKey || isChangingLoanType} onClick={() => void changeLoanTypeAsAdmin()}>
+                              {isChangingLoanType ? "Applying..." : "Apply change"}
+                            </Button>
+                          </div>
+                          {target && (
+                            <p className="text-xs text-sky-900">
+                              {actionModal.row.loan_type_label} <ArrowRight className="mx-1 inline h-3 w-3" /> <strong>{target.loan_label}</strong>
+                              {amountChanges ? ` — amount will update from GHc ${currentAmount.toLocaleString()} to GHc ${Number(target.fixed_amount).toLocaleString()}.` : " — amount stays the same."}
+                              {" "}The staff member, HOD, Accounts, HR and every queue update immediately and the change is logged in the timeline. Add a reason in the note below.
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )
+                })()}
                 <div className="rounded-md border bg-blue-50 p-3">
                   <p className="text-xs text-blue-800">
                     <strong>Note:</strong> These details were captured earlier and are shown here for review only. Click <strong>Save &amp; Forward to Accounts</strong> to send this request to the Accounts Loan Office.
@@ -7915,16 +8008,14 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     <Label className="text-xs">Disbursement Date</Label>
                     <Input type="month" value={modalDisbursement} onChange={(e) => setModalDisbursement(e.target.value)} className="h-7 text-xs" />
                   </div>
-                  {!isFuneralLoan(actionModal.row!) && <>
-                    <div>
-                      <Label className="text-xs">Recovery Start Date</Label>
-                      <Input type="month" value={modalRecovery} onChange={(e) => setModalRecovery(e.target.value)} className="h-7 text-xs" />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Recovery Months</Label>
-                      <Input type="number" value={modalMonths} onChange={(e) => setModalMonths(e.target.value)} placeholder="e.g. 24" className="h-7 text-xs" />
-                    </div>
-                  </>}
+  <div>
+  <Label className="text-xs">Recovery Start Date</Label>
+  <Input type="month" value={modalRecovery} onChange={(e) => setModalRecovery(e.target.value)} className="h-7 text-xs" />
+  </div>
+  <div>
+  <Label className="text-xs">Recovery Months</Label>
+  <Input type="number" value={modalMonths} onChange={(e) => setModalMonths(e.target.value)} placeholder="e.g. 24" className="h-7 text-xs" />
+  </div>
                   <div>
                     <Label className="text-xs">Memo Reference</Label>
                     <Input value={modalMemoRef} onChange={(e) => setModalMemoRef(e.target.value)} placeholder="e.g. QCC/HRD/SWL/V.2/81/oak" className="h-7 text-xs" />

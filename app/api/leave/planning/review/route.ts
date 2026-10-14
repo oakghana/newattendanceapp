@@ -36,7 +36,7 @@ function normalizeDecision(action: string): LeavePlanReviewDecision | null {
 function normalizeReviewerRole(role: string) {
   if (role === "regional_manager") return "regional_manager"
   if (role === "department_head" || role === "manager_hr") return "department_head"
-  if (["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "hr", "hr_office", "hr_leave_office", "hr_executive", "director_hr"].includes(role)) {
+  if (["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "hr", "hr_office", "hr_leave_office", "leave_loan_officer", "hr_executive", "director_hr"].includes(role)) {
     return "regional_hr_office"
   }
   return role
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     const isAdmin = role === "admin" || role === "administrator"
 
-    if (!["admin", "administrator", "district_officer", "regional_manager", "department_head", "transport_manager", "hr", "hr_office", "hr_leave_office", "hr_executive", "manager_hr", "director_hr", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)) {
+    if (!["admin", "administrator", "district_officer", "regional_manager", "department_head", "transport_manager", "hr", "hr_office", "hr_leave_office", "leave_loan_officer", "hr_executive", "manager_hr", "director_hr", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)) {
       return NextResponse.json({ error: "Only regional managers and department heads can review this request." }, { status: 403 })
     }
 
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "leave_plan_request_id and action are required." }, { status: 400 })
     }
 
-    const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
+    const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "leave_loan_officer", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
     const regionalOwnedLocationIds = (role === "regional_manager" || isRegionalHr)
       ? await resolveOwnedLocationIdsForRegionalOffice(admin, profile.assigned_location_id, profile.region_id)
       : []
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
     // not authoritative and older review cards do not include workflow_route.
     const { data: workflowRequest, error: workflowRequestError } = await admin
       .from("leave_plan_requests")
-      .select("workflow_route, leave_type_key, memo_reference, status")
+      .select("workflow_route, leave_type_key, memo_reference, status, preferred_start_date")
       .eq("id", leave_plan_request_id)
       .maybeSingle()
     if (workflowRequestError && isSchemaIssue(workflowRequestError)) return schemaIssueResponse(workflowRequestError)
@@ -132,15 +132,27 @@ export async function POST(request: NextRequest) {
       isRegionalManagerApproval &&
       String((workflowRequest as any).workflow_route || "").toLowerCase() === "regional" &&
       isAnnualLeave(String((workflowRequest as any).leave_type_key || "")) &&
-      !(new Date().getFullYear() === 2027 && new Date().getMonth() === 0)
+      new Date().getFullYear() < 2027
     if (isAnnualRegionalManagerApprovalBlocked) {
       return NextResponse.json(
-        { error: "Regional Manager endorsement and approval for annual leave is disabled until January 2027." },
+        { error: "Regional Managers cannot approve annual leave until 2027. Annual leave approvals may resume from 1 January 2027.", code: "REGIONAL_MANAGER_ANNUAL_APPROVAL_LOCKED" },
         { status: 423 },
       )
     }
     const isRegionalRequest = action === "forward_to_regional_manager"
       || String(workflowRequest.workflow_route || "").toLowerCase() === "regional"
+    const isJanuary2027AnnualLeave =
+      isAnnualLeave(String((workflowRequest as any).leave_type_key || "")) &&
+      String((workflowRequest as any).preferred_start_date || "").startsWith("2027-01")
+    const annualLeaveAdjustmentOpensAt = new Date("2026-12-01T00:00:00")
+    const annualLeaveAdjustmentIsClosed =
+      isRegionalRequest && isRegionalHr && isJanuary2027AnnualLeave && new Date() < annualLeaveAdjustmentOpensAt
+    if (annualLeaveAdjustmentIsClosed && (isRegionalForward || action === "recommend_change")) {
+      return NextResponse.json(
+        { error: "Annual leave requests starting in January 2027 have been received. Regional HR should notify the requester that adjustment and forwarding will open in December 2026." },
+        { status: 423 },
+      )
+    }
 
     // A staff member can be linked to more than one HOD/Regional HR/Regional
     // Manager. All of them see the request, but only the first one to act may
@@ -195,7 +207,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (reviewError || !reviews || reviews.length === 0) {
-      const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
+      const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "leave_loan_officer", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
       const isRegionalManager = role === "regional_manager"
       const isDepartmentHeadReviewer = role === "department_head"
       const isHrExecutiveReviewer = ["hr_executive", "manager_hr", "director_hr"].includes(role)

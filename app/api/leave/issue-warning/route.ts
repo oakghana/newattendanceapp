@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     const userRole = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    if (!["admin", "hr", "hr_office", "hr_officer", "hr_leave_office", "manager_hr", "director_hr"].includes(userRole)) {
+    if (!["admin", "hr", "hr_office", "hr_officer", "hr_leave_office", "leave_loan_officer", "manager_hr", "director_hr"].includes(userRole)) {
       return NextResponse.json({ error: "Only HR staff can issue warnings" }, { status: 403 })
     }
 
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     const { data: hrStaff } = await admin
       .from("user_profiles")
       .select("id")
-      .in("role", ["hr_leave_office", "director_hr", "manager_hr"])
+      .in("role", ["hr_leave_office", "leave_loan_officer", "director_hr", "manager_hr"])
       .limit(5)
 
     if (hrStaff && hrStaff.length > 0) {

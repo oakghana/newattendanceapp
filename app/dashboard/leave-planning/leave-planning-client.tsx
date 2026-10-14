@@ -1211,7 +1211,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const canViewLeaveAnalytics = isHrApprover || isHrOffice || isAdmin
   const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin || isDistrictOfficer
   const canManageLeaveTypePolicy = isHrOffice || isAdmin
-  const isLoanOffice = normalizedRole === "loan_office" || normalizedRole === "hr_loan_office" || normalizedRole === "accounts_loan_office"
+  const isLoanOffice = normalizedRole === "loan_office" || (normalizedRole === "hr_loan_office" || normalizedRole === "leave_loan_officer") || normalizedRole === "accounts_loan_office"
   const todayIsoDate = useMemo(() => toIsoDate(new Date()), [])
   const annualPlanningYear = useMemo(() => new Date().getFullYear() + 1, [])
   const annualPlanningYearStart = `${annualPlanningYear}-01-01`
@@ -1238,6 +1238,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const [hrOfficeAutoRefresh, setHrOfficeAutoRefresh] = useState(true)
   const [hrOfficeLastRefresh, setHrOfficeLastRefresh] = useState<string | null>(null)
   const [hrOfficeControlsExpanded, setHrOfficeControlsExpanded] = useState(false)
+  const [annualAdjustmentNotice, setAnnualAdjustmentNotice] = useState<{ startDate: string; availableDate: string } | null>(null)
   const [allRequestsSearch, setAllRequestsSearch] = useState("")
   const [allRequestsStatusFilter, setAllRequestsStatusFilter] = useState("all")
   const [allRequestsLocationFilter, setAllRequestsLocationFilter] = useState("all")
@@ -1377,7 +1378,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ────���─────────────────────────────────────────���──────�����������������─
+  // ── Computed ────���──────────────────────────���──────────────���──────�����������������─
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -4415,6 +4416,24 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                         <Button size="sm" variant="outline"
                           disabled={!((HR_OFFICE_PENDING_STATUSES as string[]).includes(String(req.status || "")) || (isRegionalHr && ["pending_regional_hr_office_review", "pending_regional_hr_review"].includes(String(req.status || ""))))}
                           onClick={async () => {
+                            const requestLeaveType = String(req.leave_type_key || req.leave_type || req.leave_type_name || "").toLowerCase()
+                            const isAnnualRequest = requestLeaveType === "annual" || requestLeaveType.includes("annual")
+                            if (!isExpanded && isHrOffice && isAnnualRequest) {
+                              const startDate = String(req.preferred_start_date || req.original_start_date || req.start_date || "")
+                              const parsedStart = startDate ? new Date(`${startDate}T00:00:00`) : null
+                              if (parsedStart && !Number.isNaN(parsedStart.getTime())) {
+                                const availableDate = new Date(parsedStart.getFullYear(), parsedStart.getMonth() - 1, 1)
+                                const now = new Date()
+                                const isAvailableMonth = now.getFullYear() === availableDate.getFullYear() && now.getMonth() === availableDate.getMonth()
+                                if (!isAvailableMonth) {
+                                  setAnnualAdjustmentNotice({
+                                    startDate,
+                                    availableDate: availableDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" }),
+                                  })
+                                  return
+                                }
+                              }
+                            }
                             setOfficeExpanded(isExpanded ? null : req.id)
                             if (!isExpanded) {
                               const matchingTemplate = templateOptions.find((template) => template.template_key === getDefaultMemoTemplateKey(String(req.leave_type_key || "annual"))) || templateOptions.find((template) => {
@@ -5666,8 +5685,32 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
           </div>}
         </div>
 
-
       )}
+
+      <Dialog open={annualAdjustmentNotice !== null} onOpenChange={(open) => { if (!open) setAnnualAdjustmentNotice(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Annual leave adjustment not yet available</DialogTitle>
+            <DialogDescription>
+              Annual leave requests may only be adjusted and forwarded during the month immediately before the leave begins.
+            </DialogDescription>
+          </DialogHeader>
+          {annualAdjustmentNotice && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p>
+                This request starts on <strong>{fmtDate(annualAdjustmentNotice.startDate)}</strong>.
+                Regional HR and Head Office HR may work on it from <strong>{annualAdjustmentNotice.availableDate}</strong>.
+              </p>
+              <p className="mt-2 text-xs text-amber-800">
+                For example, a January 2027 annual leave request can be adjusted in December 2026.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" onClick={() => setAnnualAdjustmentNotice(null)}>Understood</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

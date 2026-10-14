@@ -38,6 +38,7 @@ export default async function PaymentAdvicePage() {
     "hr_executive",
     "hr_officer",
     "hr_leave_office",
+    "leave_loan_officer",
     "hr_office",
     "hr",
     "manager_hr",

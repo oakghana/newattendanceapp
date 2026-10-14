@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
 
 // Define roles that can see ALL deferment/recall requests
-const HR_ADMIN_ROLES = ["hr_leave_office", "admin", "manager_hr", "director_hr", "hr_director", "hr_officer", "hr_office", "hr", "hr_executive"]
+const HR_ADMIN_ROLES = ["hr_leave_office", "leave_loan_officer", "admin", "manager_hr", "director_hr", "hr_director", "hr_officer", "hr_office", "hr", "hr_executive"]
 
 // Define roles that can see department/regional data
 const HOD_RM_ROLES = ["department_head", "regional_manager"]

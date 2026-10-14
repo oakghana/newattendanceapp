@@ -3,7 +3,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { DEFAULT_LEAVE_TYPES } from "@/lib/leave-policy"
 import { resolveEntitlementFromProfile } from "@/lib/annual-leave-entitlement"
 
-const LEADERSHIP_ROLES = new Set(["manager_hr", "director_hr", "hr_leave_office", "admin", "hr_director", "hr_officer"])
+const LEADERSHIP_ROLES = new Set(["manager_hr", "director_hr", "hr_leave_office", "leave_loan_officer", "admin", "hr_director", "hr_officer"])
 
 function normalizeRole(role: string | null | undefined) {
   return String(role || "")

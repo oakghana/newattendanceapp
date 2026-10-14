@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
       "manager",
       "deputy_hr",
       "hr_leave_office",
+      "leave_loan_officer",
       "leave_office",
       "admin",
     ]

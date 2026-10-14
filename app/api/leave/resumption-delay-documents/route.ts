@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 
-const EDITOR_ROLES = new Set(['admin', 'hr_leave_office', 'hr_office', 'hr_executive', 'director_hr', 'manager_hr'])
+const EDITOR_ROLES = new Set(['admin', 'hr_leave_office', 'leave_loan_officer', 'hr_office', 'hr_executive', 'director_hr', 'manager_hr'])
 
 async function getEditor() {
   const supabase = await createClient()

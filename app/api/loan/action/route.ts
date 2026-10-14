@@ -30,6 +30,7 @@ type ActionKey =
   | "accounts_fd_update"
   | "committee_decision"
   | "admin_committee_edit"
+  | "admin_change_loan_type"
   | "hr_set_terms"
   | "director_finalize"
   | "save_memo_draft"
@@ -146,12 +147,9 @@ function buildAutoMemo(req: any) {
     ? [`Basic Salary: GHc ${Number(req.basic_salary).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} × ${req.salary_advance_multiplier} month(s)`]
     : []),
   `Disbursement Date: ${req.disbursement_date || "TBD"}`,
-  ...(isFuneralLoan
-    ? ["This funeral support does not require repayment or monthly salary deductions."]
-    : [
-        `Recovery Start Date: ${req.recovery_start_date || "TBD"}`,
-        `Deduction Period: ${req.deduction_period_months || req.recovery_months || "TBD"} month(s)`,
-      ]),
+  `Recovery Start Date: ${req.recovery_start_date || "TBD"}`,
+  `Deduction Period: ${req.deduction_period_months || req.recovery_months || "TBD"} month(s)`,
+  ...(isFuneralLoan ? ["Funeral support recovery terms are recorded for HR/Accounts control."] : []),
   "",
     "Please contact HR/Accounts for processing and disbursement instructions.",
   ].join("\n")
@@ -164,12 +162,9 @@ function buildHrTermsMemo(req: any, disbursementDate: string, recoveryStartDate:
     "Loan Terms Set by HR Office",
     "",
     `Disbursement Date: ${disbursementDate}`,
-  ...(isFuneralLoan
-    ? ["Repayment: Not required. No monthly salary deduction applies."]
-    : [
-        `Recovery Start Date: ${recoveryStartDate}`,
-        `Recovery Duration: ${req.deduction_period_months || recoveryMonths} month(s)`,
-      ]),
+  `Recovery Start Date: ${recoveryStartDate}`,
+  `Recovery Duration: ${req.deduction_period_months || recoveryMonths} month(s)`,
+  ...(isFuneralLoan ? ["Funeral support recovery terms are recorded for HR/Accounts control."] : []),
   ...(isSalaryAdvanceLoanType(req.loan_type_key, req.loan_type_label) && req.salary_advance_amount
     ? [`Approved Salary Advance: GHc ${Number(req.salary_advance_amount).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`]
     : []),
@@ -404,8 +399,11 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: "Only HOD-approved requests can be forwarded to Accounts/HR." }, { status: 400 })
         }
 
-        const requiresFdCheck = req.requires_fd_check !== false
-        toStatus = requiresFdCheck ? "sent_to_accounts" : "awaiting_hr_terms"
+  // Every loan, including legacy FD-exempt and funeral requests, must pass through
+  // Accounts/FD before HR Loan Office terms are set. HR Loan Office remains the
+  // decision point when Accounts Executive reports a failed FD review.
+  const requiresFdCheck = true
+  toStatus = "sent_to_accounts"
         update.status = toStatus
         update.loan_office_forwarded_at = new Date().toISOString()
         if (requiresFdCheck) {
@@ -444,7 +442,7 @@ export async function POST(request: NextRequest) {
           const { data: hrUsers } = await admin
             .from("user_profiles")
             .select("id")
-            .in("role", ["hr_officer", "hr_loan_office", "loan_office", "director_hr", "manager_hr", "hr_director", "admin", "department_head"])
+            .in("role", ["hr_officer", "hr_loan_office", "leave_loan_officer", "loan_office", "director_hr", "manager_hr", "hr_director", "admin", "department_head"])
             .eq("is_active", true)
           await notifyUsers(
             admin,
@@ -455,7 +453,7 @@ export async function POST(request: NextRequest) {
             { request_id: req.id },
           )
           notifyLoanStageAdvanced(admin, {
-            toRoles: ["hr_officer", "hr_loan_office", "loan_office", "director_hr", "manager_hr", "hr_director", "admin"],
+            toRoles: ["hr_officer", "hr_loan_office", "leave_loan_officer", "loan_office", "director_hr", "manager_hr", "hr_director", "admin"],
             staffName: loanStaffName,
             loanType: String(req.loan_type_label || req.loan_type_key || ""),
             requestNumber: String(req.request_number || req.id),
@@ -512,7 +510,7 @@ export async function POST(request: NextRequest) {
       const { data: loanOfficeUsers } = await admin
         .from("user_profiles")
         .select("id")
-        .in("role", ["loan_officer", "loan_office", "hr_loan_office", "hr_officer", "admin"])
+        .in("role", ["loan_officer", "loan_office", "hr_loan_office", "leave_loan_officer", "hr_officer", "admin"])
         .eq("is_active", true)
 
       await notifyUsers(
@@ -618,6 +616,134 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    if (action === "admin_change_loan_type") {
+      actionHandled = true
+      if (role !== "admin" && role !== "administrator") {
+        return NextResponse.json({ error: "Only administrators can change a loan type. IT administrators are not permitted." }, { status: 403 })
+      }
+
+      const changeableStatuses = [
+        "pending_hod",
+        "hod_approved",
+        "sent_to_accounts",
+        "pending_hr_loan_office",
+        "awaiting_hr_terms",
+        "awaiting_committee",
+      ]
+      if (!changeableStatuses.includes(String(req.status || ""))) {
+        return NextResponse.json({ error: "The loan type can only be changed while the request is still in review." }, { status: 400 })
+      }
+
+      const newLoanTypeKey = String(body.loan_type_key || "").trim()
+      if (!newLoanTypeKey) return NextResponse.json({ error: "Select the new loan type" }, { status: 400 })
+      if (newLoanTypeKey === req.loan_type_key) {
+        return NextResponse.json({ error: "The request already uses this loan type" }, { status: 400 })
+      }
+
+      const { data: newLoanType } = await admin
+        .from("loan_types")
+        .select("*")
+        .eq("loan_key", newLoanTypeKey)
+        .maybeSingle()
+      if (!newLoanType || (newLoanType as any).is_active === false) {
+        return NextResponse.json({ error: "Select an active loan type" }, { status: 400 })
+      }
+
+      if (isSalaryAdvanceLoanType(req.loan_type_key, req.loan_type_label) || isSalaryAdvanceLoanType(newLoanType.loan_key, newLoanType.loan_label)) {
+        return NextResponse.json({ error: "Salary advance uses a separate calculation and cannot be switched to or from another loan type." }, { status: 400 })
+      }
+
+      const { data: duplicateActive } = await admin
+        .from("loan_requests")
+        .select("id, request_number")
+        .eq("user_id", req.user_id)
+        .eq("loan_type_key", newLoanType.loan_key)
+        .neq("id", req.id)
+        .in("status", changeableStatuses)
+        .limit(1)
+        .maybeSingle()
+      if (duplicateActive) {
+        return NextResponse.json({ error: `This staff member already has an active ${newLoanType.loan_label} request (${(duplicateActive as any).request_number || (duplicateActive as any).id}).` }, { status: 409 })
+      }
+
+      const newFixedAmount = Number((newLoanType as any).fixed_amount)
+      const hasFixedAmount = Number.isFinite(newFixedAmount) && newFixedAmount > 0
+      const oldAmount = Number(req.fixed_amount ?? req.requested_amount ?? 0)
+      const newAmount = hasFixedAmount ? newFixedAmount : oldAmount
+      const fdAlreadyCalculated = req.fd_score !== null && req.fd_score !== undefined
+      if (fdAlreadyCalculated && Math.abs(newAmount - oldAmount) > 0.009) {
+        return NextResponse.json({ error: "An FD score was already calculated for the current amount. Changing to a loan type with a different amount would invalidate it." }, { status: 409 })
+      }
+
+      update.loan_type_key = newLoanType.loan_key
+      update.loan_type_label = newLoanType.loan_label
+      if (hasFixedAmount) {
+        update.fixed_amount = newFixedAmount
+        update.requested_amount = newFixedAmount
+      }
+      update.committee_required = Boolean(
+        (newLoanType as any).requires_committee || /motor\s*bike/i.test(`${newLoanType.loan_key} ${newLoanType.loan_label}`),
+      )
+      update.requires_fd_check = true
+      const oldTerms = String(req.hr_note || "").trim()
+      const newTerms = String((newLoanType as any).loan_terms || "").trim()
+      if (newTerms && !oldTerms) update.hr_note = newTerms
+      if (!req.recovery_months && (newLoanType as any).default_recovery_months) {
+        update.recovery_months = (newLoanType as any).default_recovery_months
+      }
+
+      const changeNote = note || `Administrator changed the loan type from ${req.loan_type_label} to ${newLoanType.loan_label}.`
+      await timeline(admin, {
+        loan_request_id: req.id,
+        actor_id: user.id,
+        actor_role: role,
+        action_key: "admin_change_loan_type",
+        from_status: req.status,
+        to_status: req.status,
+        note: changeNote,
+        metadata: {
+          loan_type_key: { from: req.loan_type_key, to: newLoanType.loan_key },
+          loan_type_label: { from: req.loan_type_label, to: newLoanType.loan_label },
+          amount: { from: oldAmount || null, to: newAmount || null },
+        },
+      })
+
+      const stageRoles: Record<string, string[]> = {
+        pending_hod: [],
+        hod_approved: ["loan_office", "hr_loan_office", "leave_loan_officer"],
+        sent_to_accounts: ["accounts", "accounts_loan_office", "accounts_executive"],
+        pending_hr_loan_office: ["loan_office", "hr_loan_office", "leave_loan_officer"],
+        awaiting_hr_terms: ["loan_office", "hr_loan_office", "leave_loan_officer", "hr_officer", "manager_hr"],
+        awaiting_committee: ["loan_committee", "committee"],
+      }
+      const stageRoleList = stageRoles[String(req.status)] || []
+      const { data: stageUsers } = stageRoleList.length
+        ? await admin.from("user_profiles").select("id").in("role", stageRoleList).eq("is_active", true)
+        : { data: [] as any[] }
+      const recipientIds = Array.from(
+        new Set(
+          [
+            req.user_id,
+            req.hod_reviewer_id,
+            req.loan_office_reviewer_id,
+            req.accounts_reviewer_id,
+            ...((stageUsers || []) as any[]).map((row: any) => row.id),
+          ]
+            .filter(Boolean)
+            .map(String)
+            .filter((uid: string) => uid !== user.id),
+        ),
+      )
+      await notifyUsers(
+        admin,
+        recipientIds,
+        "Loan Type Updated",
+        `Request ${req.request_number} was changed from ${req.loan_type_label} to ${newLoanType.loan_label} by an administrator.`,
+        "loan_type_changed",
+        { request_id: req.id, from: req.loan_type_label, to: newLoanType.loan_label },
+      )
+    }
+
     if (action === "committee_decision") {
       actionHandled = true
       if (!canDoCommittee(role)) return NextResponse.json({ error: "Only committee/admin can decide" }, { status: 403 })
@@ -648,8 +774,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Only HR Office/Admin can set terms" }, { status: 403 })
       }
       // Accept both normal flow (awaiting_hr_terms) and FD-exempt loans (sent_to_hr_office like Funeral, Insurance, Repair with FD >= 0%)
-      if (!["awaiting_hr_terms", "sent_to_hr_office"].includes(req.status)) {
+      if (!["awaiting_hr_terms", "sent_to_hr_office", "pending_hr_loan_office"].includes(req.status)) {
         return NextResponse.json({ error: "Request is not at HR terms stage" }, { status: 400 })
+      }
+      if (req.fd_score === null || req.fd_score === undefined) {
+        return NextResponse.json(
+          { error: "This loan has no FD calculation yet. Every loan type, including FD-exempt types, must pass through Accounts/FD before HR terms are set." },
+          { status: 400 },
+        )
       }
 
       const disbursementDate = String(body.disbursement_date || "")
@@ -660,19 +792,19 @@ export async function POST(request: NextRequest) {
       const normalizedDeductionPeriodMonths = Number.isFinite(deductionPeriodMonths) && deductionPeriodMonths > 0 ? Math.trunc(deductionPeriodMonths) : null
       const isFuneralLoan = isFuneralLoanType(req.loan_type_key, req.loan_type_label)
 
-      if (!disbursementDate || (!isFuneralLoan && (!recoveryStartDate || normalizedRecoveryMonths === null))) {
-        return NextResponse.json({ error: isFuneralLoan ? "disbursement_date is required" : "disbursement_date, recovery_start_date, and valid recovery_months are required" }, { status: 400 })
-      }
+  if (!disbursementDate || !recoveryStartDate || normalizedRecoveryMonths === null) {
+  return NextResponse.json({ error: "disbursement_date, recovery_start_date, and valid recovery_months are required for every loan, including funeral loans" }, { status: 400 })
+  }
 
       toStatus = "awaiting_director_hr"
       update.status = toStatus
       update.hr_officer_id = user.id
       update.hr_note = note
-      if (isFuneralLoan) {
-        update.recovery_months = null
-        update.recovery_start_date = null
-        update.deduction_period_months = null
-      } else if (isSalaryAdvanceLoanType(req.loan_type_key, req.loan_type_label)) {
+  if (isFuneralLoan) {
+  update.recovery_months = normalizedRecoveryMonths
+  update.recovery_start_date = recoveryStartDate
+  update.deduction_period_months = normalizedDeductionPeriodMonths ?? normalizedRecoveryMonths
+  } else if (isSalaryAdvanceLoanType(req.loan_type_key, req.loan_type_label)) {
         const checkedMonths = clampSalaryAdvanceRecoveryMonths(req.loan_type_key, normalizedRecoveryMonths)
         if (checkedMonths === null) {
           return NextResponse.json(
@@ -1165,7 +1297,7 @@ export async function POST(request: NextRequest) {
         .eq("id", req.user_id)
     }
 
-    await timeline(admin, {
+    if (action !== "admin_change_loan_type") await timeline(admin, {
       loan_request_id: id,
       actor_id: user.id,
       actor_role: role,

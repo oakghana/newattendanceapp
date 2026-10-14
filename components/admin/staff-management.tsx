@@ -110,6 +110,7 @@ const ROLE_OPTIONS = [
   ["hr_executive", "HR Executive"],
   ["hr_leave_office", "HR Leave Office"],
   ["hr_loan_office", "HR Loan Office"],
+  ["leave_loan_officer", "Leave & Loan Officer"],
   ["hr_records", "HR Records Office"],
   ["intern", "Intern"],
   ["it-admin", "IT Admin"],
@@ -842,7 +843,7 @@ export function StaffManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
-                  {ROLE_OPTIONS.filter(([value]) => !isItAdmin || canItAdminCreateRole(value)).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+                  {ROLE_OPTIONS.filter(([value]) => (!isItAdmin || canItAdminCreateRole(value)) && (value !== "leave_loan_officer" || isAdministrator)).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -1026,7 +1027,7 @@ export function StaffManagement() {
   const allowedForItAdmin = canItAdminCreateRole(value)
   const allowed = isItAdmin
   ? allowedForItAdmin && !(isRegionalItAdmin && value === "department_head")
-  : isAdministrator || !["accounts", "accounts_executive", "admin", "director_hr", "driver", "chief_driver", "hr_executive", "hr_leave_office", "hr_loan_office", "hr_records", "loan_office", "manager_hr", "managing_director", "regional_hr", "regional_manager", "secretary", "transport_manager"].includes(value) || (value === "it-admin" && canManageStaffLinks)
+  : isAdministrator || !["accounts", "accounts_executive", "admin", "director_hr", "driver", "chief_driver", "hr_executive", "hr_leave_office", "leave_loan_officer", "hr_loan_office", "hr_records", "loan_office", "manager_hr", "managing_director", "regional_hr", "regional_manager", "secretary", "transport_manager"].includes(value) || (value === "it-admin" && canManageStaffLinks)
                               return allowed && `${label} ${value}`.toLowerCase().includes(roleSearch.toLowerCase())
                             }).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
                           </SelectContent>
@@ -1288,6 +1289,7 @@ export function StaffManagement() {
                             {isAdministrator && <SelectItem value="hr_executive">HR Executive</SelectItem>}
                             {isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
                             {isAdministrator && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
+                            {isAdministrator && <SelectItem value="leave_loan_officer">Leave & Loan Officer</SelectItem>}
                             {isAdministrator && <SelectItem value="hr_records">HR Records Office</SelectItem>}
                             <SelectItem value="intern">Intern</SelectItem>
                             {canManageStaffLinks && <SelectItem value="it-admin">IT Admin</SelectItem>}

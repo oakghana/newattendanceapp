@@ -55,7 +55,7 @@ export function QuickActions({ userRole }: QuickActionsProps) {
       : []
 
   const hrLeaveAdminActions = 
-    userRole && ["hr_leave_office", "admin"].includes(String(userRole).toLowerCase().replace(/[\s-]+/g, "_"))
+    userRole && ["hr_leave_office", "leave_loan_officer", "admin"].includes(String(userRole).toLowerCase().replace(/[\s-]+/g, "_"))
       ? [
           {
             title: "HR Leave Admin",

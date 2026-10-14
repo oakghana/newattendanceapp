@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     const userRole = String(profile?.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-    if (!["admin", "hr_leave_office"].includes(userRole)) {
+    if (!["admin", "hr_leave_office", "leave_loan_officer"].includes(userRole)) {
       return NextResponse.json(
         { error: "Only HR Leave Office staff can create payment memos" },
         { status: 403 }
@@ -194,7 +194,7 @@ export async function PUT(request: NextRequest) {
       .single()
 
     const userRole = String(profile?.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-    if (!["admin", "hr_leave_office"].includes(userRole)) {
+    if (!["admin", "hr_leave_office", "leave_loan_officer"].includes(userRole)) {
       return NextResponse.json(
         { error: "Only HR Leave Office staff can update payment memos" },
         { status: 403 }
@@ -291,7 +291,7 @@ export async function GET(request: NextRequest) {
       .single()
 
     const userRole = String(profile?.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-    if (!["admin", "hr_leave_office"].includes(userRole)) {
+    if (!["admin", "hr_leave_office", "leave_loan_officer"].includes(userRole)) {
       return NextResponse.json(
         { error: "Only HR Leave Office staff can view payment memos" },
         { status: 403 }

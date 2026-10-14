@@ -59,7 +59,7 @@ interface HRExecutive {
 export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole?: string }) {
   const { toast } = useToast()
   const roleNorm = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-  const isHrLeaveOffice = ["hr_leave_office", "leave_office"].includes(roleNorm)
+  const isHrLeaveOffice = ["hr_leave_office", "leave_loan_officer", "leave_office"].includes(roleNorm)
   // HR Executives who can approve payment advice - include all HR management roles
   const isHrExecutive = ["hr_executive", "director_hr", "manager_hr", "hr_director", "hr", "hr_manager", "deputy_hr", "deputy_director_hr", "human_resource_manager", "admin"].includes(roleNorm)
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7))

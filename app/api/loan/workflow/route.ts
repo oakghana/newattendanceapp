@@ -118,7 +118,7 @@ async function autoAdvanceStaleHodRequests(admin: any) {
   const { data: loanOfficeUsers } = await admin
     .from("user_profiles")
     .select("id")
-    .in("role", ["loan_officer", "hr_officer", "director_hr", "hr_director", "loan_office", "hr_loan_office", "accounts_loan_office", "manager_hr", ...ADMIN_DB_ROLE_ALIASES])
+    .in("role", ["loan_officer", "hr_officer", "director_hr", "hr_director", "loan_office", "hr_loan_office", "leave_loan_officer", "accounts_loan_office", "manager_hr", ...ADMIN_DB_ROLE_ALIASES])
     .eq("is_active", true)
 
   const loanOfficeIds = (loanOfficeUsers || []).map((u: any) => u.id)
@@ -583,7 +583,7 @@ export async function GET() {
             hrOffice: canDoHrOffice(role, deptName, deptCode),
             directorHr: canDoDirectorHr(role, deptName, deptCode),
             viewAllTabs,
-            allLoans: isAdminRole(role) || isManagingDirector || ["loan_office", "loan_officer", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
+            allLoans: isAdminRole(role) || isManagingDirector || ["loan_office", "loan_officer", "hr_loan_office", "leave_loan_officer", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
           },
         },
         { status: 200 },
@@ -612,7 +612,7 @@ export async function GET() {
       hrOffice: canDoHrOffice(role, deptName, deptCode),
       directorHr: canDoDirectorHr(role, deptName, deptCode),
       viewAllTabs,
-      allLoans: isAdminRole(role) || isManagingDirector || ["loan_office", "loan_officer", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
+      allLoans: isAdminRole(role) || isManagingDirector || ["loan_office", "loan_officer", "hr_loan_office", "leave_loan_officer", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
     }
 
     // HOD query: include requests explicitly assigned to this HOD, plus linked-staff fallback for legacy data.
@@ -670,7 +670,7 @@ export async function GET() {
     const showAccounts = permissions.accounts || viewAllTabs
     // HR Loan Office can monitor committee-stage requests, while action rights remain
   // restricted to users with the committee permission.
-  const showCommittee = permissions.committee || viewAllTabs || role === "hr_loan_office" || role.includes("hr_loan") || (role === "loan_office" && /hr|human resource/i.test(`${deptName} ${deptCode}`))
+  const showCommittee = permissions.committee || viewAllTabs || (role === "hr_loan_office" || role === "leave_loan_officer") || role.includes("hr_loan") || (role === "loan_office" && /hr|human resource/i.test(`${deptName} ${deptCode}`))
     const showHrOffice = permissions.hrOffice || viewAllTabs
     const showDirectorHr = permissions.directorHr || viewAllTabs
 
@@ -682,7 +682,42 @@ export async function GET() {
         ? admin.from("loan_requests").select("*")
             .not("status", "in", '("hod_rejected","director_rejected","rejected_fd","committee_rejected")')
             .order("created_at", { ascending: false })
-        : admin.from("loan_requests").select("*").in("status", ["awaiting_hr_terms", "sent_to_hr_office"]).order("created_at", { ascending: false })
+        : admin.from("loan_requests").select("*").in("status", ["awaiting_hr_terms", "sent_to_hr_office", "pending_hr_loan_office"]).order("created_at", { ascending: false })
+
+    // Every loan, including FD-exempt types, must have an FD result before HR sets terms.
+    // Legacy rows that reached HR Terms without one are returned to Accounts FD.
+    {
+      const { data: skippedFdRows } = await admin
+        .from("loan_requests")
+        .select("id")
+        .eq("status", "awaiting_hr_terms")
+        .is("fd_score", null)
+        .is("fd_checked_at", null)
+      const skippedIds = (skippedFdRows || []).map((r: any) => r.id)
+      if (skippedIds.length > 0) {
+        const nowIso = new Date().toISOString()
+        const { data: repaired } = await admin
+          .from("loan_requests")
+          .update({ status: "sent_to_accounts", fd_score: null, fd_good: null, fd_checked_at: null, updated_at: nowIso })
+          .in("id", skippedIds)
+          .eq("status", "awaiting_hr_terms")
+          .is("fd_score", null)
+          .select("id")
+        if (repaired && repaired.length > 0) {
+          await admin.from("loan_request_timeline").insert(
+            repaired.map((r: any) => ({
+              loan_request_id: r.id,
+              actor_id: user.id,
+              actor_role: role || "system",
+              action_key: "returned_to_accounts_fd_missing",
+              from_status: "awaiting_hr_terms",
+              to_status: "sent_to_accounts",
+              note: "Returned to Accounts/FD automatically: every loan type must have an FD calculation before HR terms are set.",
+            })),
+          )
+        }
+      }
+    }
 
     const myRequestIds = (myRes.data || []).map((r: any) => r.id)
 
@@ -1143,7 +1178,7 @@ export async function GET() {
             hrOffice: canDoHrOffice(role, deptName, deptCode),
             directorHr: canDoDirectorHr(role, deptName, deptCode),
             viewAllTabs: viewAllTabsFallback,
-            allLoans: isAdminRole(role) || isManagingDirector || ["loan_office", "loan_officer", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
+            allLoans: isAdminRole(role) || isManagingDirector || ["loan_office", "loan_officer", "hr_loan_office", "leave_loan_officer", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
           },
         },
         { status: 200 },

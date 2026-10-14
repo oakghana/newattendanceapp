@@ -33,7 +33,7 @@ export const APPLIED_STATUSES = new Set([
 ])
 
 const PROFILE_COLUMNS =
-  "id, first_name, last_name, employee_id, position, role, email, assigned_location_id, department_id, departments(name)"
+  "id, first_name, last_name, employee_id, position, role, staff_category, employment_type, employee_type, assigned_location_id, department_id, departments(name)"
 const CHUNK_SIZE = 150
 const PAGE_SIZE = 1000
 
@@ -43,6 +43,20 @@ export function defaultPlanningYear() {
 
 export function normalizeRole(role: unknown) {
   return String(role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+}
+
+/** Interns, contract staff, and NSP personnel do not participate in annual leave. */
+export function isAnnualLeaveEligible(profile: {
+  role?: unknown
+  position?: unknown
+  staff_category?: unknown
+  employment_type?: unknown
+  employee_type?: unknown
+}) {
+  const values = [profile.role, profile.position, profile.staff_category, profile.employment_type, profile.employee_type]
+    .map((value) => String(value || "").toLowerCase().trim())
+    .filter(Boolean)
+  return !values.some((value) => /(^|[ _-])(intern|internship|contract|contractor|nsp)(?=$|[ _-])/.test(value))
 }
 
 export function normalizeYear(value: unknown, fallback: string) {
@@ -216,8 +230,9 @@ export async function resolveYetToApply(
     }
   }
 
-  const pending = staffRows.filter((row) => !appliedUserIds.has(String(row.id)))
-  return { ok: true, year, senderProfile: profile, staffRows, pending, lastRejectedStatus }
+  const eligibleStaffRows = staffRows.filter(isAnnualLeaveEligible)
+  const pending = eligibleStaffRows.filter((row) => !appliedUserIds.has(String(row.id)))
+  return { ok: true, year, senderProfile: profile, staffRows: eligibleStaffRows, pending, lastRejectedStatus }
 }
 
 /** True when this staff member already has a live annual leave request for the planning year. */
