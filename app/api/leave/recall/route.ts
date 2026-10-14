@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
       "regional_manager",
       "hr_officer",
       "hr_leave_office",
+      "leave_loan_officer",
       "regional_hr",
       "manager_hr",
       "director_hr",

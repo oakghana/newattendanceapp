@@ -12,6 +12,7 @@ const HR_ROLES = new Set([
   'hr_office',
   'hr_officer',
   'hr_leave_office',
+  'leave_loan_officer',
   'manager_hr',
   'director_hr',
   'hr_executive',

@@ -17,7 +17,7 @@ import { HrExecutiveLeaveModule } from "./hr-executive-leave-module"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 import { LoanOfficeLeaveModule } from "./loan-office-leave-module"
 
-const HR_ANALYTICS_ROLES = ["hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr", "department_head", "accounts_executive", "regional_manager"]
+const HR_ANALYTICS_ROLES = ["hr_leave_office", "leave_loan_officer", "director_hr", "manager_hr", "admin", "hr_office", "hr", "department_head", "accounts_executive", "regional_manager"]
 
 function normalizeRole(role: string | null | undefined) {
   return String(role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
@@ -68,7 +68,7 @@ export function LeaveManagementModuleClient({
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
   const isRegionalHR = isRegionalHrOfficerRole(normalizedRole) || (normalizedRole.includes("regional") && normalizedRole.includes("hr"))
   const isHrExecutive = ['hr_executive', 'hr_director', 'director_hr', 'manager_hr'].includes(normalizedRole)
-  const isLoanOffice = normalizedRole === 'loan_office' || normalizedRole === 'hr_loan_office' || normalizedRole === 'accounts_loan_office'
+  const isLoanOffice = normalizedRole === 'loan_office' || (normalizedRole === 'hr_loan_office' || normalizedRole === 'leave_loan_officer') || normalizedRole === 'accounts_loan_office'
   const searchParams = useSearchParams()
   const defaultTab = isRegionalHR ? "leave-planning" : "leave-management"
   const requestedTab = searchParams.get("tab")

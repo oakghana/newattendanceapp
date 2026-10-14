@@ -40,10 +40,10 @@ export async function POST(request: NextRequest) {
     const { data: hrStaff } = await admin
       .from("user_profiles")
       .select("id, role")
-      .in("role", ["hr_leave_office", "director_hr", "manager_hr", "hr_executive"])
+      .in("role", ["hr_leave_office", "leave_loan_officer", "director_hr", "manager_hr", "hr_executive"])
       .eq("is_active", true)
 
-    const hrOfficeIds = (hrStaff || []).filter((u: any) => u.role === "hr_leave_office").map((u: any) => u.id)
+    const hrOfficeIds = (hrStaff || []).filter((u: any) => (u.role === "hr_leave_office" || u.role === "leave_loan_officer")).map((u: any) => u.id)
     const hrExecIds = (hrStaff || []).filter((u: any) => ["director_hr", "manager_hr", "hr_executive"].includes(u.role)).map((u: any) => u.id)
 
     const notifications: any[] = []

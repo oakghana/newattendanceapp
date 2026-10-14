@@ -19,7 +19,7 @@ export async function GET() {
       .single()
 
     const roleNorm = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const isManagerRole = ["regional_manager", "department_head", "admin", "hr_officer", "manager_hr", "director_hr", "hr_leave_office", "hr_office", "hr", "it_admin"].includes(roleNorm)
+    const isManagerRole = ["regional_manager", "department_head", "admin", "hr_officer", "manager_hr", "director_hr", "hr_leave_office", "leave_loan_officer", "hr_office", "hr", "it_admin"].includes(roleNorm)
 
     // Fetch user's deferment requests
     const { data: defermentRequests, error: deferErr } = await supabase

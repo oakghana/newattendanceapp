@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server"
 // "existing requests" list always agree on who has nationwide access.
 const NATIONWIDE_ROLES = [
   "hr_leave_office",
+  "leave_loan_officer",
   "admin",
   "manager_hr",
   "director_hr",

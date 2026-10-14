@@ -2,7 +2,7 @@ import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server
 import { NextRequest, NextResponse } from "next/server"
 
 // Roles permitted to approve payments
-const HR_APPROVER_ROLES = ["hr_executive", "hr_leave_office", "admin"]
+const HR_APPROVER_ROLES = ["hr_executive", "hr_leave_office", "leave_loan_officer", "admin"]
 const ACCOUNTS_APPROVER_ROLES = ["accounts_executive", "admin"]
 
 export async function PUT(request: NextRequest) {

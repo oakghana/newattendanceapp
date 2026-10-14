@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
   const isHodOrRm = ["department_head", "transport_manager", "regional_manager", "regional_manager_officer"].includes(normalizedRole)
   const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
-  const isHrExecutive = ["director_hr", "manager_hr", "admin", "hr_leave_office", "hr_office"].includes(normalizedRole)
+  const isHrExecutive = ["director_hr", "manager_hr", "admin", "hr_leave_office", "leave_loan_officer", "hr_office"].includes(normalizedRole)
 
   if (!isHodOrRm && !isRegionalHr && !isHrExecutive) {
       return NextResponse.json(

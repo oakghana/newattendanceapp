@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
     const role = normalizeRole((profile as any)?.role)
     const canManagePolicy =
       role === "admin" ||
-      role === "hr_leave_office" ||
+      (role === "hr_leave_office" || role === "leave_loan_officer") ||
       role === "hr_office" ||
       (role === "department_head" &&
         isHrDepartment((profile as any)?.departments?.name, (profile as any)?.departments?.code))

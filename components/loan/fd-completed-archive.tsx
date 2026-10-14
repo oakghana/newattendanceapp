@@ -44,7 +44,7 @@ export function FdCompletedArchive({ userRole }: { userRole?: string }) {
   const [submitting, setSubmitting] = useState(false)
   const { toast } = useToast()
   const normalizedRole = String(userRole || '').toLowerCase().replace(/[\s-]+/g, '_')
-  const isLoanOffice = normalizedRole === 'loan_office' || normalizedRole === 'hr_loan_office'
+  const isLoanOffice = normalizedRole === 'loan_office' || (normalizedRole === 'hr_loan_office' || normalizedRole === 'leave_loan_officer')
   const isAccountsOffice =
     normalizedRole === 'accounts' ||
     normalizedRole === 'accounts_loan_office' ||

@@ -103,7 +103,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       .toLowerCase()
       .replace(/[\s-]+/g, "_")
 
-    if (!profile || !["admin", "it_admin", "department_head", "regional_manager", "manager_hr", "director_hr", "hr_leave_office"].includes(normalizedRequesterRole)) {
+    if (!profile || !["admin", "it_admin", "department_head", "regional_manager", "manager_hr", "director_hr", "hr_leave_office", "leave_loan_officer"].includes(normalizedRequesterRole)) {
       console.log("[v0] Insufficient permissions for user:", profile?.role)
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
@@ -264,7 +264,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const normalizedActorRole = String(profile.role || "").trim().toLowerCase().replace(/[-\s]+/g, "_")
     const isAdministrator = ["admin", "administrator"].includes(normalizedActorRole)
     const isItAdmin = ["it_admin", "itadmin"].includes(normalizedActorRole)
-    const regionalHrRoles = ["hr_leave_office", "hr_records", "hr_records_office", "regional_hr", "regional_hr_leave_office", "regional_hr_office", "regional_hr_officer"]
+    const regionalHrRoles = ["hr_leave_office", "leave_loan_officer", "hr_records", "hr_records_office", "regional_hr", "regional_hr_leave_office", "regional_hr_office", "regional_hr_officer"]
     const normalizedIncomingHrRole = String(role || "").trim().toLowerCase().replace(/[-\s]+/g, "_")
     const normalizedExistingHrRole = String(targetProfile.role || "").trim().toLowerCase().replace(/[-\s]+/g, "_")
     const isHrRoleActuallyChanging = Boolean(role) && normalizedIncomingHrRole !== normalizedExistingHrRole

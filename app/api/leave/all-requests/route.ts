@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     // Expand allowed roles to include all HR-level roles
     const roleStr = String(profile.role || "").toLowerCase().trim()
-    const allowedRoles = ["hr_leave_office", "admin", "director_hr", "manager_hr", "hr_office", "it-admin"]
+    const allowedRoles = ["hr_leave_office", "leave_loan_officer", "admin", "director_hr", "manager_hr", "hr_office", "it-admin"]
     if (!allowedRoles.includes(roleStr)) {
       return NextResponse.json({ error: "Forbidden — requires HR role" }, { status: 403 })
     }

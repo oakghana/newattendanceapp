@@ -31,6 +31,7 @@ export async function GET(_request: NextRequest) {
 
     const allowedRoles = [
       "hr_leave_office",
+      "leave_loan_officer",
       "hr_office",
       "admin",
       "director_hr",

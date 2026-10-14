@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
       .toLowerCase()
       .trim()
       .replace(/[-\s]+/g, "_")
-    const canViewHrPaymentQueue = ["admin", "hr_leave_office", "leave_office"].includes(normalizedRole)
+    const canViewHrPaymentQueue = ["admin", "hr_leave_office", "leave_loan_officer", "leave_office"].includes(normalizedRole)
 
     if (profileError || !canViewHrPaymentQueue) {
       return NextResponse.json(

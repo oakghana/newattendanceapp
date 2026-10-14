@@ -2,7 +2,7 @@ import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server
 import { NextRequest, NextResponse } from "next/server"
 
 // Roles permitted to submit payment evidence
-const ALLOWED_ROLES = ["admin", "accounts", "accounts_executive", "loan_office", "hr_loan_office", "accounts_loan_office", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "it-admin"]
+const ALLOWED_ROLES = ["admin", "accounts", "accounts_executive", "loan_office", "hr_loan_office", "accounts_loan_office", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "leave_loan_officer", "it-admin"]
 
 export async function POST(request: NextRequest) {
   try {
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
     const { data: hrApprovers } = await admin
       .from("user_profiles")
       .select("id")
-      .in("role", ["hr_executive", "hr_leave_office", "admin"])
+      .in("role", ["hr_executive", "hr_leave_office", "leave_loan_officer", "admin"])
       .eq("is_active", true)
       .limit(5)
 
@@ -199,7 +199,7 @@ export async function GET(request: NextRequest) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { data: viewer } = await admin.from("user_profiles").select("role").eq("id", user.id).maybeSingle()
-    const auditRoles = ["hr_executive", "hr_leave_office", "hr_loan_office", "accounts_loan_office", "accounts_executive", "admin"]
+    const auditRoles = ["hr_executive", "hr_leave_office", "leave_loan_officer", "hr_loan_office", "accounts_loan_office", "accounts_executive", "admin"]
     if (!auditRoles.includes(String(viewer?.role || ""))) return NextResponse.json({ error: "Payment evidence is restricted to HR and loan accounts audit staff." }, { status: 403 })
 
     const { searchParams } = new URL(request.url)

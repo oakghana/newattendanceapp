@@ -22,7 +22,7 @@ export async function PATCH(request: NextRequest) {
       .single()
 
     const roleNorm = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const canAssign = ["hr_leave_office", "hr_office", "admin", "director_hr", "manager_hr", "hr_director"].includes(roleNorm)
+    const canAssign = ["hr_leave_office", "leave_loan_officer", "hr_office", "admin", "director_hr", "manager_hr", "hr_director"].includes(roleNorm)
 
     if (!canAssign) {
       return NextResponse.json({ error: "Forbidden - insufficient permissions" }, { status: 403 })

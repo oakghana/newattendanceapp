@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
 
     // HR and Leave Office staff can see all countdowns
     // Regular staff see only their own
-    const isHrOrLeaveOffice = ["admin", "hr", "hr_office", "hr_officer", "hr_leave_office", "manager_hr", "director_hr"].includes(userRole)
+    const isHrOrLeaveOffice = ["admin", "hr", "hr_office", "hr_officer", "hr_leave_office", "leave_loan_officer", "manager_hr", "director_hr"].includes(userRole)
 
     let query = supabase
       .from("leave_plan_requests")

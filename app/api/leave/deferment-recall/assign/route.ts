@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
 
 // HR Leave Office roles that can assign requests to HR executives
-const HR_LEAVE_OFFICE_ROLES = ["hr_leave_office", "hr_officer", "hr_office", "admin"]
+const HR_LEAVE_OFFICE_ROLES = ["hr_leave_office", "leave_loan_officer", "hr_officer", "hr_office", "admin"]
 
 export async function POST(request: NextRequest) {
   try {

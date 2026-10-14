@@ -517,7 +517,7 @@ const isRegionalLeave = leaveWorkflowRoute === "regional" || leaveWorkflowRoute 
       isApplicant ||
       role === "admin" ||
       role === "secretary" ||
-      role === "loan_office" || role === "hr_loan_office" || role === "accounts_loan_office" ||
+      role === "loan_office" || (role === "hr_loan_office" || role === "leave_loan_officer") || role === "accounts_loan_office" ||
       role === "hr_executive" ||
       role === "accounts_executive" ||
       isHrApproverRole(role, deptName, deptCode) ||
@@ -541,7 +541,7 @@ const isRegionalLeave = leaveWorkflowRoute === "regional" || leaveWorkflowRoute 
       }
     } else if (!isHrApproverRole(role, deptName, deptCode) && !isHrLeaveOfficeRole(role) && !isRegionalHr && !isHrRecords && role !== "admin" && role !== "hr_executive" && role !== "accounts_executive" && role !== "secretary") {
       // No token provided — allow the applicant or loan_office to download their own memo, or HOD/manager.
-      if (!isApplicant && role !== "loan_office" && role !== "hr_loan_office" && role !== "accounts_loan_office" && !isManagerRole(role)) {
+      if (!isApplicant && role !== "loan_office" && (role !== "hr_loan_office" && role !== "leave_loan_officer") && role !== "accounts_loan_office" && !isManagerRole(role)) {
         return NextResponse.json({ error: "A valid memo token is required." }, { status: 401 })
       }
     }

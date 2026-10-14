@@ -410,7 +410,7 @@ export async function notifyLeaveHodApproved(
   },
 ): Promise<void> {
   try {
-    const hrOfficeRoles = ["hr_leave_office", "hr_officer", "hr_office", "manager_hr", "admin"]
+    const hrOfficeRoles = ["hr_leave_office", "leave_loan_officer", "hr_officer", "hr_office", "manager_hr", "admin"]
     const hrEmails = await emailsForRoles(admin, hrOfficeRoles)
     if (!hrEmails.length) return
 
@@ -763,7 +763,7 @@ export async function notifyLoanHodApproved(
   },
 ): Promise<void> {
   try {
-    const loanOfficeRoles = ["loan_officer", "loan_office", "hr_loan_office", "accounts_loan_office", "hr_officer", "hr_office", "manager_hr", "admin"]
+    const loanOfficeRoles = ["loan_officer", "loan_office", "hr_loan_office", "leave_loan_officer", "accounts_loan_office", "hr_officer", "hr_office", "manager_hr", "admin"]
     const emails = await emailsForRoles(admin, loanOfficeRoles)
     if (!emails.length) return
 

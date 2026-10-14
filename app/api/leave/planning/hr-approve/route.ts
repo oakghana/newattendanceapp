@@ -728,7 +728,7 @@ export async function POST(request: NextRequest) {
         const { data: hrRoleUsers } = await admin
           .from("user_profiles")
           .select("id")
-          .in("role", ["hr_leave_office", "hr_executive", "director_hr", "department_head", "regional_manager"])
+          .in("role", ["hr_leave_office", "leave_loan_officer", "hr_executive", "director_hr", "department_head", "regional_manager"])
           .eq("is_active", true)
         const hrIds = (hrRoleUsers || []).map((u: any) => u.id).filter(Boolean)
 

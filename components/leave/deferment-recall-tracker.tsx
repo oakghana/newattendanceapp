@@ -113,7 +113,7 @@ interface HRExecutive {
   employee_id: string
 }
 
-const HR_LEAVE_OFFICE_ROLES = ['hr_leave_office', 'hr_officer', 'hr_office', 'admin']
+const HR_LEAVE_OFFICE_ROLES = ['hr_leave_office', 'leave_loan_officer', 'hr_officer', 'hr_office', 'admin']
 
 const getStatusBadge = (status: string) => {
   switch (status) {

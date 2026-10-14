@@ -9,6 +9,7 @@ const HR_ROLES = new Set([
   "director_hr",
   "hr_director",
   "hr_leave_office",
+  "leave_loan_officer",
   "hr_office",
   "hr",
   "admin",

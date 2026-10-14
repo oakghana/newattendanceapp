@@ -1211,7 +1211,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const canViewLeaveAnalytics = isHrApprover || isHrOffice || isAdmin
   const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin || isDistrictOfficer
   const canManageLeaveTypePolicy = isHrOffice || isAdmin
-  const isLoanOffice = normalizedRole === "loan_office" || normalizedRole === "hr_loan_office" || normalizedRole === "accounts_loan_office"
+  const isLoanOffice = normalizedRole === "loan_office" || (normalizedRole === "hr_loan_office" || normalizedRole === "leave_loan_officer") || normalizedRole === "accounts_loan_office"
   const todayIsoDate = useMemo(() => toIsoDate(new Date()), [])
   const annualPlanningYear = useMemo(() => new Date().getFullYear() + 1, [])
   const annualPlanningYearStart = `${annualPlanningYear}-01-01`

@@ -123,9 +123,9 @@ export function DefermentRequestsTracking({ userRole, userId, userDepartmentId }
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const roleNorm = userRole?.toLowerCase().replace(/[\s-]+/g, '_') || ''
-  const isStaff = !['admin', 'regional_manager', 'department_head', 'hr_officer', 'hr_leave_office', 'hr_office', 'hr', 'manager_hr', 'director_hr', 'hr_director', 'hr_executive'].includes(roleNorm)
+  const isStaff = !['admin', 'regional_manager', 'department_head', 'hr_officer', 'hr_leave_office', 'leave_loan_officer', 'hr_office', 'hr', 'manager_hr', 'director_hr', 'hr_director', 'hr_executive'].includes(roleNorm)
   const isHodOrRM = ['regional_manager', 'department_head'].includes(roleNorm)
-  const isHRLeaveOffice = ['hr_leave_office', 'hr_office', 'hr'].includes(roleNorm)
+  const isHRLeaveOffice = ['hr_leave_office', 'leave_loan_officer', 'hr_office', 'hr'].includes(roleNorm)
   const isHrExecutive = ['hr_executive', 'hr_director', 'director_hr', 'manager_hr'].includes(roleNorm)
 
   const fetchRequests = useCallback(async () => {

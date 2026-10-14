@@ -3,7 +3,7 @@ import { createClient as createSessionClient, createAdminClient } from "@/lib/su
 import { NextRequest, NextResponse } from "next/server"
 
 // HR Executive roles that can approve deferment/recall requests
-const HR_EXECUTIVE_ROLES = ["hr", "hr_executive", "hr_director", "hr_head", "admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_leave_office", "hr_office"]
+const HR_EXECUTIVE_ROLES = ["hr", "hr_executive", "hr_director", "hr_head", "admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_leave_office", "leave_loan_officer", "hr_office"]
 
 export async function POST(request: NextRequest) {
   try {

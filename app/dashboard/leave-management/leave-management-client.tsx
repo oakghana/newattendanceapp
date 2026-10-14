@@ -408,7 +408,7 @@ export function LeaveManagementClient({
   const exportAnnualLeaveToExcel = async () => {
     try {
       const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
-      const isAuthorized = ["department_head", "accounts_executive", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "admin", "hr_leave_office"].includes(normalizedRole)
+      const isAuthorized = ["department_head", "accounts_executive", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "admin", "hr_leave_office", "leave_loan_officer"].includes(normalizedRole)
 
       if (!isAuthorized) {
         toast({ title: "Access Denied", description: "Only HOD/RM and HR can export annual leave.", variant: "destructive" })
@@ -453,7 +453,7 @@ export function LeaveManagementClient({
   const fetchStaffApprovedMemos = async () => {
     try {
       const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
-      const isAuthorized = ["department_head", "regional_manager", "regional_manager_officer", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office", "admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office"].includes(normalizedRole)
+      const isAuthorized = ["department_head", "regional_manager", "regional_manager_officer", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office", "admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office", "leave_loan_officer"].includes(normalizedRole)
 
       if (!isAuthorized) return
 
@@ -700,7 +700,7 @@ export function LeaveManagementClient({
 
   const handleApprove = async (notificationId: string) => {
     const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const canManageLeave = isAssignedHod || ["admin", "department_head", "accounts_executive", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalized)
+    const canManageLeave = isAssignedHod || ["admin", "department_head", "accounts_executive", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "leave_loan_officer", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
       return
@@ -745,7 +745,7 @@ export function LeaveManagementClient({
 
   const handleDismiss = async (notificationId: string, reason: string) => {
     const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const canManageLeave = isAssignedHod || ["admin", "department_head", "accounts_executive", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalized)
+    const canManageLeave = isAssignedHod || ["admin", "department_head", "accounts_executive", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "leave_loan_officer", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
       return
@@ -848,15 +848,15 @@ export function LeaveManagementClient({
   // All authenticated users can access their leave request hub. This does not
   // grant reviewer or administrative permissions.
   const canUseStaffLeaveHub = true
-  const isManagerView = isAssignedHod || ["admin", "regional_manager", "regional_manager_officer", "department_head", "accounts_executive", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office", "hr", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
+  const isManagerView = isAssignedHod || ["admin", "regional_manager", "regional_manager_officer", "department_head", "accounts_executive", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office", "leave_loan_officer", "hr", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isRegionalManager = normalizedRole === "regional_manager" || normalizedRole === "regional_manager_officer"
   const isAdminView = isAdmin
   const canViewHrTemplates = isAdministrator
   const canEditHrTemplates = isAdministrator
-  const isHrLeaveOfficeRole = ["hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
-  const isLeaveOfficeRole = ["hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr"].includes(normalizedRole)
-  const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
-  const isHrExecutive = isAdmin || ["director_hr", "manager_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
+  const isHrLeaveOfficeRole = ["hr_leave_office", "leave_loan_officer", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
+  const isLeaveOfficeRole = ["hr_leave_office", "leave_loan_officer", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr"].includes(normalizedRole)
+  const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "leave_loan_officer", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
+  const isHrExecutive = isAdmin || ["director_hr", "manager_hr", "hr_director", "hr_leave_office", "leave_loan_officer", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const canAccessPaymentAdvice = isAdmin || isHrLeaveOfficeRole || isHrExecutive
 
   // ─── Deferment Handler ───
@@ -999,7 +999,7 @@ export function LeaveManagementClient({
   // Fetch approved memos for HOD/RM/HR staff
   useEffect(() => {
     const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
-    const isManagerRole = ["department_head", "regional_manager", "admin", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_office", "hr"].includes(normalizedRole)
+    const isManagerRole = ["department_head", "regional_manager", "admin", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "leave_loan_officer", "hr_office", "hr"].includes(normalizedRole)
     if (isManagerRole) {
       fetchStaffApprovedMemos()
     }
@@ -1011,7 +1011,7 @@ export function LeaveManagementClient({
       const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
       
       // Only fetch for hr_leave_office and related HR roles
-      const isHrLeaveRole = ["hr_leave_office", "hr_office", "leave_office"].includes(normalizedRole)
+      const isHrLeaveRole = ["hr_leave_office", "leave_loan_officer", "hr_office", "leave_office"].includes(normalizedRole)
       if (!isHrLeaveRole) return
       
       try {
@@ -1588,7 +1588,7 @@ export function LeaveManagementClient({
         </CardContent>
       </Card>
 
-      {canUseStaffLeaveHub && !hasHodLinkage && normalizedRole !== "hr_leave_office" && normalizedRole !== "hr_office" && normalizedRole !== "hr" && (
+      {canUseStaffLeaveHub && !hasHodLinkage && (normalizedRole !== "hr_leave_office" && normalizedRole !== "leave_loan_officer") && normalizedRole !== "hr_office" && normalizedRole !== "hr" && (
         <Alert className="border-blue-200 bg-blue-50">
           <AlertDescription className="text-blue-800">
             Your leave profile is not linked to a HOD yet. Kindly inform HR/Admin to complete your HOD linkage so approvals route correctly.
@@ -1798,7 +1798,7 @@ export function LeaveManagementClient({
       )}
 
       {/* Export Annual Leave Card - HOD/RM/HR Only */}
-      {["department_head", "accounts_executive", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr", "admin"].includes(String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")) && (
+      {["department_head", "accounts_executive", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "leave_loan_officer", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr", "admin"].includes(String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")) && (
         <Card className="border border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50/50">
           <CardHeader className="pb-4">
             <CardTitle className="text-lg font-bold text-purple-900 flex items-center gap-2">

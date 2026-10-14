@@ -1450,7 +1450,7 @@ export default function LoanAppPage() {
   const userDeptIsAccounts = /account|finance/i.test(userDeptName)
   const canAccessLoanOfficeWorkspace =
     isAdmin ||
-    (["loan_office", "hr_loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) ||
+    (["loan_office", "hr_loan_office", "leave_loan_officer", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) ||
     (normalizedRole === "manager_hr" && !userDeptIsAccounts)
   const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
@@ -1532,7 +1532,7 @@ export default function LoanAppPage() {
 
     // Loan Office tab: ONLY for HR department loan office staff to process HOD-approved loans and perform FD checks
     // Supports both new (hr_loan_office) and legacy (loan_office in HR dept) role names
-    const isHRLoanOffice = (["hr_loan_office", "loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) || normalizedRole.includes("hr_loan") || /hr.*loan.*office/i.test(`${normalizedRole} ${userDeptName}`)) && !userDeptIsAccounts || (p?.loanOffice && !userDeptIsAccounts)
+    const isHRLoanOffice = (["hr_loan_office", "leave_loan_officer", "loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) || normalizedRole.includes("hr_loan") || /hr.*loan.*office/i.test(`${normalizedRole} ${userDeptName}`)) && !userDeptIsAccounts || (p?.loanOffice && !userDeptIsAccounts)
     if (isHRLoanOffice || isManagingDirectorUser) {
       tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice})` })
     }
@@ -2004,7 +2004,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
   // Fetch payment records for approval
   useEffect(() => {
     const fetchPaymentRecords = async () => {
-      const isApprover = ["hr_executive", "hr_leave_office", "hr_loan_office", "accounts_loan_office", "accounts_executive", "admin"].includes(data?.profile?.role || "")
+      const isApprover = ["hr_executive", "hr_leave_office", "leave_loan_officer", "hr_loan_office", "accounts_loan_office", "accounts_executive", "admin"].includes(data?.profile?.role || "")
       if (!isApprover) return
 
       setPaymentRecordsLoading(true)
@@ -5930,9 +5930,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 {(() => {
                   // For HR/Accounts executives, fetch pending payments for their approval
                   const userRole = data?.profile?.role || ""
-                  const isHrApprover = ["hr_executive", "hr_leave_office", "hr_loan_office", "admin"].includes(userRole)
+                  const isHrApprover = ["hr_executive", "hr_leave_office", "leave_loan_officer", "hr_loan_office", "admin"].includes(userRole)
                   const isAccountsApprover = ["accounts_executive", "admin"].includes(userRole)
-                  const isAuditViewer = ["hr_executive", "hr_leave_office", "hr_loan_office", "accounts_loan_office", "accounts_executive", "admin"].includes(userRole)
+                  const isAuditViewer = ["hr_executive", "hr_leave_office", "leave_loan_officer", "hr_loan_office", "accounts_loan_office", "accounts_executive", "admin"].includes(userRole)
                   
                   if (!isAuditViewer) {
                     return (
@@ -6073,7 +6073,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
         {/* ── Repayment Tracking ── */}
 <TabsContent value="running-loans" className="space-y-4">
-  {normalizedRole === "hr_loan_office" && <SettlementInitiationPanel />}
+  {(normalizedRole === "hr_loan_office" || normalizedRole === "leave_loan_officer") && <SettlementInitiationPanel />}
   <RunningLoansReport readOnly={isManagingDirector} />
   </TabsContent>
 
@@ -7680,7 +7680,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           </Card>
         </TabsContent>
 
-      {/* ── Action Modal ──────────────────────��─────────────────────── */}
+      {/* ── Action Modal ──────────────────────��──��──────────────────── */}
       <Dialog open={actionModal.open} onOpenChange={(o) => setActionModal((s) => ({ ...s, open: o }))}>
         <DialogContent className={actionModal.actionType === "accounts" ? "max-w-[96vw] w-[96vw] sm:max-w-[96vw] max-h-[92vh] overflow-y-auto" : "max-w-lg"}>
           <DialogHeader>
@@ -7747,7 +7747,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {/* Loan Office — read-only review, forwarding to Accounts only */}
             {actionModal.actionType === "loan_office" && (
               <>
-                {isAdmin && actionModal.row && (() => {
+                {(normalizedRole === "admin" || normalizedRole === "administrator") && actionModal.row && (() => {
                   const currentKey = actionModal.row.loan_type_key
                   const options = (lookupData?.loanTypes || []).filter((type) => type.is_active !== false && type.loan_key !== currentKey && !/salary[\s_-]*advance/i.test(`${type.loan_key} ${type.loan_label}`))
                   const target = options.find((type) => type.loan_key === changeLoanTypeKey)

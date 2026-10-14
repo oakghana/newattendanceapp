@@ -566,7 +566,7 @@ export async function PATCH(request: Request) {
           const { data: hrLoanOfficeUsers } = await admin
             .from("user_profiles")
             .select("id")
-            .in("role", ["loan_office", "loan_officer", "hr_loan_office", "hr_officer", "admin"])
+            .in("role", ["loan_office", "loan_officer", "hr_loan_office", "leave_loan_officer", "hr_officer", "admin"])
             .eq("is_active", true)
           await notifyUsers(
             admin,

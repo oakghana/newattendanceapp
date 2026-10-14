@@ -27,7 +27,7 @@ export function StaffLeaveMonitoringClient({ userRole }: StaffLeaveMonitoringCli
   const [error, setError] = useState<string | null>(null)
 
   // Check if user has permission to view this
-  const canViewLeaveMonitoring = ["head_of_department", "regional_manager", "hr_executive", "hr_leave_office", "admin"].includes(
+  const canViewLeaveMonitoring = ["head_of_department", "regional_manager", "hr_executive", "hr_leave_office", "leave_loan_officer", "admin"].includes(
     userRole || ""
   )
 

@@ -24,7 +24,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       .single()
 
     const userRole = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const isAuthorized = ["hr_leave_office", "director_hr", "manager_hr", "admin"].includes(userRole)
+    const isAuthorized = ["hr_leave_office", "leave_loan_officer", "director_hr", "manager_hr", "admin"].includes(userRole)
 
     if (!isAuthorized) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
@@ -75,7 +75,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       .single()
 
     const userRole = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const isAuthorized = ["hr_leave_office", "director_hr", "manager_hr", "admin"].includes(userRole)
+    const isAuthorized = ["hr_leave_office", "leave_loan_officer", "director_hr", "manager_hr", "admin"].includes(userRole)
 
     if (!isAuthorized) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })

@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
 
     // HR-level roles that can see all departments. Regional Manager / Regional HR
     // Office are scoped to their own regional office below, not treated as global.
-    const HR_GLOBAL_ROLES = ["hr_leave_office", "hr_office", "director_hr", "manager_hr", "hr_executive", "hr"]
+    const HR_GLOBAL_ROLES = ["hr_leave_office", "leave_loan_officer", "hr_office", "director_hr", "manager_hr", "hr_executive", "hr"]
     const isGlobalRole = isAdminRole(normalizedRole) || HR_GLOBAL_ROLES.includes(normalizedRole)
     const isRegionalScoped = isRegionalManagerRole(normalizedRole) || isRegionalHrRole(normalizedRole)
     const isDeptHead = isDepartmentHeadRole(normalizedRole)

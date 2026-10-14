@@ -80,8 +80,8 @@ interface SidebarProps {
 const EXEC_ROLES = ["managing_director", "secretary"] as const
 const ALL_STAFF_ROLES = [
   "admin", "it-admin", "driver", "chief_driver", "regional_chief_driver", "district_officer", "transport_manager", "regional_manager", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "department_head",
-  "staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr",
-  "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern",
+  "staff", "loan_office", "hr_loan_office", "leave_loan_officer", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr",
+  "hr_office", "hr_leave_office", "leave_loan_officer", "audit_staff", "nsp", "intern",
   "contract", "managing_director", "secretary", "hr_records", "hr_records_officer", "hr_records_manager", "administrator",
 ]
 
@@ -193,7 +193,7 @@ const navigationItems = [
     title: "Reports & Trends",
     href: "/dashboard/reports",
     icon: BarChart3,
-    roles: ["admin", "it-admin", "managing_director", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr_leave_office", "department_head", "accounts_executive", "transport_manager", "director_hr", "manager_hr"],
+    roles: ["admin", "it-admin", "managing_director", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "hr_office", "hr_leave_office", "leave_loan_officer", "department_head", "accounts_executive", "transport_manager", "director_hr", "manager_hr"],
     category: "admin",
   },
   {
@@ -476,7 +476,7 @@ function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsColla
   ])
 
   const HR_RECORDS_SIDEBAR_ROLES = new Set(["hr_records", "hr_records_officer", "hr_records_manager"])
-  const HR_LEAVE_OFFICE_SIDEBAR_ROLES = new Set(["hr_leave_office", "hr_office", "director_hr", "manager_hr", "regional_hr"])
+  const HR_LEAVE_OFFICE_SIDEBAR_ROLES = new Set(["hr_leave_office", "leave_loan_officer", "hr_office", "director_hr", "manager_hr", "regional_hr"])
   const isRegionalHr = effectiveRole === "regional_hr"
   const isAdministratorRole = ["admin", "administrator"].includes(effectiveRole)
   // Administrators are intentionally excluded from this restriction — they must retain

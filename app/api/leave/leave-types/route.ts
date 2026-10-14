@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       .single()
 
     const userRole = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const isAuthorized = ["hr_leave_office", "director_hr", "manager_hr", "admin"].includes(userRole)
+    const isAuthorized = ["hr_leave_office", "leave_loan_officer", "director_hr", "manager_hr", "admin"].includes(userRole)
 
     if (!isAuthorized) {
       return NextResponse.json(

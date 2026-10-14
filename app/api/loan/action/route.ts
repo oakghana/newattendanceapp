@@ -442,7 +442,7 @@ export async function POST(request: NextRequest) {
           const { data: hrUsers } = await admin
             .from("user_profiles")
             .select("id")
-            .in("role", ["hr_officer", "hr_loan_office", "loan_office", "director_hr", "manager_hr", "hr_director", "admin", "department_head"])
+            .in("role", ["hr_officer", "hr_loan_office", "leave_loan_officer", "loan_office", "director_hr", "manager_hr", "hr_director", "admin", "department_head"])
             .eq("is_active", true)
           await notifyUsers(
             admin,
@@ -453,7 +453,7 @@ export async function POST(request: NextRequest) {
             { request_id: req.id },
           )
           notifyLoanStageAdvanced(admin, {
-            toRoles: ["hr_officer", "hr_loan_office", "loan_office", "director_hr", "manager_hr", "hr_director", "admin"],
+            toRoles: ["hr_officer", "hr_loan_office", "leave_loan_officer", "loan_office", "director_hr", "manager_hr", "hr_director", "admin"],
             staffName: loanStaffName,
             loanType: String(req.loan_type_label || req.loan_type_key || ""),
             requestNumber: String(req.request_number || req.id),
@@ -510,7 +510,7 @@ export async function POST(request: NextRequest) {
       const { data: loanOfficeUsers } = await admin
         .from("user_profiles")
         .select("id")
-        .in("role", ["loan_officer", "loan_office", "hr_loan_office", "hr_officer", "admin"])
+        .in("role", ["loan_officer", "loan_office", "hr_loan_office", "leave_loan_officer", "hr_officer", "admin"])
         .eq("is_active", true)
 
       await notifyUsers(
@@ -618,8 +618,8 @@ export async function POST(request: NextRequest) {
 
     if (action === "admin_change_loan_type") {
       actionHandled = true
-      if (role !== "admin" && role !== "it_admin") {
-        return NextResponse.json({ error: "Only administrators can change a loan type" }, { status: 403 })
+      if (role !== "admin" && role !== "administrator") {
+        return NextResponse.json({ error: "Only administrators can change a loan type. IT administrators are not permitted." }, { status: 403 })
       }
 
       const changeableStatuses = [
@@ -710,10 +710,10 @@ export async function POST(request: NextRequest) {
 
       const stageRoles: Record<string, string[]> = {
         pending_hod: [],
-        hod_approved: ["loan_office", "hr_loan_office"],
+        hod_approved: ["loan_office", "hr_loan_office", "leave_loan_officer"],
         sent_to_accounts: ["accounts", "accounts_loan_office", "accounts_executive"],
-        pending_hr_loan_office: ["loan_office", "hr_loan_office"],
-        awaiting_hr_terms: ["loan_office", "hr_loan_office", "hr_officer", "manager_hr"],
+        pending_hr_loan_office: ["loan_office", "hr_loan_office", "leave_loan_officer"],
+        awaiting_hr_terms: ["loan_office", "hr_loan_office", "leave_loan_officer", "hr_officer", "manager_hr"],
         awaiting_committee: ["loan_committee", "committee"],
       }
       const stageRoleList = stageRoles[String(req.status)] || []

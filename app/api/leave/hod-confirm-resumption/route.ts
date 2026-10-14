@@ -204,7 +204,7 @@ export async function POST(req: NextRequest) {
         const { data: hrUsers } = await admin
           .from('user_profiles')
           .select('id')
-          .in('role', ['hr_leave_office', 'hr_executive', 'director_hr'])
+          .in('role', ['hr_leave_office', 'leave_loan_officer', 'hr_executive', 'director_hr'])
           .eq('is_active', true)
 
         const hrNotifs = (hrUsers || [])

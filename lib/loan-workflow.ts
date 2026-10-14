@@ -187,7 +187,7 @@ export function isLoanOfficeDepartment(name?: string | null, code?: string | nul
  * Reviewer authority must come from an actual manager/HR role, never from
  * linkage data alone.
  */
-const NEVER_HOD_ROLES = new Set(["hr_leave_office", "staff", ""])
+const NEVER_HOD_ROLES = new Set(["hr_leave_office", "leave_loan_officer", "staff", ""])
 
 export function canDoHodReview(role: string, isLinkedHod = false): boolean {
   const normalized = normalizeRole(role)
@@ -201,9 +201,10 @@ export function canDoLoanOffice(role: string, deptName?: string | null, deptCode
   return isAdminRole(normalizedRole) || 
          normalizedRole === "loan_officer" || 
          normalizedRole === "loan_office" ||
-         normalizedRole === "hr_loan_office" ||
-         normalizedRole === "manager_hr" || 
-         isLoanOfficeDepartment(deptName, deptCode)
+  normalizedRole === "hr_loan_office" ||
+  normalizedRole === "leave_loan_officer" ||
+  normalizedRole === "manager_hr" ||
+  isLoanOfficeDepartment(deptName, deptCode)
 }
 
 export function canEnterFdScore(role: string, deptName?: string | null, deptCode?: string | null): boolean {
@@ -266,7 +267,7 @@ export function canDoCommittee(role: string): boolean {
 
 export function canDoHrOffice(role: string, deptName?: string | null, deptCode?: string | null): boolean {
   const nr = normalizeRole(role)
-  return isAdminRole(nr) || nr === "hr_officer" || nr === "manager_hr" || nr === "loan_office" || nr === "hr_loan_office" || nr === "hr_executive" || nr === "hr" || isHrDepartment(deptName, deptCode)
+  return isAdminRole(nr) || nr === "hr_officer" || nr === "manager_hr" || nr === "loan_office" || nr === "hr_loan_office" || nr === "leave_loan_officer" || nr === "hr_executive" || nr === "hr" || isHrDepartment(deptName, deptCode)
 }
 
 export function canDoDirectorHr(role: string, deptName?: string | null, deptCode?: string | null): boolean {

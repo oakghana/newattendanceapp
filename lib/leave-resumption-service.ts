@@ -265,7 +265,7 @@ export async function processStaffResumptionCheckIn(userId: string, checkInDateS
     const { data: hrUsers } = await getSupabase()
       .from('user_profiles')
       .select('id')
-      .in('role', ['hr_leave_office', 'hr_executive', 'director_hr'])
+      .in('role', ['hr_leave_office', 'leave_loan_officer', 'hr_executive', 'director_hr'])
       .eq('is_active', true)
 
     const hrIds = (hrUsers || []).map((u: any) => u.id).filter((id: string) => id !== userId && !hodIds.includes(id))
@@ -471,7 +471,7 @@ export async function sendEscalationNotification(
     const { data: supervisors } = await getSupabase()
       .from('user_profiles')
       .select('*')
-      .or(`id.eq.${staffUser.supervisor_id},role.in.("department_head","regional_manager","hr_executive","hr_leave_office","director_hr")`)
+      .or(`id.eq.${staffUser.supervisor_id},role.in.("department_head","regional_manager","hr_executive","hr_leave_office", "leave_loan_officer","director_hr")`)
 
     if (level === 'warning') {
       await sendWarningNotification(staffUser, daysOverdue, supervisors)

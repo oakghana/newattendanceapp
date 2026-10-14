@@ -118,7 +118,7 @@ async function autoAdvanceStaleHodRequests(admin: any) {
   const { data: loanOfficeUsers } = await admin
     .from("user_profiles")
     .select("id")
-    .in("role", ["loan_officer", "hr_officer", "director_hr", "hr_director", "loan_office", "hr_loan_office", "accounts_loan_office", "manager_hr", ...ADMIN_DB_ROLE_ALIASES])
+    .in("role", ["loan_officer", "hr_officer", "director_hr", "hr_director", "loan_office", "hr_loan_office", "leave_loan_officer", "accounts_loan_office", "manager_hr", ...ADMIN_DB_ROLE_ALIASES])
     .eq("is_active", true)
 
   const loanOfficeIds = (loanOfficeUsers || []).map((u: any) => u.id)
@@ -583,7 +583,7 @@ export async function GET() {
             hrOffice: canDoHrOffice(role, deptName, deptCode),
             directorHr: canDoDirectorHr(role, deptName, deptCode),
             viewAllTabs,
-            allLoans: isAdminRole(role) || isManagingDirector || ["loan_office", "loan_officer", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
+            allLoans: isAdminRole(role) || isManagingDirector || ["loan_office", "loan_officer", "hr_loan_office", "leave_loan_officer", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
           },
         },
         { status: 200 },
@@ -612,7 +612,7 @@ export async function GET() {
       hrOffice: canDoHrOffice(role, deptName, deptCode),
       directorHr: canDoDirectorHr(role, deptName, deptCode),
       viewAllTabs,
-      allLoans: isAdminRole(role) || isManagingDirector || ["loan_office", "loan_officer", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
+      allLoans: isAdminRole(role) || isManagingDirector || ["loan_office", "loan_officer", "hr_loan_office", "leave_loan_officer", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
     }
 
     // HOD query: include requests explicitly assigned to this HOD, plus linked-staff fallback for legacy data.
@@ -670,7 +670,7 @@ export async function GET() {
     const showAccounts = permissions.accounts || viewAllTabs
     // HR Loan Office can monitor committee-stage requests, while action rights remain
   // restricted to users with the committee permission.
-  const showCommittee = permissions.committee || viewAllTabs || role === "hr_loan_office" || role.includes("hr_loan") || (role === "loan_office" && /hr|human resource/i.test(`${deptName} ${deptCode}`))
+  const showCommittee = permissions.committee || viewAllTabs || (role === "hr_loan_office" || role === "leave_loan_officer") || role.includes("hr_loan") || (role === "loan_office" && /hr|human resource/i.test(`${deptName} ${deptCode}`))
     const showHrOffice = permissions.hrOffice || viewAllTabs
     const showDirectorHr = permissions.directorHr || viewAllTabs
 
@@ -1178,7 +1178,7 @@ export async function GET() {
             hrOffice: canDoHrOffice(role, deptName, deptCode),
             directorHr: canDoDirectorHr(role, deptName, deptCode),
             viewAllTabs: viewAllTabsFallback,
-            allLoans: isAdminRole(role) || isManagingDirector || ["loan_office", "loan_officer", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
+            allLoans: isAdminRole(role) || isManagingDirector || ["loan_office", "loan_officer", "hr_loan_office", "leave_loan_officer", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
           },
         },
         { status: 200 },

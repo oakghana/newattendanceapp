@@ -16,6 +16,7 @@ const ALLOWED_ROLES = new Set([
   "accounts_exec",
   "accounts_loan_office",
   "hr_loan_office",
+  "leave_loan_officer",
   "hr_loan",
   "loan_office",
   "loan_officer",

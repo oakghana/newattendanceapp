@@ -364,7 +364,7 @@ export async function POST(request: NextRequest) {
         })
     const isSelfLeaveWorkflow = leaveRoute.route === "self_leave"
     const isRegionalWorkflow = leaveRoute.route === "regional"
-    const isHrLeaveOffice = normalizedRole === "hr_leave_office" || isRegionalHrLeaveOfficeRole(normalizedRole)
+    const isHrLeaveOffice = (normalizedRole === "hr_leave_office" || normalizedRole === "leave_loan_officer") || isRegionalHrLeaveOfficeRole(normalizedRole)
     if (!shouldAutoApprove && isRegionalWorkflow && !regionalOffice?.user_id) {
       const regionalGuidance = getAssignmentGuidance(locationName, "leave")
       return NextResponse.json(

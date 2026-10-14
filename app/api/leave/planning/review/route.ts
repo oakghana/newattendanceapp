@@ -36,7 +36,7 @@ function normalizeDecision(action: string): LeavePlanReviewDecision | null {
 function normalizeReviewerRole(role: string) {
   if (role === "regional_manager") return "regional_manager"
   if (role === "department_head" || role === "manager_hr") return "department_head"
-  if (["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "hr", "hr_office", "hr_leave_office", "hr_executive", "director_hr"].includes(role)) {
+  if (["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "hr", "hr_office", "hr_leave_office", "leave_loan_officer", "hr_executive", "director_hr"].includes(role)) {
     return "regional_hr_office"
   }
   return role
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     const isAdmin = role === "admin" || role === "administrator"
 
-    if (!["admin", "administrator", "district_officer", "regional_manager", "department_head", "transport_manager", "hr", "hr_office", "hr_leave_office", "hr_executive", "manager_hr", "director_hr", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)) {
+    if (!["admin", "administrator", "district_officer", "regional_manager", "department_head", "transport_manager", "hr", "hr_office", "hr_leave_office", "leave_loan_officer", "hr_executive", "manager_hr", "director_hr", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)) {
       return NextResponse.json({ error: "Only regional managers and department heads can review this request." }, { status: 403 })
     }
 
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "leave_plan_request_id and action are required." }, { status: 400 })
     }
 
-    const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
+    const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "leave_loan_officer", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
     const regionalOwnedLocationIds = (role === "regional_manager" || isRegionalHr)
       ? await resolveOwnedLocationIdsForRegionalOffice(admin, profile.assigned_location_id, profile.region_id)
       : []
@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (reviewError || !reviews || reviews.length === 0) {
-      const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
+      const isRegionalHr = ["hr", "hr_office", "hr_leave_office", "leave_loan_officer", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)
       const isRegionalManager = role === "regional_manager"
       const isDepartmentHeadReviewer = role === "department_head"
       const isHrExecutiveReviewer = ["hr_executive", "manager_hr", "director_hr"].includes(role)
