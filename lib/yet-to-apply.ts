@@ -33,7 +33,7 @@ export const APPLIED_STATUSES = new Set([
 ])
 
 const PROFILE_COLUMNS =
-  "id, first_name, last_name, employee_id, position, role, staff_category, employment_type, employee_type, assigned_location_id, department_id, departments(name)"
+  "id, first_name, last_name, employee_id, position, role, staff_category, assigned_location_id, department_id, departments(name)"
 const CHUNK_SIZE = 150
 const PAGE_SIZE = 1000
 
@@ -50,10 +50,8 @@ export function isAnnualLeaveEligible(profile: {
   role?: unknown
   position?: unknown
   staff_category?: unknown
-  employment_type?: unknown
-  employee_type?: unknown
 }) {
-  const values = [profile.role, profile.position, profile.staff_category, profile.employment_type, profile.employee_type]
+  const values = [profile.role, profile.position, profile.staff_category]
     .map((value) => String(value || "").toLowerCase().trim())
     .filter(Boolean)
   return !values.some((value) => /(^|[ _-])(intern|internship|contract|contractor|nsp)(?=$|[ _-])/.test(value))
