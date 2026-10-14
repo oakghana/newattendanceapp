@@ -648,6 +648,12 @@ export async function POST(request: NextRequest) {
       if (!["awaiting_hr_terms", "sent_to_hr_office", "pending_hr_loan_office"].includes(req.status)) {
         return NextResponse.json({ error: "Request is not at HR terms stage" }, { status: 400 })
       }
+      if (req.fd_score === null || req.fd_score === undefined) {
+        return NextResponse.json(
+          { error: "This loan has no FD calculation yet. Every loan type, including FD-exempt types, must pass through Accounts/FD before HR terms are set." },
+          { status: 400 },
+        )
+      }
 
       const disbursementDate = String(body.disbursement_date || "")
       const recoveryStartDate = String(body.recovery_start_date || "")

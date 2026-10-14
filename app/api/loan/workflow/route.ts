@@ -684,6 +684,41 @@ export async function GET() {
             .order("created_at", { ascending: false })
         : admin.from("loan_requests").select("*").in("status", ["awaiting_hr_terms", "sent_to_hr_office", "pending_hr_loan_office"]).order("created_at", { ascending: false })
 
+    // Every loan, including FD-exempt types, must have an FD result before HR sets terms.
+    // Legacy rows that reached HR Terms without one are returned to Accounts FD.
+    {
+      const { data: skippedFdRows } = await admin
+        .from("loan_requests")
+        .select("id")
+        .eq("status", "awaiting_hr_terms")
+        .is("fd_score", null)
+        .is("fd_checked_at", null)
+      const skippedIds = (skippedFdRows || []).map((r: any) => r.id)
+      if (skippedIds.length > 0) {
+        const nowIso = new Date().toISOString()
+        const { data: repaired } = await admin
+          .from("loan_requests")
+          .update({ status: "sent_to_accounts", fd_score: null, fd_good: null, fd_checked_at: null, updated_at: nowIso })
+          .in("id", skippedIds)
+          .eq("status", "awaiting_hr_terms")
+          .is("fd_score", null)
+          .select("id")
+        if (repaired && repaired.length > 0) {
+          await admin.from("loan_request_timeline").insert(
+            repaired.map((r: any) => ({
+              loan_request_id: r.id,
+              actor_id: user.id,
+              actor_role: role || "system",
+              action_key: "returned_to_accounts_fd_missing",
+              from_status: "awaiting_hr_terms",
+              to_status: "sent_to_accounts",
+              note: "Returned to Accounts/FD automatically: every loan type must have an FD calculation before HR terms are set.",
+            })),
+          )
+        }
+      }
+    }
+
     const myRequestIds = (myRes.data || []).map((r: any) => r.id)
 
     const [hodRes, loanOfficeRes, accountsRes, accountsSignedRes, committeeRes, hrRes, directorRes, directorGoodFdRes, allLoansRes, timelinesRes, myTasksRes] = await Promise.all([
