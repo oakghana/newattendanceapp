@@ -18,19 +18,6 @@ function buildMemoPath(loanId: string, recipientUserId: string) {
   return `/api/loan/memo/${loanId}?token=${encodeURIComponent(token)}`
 }
 
-function buildFdRejectionMemo(loan: any, fdScore: number, reason?: string | null) {
-  return [
-    `Reference: ${memoReference(loan)}`,
-    "Loan Request Feedback: FD Threshold Not Met",
-    "",
-    `FD Score: ${fdScore}%`,
-    `Minimum Required FD Score: ${GOOD_FD_THRESHOLD}%`,
-    `Reason from Accounts Executive: ${reason || "FD value below required threshold."}`,
-    "",
-    "You may improve your FD position and submit a new request in a future cycle.",
-  ].join("\n")
-}
-
 function buildCarLoanHoldNotice(loan: any) {
   return [
     `Reference: ${memoReference(loan)}`,
@@ -485,7 +472,7 @@ export async function PATCH(request: Request) {
         loan_request_id: review_id,
         actor_id: user.id,
         actor_role: "accounts_executive",
-        action_key: isCorrectionRequest ? "fd_returned_to_accounts" : isApproved ? "fd_approved" : "fd_rejected",
+        action_key: isCorrectionRequest ? "fd_returned_to_accounts" : isApproved ? "fd_approved" : "fd_failed_hr_decision",
         from_status: "pending_accounts_fd_review",
         to_status: finalStatus,
         note: [adjustmentMemo, review_decision || (isCorrectionRequest ? "FD returned to Accounts Office for full recalculation" : isApproved ? "FD approved by Accounts Executive" : "FD rejected by Accounts Executive")].filter(Boolean).join(" | "),
@@ -504,8 +491,8 @@ export async function PATCH(request: Request) {
       // Don't fail the whole operation if timeline logging fails
     }
 
-    // Accounts Executive's decision is what issues the rejection letter (or approval
-    // notice) to the staff member — Accounts Office never sends this notification.
+    // Accounts Executive records the FD recommendation. A failed recommendation is
+    // sent to HR Loan Office for a human decision; no rejection memo is issued here.
     try {
       const staffId = String((currentLoan as any)?.user_id || "").trim()
       const loanForMemo = { ...currentLoan, request_number: updatedLoan?.request_number || (currentLoan as any)?.request_number }
@@ -551,16 +538,14 @@ export async function PATCH(request: Request) {
         }
       } else {
         const rejectionReason = review_decision || fd_verification_memo || null
-        const rejectionMemo = buildFdRejectionMemo(loanForMemo, normalizedFinalScore, rejectionReason)
         if (staffId) {
-          const memoPath = buildMemoPath(review_id, staffId)
           await notifyUsers(
             admin,
             [staffId],
             "Loan Request Sent to HR Loan Office",
-            `Accounts Executive recorded an FD recommendation of ${normalizedFinalScore}%. HR Loan Office will make the final decision before processing continues.\n\n${rejectionMemo}`,
+            `Accounts Executive recorded an FD recommendation of ${normalizedFinalScore}%. HR Loan Office will make the final decision before processing continues.${rejectionReason ? ` Reason: ${rejectionReason}` : ""}`,
             "loan_fd_pending_hr_decision",
-            { request_id: review_id, fd_score: normalizedFinalScore, threshold: GOOD_FD_THRESHOLD, reason: rejectionReason, memo: rejectionMemo, memo_path: memoPath },
+            { request_id: review_id, fd_score: normalizedFinalScore, threshold: GOOD_FD_THRESHOLD, reason: rejectionReason },
           )
         }
 
@@ -600,7 +585,7 @@ export async function PATCH(request: Request) {
         ? "FD returned to Accounts Office for correction. It will be sent back to HR Loan Office before HR Executive approval."
         : isApproved
           ? (isCarLoan ? "FD approved. Loan forwarded to the Car Loan Committee." : "FD approved. Loan forwarded to HR Loan Office.")
-          : "FD rejected by Accounts Executive. Staff and Loan Office have been notified.",
+          : "FD recommendation failed. The request was sent to HR Loan Office for a decision; no rejection memo was issued.",
     })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Internal server error"

@@ -682,7 +682,7 @@ export async function GET() {
         ? admin.from("loan_requests").select("*")
             .not("status", "in", '("hod_rejected","director_rejected","rejected_fd","committee_rejected")')
             .order("created_at", { ascending: false })
-        : admin.from("loan_requests").select("*").in("status", ["awaiting_hr_terms", "sent_to_hr_office"]).order("created_at", { ascending: false })
+        : admin.from("loan_requests").select("*").in("status", ["awaiting_hr_terms", "sent_to_hr_office", "pending_hr_loan_office"]).order("created_at", { ascending: false })
 
     const myRequestIds = (myRes.data || []).map((r: any) => r.id)
 

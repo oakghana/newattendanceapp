@@ -10,6 +10,7 @@ export type LoanStatus =
   | "hod_approved"
   | "hod_rejected"
   | "sent_to_accounts"
+  | "pending_hr_loan_office"
   | "rejected_fd"
   | "awaiting_committee"
   | "committee_rejected"
@@ -33,7 +34,8 @@ const LOAN_VALID_TRANSITIONS: Record<LoanStatus, LoanStatus[]> = {
   "pending_hod": ["hod_approved", "hod_rejected"],
   "hod_rejected": [], // Terminal state - can be re-submitted as new request
   "hod_approved": ["sent_to_accounts"],
-  "sent_to_accounts": ["awaiting_committee", "awaiting_hr_terms", "rejected_fd"],
+  "sent_to_accounts": ["awaiting_committee", "awaiting_hr_terms", "pending_hr_loan_office"],
+  "pending_hr_loan_office": ["awaiting_hr_terms", "awaiting_director_hr"],
   "rejected_fd": [], // Terminal state - requires new submission
   "awaiting_committee": ["awaiting_hr_terms", "committee_rejected"],
   "committee_rejected": [], // Terminal state - requires new submission
@@ -100,7 +102,8 @@ export function getStatusLabel(status: string): string {
     hod_approved: "HOD Approved",
     hod_rejected: "Rejected by HOD",
     sent_to_accounts: "Sent to Accounts (FD Review)",
-    rejected_fd: "Rejected by Accounts (FD)",
+    pending_hr_loan_office: "HR Loan Office Decision Required",
+  rejected_fd: "Rejected by Accounts (FD)",
     awaiting_committee: "Awaiting Committee Review",
     committee_rejected: "Rejected by Committee",
     awaiting_hr_terms: "HR Preparing Terms",
@@ -118,7 +121,8 @@ export function getStatusLabel(status: string): string {
  */
 export function getStage(status: string): string {
   if (["pending_hod", "hod_approved", "hod_rejected"].includes(status)) return "HOD Review"
-  if (["sent_to_accounts", "rejected_fd"].includes(status)) return "Accounts FD Review"
+  if (["sent_to_accounts"].includes(status)) return "Accounts FD Review"
+  if (["pending_hr_loan_office"].includes(status)) return "HR Loan Office Decision"
   if (["awaiting_committee", "committee_rejected"].includes(status)) return "Committee Review"
   if (["awaiting_hr_terms", "awaiting_director_hr", "approved_director", "director_rejected"].includes(status))
     return "HR Review"

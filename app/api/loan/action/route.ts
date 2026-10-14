@@ -645,7 +645,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Only HR Office/Admin can set terms" }, { status: 403 })
       }
       // Accept both normal flow (awaiting_hr_terms) and FD-exempt loans (sent_to_hr_office like Funeral, Insurance, Repair with FD >= 0%)
-      if (!["awaiting_hr_terms", "sent_to_hr_office"].includes(req.status)) {
+      if (!["awaiting_hr_terms", "sent_to_hr_office", "pending_hr_loan_office"].includes(req.status)) {
         return NextResponse.json({ error: "Request is not at HR terms stage" }, { status: 400 })
       }
 
