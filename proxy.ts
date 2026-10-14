@@ -46,7 +46,8 @@ const ALL_STAFF_ROLES = [
   "secretary",
   "leave_admin",
   "district_officer",
-]
+  "leave_loan_officer",
+  ]
 
 // Define route protection rules: [pathPattern] => [allowedRoles]
 const PROTECTED_ROUTES: Record<string, string[]> = {
