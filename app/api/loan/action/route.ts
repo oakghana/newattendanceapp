@@ -30,6 +30,7 @@ type ActionKey =
   | "accounts_fd_update"
   | "committee_decision"
   | "admin_committee_edit"
+  | "admin_change_loan_type"
   | "hr_set_terms"
   | "director_finalize"
   | "save_memo_draft"
@@ -615,6 +616,134 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    if (action === "admin_change_loan_type") {
+      actionHandled = true
+      if (role !== "admin" && role !== "it_admin") {
+        return NextResponse.json({ error: "Only administrators can change a loan type" }, { status: 403 })
+      }
+
+      const changeableStatuses = [
+        "pending_hod",
+        "hod_approved",
+        "sent_to_accounts",
+        "pending_hr_loan_office",
+        "awaiting_hr_terms",
+        "awaiting_committee",
+      ]
+      if (!changeableStatuses.includes(String(req.status || ""))) {
+        return NextResponse.json({ error: "The loan type can only be changed while the request is still in review." }, { status: 400 })
+      }
+
+      const newLoanTypeKey = String(body.loan_type_key || "").trim()
+      if (!newLoanTypeKey) return NextResponse.json({ error: "Select the new loan type" }, { status: 400 })
+      if (newLoanTypeKey === req.loan_type_key) {
+        return NextResponse.json({ error: "The request already uses this loan type" }, { status: 400 })
+      }
+
+      const { data: newLoanType } = await admin
+        .from("loan_types")
+        .select("*")
+        .eq("loan_key", newLoanTypeKey)
+        .maybeSingle()
+      if (!newLoanType || (newLoanType as any).is_active === false) {
+        return NextResponse.json({ error: "Select an active loan type" }, { status: 400 })
+      }
+
+      if (isSalaryAdvanceLoanType(req.loan_type_key, req.loan_type_label) || isSalaryAdvanceLoanType(newLoanType.loan_key, newLoanType.loan_label)) {
+        return NextResponse.json({ error: "Salary advance uses a separate calculation and cannot be switched to or from another loan type." }, { status: 400 })
+      }
+
+      const { data: duplicateActive } = await admin
+        .from("loan_requests")
+        .select("id, request_number")
+        .eq("user_id", req.user_id)
+        .eq("loan_type_key", newLoanType.loan_key)
+        .neq("id", req.id)
+        .in("status", changeableStatuses)
+        .limit(1)
+        .maybeSingle()
+      if (duplicateActive) {
+        return NextResponse.json({ error: `This staff member already has an active ${newLoanType.loan_label} request (${(duplicateActive as any).request_number || (duplicateActive as any).id}).` }, { status: 409 })
+      }
+
+      const newFixedAmount = Number((newLoanType as any).fixed_amount)
+      const hasFixedAmount = Number.isFinite(newFixedAmount) && newFixedAmount > 0
+      const oldAmount = Number(req.fixed_amount ?? req.requested_amount ?? 0)
+      const newAmount = hasFixedAmount ? newFixedAmount : oldAmount
+      const fdAlreadyCalculated = req.fd_score !== null && req.fd_score !== undefined
+      if (fdAlreadyCalculated && Math.abs(newAmount - oldAmount) > 0.009) {
+        return NextResponse.json({ error: "An FD score was already calculated for the current amount. Changing to a loan type with a different amount would invalidate it." }, { status: 409 })
+      }
+
+      update.loan_type_key = newLoanType.loan_key
+      update.loan_type_label = newLoanType.loan_label
+      if (hasFixedAmount) {
+        update.fixed_amount = newFixedAmount
+        update.requested_amount = newFixedAmount
+      }
+      update.committee_required = Boolean(
+        (newLoanType as any).requires_committee || /motor\s*bike/i.test(`${newLoanType.loan_key} ${newLoanType.loan_label}`),
+      )
+      update.requires_fd_check = true
+      const oldTerms = String(req.hr_note || "").trim()
+      const newTerms = String((newLoanType as any).loan_terms || "").trim()
+      if (newTerms && !oldTerms) update.hr_note = newTerms
+      if (!req.recovery_months && (newLoanType as any).default_recovery_months) {
+        update.recovery_months = (newLoanType as any).default_recovery_months
+      }
+
+      const changeNote = note || `Administrator changed the loan type from ${req.loan_type_label} to ${newLoanType.loan_label}.`
+      await timeline(admin, {
+        loan_request_id: req.id,
+        actor_id: user.id,
+        actor_role: role,
+        action_key: "admin_change_loan_type",
+        from_status: req.status,
+        to_status: req.status,
+        note: changeNote,
+        metadata: {
+          loan_type_key: { from: req.loan_type_key, to: newLoanType.loan_key },
+          loan_type_label: { from: req.loan_type_label, to: newLoanType.loan_label },
+          amount: { from: oldAmount || null, to: newAmount || null },
+        },
+      })
+
+      const stageRoles: Record<string, string[]> = {
+        pending_hod: [],
+        hod_approved: ["loan_office", "hr_loan_office"],
+        sent_to_accounts: ["accounts", "accounts_loan_office", "accounts_executive"],
+        pending_hr_loan_office: ["loan_office", "hr_loan_office"],
+        awaiting_hr_terms: ["loan_office", "hr_loan_office", "hr_officer", "manager_hr"],
+        awaiting_committee: ["loan_committee", "committee"],
+      }
+      const stageRoleList = stageRoles[String(req.status)] || []
+      const { data: stageUsers } = stageRoleList.length
+        ? await admin.from("user_profiles").select("id").in("role", stageRoleList).eq("is_active", true)
+        : { data: [] as any[] }
+      const recipientIds = Array.from(
+        new Set(
+          [
+            req.user_id,
+            req.hod_reviewer_id,
+            req.loan_office_reviewer_id,
+            req.accounts_reviewer_id,
+            ...((stageUsers || []) as any[]).map((row: any) => row.id),
+          ]
+            .filter(Boolean)
+            .map(String)
+            .filter((uid: string) => uid !== user.id),
+        ),
+      )
+      await notifyUsers(
+        admin,
+        recipientIds,
+        "Loan Type Updated",
+        `Request ${req.request_number} was changed from ${req.loan_type_label} to ${newLoanType.loan_label} by an administrator.`,
+        "loan_type_changed",
+        { request_id: req.id, from: req.loan_type_label, to: newLoanType.loan_label },
+      )
+    }
+
     if (action === "committee_decision") {
       actionHandled = true
       if (!canDoCommittee(role)) return NextResponse.json({ error: "Only committee/admin can decide" }, { status: 403 })
@@ -1168,7 +1297,7 @@ export async function POST(request: NextRequest) {
         .eq("id", req.user_id)
     }
 
-    await timeline(admin, {
+    if (action !== "admin_change_loan_type") await timeline(admin, {
       loan_request_id: id,
       actor_id: user.id,
       actor_role: role,

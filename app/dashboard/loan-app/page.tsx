@@ -39,6 +39,7 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowRight,
+  ArrowRightLeft,
   Award,
   BadgeCheck,
   BarChart3,
@@ -373,6 +374,7 @@ const ACTION_LABELS: Record<string, string> = {
   hod_auto_approved: "HOD Auto-Forwarded",
   loan_office_update_request: "Loan Office Updated Request",
   loan_office_forward: "Loan Office Forward",
+  admin_change_loan_type: "Loan Type Changed by Administrator",
   accounts_fd_update: "Accounts FD Update",
   committee_decision: "Committee Decision",
   hr_set_terms: "HR Terms Set",
@@ -1154,6 +1156,8 @@ export default function LoanAppPage() {
   // ── Action modal state ──────────────────���───────────────────────────
   type ActionType = "hod" | "loan_office" | "accounts" | "committee" | "hr_terms" | "director" | "payment_completed" | "push_to_hr_executive"
   const [actionModal, setActionModal] = useState<{ open: boolean; row: LoanRequest | null; actionType: ActionType | null }>({ open: false, row: null, actionType: null })
+  const [changeLoanTypeKey, setChangeLoanTypeKey] = useState("")
+  const [isChangingLoanType, setIsChangingLoanType] = useState(false)
   const [restoringLoanId, setRestoringLoanId] = useState<string | null>(null)
   const [isRestoringAll, setIsRestoringAll] = useState(false)
   const [selectedArchivedLoans, setSelectedArchivedLoans] = useState<Set<string>>(new Set())
@@ -2630,6 +2634,41 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     await loadData()
   }
 
+  const changeLoanTypeAsAdmin = async () => {
+    const row = actionModal.row
+    if (!row || !changeLoanTypeKey) return
+    const target = (lookupData?.loanTypes || []).find((type) => type.loan_key === changeLoanTypeKey)
+    setIsChangingLoanType(true)
+    try {
+      const res = await fetch("/api/loan/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "admin_change_loan_type",
+          id: row.id,
+          loan_type_key: changeLoanTypeKey,
+          note: modalNote.trim() || undefined,
+        }),
+      })
+      const result = await res.json()
+      if (!res.ok) {
+        toast({ title: "Could not change loan type", description: result.error || "Try again", variant: "destructive" })
+        return
+      }
+      setActionModal((state) => (state.row ? { ...state, row: { ...state.row, ...(result.data || {}) } } : state))
+      setChangeLoanTypeKey("")
+      toast({
+        title: "Loan type updated",
+        description: `${row.request_number} is now ${target?.loan_label || result.data?.loan_type_label}. Every queue and the staff member's view have been refreshed.`,
+      })
+      await loadData()
+    } catch (error) {
+      toast({ title: "Could not change loan type", description: error instanceof Error ? error.message : "Try again", variant: "destructive" })
+    } finally {
+      setIsChangingLoanType(false)
+    }
+  }
+
   const saveMemoChanges = async () => {
     if (!memoReviewModal.row) return
     setIsSavingMemo(true)
@@ -3906,6 +3945,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                               hod_auto_approved: { icon: <Zap className="h-3.5 w-3.5" />, bg: "bg-amber-50 text-amber-700 border-amber-200", text: "text-amber-900" },
                               loan_office_update_request: { icon: <FileCheck className="h-3.5 w-3.5" />, bg: "bg-cyan-50 text-cyan-700 border-cyan-200", text: "text-cyan-900" },
                               loan_office_forward: { icon: <Forward className="h-3.5 w-3.5" />, bg: "bg-indigo-50 text-indigo-700 border-indigo-200", text: "text-indigo-900" },
+                              admin_change_loan_type: { icon: <ArrowRightLeft className="h-3.5 w-3.5" />, bg: "bg-sky-50 text-sky-700 border-sky-200", text: "text-sky-900" },
                               accounts_fd_update: { icon: <Calculator className="h-3.5 w-3.5" />, bg: "bg-emerald-50 text-emerald-700 border-emerald-200", text: "text-emerald-900" },
                               committee_decision: { icon: <Users className="h-3.5 w-3.5" />, bg: "bg-violet-50 text-violet-700 border-violet-200", text: "text-violet-900" },
                               hr_set_terms: { icon: <FileSpreadsheet className="h-3.5 w-3.5" />, bg: "bg-teal-50 text-teal-700 border-teal-200", text: "text-teal-900" },
@@ -7707,6 +7747,53 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {/* Loan Office — read-only review, forwarding to Accounts only */}
             {actionModal.actionType === "loan_office" && (
               <>
+                {isAdmin && actionModal.row && (() => {
+                  const currentKey = actionModal.row.loan_type_key
+                  const options = (lookupData?.loanTypes || []).filter((type) => type.is_active !== false && type.loan_key !== currentKey && !/salary[\s_-]*advance/i.test(`${type.loan_key} ${type.loan_label}`))
+                  const target = options.find((type) => type.loan_key === changeLoanTypeKey)
+                  const currentAmount = Number(actionModal.row.fixed_amount ?? actionModal.row.requested_amount ?? 0)
+                  const amountChanges = Boolean(target && Number(target.fixed_amount) > 0 && Number(target.fixed_amount) !== currentAmount)
+                  const locked = /salary[\s_-]*advance/i.test(`${currentKey} ${actionModal.row.loan_type_label}`)
+                  return (
+                    <div className="rounded-lg border border-sky-200 bg-sky-50/70 p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="flex items-center gap-1.5 text-sm font-semibold text-sky-950">
+                          <ArrowRightLeft className="h-4 w-4 text-sky-700" /> Change loan type
+                          <Badge variant="outline" className="border-sky-300 text-[10px] text-sky-800">Admin only</Badge>
+                        </p>
+                        <span className="text-xs text-sky-900/80">Current: <strong>{actionModal.row.loan_type_label}</strong></span>
+                      </div>
+                      {locked ? (
+                        <p className="text-xs text-muted-foreground">Salary advances use a separate calculation and cannot be switched to another loan type.</p>
+                      ) : (
+                        <>
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <Select value={changeLoanTypeKey} onValueChange={setChangeLoanTypeKey}>
+                              <SelectTrigger className="h-8 flex-1 bg-background text-xs"><SelectValue placeholder="Select the correct loan type" /></SelectTrigger>
+                              <SelectContent>
+                                {options.map((type) => (
+                                  <SelectItem key={type.loan_key} value={type.loan_key}>
+                                    {type.loan_label}{Number(type.fixed_amount) > 0 ? ` — GHc ${Number(type.fixed_amount).toLocaleString()}` : ""}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button type="button" size="sm" className="h-8 bg-sky-700 text-xs hover:bg-sky-800" disabled={!changeLoanTypeKey || isChangingLoanType} onClick={() => void changeLoanTypeAsAdmin()}>
+                              {isChangingLoanType ? "Applying..." : "Apply change"}
+                            </Button>
+                          </div>
+                          {target && (
+                            <p className="text-xs text-sky-900">
+                              {actionModal.row.loan_type_label} <ArrowRight className="mx-1 inline h-3 w-3" /> <strong>{target.loan_label}</strong>
+                              {amountChanges ? ` — amount will update from GHc ${currentAmount.toLocaleString()} to GHc ${Number(target.fixed_amount).toLocaleString()}.` : " — amount stays the same."}
+                              {" "}The staff member, HOD, Accounts, HR and every queue update immediately and the change is logged in the timeline. Add a reason in the note below.
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )
+                })()}
                 <div className="rounded-md border bg-blue-50 p-3">
                   <p className="text-xs text-blue-800">
                     <strong>Note:</strong> These details were captured earlier and are shown here for review only. Click <strong>Save &amp; Forward to Accounts</strong> to send this request to the Accounts Loan Office.
