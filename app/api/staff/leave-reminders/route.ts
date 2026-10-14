@@ -16,7 +16,7 @@ export async function GET() {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("role, position, staff_category, employee_type")
+      .select("role, position, staff_category")
       .eq("id", user.id)
       .maybeSingle()
     if (profileError) throw profileError
