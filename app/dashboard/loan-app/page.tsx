@@ -375,6 +375,7 @@ const ACTION_LABELS: Record<string, string> = {
   loan_office_update_request: "Loan Office Updated Request",
   loan_office_forward: "Loan Office Forward",
   admin_change_loan_type: "Loan Type Changed by Administrator",
+  admin_return_to_loan_office: "Returned to Loan Office for Correction",
   accounts_fd_update: "Accounts FD Update",
   committee_decision: "Committee Decision",
   hr_set_terms: "HR Terms Set",
@@ -1167,6 +1168,9 @@ export default function LoanAppPage() {
   const [modalNote, setModalNote] = useState("")
   const [returnAccountsDialogOpen, setReturnAccountsDialogOpen] = useState(false)
   const [returnAccountsReason, setReturnAccountsReason] = useState("")
+  const [returnLoanOfficeDialogOpen, setReturnLoanOfficeDialogOpen] = useState(false)
+  const [returnLoanOfficeReason, setReturnLoanOfficeReason] = useState("")
+  const [isReturningToLoanOffice, setIsReturningToLoanOffice] = useState(false)
   const [isReturningToAccounts, setIsReturningToAccounts] = useState(false)
   const [modalMemoCC, setModalMemoCC] = useState("Managing Director\nDeputy Managing Director\nDeputy Director Finance\nDeputy Director Human Resource\nAudit Manager\nRegistry Unit\nRecords Unit")
   const [modalDecision, setModalDecision] = useState<"approve" | "reject">("approve")
@@ -2638,6 +2642,32 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     await loadData()
   }
 
+  const returnLoanToOfficeAsAdmin = async () => {
+    const row = actionModal.row
+    const reason = returnLoanOfficeReason.trim()
+    if (!row || !reason) return
+    setIsReturningToLoanOffice(true)
+    try {
+      const res = await fetch("/api/loan/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "admin_return_to_loan_office", id: row.id, note: reason }),
+      })
+      const result = await res.json()
+      if (!res.ok) {
+        toast({ title: "Return failed", description: result.error || "Could not return the loan.", variant: "destructive" })
+        return
+      }
+      toast({ title: "Returned to Loan Office", description: "The loan is available for correction in the Loan Office tab." })
+      setReturnLoanOfficeDialogOpen(false)
+      setReturnLoanOfficeReason("")
+      setActionModal((state) => ({ ...state, open: false }))
+      await loadData()
+    } finally {
+      setIsReturningToLoanOffice(false)
+    }
+  }
+
   const changeLoanTypeAsAdmin = async () => {
     const row = actionModal.row
     if (!row || !changeLoanTypeKey) return
@@ -3619,7 +3649,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
               {isSalaryAdvanceRequest && (
                 <div className="space-y-2">
-                  <Label>Salary Advance Period ({isSeniorStaff ? "1–2" : "1–3"} months)</Label>
+                  <Label>Salary Advance Period ({isSeniorStaff ? "1–2" : "1��3"} months)</Label>
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
                   {salaryAdvanceMonthOptions.map((months) => (
                     <label key={months} className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-900 hover:border-emerald-300">
@@ -4926,7 +4956,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       <TableHead className="whitespace-nowrap">Status</TableHead>
                       <TableHead className="whitespace-nowrap">Attachment</TableHead>
                       <TableHead className="whitespace-nowrap">Requested At</TableHead>
-                      {p?.accounts && <TableHead className="whitespace-nowrap">FD Action</TableHead>}
+                      {(p?.accounts || isAdmin) && <TableHead className="whitespace-nowrap">FD Action</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -4951,14 +4981,19 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                             )}
                           </TableCell>
                           <TableCell className="text-xs whitespace-nowrap"><span className="font-medium">{fmtDateTime(row.submitted_at || row.created_at)}</span></TableCell>
-                          {canEnterFdScore && (
-                            <TableCell>
-                              <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "accounts")}>
-                                <Calculator className="h-3.5 w-3.5 mr-1" />
-                                {row.fd_score != null ? "Recalculate FD" : "Calculate FD"}
-                              </Button>
-                            </TableCell>
-                          )}
+                              {(canEnterFdScore || isAdmin) && (
+                                <TableCell>
+                                  <div className="flex flex-wrap gap-1">
+                                    {canEnterFdScore && <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "accounts")}>
+                                      <Calculator className="h-3.5 w-3.5 mr-1" />
+                                      {row.fd_score != null ? "Recalculate FD" : "Calculate FD"}
+                                    </Button>}
+                                    {isAdmin && <Button size="sm" variant="outline" className="text-xs whitespace-nowrap border-amber-300 text-amber-700 hover:bg-amber-50" onClick={() => { setReturnLoanOfficeReason(""); setReturnLoanOfficeDialogOpen(true); setActionModal((state) => ({ ...state, row })) }}>
+                                      <ArrowRightLeft className="h-3.5 w-3.5 mr-1" /> Return to Loan Office
+                                    </Button>}
+                                  </div>
+                                </TableCell>
+                              )}
                         </TableRow>
                       )
                     })}
@@ -4970,12 +5005,13 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
           {accountsViewMode === "card" && pagedAccounts.map((row) => (
             <StageCard key={row.id} row={row}>
-              {canEnterFdScore && (
-                <Button size="sm" onClick={() => openActionModal(row, "accounts")}>
-                  <Calculator className="h-3.5 w-3.5 mr-1" />
-                  {row.fd_score != null ? "Recalculate FD" : "Calculate FD"}
-                </Button>
-              )}
+              {canEnterFdScore && <Button size="sm" onClick={() => openActionModal(row, "accounts")}>
+                <Calculator className="h-3.5 w-3.5 mr-1" />
+                {row.fd_score != null ? "Recalculate FD" : "Calculate FD"}
+              </Button>}
+              {isAdmin && <Button size="sm" variant="outline" className="border-amber-300 text-amber-700" onClick={() => { setReturnLoanOfficeReason(""); setReturnLoanOfficeDialogOpen(true); setActionModal((state) => ({ ...state, row })) }}>
+                <ArrowRightLeft className="h-3.5 w-3.5 mr-1" /> Return to Loan Office
+              </Button>}
             </StageCard>
           ))}
 
@@ -7124,7 +7160,16 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           placeholder="e.g. education_loan"
                         />
                       </div>
-                      <div className="flex items-end">
+                      <div className="space-y-2">
+                        <Label htmlFor="new-loan-label">Loan Label</Label>
+                        <Input
+                          id="new-loan-label"
+                          value={setupLoanLabel}
+                          onChange={(e) => setSetupLoanLabel(e.target.value)}
+                          placeholder="e.g. Education Loan"
+                        />
+                      </div>
+                      <div className="flex items-end md:col-span-2">
                         <Button
                           type="button"
                           className="w-full"
@@ -8438,6 +8483,26 @@ if (!modalDisbursement || !modalRecovery) {
           }}
         >
           {isReturningToAccounts ? "Returning..." : "Confirm Return"}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+
+  <Dialog open={returnLoanOfficeDialogOpen} onOpenChange={setReturnLoanOfficeDialogOpen}>
+    <DialogContent className="max-w-md">
+      <DialogHeader>
+        <DialogTitle>Return Loan to Loan Office</DialogTitle>
+        <DialogDescription>Send this Accounts submission back for correction of the loan type or other request details.</DialogDescription>
+      </DialogHeader>
+      <div className="space-y-2">
+        <Label htmlFor="return-loan-office-reason">Correction reason <span className="text-destructive">*</span></Label>
+        <Textarea id="return-loan-office-reason" value={returnLoanOfficeReason} onChange={(event) => setReturnLoanOfficeReason(event.target.value)} placeholder="Example: Correct the loan type from Rent Loan to Education Loan." rows={5} autoFocus />
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={() => setReturnLoanOfficeDialogOpen(false)} disabled={isReturningToLoanOffice}>Cancel</Button>
+        <Button type="button" className="bg-amber-600 text-white hover:bg-amber-700" disabled={returnLoanOfficeReason.trim().length < 5 || isReturningToLoanOffice} onClick={() => void returnLoanToOfficeAsAdmin()}>
+          {isReturningToLoanOffice ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <ArrowRightLeft className="h-4 w-4 mr-1" />}
+          Return for Correction
         </Button>
       </DialogFooter>
     </DialogContent>

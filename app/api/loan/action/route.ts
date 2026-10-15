@@ -31,6 +31,7 @@ type ActionKey =
   | "committee_decision"
   | "admin_committee_edit"
   | "admin_change_loan_type"
+  | "admin_return_to_loan_office"
   | "hr_set_terms"
   | "director_finalize"
   | "save_memo_draft"
@@ -243,6 +244,42 @@ export async function POST(request: NextRequest) {
     let toStatus = req.status
     let actionHandled = false
     let requestedStaffFullName: string | null = null
+
+    if (action === "admin_return_to_loan_office") {
+      actionHandled = true
+      if (role !== "admin") {
+        return NextResponse.json({ error: "Only administrators can return Accounts loans to the Loan Office." }, { status: 403 })
+      }
+      if (!["sent_to_accounts", "pending_accounts_fd_review", "fd_review_pending", "rejected_fd", "fd_rejected"].includes(String(req.status || ""))) {
+        return NextResponse.json({ error: "Only loans currently with Accounts can be returned to the Loan Office." }, { status: 400 })
+      }
+      if (!note || note.length < 5) {
+        return NextResponse.json({ error: "A correction reason of at least 5 characters is required." }, { status: 400 })
+      }
+      toStatus = "hod_approved"
+      update.status = toStatus
+      update.fd_score = null
+      update.fd_good = null
+      update.fd_checked_at = null
+      update.fd_note = null
+      update.fd_document_url = null
+      update.accounts_reviewer_id = null
+      update.loan_office_forwarded_at = null
+      update.loan_office_note = `Returned by Administrator for correction: ${note}`
+      const { data: loanOfficeUsers } = await admin
+        .from("user_profiles")
+        .select("id")
+        .in("role", ["loan_office", "loan_officer", "hr_loan_office", "accounts_loan_office"])
+        .eq("is_active", true)
+      await notifyUsers(
+        admin,
+        (loanOfficeUsers || []).map((row: any) => String(row.id)),
+        "Loan Returned for Correction",
+        `Request ${req.request_number} was returned from Accounts to the Loan Office. Reason: ${note}`,
+        "loan_returned_to_loan_office",
+        { request_id: req.id },
+      )
+    }
 
     if (action === "hod_decision") {
       actionHandled = true
