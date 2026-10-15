@@ -463,6 +463,7 @@ function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsColla
   const effectiveRole = isProtectedAdministrator ? "admin" : normalizedRole === "audit_staff" ? "staff" : normalizedRole
   const isItAdmin = effectiveRole === "it-admin"
   const isAttendanceOnly = isAttendanceOnlyRole(effectiveRole)
+  const isLeaveLoanIneligible = ["contract", "intern", "nsp"].includes(effectiveRole)
 
   // A handful of "main" category items are intentionally restricted to specific
   // roles (e.g. Disbursement Confirmation is only for Accounts/Loan Office staff,
@@ -496,6 +497,7 @@ function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsColla
   const isOperationalDepartment = departmentCodeLower.includes("operation") || departmentNameLower.includes("operation")
 
   const filteredNavItems = allNavigationItems.filter((item) => {
+  if (isLeaveLoanIneligible && ["/dashboard/leave-management", "/dashboard/leave-planning", "/dashboard/loan-app"].includes(item.href)) return false
   if (item.operationalOnly && !isOperationalDepartment && !isAdministratorRole) return false
   if (isChiefDriver && ROLE_RESTRICTED_MAIN_HREFS.has(item.href)) return false
     if (item.href === "/dashboard/transport") {
