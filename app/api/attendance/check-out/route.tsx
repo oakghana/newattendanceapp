@@ -316,11 +316,13 @@ export async function POST(request: NextRequest) {
     const serverTimeMinutes = now.getHours() * 60 + now.getMinutes()
     const isAfter530PmServerTime = serverTimeMinutes >= 17 * 60 + 30
     const hasWorkedAtLeast8Hours = provisionalWorkHours >= 8
+    const normalizedRole = String(userProfile?.role || "").trim().toLowerCase().replace(/[\s-]+/g, "_")
+    const isDepartmentHead = normalizedRole === "department_head"
     const isPrivilegedRole = isExemptFromAttendanceReasons(userProfile?.role)
 
-    // Staff policy: minimum 2 hours required for regular checkout.
-    // Emergency checkout has its own separate endpoint and rules.
-    if (!isPrivilegedRole && provisionalWorkHours < 2) {
+    // Every department head must complete the mandatory two-hour minimum before checkout.
+    // This is enforced separately from the privileged-role exemptions.
+    if ((isDepartmentHead || !isPrivilegedRole) && provisionalWorkHours < 2) {
       return NextResponse.json(
         {
           error: `You can check out after 2 hours of work. You have worked ${provisionalWorkHours.toFixed(2)} hours so far.`,

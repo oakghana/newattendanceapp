@@ -2009,7 +2009,23 @@ export function AttendanceRecorder({
   const workedNinePlusHoursForReason = hoursWorkedSoFar >= 8
   // Nine hours completes the standard workday; shorter shifts need one meaningful reason.
   setEarlyCheckoutReasonRequired(Boolean(effectiveRequireEarlyCheckoutReason) && !workedNinePlusHoursForReason)
-  const workedNinePlusHours = hoursWorkedSoFar >= 8
+      const workedNinePlusHours = hoursWorkedSoFar >= 8
+      const normalizedDepartmentName = String(userProfile?.departments?.name || userProfile?.departments?.code || "").toLowerCase()
+      const isSecurityOperationsOrTransport = isSecurityDept(userProfile?.departments) || isOperationalDept(userProfile?.departments) || isTransportDept(userProfile?.departments) || /security|operation|transport/.test(normalizedDepartmentName)
+      const isWithinPremises = checkoutValidation.canCheckOut || locationValidation?.canCheckOut === true
+      const normalizedRole = String(userProfile?.role || "").trim().toLowerCase().replace(/[\s-]+/g, "_")
+      if (normalizedRole === "department_head" && hoursWorkedSoFar < 2) {
+        setFlashMessage({
+          message: `Department Heads must complete the mandatory 2-hour working period before checking out. ${Math.max(1, Math.ceil((2 - hoursWorkedSoFar) * 60))} minutes remaining.`,
+          type: "error",
+        })
+        setIsLoading(false)
+        return
+      }
+      if (isWithinPremises && isSecurityOperationsOrTransport && !window.confirm("You are currently within QCC premises. Do you want to continue with a new working session by checking out now? Select Cancel if you will remain at work.")) {
+        setIsLoading(false)
+        return
+      }
       const isApprovedOffPremisesStarter = Boolean(
         localTodayAttendance?.on_official_duty_outside_premises || localTodayAttendance?.is_remote_location,
       )
