@@ -3649,7 +3649,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
               {isSalaryAdvanceRequest && (
                 <div className="space-y-2">
-                  <Label>Salary Advance Period ({isSeniorStaff ? "1–2" : "1–3"} months)</Label>
+                  <Label>Salary Advance Period ({isSeniorStaff ? "1–2" : "1��3"} months)</Label>
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
                   {salaryAdvanceMonthOptions.map((months) => (
                     <label key={months} className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-900 hover:border-emerald-300">
@@ -7160,7 +7160,16 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           placeholder="e.g. education_loan"
                         />
                       </div>
-                      <div className="flex items-end">
+                      <div className="space-y-2">
+                        <Label htmlFor="new-loan-label">Loan Label</Label>
+                        <Input
+                          id="new-loan-label"
+                          value={setupLoanLabel}
+                          onChange={(e) => setSetupLoanLabel(e.target.value)}
+                          placeholder="e.g. Education Loan"
+                        />
+                      </div>
+                      <div className="flex items-end md:col-span-2">
                         <Button
                           type="button"
                           className="w-full"
