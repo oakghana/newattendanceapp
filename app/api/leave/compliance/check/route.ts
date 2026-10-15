@@ -27,6 +27,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { data: currentProfile } = await admin
+      .from('user_profiles')
+      .select('role, position, staff_category')
+      .eq('id', user.id)
+      .maybeSingle()
+    const eligibilityValues = [currentProfile?.role, currentProfile?.position, currentProfile?.staff_category]
+      .map((value) => String(value || '').toLowerCase().trim())
+    const isLeaveLoanIneligible = eligibilityValues.some((value) => /(^|[ _-])(intern|internship|contract|contractor|nsp)(?=$|[ _-])/.test(value))
+
+    // Restricted roles do not request leave and must never receive leave prompts.
+    if (isLeaveLoanIneligible) {
+      return NextResponse.json({ compliance: null, reminders: [], escalations: [], daysLeft: 0, isReminderPeriod: false })
+    }
+
     // Check compliance status
     const compliance = await checkLeaveCompliance(user.id, admin)
 

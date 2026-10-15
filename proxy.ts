@@ -58,9 +58,9 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
 
   // Every employee must be able to apply for a loan or leave — use the
   // universal role list rather than a hand-maintained subset.
-  "/dashboard/loan-app": ALL_STAFF_ROLES,
-  "/dashboard/leave-management": ALL_STAFF_ROLES,
-  "/dashboard/leave-planning": ALL_STAFF_ROLES,
+  "/dashboard/loan-app": ALL_STAFF_ROLES.filter((role) => !["contract", "intern", "nsp"].includes(role)),
+  "/dashboard/leave-management": ALL_STAFF_ROLES.filter((role) => !["contract", "intern", "nsp"].includes(role)),
+  "/dashboard/leave-planning": ALL_STAFF_ROLES.filter((role) => !["contract", "intern", "nsp"].includes(role)),
 
   // Attendance check-in — the universal landing page for every role after login
   "/dashboard/attendance": ALL_STAFF_ROLES,
