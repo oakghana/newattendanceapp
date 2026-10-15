@@ -2459,6 +2459,15 @@ export function AttendanceRecorder({
     // duplicate check-in while the staff member is still genuinely at post.
     if (overnightCheckLoading) return
 
+    // A completed checkout is a terminal state for the day. Do not reset the
+    // auto-check-in guards when the completed record arrives after checkout;
+    // doing so allowed the geofence watcher to start a second session.
+    if (localTodayAttendance?.check_out_time || recentCheckOut) {
+      autoCheckInAttemptedRef.current = true
+      autoTriggeredOffPremisesRef.current = false
+      return
+    }
+
     if (localTodayAttendance?.check_in_time || hasPendingOffPremisesRequest || isOnLeave || (overnightOpenAttendance && !overnightAttendanceConfirmed)) {
       autoCheckInAttemptedRef.current = false
       autoTriggeredOffPremisesRef.current = false
@@ -2468,7 +2477,7 @@ export function AttendanceRecorder({
 
     const attemptAutomaticCheckIn = async () => {
       // Guard against stale closure: re-check using the always-current ref
-      if (localTodayAttendanceRef.current?.check_in_time) return
+      if (localTodayAttendanceRef.current?.check_in_time || localTodayAttendanceRef.current?.check_out_time || recentCheckOut) return
 
       if (
         autoCheckInAttemptedRef.current ||
