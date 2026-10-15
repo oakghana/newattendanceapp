@@ -220,7 +220,8 @@ export function StaffManagement() {
           ? result.data.map((row: StaffMember) => ({
               ...row,
               staff_category: row.staff_category || "Junior",
-              role: displayRole(row.role),
+              // Keep the canonical database role in state; labels are formatted only when rendered.
+              role: row.role,
             }))
           : []
         setStaff(rows)
@@ -538,7 +539,7 @@ export function StaffManagement() {
         setStaff((prev) =>
           prev.map((s) =>
             s.id === editingStaff.id
-              ? { ...s, ...updatedMember, role: displayRole(updatedMember.role ?? s.role) }
+              ? { ...s, ...updatedMember }
               : s
           )
         )
@@ -1529,7 +1530,7 @@ export function StaffManagement() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setEditingStaff({ ...member, role: displayRole(member.role) })}
+                            onClick={() => setEditingStaff({ ...member })}
                             className="h-8 w-8 p-0 hover:bg-primary/10 hover:border-primary/20"
                             disabled={
                               isItAdmin && (displayRole(member.role) === "admin" || displayRole(member.role) === "it-admin")
