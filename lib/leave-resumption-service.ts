@@ -147,6 +147,24 @@ export async function processStaffResumptionCheckIn(userId: string, checkInDateS
       return { success: true, triggered: false, message: 'No active leave found requiring resumption confirmation' }
     }
 
+    // A resumption notice is valid only for an approved leave request. Older or
+    // manually-created tracking rows must not turn a normal check-in into a
+    // claim that the staff member resumed from leave.
+    const { data: linkedLeave, error: linkedLeaveError } = await getSupabase()
+      .from('leave_plan_requests')
+      .select('id, status')
+      .eq('id', targetRecord.leave_request_id)
+      .maybeSingle()
+
+    const approvedLeaveStatuses = new Set(['hr_approved', 'approved', 'completed'])
+    if (linkedLeaveError || !linkedLeave || !approvedLeaveStatuses.has(String(linkedLeave.status || '').toLowerCase())) {
+      return {
+        success: true,
+        triggered: false,
+        message: 'No approved leave found requiring resumption confirmation',
+      }
+    }
+
     // Update leave_resumption_notifications
     await getSupabase()
       .from('leave_resumption_notifications')
@@ -232,7 +250,7 @@ export async function processStaffResumptionCheckIn(userId: string, checkInDateS
       .select('hod_user_id')
       .eq('staff_user_id', userId)
 
-    let hodIds = (hodLinks || []).map((h: any) => h.hod_user_id).filter(Boolean)
+    const hodIds = (hodLinks || []).map((h: any) => h.hod_user_id).filter(Boolean)
     if (staffUser?.supervisor_id && !hodIds.includes(staffUser.supervisor_id)) {
       hodIds.push(staffUser.supervisor_id)
     }
