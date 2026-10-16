@@ -321,8 +321,8 @@ export function AttendanceReports({
   const displayUserLabel = (record: AttendanceRecord) => {
     const p = record.user_profiles
     const name = extractFullNameFromProfile(p)
-    if (name) return name
-    if (p?.employee_id) return p.employee_id
+    if (name) return name.toUpperCase()
+    if (p?.employee_id) return p.employee_id.toUpperCase()
     // Try to extract name from email (e.g. john.doe@company.com -> John Doe)
     const email = (p as any)?.email
     if (email) {
@@ -691,7 +691,7 @@ export function AttendanceReports({
               const row = [
                 new Date(record.check_in_time).toLocaleDateString(),
                 `"${record.user_profiles?.employee_id || "Not recorded"}"`,
-                `"${(record.user_profiles?.first_name || "") + (record.user_profiles?.last_name ? ' ' + record.user_profiles.last_name : '') || 'Unnamed staff record'}"`,
+                `"${((record.user_profiles?.first_name || "") + (record.user_profiles?.last_name ? ' ' + record.user_profiles.last_name : '') || 'Unnamed staff record').toUpperCase()}"`,
                 `"${record.user_profiles?.departments?.name || "Not recorded"}"`,
                 `"${record.user_profiles?.assigned_location?.name || "Not recorded"}"`,
                 `"${new Date(record.check_in_time).toLocaleTimeString()}"`,
@@ -757,7 +757,7 @@ export function AttendanceReports({
 
             const firstName = record.user_profiles?.first_name || ""
             const lastName = record.user_profiles?.last_name || ""
-            const fullName = (firstName + (lastName ? " " + lastName : "")).trim() || "Unnamed staff record"
+            const fullName = ((firstName + (lastName ? " " + lastName : "")).trim() || "Unnamed staff record").toUpperCase()
 
             return [
               new Date(record.check_in_time).toLocaleDateString(),
@@ -2194,7 +2194,7 @@ export function AttendanceReports({
                         {offPremisesPageItems.map((req) => {
                           const first = req.user_profiles?.first_name || ""
                           const last = req.user_profiles?.last_name || ""
-                          const staffName = `${first} ${last}`.trim() || req.user_profiles?.email || "Unknown Staff"
+                          const staffName = (`${first} ${last}`.trim() || req.user_profiles?.email || "Unknown Staff").toUpperCase()
                           const employeeId = req.user_profiles?.employee_id
                           const locationName = req.google_maps_name || req.current_location_name || "Unknown Location"
                           const status = String(req.status || "pending").toLowerCase()
