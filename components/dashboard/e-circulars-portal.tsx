@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { CheckCheck, ChevronLeft, ChevronRight, Eye, FileText, Megaphone, Pencil, Quote, RefreshCw, Send, ShieldCheck, Trash2, Upload } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
@@ -55,7 +55,7 @@ export function ECircularsPortal() {
   const [refreshingAnalytics, setRefreshingAnalytics] = useState(false)
   const [selectedCircular, setSelectedCircular] = useState<Circular | null>(null)
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const response = await fetch("/api/e-circulars", { cache: "no-store" })
     const data = await response.json()
     if (!response.ok) {
@@ -71,11 +71,11 @@ export function ECircularsPortal() {
     setCanPublish(Boolean(data.canPublish))
     setCanManage(Boolean(data.canManage))
     setCanAnalytics(Boolean(data.canViewAnalytics))
-  }
+  }, [toast])
 
   useEffect(() => {
-  void load()
-  }, [])
+    void load()
+  }, [load])
 
   const refreshAnalytics = async () => {
     setRefreshingAnalytics(true)
@@ -84,6 +84,8 @@ export function ECircularsPortal() {
       if (!response.ok) throw new Error("Unable to refresh analytics")
       const data = await response.json()
       setAnalytics(data.summary || null)
+    } catch {
+      toast({ title: "Analytics unavailable", description: "Circulars are available, but metrics could not be loaded.", variant: "destructive" })
     } finally {
       setRefreshingAnalytics(false)
     }
@@ -92,7 +94,7 @@ export function ECircularsPortal() {
   useEffect(() => {
     if (!canAnalytics) return
     void refreshAnalytics()
-  }, [canAnalytics])
+  }, [canAnalytics, toast])
 
   const qccWeekLabel = (date: Date) => {
     const monthStart = new Date(date.getFullYear(), date.getMonth(), 1)

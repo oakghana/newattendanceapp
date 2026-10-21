@@ -22,7 +22,11 @@ export async function GET() {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const role = String(current.profile.role)
   const publishedByIds = Array.from(new Set((data || []).map((item: any) => item.published_by).filter(Boolean)))
-  const { data: publishers } = publishedByIds.length ? await current.admin.from("user_profiles").select("id,first_name,last_name,role,position").in("id", publishedByIds) : { data: [] }
+  const visibleIds = (data || []).map((item: any) => item.id)
+  const [{ data: publishers }, { data: reads }] = await Promise.all([
+    publishedByIds.length ? current.admin.from("user_profiles").select("id,first_name,last_name,role,position").in("id", publishedByIds) : Promise.resolve({ data: [] }),
+    visibleIds.length ? current.admin.from("e_circular_reads").select("circular_id").eq("user_id", current.user.id).in("circular_id", visibleIds) : Promise.resolve({ data: [] }),
+  ])
   const publisherMap = new Map((publishers || []).map((publisher: any) => [publisher.id, publisher]))
   const includeUploader = ADMINISTRATORS.has(role)
   const enriched = (data || []).map((item: any) => {
@@ -37,7 +41,6 @@ export async function GET() {
     if (item.audience_roles.includes("regional_hr_office") && ["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)) return true
     return false
   })
-  const { data: reads } = await current.admin.from("e_circular_reads").select("circular_id").eq("user_id", current.user.id).in("circular_id", visible.map((item: any) => item.id))
   return NextResponse.json({ circulars: visible, readCircularIds: (reads || []).map((read: any) => read.circular_id), canPublish: PUBLISHERS.has(role), canManage: ADMINISTRATORS.has(role), canViewAnalytics: ANALYSTS.has(role) })
 }
 
