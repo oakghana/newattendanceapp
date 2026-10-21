@@ -153,9 +153,12 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
         const response = await fetch("/api/e-circulars", { cache: "no-store" })
         const data = await response.json()
         if (response.ok && Array.isArray(data.circulars) && data.circulars.length > 0) {
-          // Always lead with the latest official notice after dashboard entry.
-          // The read endpoint still records accountability when the user opens it.
-          setPriorityCircular(data.circulars[0])
+          const readIds = new Set(Array.isArray(data.readCircularIds) ? data.readCircularIds : [])
+          const unreadCircular = data.circulars.find((circular: { id: string }) => !readIds.has(circular.id))
+
+          // Only remind users about circulars they have not opened yet.
+          // "Remind me later" closes this session's prompt without recording a read.
+          if (unreadCircular) setPriorityCircular(unreadCircular)
           return
         }
         if (attempt < 1) {
