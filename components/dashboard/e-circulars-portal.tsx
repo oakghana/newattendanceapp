@@ -251,7 +251,7 @@ export function ECircularsPortal() {
               <div className="min-h-0 flex-1 overflow-auto bg-slate-950 p-3 sm:p-6">
                 {selectedCircular.mime_type === "application/pdf" ? <iframe src={selectedCircular.file_url} title={selectedCircular.title} className="h-[70vh] min-h-[420px] w-full rounded-xl border border-slate-800 bg-white" /> : <img src={selectedCircular.file_url} alt={`Full official circular: ${selectedCircular.title}`} className="mx-auto block h-auto max-h-[75vh] w-auto max-w-full rounded-xl object-contain" />}
               </div>
-              <div className="flex flex-col gap-3 border-t border-slate-800 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm leading-6 text-slate-400">{selectedCircular.commentary || "Please review this official circular for full details."}</p>{selectedCircular.is_downloadable && <Button asChild variant="outline" className="shrink-0 border-emerald-500/40 bg-transparent text-emerald-300 hover:bg-emerald-500/10"><a href={selectedCircular.file_url} download={selectedCircular.file_name}>Download</a></Button>}</div>
+              <div className="flex flex-col gap-3 border-t border-slate-800 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm leading-6 text-slate-400">{selectedCircular.commentary || "Please review this official circular for full details."}</p>{selectedCircular.is_downloadable && <Button type="button" onClick={() => void downloadCircular(selectedCircular)} variant="outline" className="shrink-0 border-emerald-500/40 bg-transparent text-emerald-300 hover:bg-emerald-500/10">Download</Button>}</div>
             </div>
           </div>
         )}
