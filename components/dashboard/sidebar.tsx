@@ -103,7 +103,7 @@ const navigationItems = [
   },
   {
     title: "Balance Scorecard",
-    href: "https://bsc.cocobod.net/login.we",
+    href: "https://bsc.cocobod.net/login",
     icon: BarChart3,
     roles: ALL_STAFF_ROLES,
     category: "main",
