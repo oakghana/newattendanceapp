@@ -147,16 +147,28 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
   useEffect(() => {
     if (!profile || circularNoticeShownRef.current) return
     circularNoticeShownRef.current = true
-    const loadPriorityCircular = async () => {
+
+    const loadPriorityCircular = async (attempt = 0) => {
       try {
         const response = await fetch("/api/e-circulars", { cache: "no-store" })
         const data = await response.json()
-        const unread = (data.circulars || []).filter((item: any) => !(data.readCircularIds || []).includes(item.id))
-        if (response.ok && unread.length > 0) setPriorityCircular(unread[0])
+        if (response.ok && Array.isArray(data.circulars) && data.circulars.length > 0) {
+          // Always lead with the latest official notice after dashboard entry.
+          // The read endpoint still records accountability when the user opens it.
+          setPriorityCircular(data.circulars[0])
+          return
+        }
+        if (attempt < 1) {
+          window.setTimeout(() => void loadPriorityCircular(attempt + 1), 750)
+        }
       } catch {
+        if (attempt < 1) {
+          window.setTimeout(() => void loadPriorityCircular(attempt + 1), 750)
+        }
         // A notice should never block dashboard access.
       }
     }
+
     void loadPriorityCircular()
   }, [profile])
 
@@ -269,7 +281,7 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className="space-y-4 p-6">
               <div><p className="text-sm font-medium text-cyan-300">Please stay informed</p><h2 id="priority-circular-title" className="mt-1 text-2xl font-semibold tracking-tight">{priorityCircular.title}</h2></div>
               <p className="text-sm leading-6 text-slate-300">{priorityCircular.commentary || "Please take a moment to read this official QCC announcement."}</p>
-              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end"><Button variant="ghost" onClick={() => setPriorityCircular(null)} className="text-slate-300 hover:bg-slate-800 hover:text-white">Remind me later</Button><Button onClick={async () => { await fetch("/api/e-circulars/read", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ circularId: priorityCircular.id }) }); window.open(priorityCircular.file_url, "_blank", "noopener,noreferrer"); setPriorityCircular(null) }} className="bg-cyan-400 text-slate-950 hover:bg-cyan-300">Read official notice</Button></div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end"><Button variant="ghost" onClick={() => setPriorityCircular(null)} className="text-slate-300 hover:bg-slate-800 hover:text-white">Remind me later</Button><Button onClick={async () => { await fetch("/api/e-circulars/read", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ circularId: priorityCircular.id }) }); setPriorityCircular(null) }} className="bg-cyan-400 text-slate-950 hover:bg-cyan-300">Read official notice</Button></div>
             </div>
           </div>
         </div>
