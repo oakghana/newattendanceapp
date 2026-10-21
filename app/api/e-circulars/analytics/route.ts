@@ -9,10 +9,15 @@ export async function GET(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const reads = data || []
-  const [{ count: totalStaff }, { data: circulars }] = await Promise.all([
+  const today = new Date()
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()
+  const tomorrowStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString()
+  const [{ count: totalStaff }, { data: circulars }, { data: todayCheckIns }] = await Promise.all([
     admin.from("user_profiles").select("id", { count: "exact", head: true }),
     admin.from("e_circulars").select("id,title,published_at").eq("is_published", true),
+    admin.from("attendance_records").select("user_id").gte("check_in_time", todayStart).lt("check_in_time", tomorrowStart),
   ])
+  const checkedInStaff = new Set((todayCheckIns || []).map((record: any) => record.user_id).filter(Boolean)).size
   const userIds = Array.from(new Set(reads.map((read: any) => read.user_id).filter(Boolean)))
   const locationIds = Array.from(new Set(reads.map((read: any) => read.location_id).filter(Boolean)))
   const [{ data: profiles }, { data: locations }] = await Promise.all([
@@ -27,7 +32,6 @@ export async function GET(request: Request) {
     return { ...read, location: locationMap.get(read.location_id) || "Not specified", rank: profile?.position || "Not specified", role: profile?.role || read.role || "Not specified" }
   })
   const staffTotal = totalStaff || 0
-  const repeatOpens = reads.filter((read: any) => Number(read.open_count || 0) > 1).length
   const circularPerformance = (circulars || []).map((circular: any) => {
     const circularReads = reads.filter((read: any) => read.circular_id === circular.id)
     const readers = new Set(circularReads.map((read: any) => read.user_id).filter(Boolean)).size
@@ -37,5 +41,5 @@ export async function GET(request: Request) {
   }).sort((a, b) => b.downloads - a.downloads || b.readers - a.readers)
   const totalDownloads = reads.reduce((sum: number, read: any) => sum + Number(read.download_count || 0), 0)
   const uniqueDownloaders = new Set(reads.filter((read: any) => Number(read.download_count || 0) > 0).map((read: any) => read.user_id).filter(Boolean)).size
-  return NextResponse.json({ reads: enrichedReads, summary: { totalReads: reads.length, uniqueReaders: userIds.length, totalStaff: staffTotal, readingRate: staffTotal ? Math.round((userIds.length / staffTotal) * 100) : 0, unreadReaders: Math.max(staffTotal - userIds.length, 0), repeatOpens, averageOpens: userIds.length ? Math.round((reads.reduce((sum: number, read: any) => sum + Number(read.open_count || 1), 0) / userIds.length) * 10) / 10 : 0, totalDownloads, uniqueDownloaders, downloadRate: userIds.length ? Math.round((uniqueDownloaders / userIds.length) * 100) : 0, byLocation: countBy(enrichedReads.map((read: any) => read.location)), byRank: countBy(enrichedReads.map((read: any) => read.rank)), circularPerformance } })
+  return NextResponse.json({ reads: enrichedReads, summary: { totalReads: reads.length, uniqueReaders: userIds.length, totalStaff: staffTotal, readingRate: staffTotal ? Math.round((userIds.length / staffTotal) * 100) : 0, unreadReaders: Math.max(staffTotal - userIds.length, 0), checkedInStaff, averageOpens: userIds.length ? Math.round((reads.reduce((sum: number, read: any) => sum + Number(read.open_count || 1), 0) / userIds.length) * 10) / 10 : 0, totalDownloads, uniqueDownloaders, downloadRate: userIds.length ? Math.round((uniqueDownloaders / userIds.length) * 100) : 0, byLocation: countBy(enrichedReads.map((read: any) => read.location)), byRank: countBy(enrichedReads.map((read: any) => read.rank)), circularPerformance } })
 }
