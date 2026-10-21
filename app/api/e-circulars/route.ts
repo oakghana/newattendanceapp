@@ -23,6 +23,7 @@ export async function GET() {
   const visible = (data || []).filter((item: any) => {
     if (!item.audience_roles?.length) return true
     if (item.audience_roles.includes(role)) return true
+    if (item.audience_roles.includes("department_head_and_regional_manager") && ["department_head", "hod", "regional_manager", "rm"].includes(role)) return true
     if (item.audience_roles.includes("regional_hr_office") && ["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)) return true
     return false
   })

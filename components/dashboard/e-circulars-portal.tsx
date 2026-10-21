@@ -11,8 +11,9 @@ import { Textarea } from "@/components/ui/textarea"
 
   const AUDIENCES = [
     ["", "All Staff / All Roles"],
-    ["department_head", "Department Heads only"],
-    ["regional_manager", "Regional Managers only"],
+  ["department_head", "Department Heads only"],
+  ["regional_manager", "Regional Managers only"],
+  ["department_head_and_regional_manager", "Department Heads + Regional Managers"],
     ["regional_hr_office", "Regional HR Office only"],
   ] as const
 
