@@ -21,7 +21,8 @@ export async function GET() {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const role = String(current.profile.role)
   const visible = (data || []).filter((item: any) => !item.audience_roles?.length || item.audience_roles.includes(role))
-  return NextResponse.json({ circulars: visible, canPublish: PUBLISHERS.has(role), canViewAnalytics: ANALYSTS.has(role) })
+  const { data: reads } = await current.admin.from("e_circular_reads").select("circular_id").eq("user_id", current.user.id).in("circular_id", visible.map((item: any) => item.id))
+  return NextResponse.json({ circulars: visible, readCircularIds: (reads || []).map((read: any) => read.circular_id), canPublish: PUBLISHERS.has(role), canViewAnalytics: ANALYSTS.has(role) })
 }
 
 export async function POST(request: Request) {
