@@ -20,7 +20,12 @@ export async function GET() {
   const { data, error } = await current.admin.from("e_circulars").select("id,title,commentary,file_url,file_name,mime_type,audience_roles,published_at,published_by").eq("is_published", true).order("published_at", { ascending: false })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const role = String(current.profile.role)
-  const visible = (data || []).filter((item: any) => !item.audience_roles?.length || item.audience_roles.includes(role))
+  const visible = (data || []).filter((item: any) => {
+    if (!item.audience_roles?.length) return true
+    if (item.audience_roles.includes(role)) return true
+    if (item.audience_roles.includes("regional_hr_office") && ["regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(role)) return true
+    return false
+  })
   const { data: reads } = await current.admin.from("e_circular_reads").select("circular_id").eq("user_id", current.user.id).in("circular_id", visible.map((item: any) => item.id))
   return NextResponse.json({ circulars: visible, readCircularIds: (reads || []).map((read: any) => read.circular_id), canPublish: PUBLISHERS.has(role), canViewAnalytics: ANALYSTS.has(role) })
 }

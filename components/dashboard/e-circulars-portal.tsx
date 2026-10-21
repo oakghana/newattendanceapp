@@ -9,13 +9,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 
-const AUDIENCES = [
-  ["", "All roles"],
-  ["department_head", "HODs only"],
-  ["regional_manager", "Regional Managers only"],
-  ["managing_director", "Managing Director only"],
-  ["hr_records", "HR Records only"],
-] as const
+  const AUDIENCES = [
+    ["", "All Staff / All Roles"],
+    ["department_head", "Department Heads only"],
+    ["regional_manager", "Regional Managers only"],
+    ["regional_hr_office", "Regional HR Office only"],
+  ] as const
 
 type Circular = {
   id: string
@@ -130,7 +129,7 @@ export function ECircularsPortal() {
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-400">Official communications</p>
             <h1 className="mt-2 text-4xl font-semibold tracking-tight">Electronic Circulars</h1>
-            <p className="mt-2 max-w-2xl text-slate-400">Read official notices from the organisation. Your access is recorded for accountability.</p>
+            <p className="mt-2 max-w-2xl text-slate-400">📢 Please take a moment to read QCC&apos;s official notices here. Where download options are available, staff may also download the attached documents for future reference. Thank you for staying informed and updated.</p>
           </div>
           <div className="flex items-center gap-2 text-sm text-slate-400"><ShieldCheck className="h-4 w-4 text-emerald-400" /> Read access is recorded</div>
         </header>
