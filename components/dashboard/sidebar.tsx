@@ -102,6 +102,14 @@ const navigationItems = [
     external: true,
   },
   {
+    title: "Balance Scorecard",
+    href: "https://bsc.cocobod.net/login",
+    icon: BarChart3,
+    roles: ALL_STAFF_ROLES,
+    category: "main",
+    external: true,
+  },
+  {
     title: "Attendance Check",
     href: "/dashboard/attendance",
     icon: Clock,
