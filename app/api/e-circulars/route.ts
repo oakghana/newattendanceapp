@@ -21,7 +21,16 @@ export async function GET() {
   const { data, error } = await current.admin.from("e_circulars").select("id,title,commentary,file_url,file_name,mime_type,is_downloadable,audience_roles,published_at,published_by").eq("is_published", true).order("published_at", { ascending: false })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const role = String(current.profile.role)
-  const visible = (data || []).filter((item: any) => {
+  const publishedByIds = Array.from(new Set((data || []).map((item: any) => item.published_by).filter(Boolean)))
+  const { data: publishers } = publishedByIds.length ? await current.admin.from("user_profiles").select("id,first_name,last_name,role,position").in("id", publishedByIds) : { data: [] }
+  const publisherMap = new Map((publishers || []).map((publisher: any) => [publisher.id, publisher]))
+  const includeUploader = ADMINISTRATORS.has(role)
+  const enriched = (data || []).map((item: any) => {
+    if (!includeUploader) return item
+    const publisher = publisherMap.get(item.published_by)
+    return { ...item, publisher_name: publisher ? `${publisher.first_name || ""} ${publisher.last_name || ""}`.trim() || "HR Records" : "HR Records", publisher_role: publisher?.role || "hr_records", publisher_position: publisher?.position || "HR Records" }
+  })
+  const visible = enriched.filter((item: any) => {
     if (!item.audience_roles?.length) return true
     if (item.audience_roles.includes(role)) return true
     if (item.audience_roles.includes("department_head_and_regional_manager") && ["department_head", "hod", "regional_manager", "rm"].includes(role)) return true
