@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { CheckCheck, ChevronLeft, ChevronRight, Eye, FileText, Megaphone, Quote, Send, ShieldCheck, Upload } from "lucide-react"
+import { CheckCheck, ChevronLeft, ChevronRight, Eye, FileText, Megaphone, Pencil, Quote, Send, ShieldCheck, Trash2, Upload } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -24,6 +24,7 @@ type Circular = {
   file_url: string
   file_name: string
   is_downloadable: boolean
+  audience_roles?: string[]
   published_at: string
 }
 
@@ -36,6 +37,8 @@ export function ECircularsPortal() {
   const [period, setPeriod] = useState<Period>("month")
   const [page, setPage] = useState(1)
   const [canPublish, setCanPublish] = useState(false)
+  const [canManage, setCanManage] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [canAnalytics, setCanAnalytics] = useState(false)
   const [activeTab, setActiveTab] = useState<"read" | "publish">("read")
   const [title, setTitle] = useState("")
@@ -59,6 +62,7 @@ export function ECircularsPortal() {
     const unreadCount = nextItems.filter((item: Circular) => !nextReadIds.has(item.id)).length
     if (unreadCount > 0) toast({ title: `${unreadCount} new circular${unreadCount === 1 ? "" : "s"}`, description: "New official communication is available for your attention." })
     setCanPublish(Boolean(data.canPublish))
+    setCanManage(Boolean(data.canManage))
     setCanAnalytics(Boolean(data.canViewAnalytics))
   }
 
@@ -117,6 +121,38 @@ export function ECircularsPortal() {
     setActiveTab("read")
   }
 
+  const editCircular = async (item: Circular) => {
+    const nextTitle = window.prompt("Edit circular title", item.title)
+    if (!nextTitle?.trim()) return
+    const nextCommentary = window.prompt("Edit reader commentary", item.commentary || "")
+    const body = new FormData()
+    body.append("id", item.id)
+    body.append("title", nextTitle.trim())
+    body.append("commentary", nextCommentary?.trim() || "")
+    body.append("audienceRoles", JSON.stringify(item.audience_roles || []))
+    body.append("isDownloadable", String(item.is_downloadable))
+    const response = await fetch("/api/e-circulars", { method: "PUT", body })
+    const data = await response.json()
+    if (!response.ok) {
+      toast({ title: "Unable to update circular", description: data.error || "Please try again.", variant: "destructive" })
+      return
+    }
+    toast({ title: "Circular updated", description: "The updated notice is now visible to its selected audience." })
+    await load()
+  }
+
+  const deleteCircular = async (item: Circular) => {
+    if (!window.confirm(`Delete \\"${item.title}\\"? It will disappear from every dashboard.`)) return
+    const response = await fetch("/api/e-circulars", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id }) })
+    const data = await response.json()
+    if (!response.ok) {
+      toast({ title: "Unable to delete circular", description: data.error || "Please try again.", variant: "destructive" })
+      return
+    }
+    setItems((current) => current.filter((circular) => circular.id !== item.id))
+    toast({ title: "Circular deleted", description: "The circular has been removed from all dashboards." })
+  }
+
   const openCircular = async (item: Circular) => {
     await fetch("/api/e-circulars/read", {
       method: "POST",
@@ -152,7 +188,7 @@ export function ECircularsPortal() {
           <section className="space-y-4">
             <div className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 md:flex-row md:items-center md:justify-between"><div><h2 className="text-xl font-semibold">Circular archive</h2><p className="mt-1 text-sm text-slate-400">Browse notices by publication period.</p></div><div className="flex flex-wrap gap-2">{([['week','Weekly'],['month','Monthly'],['quarter','Quarterly'],['year','Yearly']] as [Period,string][]).map(([value,label]) => <Button key={value} size="sm" onClick={() => { setPeriod(value); setPage(1) }} className={period === value ? "bg-cyan-500 text-slate-950 hover:bg-cyan-400" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}>{label}</Button>)}</div></div>
             <div className="flex items-center justify-between text-sm text-slate-400"><span>{items.length} published circulars</span><span>Page {page} of {pageCount}</span></div>
-            {visibleGroups.map(([label, group]) => <div key={label} className="space-y-3"><div className="flex items-center gap-3"><span className="h-px flex-1 bg-slate-800" /><h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-400">{label}</h3><span className="h-px flex-1 bg-slate-800" /></div>{group.map((item) => { const isRead = readIds.has(item.id); return <Card key={item.id} className={`border-slate-800 bg-slate-900 text-slate-100 ${isRead ? "opacity-80" : "ring-1 ring-cyan-400/20"}`}><CardContent className="flex flex-col justify-between gap-5 p-5 md:flex-row"><div className="flex gap-4"><div className={`rounded-xl p-3 ${isRead ? "bg-emerald-400/10 text-emerald-400" : "bg-cyan-400/10 text-cyan-400"}`}>{isRead ? <CheckCheck /> : <FileText />}</div><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{item.title}</h3>{isRead && <span className="rounded-full bg-emerald-400/10 px-2 py-1 text-xs font-medium text-emerald-300">Read</span>}</div><div className="mt-3 flex gap-2 border-l-2 border-cyan-400/60 pl-3 text-sm leading-6 text-slate-300"><Quote className="mt-1 h-4 w-4 shrink-0 text-cyan-400" /><p>{item.commentary || "Please review the attached official circular for full details."}</p></div><p className="mt-3 text-xs text-slate-500">Published {new Date(item.published_at).toLocaleDateString()} · {item.file_name}</p></div></div><div className="flex shrink-0 flex-wrap gap-2"><Button onClick={() => void openCircular(item)} className="bg-cyan-500 text-slate-950 hover:bg-cyan-400"><Eye className="mr-2 h-4 w-4" />{isRead ? "Read again" : "Open notice"}</Button>{item.is_downloadable && <Button asChild variant="outline" className="border-emerald-500/40 bg-transparent text-emerald-300 hover:bg-emerald-500/10"><a href={item.file_url} download={item.file_name} target="_blank" rel="noreferrer">Download</a></Button>}</div></CardContent></Card>})}</div>)}
+            {visibleGroups.map(([label, group]) => <div key={label} className="space-y-3"><div className="flex items-center gap-3"><span className="h-px flex-1 bg-slate-800" /><h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-400">{label}</h3><span className="h-px flex-1 bg-slate-800" /></div>{group.map((item) => { const isRead = readIds.has(item.id); return <Card key={item.id} className={`border-slate-800 bg-slate-900 text-slate-100 ${isRead ? "opacity-80" : "ring-1 ring-cyan-400/20"}`}><CardContent className="flex flex-col justify-between gap-5 p-5 md:flex-row"><div className="flex gap-4"><div className={`rounded-xl p-3 ${isRead ? "bg-emerald-400/10 text-emerald-400" : "bg-cyan-400/10 text-cyan-400"}`}>{isRead ? <CheckCheck /> : <FileText />}</div><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{item.title}</h3>{isRead && <span className="rounded-full bg-emerald-400/10 px-2 py-1 text-xs font-medium text-emerald-300">Read</span>}</div><div className="mt-3 flex gap-2 border-l-2 border-cyan-400/60 pl-3 text-sm leading-6 text-slate-300"><Quote className="mt-1 h-4 w-4 shrink-0 text-cyan-400" /><p>{item.commentary || "Please review the attached official circular for full details."}</p></div><p className="mt-3 text-xs text-slate-500">Published {new Date(item.published_at).toLocaleDateString()} · {item.file_name}</p></div></div><div className="flex shrink-0 flex-wrap gap-2"><Button onClick={() => void openCircular(item)} className="bg-cyan-500 text-slate-950 hover:bg-cyan-400"><Eye className="mr-2 h-4 w-4" />{isRead ? "Read again" : "Open notice"}</Button>{item.is_downloadable && <Button asChild variant="outline" className="border-emerald-500/40 bg-transparent text-emerald-300 hover:bg-emerald-500/10"><a href={item.file_url} download={item.file_name} target="_blank" rel="noreferrer">Download</a></Button>}{canManage && <><Button size="sm" variant="outline" onClick={() => void editCircular(item)} className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800" aria-label={`Edit ${item.title}`}><Pencil className="h-4 w-4" /></Button><Button size="sm" variant="outline" onClick={() => void deleteCircular(item)} className="border-red-500/30 bg-transparent text-red-300 hover:bg-red-500/10" aria-label={`Delete ${item.title}`}><Trash2 className="h-4 w-4" /></Button></>}</div></CardContent></Card>})}</div>)}
             {!items.length && <div className="rounded-2xl border border-dashed border-slate-700 p-12 text-center text-slate-400">No circulars have been published for your role.</div>}
             {items.length > 0 && <div className="flex items-center justify-center gap-3 pt-2"><Button size="sm" variant="outline" disabled={page === 1} onClick={() => setPage((current) => current - 1)} className="border-slate-700 bg-transparent text-slate-300"><ChevronLeft className="mr-1 h-4 w-4" />Previous</Button><span className="text-sm text-slate-400">{page} / {pageCount}</span><Button size="sm" variant="outline" disabled={page === pageCount} onClick={() => setPage((current) => current + 1)} className="border-slate-700 bg-transparent text-slate-300">Next<ChevronRight className="ml-1 h-4 w-4" /></Button></div>}
             {canAnalytics && <p className="text-sm text-slate-500">Read analytics are available to your role.</p>}

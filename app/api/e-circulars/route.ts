@@ -3,6 +3,7 @@ import { put } from "@vercel/blob"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 
 const PUBLISHERS = new Set(["admin", "administrator", "hr_records", "hr_records_officer", "hr_records_manager"])
+const ADMINISTRATORS = new Set(["admin", "administrator"])
 const ANALYSTS = new Set(["admin", "administrator", "hod", "department_head", "regional_manager", "regional_hr_office", "regional_hr_officer", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director"])
 
 async function actor() {
@@ -28,7 +29,43 @@ export async function GET() {
     return false
   })
   const { data: reads } = await current.admin.from("e_circular_reads").select("circular_id").eq("user_id", current.user.id).in("circular_id", visible.map((item: any) => item.id))
-  return NextResponse.json({ circulars: visible, readCircularIds: (reads || []).map((read: any) => read.circular_id), canPublish: PUBLISHERS.has(role), canViewAnalytics: ANALYSTS.has(role) })
+  return NextResponse.json({ circulars: visible, readCircularIds: (reads || []).map((read: any) => read.circular_id), canPublish: PUBLISHERS.has(role), canManage: ADMINISTRATORS.has(role), canViewAnalytics: ANALYSTS.has(role) })
+}
+
+export async function PUT(request: Request) {
+  const current = await actor()
+  if (!current) return NextResponse.json({ error: "Authentication required" }, { status: 401 })
+  if (!ADMINISTRATORS.has(String(current.profile.role))) return NextResponse.json({ error: "Only Admin can edit circulars" }, { status: 403 })
+  const form = await request.formData()
+  const id = String(form.get("id") || "")
+  const title = String(form.get("title") || "").trim()
+  const commentary = String(form.get("commentary") || "").trim()
+  const audienceRoles = JSON.parse(String(form.get("audienceRoles") || "[]"))
+  const isDownloadable = String(form.get("isDownloadable") || "false") === "true"
+  if (!id || !title) return NextResponse.json({ error: "Circular id and title are required" }, { status: 400 })
+  const file = form.get("file")
+  const updates: Record<string, unknown> = { title, commentary: commentary || null, audience_roles: Array.isArray(audienceRoles) ? audienceRoles : [], is_downloadable: isDownloadable, updated_at: new Date().toISOString() }
+  if (file instanceof File && file.size > 0) {
+    const allowed = ["application/pdf", "image/png", "image/jpeg", "image/webp"]
+    if (!allowed.includes(file.type)) return NextResponse.json({ error: "Upload a PDF, PNG, JPG, or WEBP file" }, { status: 400 })
+    if (file.size > 15 * 1024 * 1024) return NextResponse.json({ error: "Files must be 15MB or smaller" }, { status: 400 })
+    const blob = await put(`e-circulars/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`, file, { access: "public", addRandomSuffix: true })
+    Object.assign(updates, { file_url: blob.url, file_name: file.name, mime_type: file.type })
+  }
+  const { data, error } = await current.admin.from("e_circulars").update(updates).eq("id", id).select().single()
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ circular: data })
+}
+
+export async function DELETE(request: Request) {
+  const current = await actor()
+  if (!current) return NextResponse.json({ error: "Authentication required" }, { status: 401 })
+  if (!ADMINISTRATORS.has(String(current.profile.role))) return NextResponse.json({ error: "Only Admin can delete circulars" }, { status: 403 })
+  const { id } = await request.json()
+  if (!id) return NextResponse.json({ error: "Circular id is required" }, { status: 400 })
+  const { error } = await current.admin.from("e_circulars").update({ is_published: false, updated_at: new Date().toISOString() }).eq("id", id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
 }
 
 export async function POST(request: Request) {
