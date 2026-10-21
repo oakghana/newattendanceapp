@@ -12,6 +12,7 @@ import { MobileBottomNav } from "./mobile-bottom-nav"
 import { LeaveReminderModal } from "@/components/leave/leave-reminder-modal"
 import { toast } from "@/hooks/use-toast"
 import { ToastAction } from "@/components/ui/toast"
+import { Button } from "@/components/ui/button"
 
 const POLL_INTERVAL_MS = 120_000
 const SESSION_REFRESH_INTERVAL_MS = 5 * 60 * 1000
@@ -31,6 +32,8 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname()
   const lastSeenIdRef = useRef<string | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const circularNoticeShownRef = useRef(false)
+  const [priorityCircular, setPriorityCircular] = useState<any>(null)
 
   useEffect(() => {
     if (!user) return
@@ -140,6 +143,23 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
 
 
 
+  // Put official circulars first after the authenticated dashboard becomes available.
+  useEffect(() => {
+    if (!profile || circularNoticeShownRef.current) return
+    circularNoticeShownRef.current = true
+    const loadPriorityCircular = async () => {
+      try {
+        const response = await fetch("/api/e-circulars", { cache: "no-store" })
+        const data = await response.json()
+        const unread = (data.circulars || []).filter((item: any) => !(data.readCircularIds || []).includes(item.id))
+        if (response.ok && unread.length > 0) setPriorityCircular(unread[0])
+      } catch {
+        // A notice should never block dashboard access.
+      }
+    }
+    void loadPriorityCircular()
+  }, [profile])
+
   // Poll for new notifications and show modern flash toasts.
   useEffect(() => {
     if (!profile) return
@@ -238,6 +258,22 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
       <PWAUpdateNotification />
       <LeaveReminderModal />
       <OfflineIndicator />
+
+      {priorityCircular && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md" role="dialog" aria-modal="true" aria-labelledby="priority-circular-title">
+          <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-cyan-400/30 bg-slate-950 text-white shadow-2xl shadow-cyan-950/40">
+            <div className="relative aspect-[16/7] overflow-hidden bg-slate-900">
+              {priorityCircular.mime_type === "application/pdf" ? <iframe src={priorityCircular.file_url} title={priorityCircular.title} className="h-full w-full" /> : <img src={priorityCircular.file_url} alt="Preview of official circular" className="h-full w-full object-cover" />}
+              <div className="absolute left-4 top-4 rounded-full bg-cyan-400 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-slate-950">Official notice</div>
+            </div>
+            <div className="space-y-4 p-6">
+              <div><p className="text-sm font-medium text-cyan-300">Please stay informed</p><h2 id="priority-circular-title" className="mt-1 text-2xl font-semibold tracking-tight">{priorityCircular.title}</h2></div>
+              <p className="text-sm leading-6 text-slate-300">{priorityCircular.commentary || "Please take a moment to read this official QCC announcement."}</p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end"><Button variant="ghost" onClick={() => setPriorityCircular(null)} className="text-slate-300 hover:bg-slate-800 hover:text-white">Remind me later</Button><Button onClick={async () => { await fetch("/api/e-circulars/read", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ circularId: priorityCircular.id }) }); window.open(priorityCircular.file_url, "_blank", "noopener,noreferrer"); setPriorityCircular(null) }} className="bg-cyan-400 text-slate-950 hover:bg-cyan-300">Read official notice</Button></div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

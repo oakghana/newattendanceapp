@@ -95,11 +95,10 @@ const navigationItems = [
   },
   {
     title: "E-Circulars",
-    href: "https://engage.cloud.microsoft/main/org/qccgh.onmicrosoft.com/users/eyJfdHlwZSI6IlVzZXIiLCJpZCI6IjUwMjc4NTE1NTA3MyJ9/storyline",
+    href: "/dashboard/e-circulars",
     icon: Mail,
     roles: ALL_STAFF_ROLES,
     category: "main",
-    external: true,
   },
   {
     title: "Balance Scorecard",

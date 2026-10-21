@@ -517,16 +517,23 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       console.error("[v0] Staff API PUT - Regional HOD auto-link failed (non-fatal):", autoLinkErr)
     }
 
-    // Log the action
-    await supabase.from("audit_logs").insert({
-      user_id: user.id,
-      action: "update_staff",
-      table_name: "user_profiles",
-      record_id: id,
-      new_values: updatedProfile,
-      ip_address: (request as any).ip || request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || null,
-      user_agent: request.headers.get("user-agent"),
-    })
+    // Audit logging is best-effort. The profile update has already succeeded, so an
+    // audit policy or transient logging failure must not make the staff update look
+    // unsuccessful to the administrator.
+    try {
+      const { error: auditError } = await adminSupabase.from("audit_logs").insert({
+        user_id: user.id,
+        action: "update_staff",
+        table_name: "user_profiles",
+        record_id: id,
+        new_values: updatedProfile,
+        ip_address: (request as any).ip || request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || null,
+        user_agent: request.headers.get("user-agent"),
+      })
+      if (auditError) console.error("[v0] Staff update audit log failed after successful update:", auditError)
+    } catch (auditError) {
+      console.error("[v0] Staff update audit log exception after successful update:", auditError)
+    }
 
     return NextResponse.json({
       success: true,
