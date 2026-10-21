@@ -99,7 +99,6 @@ const navigationItems = [
     icon: Mail,
     roles: ALL_STAFF_ROLES,
     category: "main",
-    external: true,
   },
   {
     title: "Balance Scorecard",
