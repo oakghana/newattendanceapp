@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, AlertCircle, CheckCircle2, Clock, FileText, TrendingUp } from 'lucide-react'
 import { RequestDetailsModal } from './request-details-modal'
 import { HodPendingSummary } from './hod-pending-summary'
+import { fetchAllLeaveRequests } from '@/lib/fetch-all-leave-requests'
 
 interface Stats {
   pendingApprovals: number
@@ -50,6 +51,7 @@ export function HrExecutiveOverviewPanel({ onNavigateToTab }: HrExecutiveOvervie
 
   useEffect(() => {
     const fetchStats = async () => {
+      // fetchAllLeaveRequests pages through the full result set (no 1000 cap)
       try {
         setLoading(true)
         
@@ -59,8 +61,9 @@ export function HrExecutiveOverviewPanel({ onNavigateToTab }: HrExecutiveOvervie
         const pendingData = pendingRes.ok ? await pendingRes.json() : { requests: [] }
         
         // Fetch all leave requests to get approved and HOD pending counts
-        const allRequestsRes = await fetch('/api/leave/requests?limit=1000')
-        const allRequestsData = allRequestsRes.ok ? await allRequestsRes.json() : { records: [] }
+        const allRequestsData = await fetchAllLeaveRequests()
+          .then(({ rows }) => ({ data: rows }))
+          .catch(() => ({ data: [] as any[] }))
         
         // Fetch payment advice pending memos awaiting HR approval
         const pendingMemosRes = await fetch('/api/leave/payment-advice/pending-approval')
@@ -74,7 +77,7 @@ export function HrExecutiveOverviewPanel({ onNavigateToTab }: HrExecutiveOvervie
         const pendingRequests = (pendingData.requests || []).filter(
           (request: any) => String(request.status || "").toLowerCase() === "hr_office_forwarded",
         )
-        const allRequests = allRequestsData.data || allRequestsData.records || []
+        const allRequests = allRequestsData.data
 
         // Count approved leave — statuses set by hr-approve route and workflow
         const APPROVED_STATUSES = ['approved', 'hr_approved', 'hod_approved', 'finalized', 'completed', 'memo_issued']

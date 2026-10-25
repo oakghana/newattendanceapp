@@ -24,18 +24,33 @@ export async function GET(request: Request) {
   const today = new Date()
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()
   const tomorrowStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString()
-  const [{ count: totalStaff }, { data: circulars }, { data: todayCheckIns }] = await Promise.all([
-    admin.from("user_profiles").select("id", { count: "exact", head: true }),
-    admin.from("e_circulars").select("id,title,published_at").eq("is_published", true),
-    admin.from("attendance_records").select("user_id").gte("check_in_time", todayStart).lt("check_in_time", tomorrowStart),
-  ])
-  const checkedInStaff = new Set((todayCheckIns || []).map((record: any) => record.user_id).filter(Boolean)).size
+  // PostgREST caps each response at 1000 rows, which under-counted today's check-ins.
+  const fetchTodayCheckInUserIds = async () => {
+    const ids = new Set<string>()
+    for (let from = 0; ; from += PAGE) {
+      const { data } = await admin.from("attendance_records").select("user_id").gte("check_in_time", todayStart).lt("check_in_time", tomorrowStart).order("id", { ascending: true }).range(from, from + PAGE - 1)
+      for (const record of data || []) if (record.user_id) ids.add(record.user_id)
+      if (!data || data.length < PAGE) break
+    }
+    return ids
+  }
   const userIds = Array.from(new Set(reads.map((read: any) => read.user_id).filter(Boolean)))
   const locationIds = Array.from(new Set(reads.map((read: any) => read.location_id).filter(Boolean)))
-  const [{ data: profiles }, { data: locations }] = await Promise.all([
-    userIds.length ? admin.from("user_profiles").select("id,position,role,assigned_location_id").in("id", userIds) : Promise.resolve({ data: [] }),
+  // Chunk the id list: thousands of ids in one .in() overflow the request URL and silently return nothing.
+  const fetchProfiles = async () => {
+    const chunks: string[][] = []
+    for (let i = 0; i < userIds.length; i += 150) chunks.push(userIds.slice(i, i + 150))
+    const results = await Promise.all(chunks.map((ids) => admin.from("user_profiles").select("id,position,role,assigned_location_id").in("id", ids)))
+    return results.flatMap((result) => result.data || [])
+  }
+  const [{ count: totalStaff }, { data: circulars }, checkedInIds, profiles, { data: locations }] = await Promise.all([
+    admin.from("user_profiles").select("id", { count: "exact", head: true }),
+    admin.from("e_circulars").select("id,title,published_at").eq("is_published", true),
+    fetchTodayCheckInUserIds(),
+    fetchProfiles(),
     locationIds.length ? admin.from("geofence_locations").select("id,name").in("id", locationIds) : Promise.resolve({ data: [] }),
   ])
+  const checkedInStaff = checkedInIds.size
   const profileMap = new Map((profiles || []).map((profile: any) => [profile.id, profile]))
   const locationMap = new Map((locations || []).map((location: any) => [location.id, location.name]))
   const countBy = (values: string[]) => Object.entries(values.reduce<Record<string, number>>((result, value) => { const key = value || "Not specified"; result[key] = (result[key] || 0) + 1; return result }, {})).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count)

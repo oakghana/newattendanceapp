@@ -19,6 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { getDaysOverdue } from '@/lib/resumption-confirmation-helpers'
+import { fetchAllLeaveRequests } from '@/lib/fetch-all-leave-requests'
 
 interface LeaveRequest {
   id: string
@@ -110,26 +111,15 @@ export function AllRequestsViewSection() {
       setLoading(true)
       setError(null)
 
-      const res = await fetch('/api/leave/requests?limit=1000')
+      let firstPageShown = false
+      const { rows } = await fetchAllLeaveRequests({}, (partial) => {
+        if (firstPageShown) return
+        firstPageShown = true
+        setRequests(partial as LeaveRequest[])
+        setLoading(false)
+      })
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`)
-      }
-
-      const responseData = await res.json()
-      
-      // Extract data from response - handle multiple possible response formats
-      let requestsList: LeaveRequest[] = []
-      
-      if (Array.isArray(responseData?.data)) {
-        requestsList = responseData.data.filter((item): item is LeaveRequest => Boolean(item && typeof item === 'object' && item.id))
-      } else if (Array.isArray(responseData?.records)) {
-        requestsList = responseData.records.filter((item): item is LeaveRequest => Boolean(item && typeof item === 'object' && item.id))
-      } else if (Array.isArray(responseData)) {
-        requestsList = responseData.filter((item): item is LeaveRequest => Boolean(item && typeof item === 'object' && item.id))
-      }
-      
-      setRequests(requestsList)
+      setRequests(rows as LeaveRequest[])
     } catch (err) {
       console.error('[v0] All requests fetch error:', err)
       setError(err instanceof Error ? err.message : 'Failed to load requests')
