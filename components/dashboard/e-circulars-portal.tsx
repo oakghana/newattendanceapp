@@ -241,6 +241,8 @@ export function ECircularsPortal() {
           </Button>}
         </div>
 
+        <a href="https://www.qccsurvey.site" target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-2xl border border-cyan-400/30 bg-cyan-400/5 px-5 py-4 text-sm font-semibold text-cyan-300 transition-colors hover:border-cyan-300 hover:bg-cyan-400/10"><span>Your opinion</span><span className="text-xs font-normal text-slate-400">Share your feedback</span></a>
+
         {activeTab === "read" ? (
           <section className="space-y-4">
             <div className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 md:flex-row md:items-center md:justify-between"><div><h2 className="text-xl font-semibold">Circular archive</h2><p className="mt-1 text-sm text-slate-400">Browse notices by publication period.</p></div><div className="flex flex-wrap gap-2">{([['week','Weekly'],['month','Monthly'],['quarter','Quarterly'],['year','Yearly']] as [Period,string][]).map(([value,label]) => <Button key={value} size="sm" onClick={() => { setPeriod(value); setPage(1) }} className={period === value ? "bg-cyan-500 text-slate-950 hover:bg-cyan-400" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}>{label}</Button>)}</div></div>

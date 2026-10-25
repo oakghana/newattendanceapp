@@ -29,83 +29,50 @@ export async function GET(request: NextRequest) {
     const leaveYearPeriod = searchParams.get("leaveYearPeriod")
     const userId = searchParams.get("userId")
 
-    // Fetch outstanding leave balances with user profile info
-    let query = supabase
-      .from("outstanding_leave_balances")
-      .select(`
-        *,
-        user_profiles!outstanding_leave_balances_user_id_fkey (
-          first_name,
-          last_name,
-          employee_id,
-          departments (name)
-        )
-      `)
-      .order("created_at", { ascending: false })
-
-    if (leaveYearPeriod) {
-      query = query.eq("leave_year_period", leaveYearPeriod)
-    }
-    
-    // Filter by specific user if provided
-    if (userId) {
-      query = query.eq("user_id", userId)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-      console.error("[v0] Error fetching outstanding balances with join:", error)
-      // Try simpler query without join and then manually fetch user profiles
-      let simpleQuery = supabase
+    // No FK exists between outstanding_leave_balances and user_profiles, so a
+    // PostgREST embed always fails. Fetch balances, then resolve profiles separately.
+    // PostgREST caps responses at 1000 rows, so page through the balances.
+    const PAGE_SIZE = 1000
+    const balances: any[] = []
+    for (let from = 0; ; from += PAGE_SIZE) {
+      let query = supabase
         .from("outstanding_leave_balances")
         .select("*")
         .order("created_at", { ascending: false })
-      
-      if (leaveYearPeriod) {
-        simpleQuery = simpleQuery.eq("leave_year_period", leaveYearPeriod)
-      }
-      if (userId) {
-        simpleQuery = simpleQuery.eq("user_id", userId)
-      }
-      
-      const { data: simpleData, error: simpleError } = await simpleQuery
+        .order("id", { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
 
-      if (simpleError) throw simpleError
-      
-      // Fetch user profiles separately for each record
-      const userIds = [...new Set((simpleData || []).map((d: any) => d.user_id).filter(Boolean))]
-      const { data: profiles } = await supabase
-        .from("user_profiles")
-        .select("id, first_name, last_name, employee_id, department_id, departments(name)")
-        .in("id", userIds)
-      
-      const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]))
-      
-      const transformedSimple = (simpleData || []).map((item: any) => {
-        const profile = profileMap.get(item.user_id)
-        return {
-          ...item,
-          staff_name: profile ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Unknown" : "Unknown",
-          employee_id: profile?.employee_id || "N/A",
-          department_name: profile?.departments?.name || "Unassigned",
-        }
-      })
-      
-      return NextResponse.json({ data: transformedSimple, success: true })
+      if (leaveYearPeriod) query = query.eq("leave_year_period", leaveYearPeriod)
+      if (userId) query = query.eq("user_id", userId)
+
+      const { data: page, error } = await query
+      if (error) throw error
+      balances.push(...(page || []))
+      if (!page || page.length < PAGE_SIZE || userId) break
     }
 
-    console.log("[v0] Outstanding balances raw data sample:", data?.[0])
-    
-    // Transform data to include staff names
-    const transformedData = (data || []).map((item: any) => ({
-      ...item,
-      staff_name: item.user_profiles 
-        ? `${item.user_profiles.first_name || ""} ${item.user_profiles.last_name || ""}`.trim() || "Unknown"
-        : "Unknown",
-      employee_id: item.user_profiles?.employee_id || "N/A",
-      department_name: item.user_profiles?.departments?.name || "Unassigned",
-    }))
+    const userIds = [...new Set(balances.map((d) => d.user_id).filter(Boolean))]
+    const profileMap = new Map<string, any>()
+    const PROFILE_CHUNK = 200
+    for (let i = 0; i < userIds.length; i += PROFILE_CHUNK) {
+      const { data: profiles } = await supabase
+        .from("user_profiles")
+        .select("id, first_name, last_name, employee_id, departments(name)")
+        .in("id", userIds.slice(i, i + PROFILE_CHUNK))
+      for (const p of profiles || []) profileMap.set(p.id, p)
+    }
+
+    const transformedData = balances.map((item) => {
+      const profile = profileMap.get(item.user_id)
+      return {
+        ...item,
+        staff_name: profile
+          ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Unknown"
+          : "Unknown",
+        employee_id: profile?.employee_id || "N/A",
+        department_name: profile?.departments?.name || "Unassigned",
+      }
+    })
 
     return NextResponse.json({ data: transformedData, success: true })
   } catch (error) {

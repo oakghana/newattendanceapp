@@ -635,13 +635,41 @@ async function findSameMonthSameTypeRequest(
   return null
 }
 
+// PostgREST caps every response at 1000 rows, which silently truncated the
+// All Requests list (1040+ annual leave requests showed as 1000). Page through
+// the full result set instead of relying on a single response.
+async function fetchAllPages(
+  buildPage: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: any }>,
+  pageSize = 500,
+): Promise<{ data: any[]; error: any }> {
+  const rows: any[] = []
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await buildPage(from, from + pageSize - 1)
+    if (error) return { data: rows, error }
+    const page = data || []
+    rows.push(...page)
+    if (page.length < pageSize) break
+  }
+  return { data: rows, error: null }
+}
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size))
+  return chunks
+}
+
 async function fetchStaffLeaveHistory(admin: any, userIds: string[]) {
   const uniqueUserIds = [...new Set(userIds.filter(Boolean))]
   if (uniqueUserIds.length === 0) return {}
 
-  const { data, error } = await admin
-    .from("leave_plan_requests")
-    .select(`
+  // Chunk the id list so the PostgREST URL stays within length limits.
+  const results = await Promise.all(
+    chunkArray(uniqueUserIds, 150).map((ids) =>
+      fetchAllPages((from, to) =>
+        admin
+          .from("leave_plan_requests")
+          .select(`
       id,
       user_id,
       leave_type_key,
@@ -660,10 +688,16 @@ async function fetchStaffLeaveHistory(admin: any, userIds: string[]) {
       hr_approval_note,
       is_archived
     `)
-    .in("user_id", uniqueUserIds)
-    .order("submitted_at", { ascending: false })
-
-  if (error) throw error
+          .in("user_id", ids)
+          .order("submitted_at", { ascending: false })
+          .order("id", { ascending: true })
+          .range(from, to),
+      ),
+    ),
+  )
+  const failed = results.find((r) => r.error)
+  if (failed) throw failed.error
+  const data = results.flatMap((r) => r.data)
 
   const historyByUser: Record<string, any[]> = {}
   for (const row of data || []) {
@@ -684,9 +718,10 @@ async function fetchHrOfficeAnalytics(admin: any) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  const { data, error } = await admin
-    .from("leave_plan_requests")
-    .select(`
+  const { data, error } = await fetchAllPages((from, to) =>
+    admin
+      .from("leave_plan_requests")
+      .select(`
       id,
       status,
       leave_type_key,
@@ -709,8 +744,11 @@ async function fetchHrOfficeAnalytics(admin: any) {
         geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
       )
     `)
-    .eq("is_archived", false)
-    .order("created_at", { ascending: false })
+      .eq("is_archived", false)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, to),
+  )
 
   if (error) throw error
 
@@ -901,7 +939,9 @@ export async function GET(request: NextRequest) {
       let requests: any[] | null = null
       let reqError: any = null
       try {
-        const result = await officeQuery
+        const result = await fetchAllPages((from, to) =>
+          officeQuery.order("id", { ascending: true }).range(from, to),
+        )
         requests = result.data || []
         reqError = result.error
         if (reqError) {
@@ -925,7 +965,9 @@ export async function GET(request: NextRequest) {
               .in("status", ["pending_regional_hr_office_review", "pending_regional_hr_review", "pending_regional_manager_approval"])
               .in("user_id", regionalScopedStaffIds.length ? regionalScopedStaffIds : ["00000000-0000-0000-0000-000000000000"])
           }
-          const fallbackResult = await fallbackQuery
+          const fallbackResult = await fetchAllPages((from, to) =>
+            fallbackQuery.order("id", { ascending: true }).range(from, to),
+          )
           requests = fallbackResult.data || []
           reqError = fallbackResult.error
         } catch (fallbackError) {
@@ -938,9 +980,12 @@ export async function GET(request: NextRequest) {
       // payload and caused Leave Center to fail with `TypeError: fetch failed`.
       let allRegionalRequests: any[] = isAdmin ? requests || [] : []
       if (!isAdmin && isRegionalHr && regionalScopedStaffIds.length > 0) {
-        const { data: regionalRows, error: regionalRowsError } = await admin
-          .from("leave_plan_requests")
-          .select(`
+        const regionalChunks = await Promise.all(
+          chunkArray(regionalScopedStaffIds, 150).map((ids) =>
+            fetchAllPages((from, to) =>
+              admin
+                .from("leave_plan_requests")
+                .select(`
             *,
             user:user_profiles!leave_plan_requests_user_id_fkey (
               id, first_name, last_name, employee_id, position,
@@ -949,9 +994,18 @@ export async function GET(request: NextRequest) {
               geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
             )
           `)
-          .eq("workflow_route", "regional")
-          .in("user_id", regionalScopedStaffIds)
-          .order("created_at", { ascending: false })
+                .eq("workflow_route", "regional")
+                .in("user_id", ids)
+                .order("created_at", { ascending: false })
+                .order("id", { ascending: true })
+                .range(from, to),
+            ),
+          ),
+        )
+        const regionalRowsError = regionalChunks.find((chunk) => chunk.error)?.error
+        const regionalRows = regionalChunks
+          .flatMap((chunk) => chunk.data)
+          .sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
 
         if (regionalRowsError) throw regionalRowsError
         allRegionalRequests = regionalRows || []
@@ -1007,11 +1061,22 @@ export async function GET(request: NextRequest) {
       
       
       // Fetch outstanding balances for current AND previous year (in case staff data is from different periods)
-      const { data: outstandingRecords, error: outstandingError } = await admin
-        .from("outstanding_leave_balances")
-        .select("user_id, carryover_to_next_year, leave_year_period")
-        .in("user_id", staffIds)
-        .order("created_at", { ascending: false })
+      const outstandingChunks = await Promise.all(
+        chunkArray(staffIds as string[], 150).map((ids) =>
+          fetchAllPages((from, to) =>
+            admin
+              .from("outstanding_leave_balances")
+              .select("user_id, carryover_to_next_year, leave_year_period, created_at")
+              .in("user_id", ids)
+              .order("created_at", { ascending: false })
+              .order("user_id", { ascending: true })
+              .range(from, to),
+          ),
+        ),
+      )
+      const outstandingRecords = outstandingChunks
+        .flatMap((chunk) => chunk.data)
+        .sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
       
       
       // Build map using most recent record for each user
@@ -1407,9 +1472,10 @@ export async function GET(request: NextRequest) {
     }
 
     if (isHr) {
-      const { data, error } = await admin
-        .from("leave_plan_requests")
-        .select(`
+      const { data, error } = await fetchAllPages((from, to) =>
+        admin
+          .from("leave_plan_requests")
+          .select(`
           *,
           user:user_profiles!leave_plan_requests_user_id_fkey (
             id,
@@ -1419,7 +1485,10 @@ export async function GET(request: NextRequest) {
             departments(name, code)
           )
         `)
-        .order("created_at", { ascending: false })
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: true })
+          .range(from, to),
+      )
 
       if (error) {
         if (isSchemaIssue(error)) {
@@ -1494,17 +1563,33 @@ export async function GET(request: NextRequest) {
       const requestIds = (data || []).map((r: any) => r.id).filter(Boolean)
       let hodReviewerMap: Map<string, string[]> = new Map()
       if (requestIds.length > 0) {
-        const { data: reviewRows } = await admin
-          .from("leave_plan_reviews")
-          .select("leave_plan_request_id, reviewer_id")
-          .in("leave_plan_request_id", requestIds)
+        const reviewChunks = await Promise.all(
+          chunkArray(requestIds as string[], 150).map((ids) =>
+            fetchAllPages((from, to) =>
+              admin
+                .from("leave_plan_reviews")
+                .select("id, leave_plan_request_id, reviewer_id")
+                .in("leave_plan_request_id", ids)
+                .order("id", { ascending: true })
+                .range(from, to),
+            ),
+          ),
+        )
+        const reviewRows = reviewChunks.flatMap((chunk) => chunk.data)
 
-        const reviewerIds = [...new Set((reviewRows || []).map((r: any) => r.reviewer_id).filter(Boolean))]
+        const reviewerIds = [...new Set((reviewRows || []).map((r: any) => r.reviewer_id).filter(Boolean))] as string[]
         if (reviewerIds.length > 0) {
-          const { data: reviewerProfiles } = await admin
-            .from("user_profiles")
-            .select("id, first_name, last_name")
-            .in("id", reviewerIds)
+          const reviewerProfiles = (
+            await Promise.all(
+              chunkArray(reviewerIds, 150).map(async (ids) => {
+                const { data: profiles } = await admin
+                  .from("user_profiles")
+                  .select("id, first_name, last_name")
+                  .in("id", ids)
+                return profiles || []
+              }),
+            )
+          ).flat()
 
           const profileMap = new Map((reviewerProfiles || []).map((p: any) => [p.id, `${p.first_name || ""} ${p.last_name || ""}`.trim()]))
           for (const row of (reviewRows || [])) {

@@ -49,6 +49,9 @@ import {
   ScrollText,
   Bus,
   ClipboardList,
+  MessageSquare,
+  ExternalLink,
+  LayoutGrid,
 } from "lucide-react"
 import Image from "next/image"
 import { canAccessMemoConsole, isAttendanceOnlyRole, normalizeAppRole } from "@/lib/role-capabilities"
@@ -85,6 +88,13 @@ const ALL_STAFF_ROLES = [
   "contract", "managing_director", "secretary", "hr_records", "hr_records_officer", "hr_records_manager", "administrator",
 ]
 
+const INFO_HUB_DESCRIPTIONS: Record<string, string> = {
+  "/dashboard/e-circulars": "Official notices and memos",
+  "https://www.qccsurvey.site": "Share your feedback",
+  "https://bsc.cocobod.net/login": "Performance tracking",
+}
+const INFO_HUB_TITLES = new Set(["E-Circulars", "Your Opinion", "Balance Scorecard"])
+
 const navigationItems = [
   {
     title: "Home Dashboard",
@@ -99,6 +109,14 @@ const navigationItems = [
     icon: Mail,
     roles: ALL_STAFF_ROLES,
     category: "main",
+  },
+  {
+    title: "Your Opinion",
+    href: "https://www.qccsurvey.site",
+    icon: MessageSquare,
+    roles: ALL_STAFF_ROLES,
+    category: "main",
+    external: true,
   },
   {
     title: "Balance Scorecard",
@@ -337,7 +355,12 @@ function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsColla
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isClearingCache, setIsClearingCache] = useState(false)
   const [openAdminGroups, setOpenAdminGroups] = useState<string[]>([])
+  const [isInfoHubOpen, setIsInfoHubOpen] = useState(false)
   const pathname = usePathname()
+
+  useEffect(() => {
+    if (pathname?.startsWith("/dashboard/e-circulars")) setIsInfoHubOpen(true)
+  }, [pathname])
   const router = useRouter()
   const [ghanaTime, setGhanaTime] = useState<string>("")
 
@@ -656,6 +679,120 @@ function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsColla
                 </div>
               )}
               {mainItems.map((item) => {
+                if (INFO_HUB_TITLES.has(item.title)) {
+                  const hubItems = mainItems.filter((candidate) => INFO_HUB_TITLES.has(candidate.title))
+                  if (item.title !== "E-Circulars") return null
+
+                  const hubHasActive = hubItems.some((hubItem) => pathname === hubItem.href)
+                  return (
+                    <div key="info-hub" className="space-y-1">
+                      <button
+                        type="button"
+                        title={isCollapsed ? "Circulars & Insights" : undefined}
+                        aria-expanded={!isCollapsed && isInfoHubOpen}
+                        aria-controls="info-hub-menu"
+                        onClick={() => {
+                          if (isCollapsed) {
+                            setIsCollapsed(false)
+                            setIsInfoHubOpen(true)
+                            return
+                          }
+                          setIsInfoHubOpen((current) => !current)
+                        }}
+                        className={cn(
+                          "group w-full flex items-center rounded-lg text-sm font-medium transition-all duration-200 min-h-[42px] border touch-manipulation",
+                          isCollapsed ? "justify-center px-0 py-2" : "gap-2.5 px-2.5 py-1.5",
+                          hubHasActive || isInfoHubOpen
+                            ? "bg-primary/10 border-primary/25 text-primary"
+                            : "border-transparent text-sidebar-foreground hover:bg-muted/60 hover:border-border",
+                        )}
+                      >
+                        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm">
+                          <LayoutGrid className="h-4 w-4" />
+                        </span>
+                        {!isCollapsed && (
+                          <>
+                            <span className="flex-1 text-left">Circulars &amp; Insights</span>
+                            <ChevronDown
+                              className={cn(
+                                "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                                isInfoHubOpen && "rotate-180",
+                              )}
+                            />
+                          </>
+                        )}
+                      </button>
+
+                      {!isCollapsed && isInfoHubOpen && (
+                        <div
+                          id="info-hub-menu"
+                          className="ml-4 space-y-1 border-l-2 border-primary/20 pl-2 animate-in fade-in slide-in-from-top-1 duration-200"
+                        >
+                          {hubItems.map((hubItem) => {
+                            const HubIcon = hubItem.icon
+                            const hubExternal = Boolean((hubItem as any).external)
+                            const hubItemActive = pathname === hubItem.href
+                            const hubItemClass = cn(
+                              "group/item flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-all duration-200 min-h-[44px] touch-manipulation",
+                              hubItemActive
+                                ? "bg-primary/12 text-primary"
+                                : "text-sidebar-foreground hover:bg-muted/70 hover:text-foreground",
+                            )
+                            const hubItemBody = (
+                              <>
+                                <span
+                                  className={cn(
+                                    "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md transition-colors",
+                                    hubItemActive
+                                      ? "bg-primary text-primary-foreground"
+                                      : "bg-muted text-muted-foreground group-hover/item:bg-primary/10 group-hover/item:text-primary",
+                                  )}
+                                >
+                                  <HubIcon className="h-4 w-4" />
+                                </span>
+                                <span className="flex min-w-0 flex-1 flex-col text-left leading-tight">
+                                  <span className="truncate text-[13px] font-medium">{hubItem.title}</span>
+                                  <span className="truncate text-[11px] font-normal text-muted-foreground">
+                                    {INFO_HUB_DESCRIPTIONS[hubItem.href]}
+                                  </span>
+                                </span>
+                                {hubExternal ? (
+                                  <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/item:opacity-100" />
+                                ) : (
+                                  hubItemActive && <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 opacity-70" />
+                                )}
+                              </>
+                            )
+
+                            return hubExternal ? (
+                              <a
+                                key={hubItem.href}
+                                href={hubItem.href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={hubItemClass}
+                                onClick={() => setIsMobileMenuOpen(false)}
+                              >
+                                {hubItemBody}
+                              </a>
+                            ) : (
+                              <Link
+                                key={hubItem.href}
+                                href={hubItem.href}
+                                prefetch
+                                className={hubItemClass}
+                                onClick={() => setIsMobileMenuOpen(false)}
+                              >
+                                {hubItemBody}
+                              </Link>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                }
+
                 const Icon = item.icon
                 const isActive = pathname === item.href
                 const isExternal = (item as any).external
