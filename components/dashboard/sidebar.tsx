@@ -93,7 +93,7 @@ const INFO_HUB_DESCRIPTIONS: Record<string, string> = {
   "https://www.qccsurvey.site": "Share your feedback",
   "https://bsc.cocobod.net/login": "Performance tracking",
 }
-const INFO_HUB_HREFS = Object.keys(INFO_HUB_DESCRIPTIONS)
+const INFO_HUB_TITLES = new Set(["E-Circulars", "Your Opinion", "Balance Scorecard"])
 
 const navigationItems = [
   {
@@ -679,9 +679,9 @@ function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsColla
                 </div>
               )}
               {mainItems.map((item) => {
-                if (INFO_HUB_HREFS.includes(item.href)) {
-                  const hubItems = mainItems.filter((candidate) => INFO_HUB_HREFS.includes(candidate.href))
-                  if (item.href !== hubItems[0]?.href) return null
+                if (INFO_HUB_TITLES.has(item.title)) {
+                  const hubItems = mainItems.filter((candidate) => INFO_HUB_TITLES.has(candidate.title))
+                  if (item.title !== "E-Circulars") return null
 
                   const hubHasActive = hubItems.some((hubItem) => pathname === hubItem.href)
                   return (
