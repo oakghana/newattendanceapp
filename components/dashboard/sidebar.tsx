@@ -49,6 +49,7 @@ import {
   ScrollText,
   Bus,
   ClipboardList,
+  MessageSquare,
 } from "lucide-react"
 import Image from "next/image"
 import { canAccessMemoConsole, isAttendanceOnlyRole, normalizeAppRole } from "@/lib/role-capabilities"
@@ -99,6 +100,14 @@ const navigationItems = [
     icon: Mail,
     roles: ALL_STAFF_ROLES,
     category: "main",
+  },
+  {
+    title: "Your Opinion",
+    href: "https://www.qccsurvey.site",
+    icon: MessageSquare,
+    roles: ALL_STAFF_ROLES,
+    category: "main",
+    external: true,
   },
   {
     title: "Balance Scorecard",
