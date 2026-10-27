@@ -147,17 +147,17 @@ export async function POST(request: NextRequest) {
         const sessionAgeHours = (Date.now() - priorCheckIn.getTime()) / (1000 * 60 * 60)
 
         // Only Security, Transport, and Operations may keep an open session
-        // beyond normal office hours; their hard maximum is 48 hours.
-        if (overnightDepartment && sessionAgeHours >= 48) {
-          const closeAt = new Date(priorCheckIn.getTime() + 48 * 60 * 60 * 1000)
+        // beyond normal office hours; their hard maximum is 24 hours.
+        if (overnightDepartment && sessionAgeHours >= 24) {
+          const closeAt = new Date(priorCheckIn.getTime() + 24 * 60 * 60 * 1000)
           await supabase
             .from("attendance_records")
             .update({
               check_out_time: closeAt.toISOString(),
-              work_hours: 48,
+              work_hours: 24,
               auto_checkout: true,
-              check_out_method: "department_48_hour_auto_checkout",
-              notes: "Automatically closed open attendance session after the 48-hour maximum duty period.",
+              check_out_method: "department_24_hour_auto_checkout",
+              notes: "Automatically closed open attendance session after the 24-hour maximum duty period.",
             })
             .eq("id", openPriorRecord.id)
             .is("check_out_time", null)

@@ -77,7 +77,7 @@ export function isExemptFromTimeRestrictions(dept?: DeptInfo, role?: string | nu
 
 /**
  * Security, Transport, and Operations may work overnight, but no open session
- * may remain active for more than 48 hours.
+ * may remain active for more than 24 hours.
  */
 export function isOvernightShiftDept(dept?: DeptInfo): boolean {
   return isSecurityDept(dept) || isTransportDept(dept) || isOperationalDept(dept)
@@ -85,12 +85,12 @@ export function isOvernightShiftDept(dept?: DeptInfo): boolean {
 
 export function hasTwentyTwoHourAutoCheckout(dept?: DeptInfo): boolean {
   // Kept as a compatibility name for existing callers. Security, Transport,
-  // and Operations sessions are automatically closed after 48 hours.
+  // and Operations sessions are automatically closed after 24 hours.
   return isSecurityDept(dept) || isOperationalDept(dept) || isTransportDept(dept)
 }
 
 export function getMaximumOpenAttendanceHours(dept?: DeptInfo): number | null {
-  return hasTwentyTwoHourAutoCheckout(dept) ? 48 : null
+  return hasTwentyTwoHourAutoCheckout(dept) ? 24 : null
 }
 
 export function shouldSkipSystemAutoCheckout(dept?: DeptInfo): boolean {
