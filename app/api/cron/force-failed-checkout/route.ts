@@ -1,5 +1,4 @@
 import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
-import { hasTwentyTwoHourAutoCheckout } from "@/lib/attendance-utils"
 import { type NextRequest, NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
@@ -70,38 +69,25 @@ async function runForceFailedCheckout(request: NextRequest) {
     return NextResponse.json({ error: "Failed to query overdue attendance", details: openSessionsError.message }, { status: 500 })
   }
 
-  const openUserIds = [...new Set((openSessions || []).map((session: any) => session.user_id).filter(Boolean))]
-  if (openUserIds.length > 0) {
-    const { data: departmentProfiles } = await admin
-      .from("user_profiles")
-      .select("id, department:departments!inner(code, name)")
-      .in("id", openUserIds)
+  // The 48-hour maximum open session applies to every user, in every department.
+  for (const session of openSessions || []) {
+    const checkInTime = new Date(session.check_in_time)
+    const checkoutTime = new Date(checkInTime.getTime() + 48 * 60 * 60 * 1000)
+    const { error: closeError } = await admin
+      .from("attendance_records")
+      .update({
+        check_out_time: checkoutTime.toISOString(),
+        check_out_method: "system_48_hour_auto_checkout",
+        check_out_location_name: session.check_in_location_name || "Automatic checkout",
+        work_hours: 48,
+        auto_checkout: true,
+        notes: "Automatically checked out after the 48-hour maximum open attendance period.",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", session.id)
+      .is("check_out_time", null)
 
-    const targetUserIds = new Set(
-      (departmentProfiles || [])
-        .filter((profile: any) => hasTwentyTwoHourAutoCheckout(profile.department))
-        .map((profile: any) => String(profile.id)),
-    )
-
-    for (const session of openSessions || []) {
-      if (!targetUserIds.has(String(session.user_id))) continue
-      const checkInTime = new Date(session.check_in_time)
-      const checkoutTime = new Date(checkInTime.getTime() + 22 * 60 * 60 * 1000)
-      const { error: closeError } = await admin
-        .from("attendance_records")
-        .update({
-          check_out_time: checkoutTime.toISOString(),
-          check_out_method: "department_48_hour_auto_checkout",
-          check_out_location_name: session.check_in_location_name || "Automatic department checkout",
-          work_hours: 22,
-          notes: "Automatically checked out after the department 22-hour maximum duty period.",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", session.id)
-        .is("check_out_time", null)
-
-      if (!closeError) departmentAutoCheckedOut += 1
-    }
+    if (!closeError) departmentAutoCheckedOut += 1
   }
 
   const { data: locations, error: locErr } = await admin.from("geofence_locations").select("name")

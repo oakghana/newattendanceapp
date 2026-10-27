@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
-import { requiresLatenessReason, isExemptFromAttendanceReasons, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept, isOvernightShiftDept, shouldSkipSystemAutoCheckout, hasTwentyTwoHourAutoCheckout } from "@/lib/attendance-utils"
+import { requiresLatenessReason, isExemptFromAttendanceReasons, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept, isOvernightShiftDept, shouldSkipSystemAutoCheckout } from "@/lib/attendance-utils"
 import { trackLeaveResumption, processStaffResumptionCheckIn, checkLeaveOverdueBlock } from "@/lib/leave-resumption-service"
 import { validateAttendanceReason } from "@/lib/meaningful-text"
 
@@ -145,9 +145,9 @@ export async function POST(request: NextRequest) {
 
         const overnightDepartment = isOvernightShiftDept(userProfile?.departments as any)
         const sessionAgeHours = (Date.now() - priorCheckIn.getTime()) / (1000 * 60 * 60)
-        const departmentHas48HourLimit = hasTwentyTwoHourAutoCheckout(userProfile?.departments as any)
 
-        if (departmentHas48HourLimit && sessionAgeHours >= 48) {
+        // The 48-hour maximum open session applies to every user.
+        if (sessionAgeHours >= 48) {
           const closeAt = new Date(priorCheckIn.getTime() + 48 * 60 * 60 * 1000)
           await supabase
             .from("attendance_records")

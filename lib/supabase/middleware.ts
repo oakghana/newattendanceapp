@@ -2,16 +2,25 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
 export async function updateSession(request: NextRequest) {
+  const { response } = await updateSessionWithUser(request)
+  return response
+}
+
+/**
+ * Refreshes the session once and returns the resolved user, so callers (the
+ * proxy) don't need a second network round-trip to Supabase Auth per request.
+ */
+export async function updateSessionWithUser(request: NextRequest): Promise<{ response: NextResponse; user: any | null }> {
   // Avoid expensive network calls for public pages (login, static assets)
   const pathname = request.nextUrl?.pathname || request.url || ''
   if (pathname.startsWith('/auth/login') || pathname.startsWith('/_next') || pathname.startsWith('/favicon.ico')) {
-    return NextResponse.next({ request })
+    return { response: NextResponse.next({ request }), user: null }
   }
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.next({ request })
+    return { response: NextResponse.next({ request }), user: null }
   }
 
   let supabaseResponse = NextResponse.next({ request })
@@ -43,10 +52,12 @@ export async function updateSession(request: NextRequest) {
     })
 
     // Refresh the session to update cookies
-    await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-    return supabaseResponse
+    return { response: supabaseResponse, user: user ?? null }
   } catch (error: any) {
-    return supabaseResponse
+    return { response: supabaseResponse, user: null }
   }
 }

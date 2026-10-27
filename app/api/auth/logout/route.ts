@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       user_agent: request.headers.get("user-agent"),
     })
 
-    const { error: signOutError } = await supabase.auth.signOut()
+    const { error: signOutError } = await supabase.auth.signOut({ scope: "local" })
 
     if (signOutError) {
       console.error("Sign out error:", signOutError)
