@@ -57,7 +57,7 @@ async function runForceFailedCheckout(request: NextRequest) {
   const maxDistanceM = Math.max(1, Number.parseInt(searchParams.get("max_distance_m") || "100", 10))
 
   const { day, start, end } = toUtcDayRange(dateParam)
-  const autoCheckoutCutoff = new Date(Date.now() - 22 * 60 * 60 * 1000)
+  const autoCheckoutCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000)
   let departmentAutoCheckedOut = 0
 
   const { data: openSessions, error: openSessionsError } = await admin
@@ -91,7 +91,7 @@ async function runForceFailedCheckout(request: NextRequest) {
         .from("attendance_records")
         .update({
           check_out_time: checkoutTime.toISOString(),
-          check_out_method: "department_22_hour_auto_checkout",
+          check_out_method: "department_48_hour_auto_checkout",
           check_out_location_name: session.check_in_location_name || "Automatic department checkout",
           work_hours: 22,
           notes: "Automatically checked out after the department 22-hour maximum duty period.",
@@ -183,7 +183,7 @@ async function runForceFailedCheckout(request: NextRequest) {
       criteria: { minAttempts, maxDistanceM },
       candidates: candidates.length,
       security_exempted: securityExemptCount,
-      department_22_hour_auto_checked_out: departmentAutoCheckedOut,
+      department_48_hour_auto_checked_out: departmentAutoCheckedOut,
       updated: 0,
       skipped: 0,
       report: candidates.map((c) => ({ 
@@ -294,7 +294,7 @@ async function runForceFailedCheckout(request: NextRequest) {
     criteria: { minAttempts, maxDistanceM },
     candidates: candidates.length,
     security_exempted: securityExemptCount,
-    department_22_hour_auto_checked_out: departmentAutoCheckedOut,
+    department_48_hour_auto_checked_out: departmentAutoCheckedOut,
     updated,
     skipped,
     report,

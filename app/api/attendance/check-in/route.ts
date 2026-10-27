@@ -145,18 +145,18 @@ export async function POST(request: NextRequest) {
 
         const overnightDepartment = isOvernightShiftDept(userProfile?.departments as any)
         const sessionAgeHours = (Date.now() - priorCheckIn.getTime()) / (1000 * 60 * 60)
-        const departmentHas22HourLimit = hasTwentyTwoHourAutoCheckout(userProfile?.departments as any)
+        const departmentHas48HourLimit = hasTwentyTwoHourAutoCheckout(userProfile?.departments as any)
 
-        if (departmentHas22HourLimit && sessionAgeHours >= 22) {
-          const closeAt = new Date(priorCheckIn.getTime() + 22 * 60 * 60 * 1000)
+        if (departmentHas48HourLimit && sessionAgeHours >= 48) {
+          const closeAt = new Date(priorCheckIn.getTime() + 48 * 60 * 60 * 1000)
           await supabase
             .from("attendance_records")
             .update({
               check_out_time: closeAt.toISOString(),
-              work_hours: 22,
+              work_hours: 48,
               auto_checkout: true,
-              check_out_method: "department_22_hour_auto_checkout",
-              notes: "Automatically closed prior-day open attendance session after the 22-hour maximum duty period.",
+              check_out_method: "department_48_hour_auto_checkout",
+              notes: "Automatically closed open attendance session after the 48-hour maximum duty period.",
             })
             .eq("id", openPriorRecord.id)
             .is("check_out_time", null)

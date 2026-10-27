@@ -76,25 +76,25 @@ export function isExemptFromTimeRestrictions(dept?: DeptInfo, role?: string | nu
 }
 
 /**
- * Security and Transport often work overnight past midnight.
- * Standard departments use the system 23:59:59 auto-checkout; only overnight shift departments are exempt.
+ * Security, Transport, and Operations may work overnight, but no open session
+ * may remain active for more than 48 hours.
  */
 export function isOvernightShiftDept(dept?: DeptInfo): boolean {
   return isSecurityDept(dept) || isTransportDept(dept) || isOperationalDept(dept)
 }
 
 export function hasTwentyTwoHourAutoCheckout(dept?: DeptInfo): boolean {
-  // Security staff must end their own sessions because they may remain at post
-  // beyond the normal shift window. Never close their attendance automatically.
-  return isOperationalDept(dept) || isTransportDept(dept)
+  // Kept as a compatibility name for existing callers. Security, Transport,
+  // and Operations sessions are automatically closed after 48 hours.
+  return isSecurityDept(dept) || isOperationalDept(dept) || isTransportDept(dept)
 }
 
 export function getMaximumOpenAttendanceHours(dept?: DeptInfo): number | null {
-  return hasTwentyTwoHourAutoCheckout(dept) ? 22 : null
+  return hasTwentyTwoHourAutoCheckout(dept) ? 48 : null
 }
 
 export function shouldSkipSystemAutoCheckout(dept?: DeptInfo): boolean {
-  return isOvernightShiftDept(dept) && !hasTwentyTwoHourAutoCheckout(dept)
+  return false
 }
 
 export function isExemptFromAttendanceReasons(role?: string | null): boolean {
