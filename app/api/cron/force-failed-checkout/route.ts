@@ -1,4 +1,5 @@
 import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
+import { isOvernightShiftDept } from "@/lib/attendance-utils"
 import { type NextRequest, NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
@@ -69,8 +70,20 @@ async function runForceFailedCheckout(request: NextRequest) {
     return NextResponse.json({ error: "Failed to query overdue attendance", details: openSessionsError.message }, { status: 500 })
   }
 
-  // The 48-hour maximum open session applies to every user, in every department.
+  // Only Security, Transport, and Operations may keep sessions open overnight.
+  // Their hard maximum is 48 hours; standard departments use normal office rules.
+  const openUserIds = [...new Set((openSessions || []).map((session: any) => session.user_id).filter(Boolean))]
+  const { data: departmentProfiles } = openUserIds.length
+    ? await admin.from("user_profiles").select("id, department:departments!inner(code, name)").in("id", openUserIds)
+    : { data: [] }
+  const overnightUserIds = new Set(
+    (departmentProfiles || [])
+      .filter((profile: any) => isOvernightShiftDept(profile.department))
+      .map((profile: any) => String(profile.id)),
+  )
+
   for (const session of openSessions || []) {
+    if (!overnightUserIds.has(String(session.user_id))) continue
     const checkInTime = new Date(session.check_in_time)
     const checkoutTime = new Date(checkInTime.getTime() + 48 * 60 * 60 * 1000)
     const { error: closeError } = await admin
@@ -81,7 +94,7 @@ async function runForceFailedCheckout(request: NextRequest) {
         check_out_location_name: session.check_in_location_name || "Automatic checkout",
         work_hours: 48,
         auto_checkout: true,
-        notes: "Automatically checked out after the 48-hour maximum open attendance period.",
+        notes: "Automatically checked out after the 48-hour maximum overnight department period.",
         updated_at: new Date().toISOString(),
       })
       .eq("id", session.id)

@@ -146,8 +146,9 @@ export async function POST(request: NextRequest) {
         const overnightDepartment = isOvernightShiftDept(userProfile?.departments as any)
         const sessionAgeHours = (Date.now() - priorCheckIn.getTime()) / (1000 * 60 * 60)
 
-        // The 48-hour maximum open session applies to every user.
-        if (sessionAgeHours >= 48) {
+        // Only Security, Transport, and Operations may keep an open session
+        // beyond normal office hours; their hard maximum is 48 hours.
+        if (overnightDepartment && sessionAgeHours >= 48) {
           const closeAt = new Date(priorCheckIn.getTime() + 48 * 60 * 60 * 1000)
           await supabase
             .from("attendance_records")
