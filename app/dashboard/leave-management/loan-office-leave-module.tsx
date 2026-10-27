@@ -90,7 +90,7 @@ export function LoanOfficeLeaveModule({
           <LeavePlanningClient
             profile={{
               id: userId,
-              role: userRole ?? "loan_office",
+              role: userRole ?? "loan_officer",
               departmentName: userDepartmentName,
               departmentCode: userDepartmentCode,
             }}

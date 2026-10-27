@@ -68,7 +68,13 @@ export function LeaveManagementModuleClient({
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
   const isRegionalHR = isRegionalHrOfficerRole(normalizedRole) || (normalizedRole.includes("regional") && normalizedRole.includes("hr"))
   const isHrExecutive = ['hr_executive', 'hr_director', 'director_hr', 'manager_hr'].includes(normalizedRole)
-  const isLoanOffice = normalizedRole === 'loan_office' || (normalizedRole === 'hr_loan_office' || normalizedRole === 'leave_loan_officer') || normalizedRole === 'accounts_loan_office'
+  const isLoanOffice = [
+    "loan_officer",
+    "loan_office",
+    "hr_loan_office",
+    "leave_loan_officer",
+    "accounts_loan_office",
+  ].includes(normalizedRole)
   const searchParams = useSearchParams()
   const defaultTab = isRegionalHR ? "leave-planning" : "leave-management"
   const requestedTab = searchParams.get("tab")

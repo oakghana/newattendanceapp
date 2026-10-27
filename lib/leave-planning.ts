@@ -79,7 +79,17 @@ export const STAFF_EDITABLE_STATUSES: LeavePlanStatus[] = [
 
 export function isStaffRole(role: string | null | undefined): boolean {
   const normalized = (role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
-  return ["staff", "it_admin", "nsp", "intern", "secretary"].includes(normalized)
+  return [
+    "staff",
+    "it_admin",
+    "nsp",
+    "intern",
+    "secretary",
+    "loan_officer",
+    "loan_office",
+    "hr_loan_office",
+    "accounts_loan_office",
+  ].includes(normalized)
 }
 
 /** HR Executives can also act as HOD for their department staff */
