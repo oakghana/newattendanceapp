@@ -36,8 +36,8 @@ export async function GET() {
     const nowMs = Date.now()
     const { data, error } = await admin
       .from("attendance_records")
-      .select("id, user_id, check_in_time, check_in_location_name")
-      .is("check_out_time", null)
+      .select("id, user_id, check_in_time, check_out_time, check_in_location_name")
+      .or("check_out_time.is.null,check_out_time.eq.")
       .order("check_in_time", { ascending: true })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -46,7 +46,8 @@ export async function GET() {
     // values are handled consistently instead of relying on a database cast.
     const rows = (data || []).filter((row: any) => {
       const checkInMs = Date.parse(row.check_in_time)
-      return Number.isFinite(checkInMs) && nowMs - checkInMs >= 20 * 60 * 60 * 1000
+      const hasNoCheckout = row.check_out_time == null || String(row.check_out_time).trim() === ""
+      return hasNoCheckout && Number.isFinite(checkInMs) && nowMs - checkInMs >= 20 * 60 * 60 * 1000
     }) as Array<Omit<OpenAttendance, "user_profiles">>
     const userIds = [...new Set(rows.map((row) => row.user_id).filter(Boolean))]
     const { data: profiles, error: profilesError } = userIds.length
@@ -96,9 +97,9 @@ export async function POST(request: NextRequest) {
     const now = new Date()
     const { data: openRecords, error: fetchError } = await admin
       .from("attendance_records")
-      .select("id, user_id, check_in_time")
+      .select("id, user_id, check_in_time, check_out_time")
       .in("id", recordIds)
-      .is("check_out_time", null)
+      .or("check_out_time.is.null,check_out_time.eq.")
 
     if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 })
 
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
         auto_checkout: true,
         notes: body.note?.trim() || "Administrator checked out an attendance record open for more than 20 hours.",
         updated_at: now.toISOString(),
-      }).eq("id", record.id).is("check_out_time", null)
+      }).eq("id", record.id).or("check_out_time.is.null,check_out_time.eq.")
       if (!error) updated.push(record.id)
     }
 
