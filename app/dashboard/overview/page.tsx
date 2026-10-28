@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { DashboardOverviewClient } from "./dashboard-overview-client"
 import { normalizeAppRole } from "@/lib/role-capabilities"
 

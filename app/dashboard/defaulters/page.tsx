@@ -1,5 +1,5 @@
 import { AttendanceDefaulters } from "@/components/admin/attendance-defaulters"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"

@@ -92,6 +92,20 @@ export async function createAdminClient() {
 // Helper: create client and attempt to resolve the current user.
 // If a refresh token is missing or invalid, clear Supabase-related cookies
 // to avoid repeated "Refresh Token Not Found" errors and force a login.
+export async function getAuthenticatedUser(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const first = await supabase.auth.getUser()
+  if (first.data.user) return { user: first.data.user, error: null }
+
+  // Server rendering can race the middleware refresh during client navigation.
+  // A valid local session should keep the selected module open instead of
+  // redirecting the user to login.
+  const session = await supabase.auth.getSession()
+  if (session.data.session?.user) return { user: session.data.session.user, error: null }
+
+  const retry = await supabase.auth.getUser()
+  return { user: retry.data.user ?? null, error: retry.error || first.error || null }
+}
+
 export async function createClientAndGetUser() {
   const supabase = await createClient()
 

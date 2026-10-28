@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { LeaveNotificationsClient } from "./leave-notifications-client"
 
 export default async function LeaveNotificationsManagementPage() {

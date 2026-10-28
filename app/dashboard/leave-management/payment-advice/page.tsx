@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { PaymentAdviceClient } from "@/components/leave/payment-advice-client"
 import { redirect } from "next/navigation"
 

@@ -1,5 +1,5 @@
 import { SmtpSettingsPanel } from "@/components/admin/smtp-settings-panel"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 
 export const metadata = {

@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { normalizeAppRole } from "@/lib/role-capabilities"
 import { NonRegionalRequisitionForm } from "@/components/transport/nonregional-requisition-form"
 
 export default async function NewHeadOfficeTransportRequestPage() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { user } = await getAuthenticatedUser(supabase)
   if (!user) redirect("/auth/login")
   const { data: profile } = await supabase
     .from("user_profiles")

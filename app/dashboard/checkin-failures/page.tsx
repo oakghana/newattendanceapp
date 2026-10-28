@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { CheckinFailuresClient } from "@/components/admin/checkin-failures-client"
 
 const ALLOWED_ROLES = ["admin"]
