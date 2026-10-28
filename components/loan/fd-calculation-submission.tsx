@@ -83,6 +83,7 @@ export function FDCalculationSubmission({
   const [result, setResult] = useState<FDCalculationResult | null>(null)
   const [errors, setErrors] = useState<string[]>([])
   const [outstandingOpen, setOutstandingOpen] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
   const [accountsNotes, setAccountsNotes] = useState('')
   const [correctionReason, setCorrectionReason] = useState('')
   const [manualScoreOverride, setManualScoreOverride] = useState('')
@@ -369,9 +370,18 @@ export function FDCalculationSubmission({
       {/* FD Calculation Tabs */}
       <Card>
         <CardHeader className="pb-0">
-          <CardTitle className="text-sm">FD Calculation</CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-sm">FD Calculation</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">Enter salary, deductions and outstanding loans to calculate the FD score.</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setIsExpanded((open) => !open)} className="shrink-0 gap-1">
+              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              {isExpanded ? 'Minimise' : 'Maximise'}
+            </Button>
+          </div>
         </CardHeader>
-        <CardContent className="p-0">
+        {isExpanded ? <CardContent className="p-0">
           <Tabs value={fdTab} onValueChange={setFdTab} className="w-full" orientation="vertical">
             <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-none border-b bg-transparent p-0">
               <TabsTrigger value="salary" className="rounded-none border-b-2 data-[state=active]:border-primary px-4 py-2 text-xs">
@@ -731,7 +741,14 @@ export function FDCalculationSubmission({
               </TabsContent>
             )}
           </Tabs>
-        </CardContent>
+        </CardContent> : (
+          <CardContent className="pt-0">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+              <span className="font-medium text-foreground">{result ? `FD score preview: ${result.fd_score}%` : 'Calculation form is minimised'}</span>
+              <span className="text-muted-foreground">Click Maximise to enter or review values.</span>
+            </div>
+          </CardContent>
+        )}
       </Card>
     </div>
   )

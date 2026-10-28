@@ -175,6 +175,32 @@ export function LeaveManagementClient({
   const [editReason, setEditReason] = useState("")
   const [editLeaveType, setEditLeaveType] = useState("")
   const [selectedTab, setSelectedTab] = useState(initialSelectedTab)
+  const [leavePageByKey, setLeavePageByKey] = useState<Record<string, number>>({})
+  const leavePageSize = 10
+  const getLeavePage = (key: string) => leavePageByKey[key] || 1
+  const paginateLeaveRows = <T,>(rows: T[], key: string) => {
+    const totalPages = Math.max(1, Math.ceil(rows.length / leavePageSize))
+    const page = Math.min(getLeavePage(key), totalPages)
+    return {
+      rows: rows.slice((page - 1) * leavePageSize, page * leavePageSize),
+      page,
+      totalPages,
+      setPage: (nextPage: number) => setLeavePageByKey((current) => ({ ...current, [key]: nextPage })),
+    }
+  }
+  const renderLeavePagination = (page: number, totalPages: number, setPage: (page: number) => void) => totalPages > 1 ? (
+    <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-600">
+      <span>Page {page} of {totalPages} · {leavePageSize} per page</span>
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1} className="h-8 gap-1">
+          <ChevronLeft className="h-3.5 w-3.5" /> Previous
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page === totalPages} className="h-8 gap-1">
+          Next <ChevronRight className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  ) : null
   // Sub-tabs for the Deferment and Recall sections: "tracking" | "approvals" | "submit"
   const [defermentSubTab, setDefermentSubTab] = useState<"tracking" | "approvals" | "submit">("tracking")
   const [recallSubTab, setRecallSubTab] = useState<"tracking" | "approvals" | "submit">("tracking")
@@ -851,6 +877,8 @@ export function LeaveManagementClient({
   const adminHodQueue = useMemo(() => pendingNotifications.filter((n) => String(n.requester_role || "").toLowerCase() === "department_head"), [pendingNotifications])
   const adminRegionalQueue = useMemo(() => pendingNotifications.filter((n) => String(n.requester_role || "").toLowerCase() === "regional_manager"), [pendingNotifications])
   const adminDelayedQueue = useMemo(() => pendingNotifications.filter((n) => Number(n.waiting_days || 0) >= inactivityDays), [pendingNotifications, inactivityDays])
+  const pagedApprovedRequests = paginateLeaveRows(approvedRequests, "approved-leaves")
+  const pagedStaffRequests = paginateLeaveRows(staffRequests, "my-leave-requests")
 
   const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
   const isAdmin = normalizedRole === "admin" || normalizedRole === "administrator"
@@ -1412,6 +1440,8 @@ export function LeaveManagementClient({
   }
 
   const renderManagerNotifications = (rows: LeaveNotification[], emptyMessage: string, regionalHrMode = false) => {
+    const paginationKey = `queue:${emptyMessage}`
+    const paged = paginateLeaveRows(rows, paginationKey)
     if (rows.length === 0) {
       return (
         <Card className="border border-dashed border-slate-300 bg-slate-50/80">
@@ -1441,7 +1471,7 @@ export function LeaveManagementClient({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((notification) => {
+                {paged.rows.map((notification) => {
                   const leave = notification.leave_requests || {
                     id: String(notification.leave_plan_request_id || ""),
                     leave_type: "annual",
@@ -1543,6 +1573,7 @@ export function LeaveManagementClient({
               </tbody>
             </table>
           </div>
+          {renderLeavePagination(paged.page, paged.totalPages, paged.setPage)}
         </CardContent>
       </Card>
     )
@@ -2046,9 +2077,10 @@ export function LeaveManagementClient({
                     </div>
                   ) : (
                     <div className="grid gap-3">
-                      {staffRequests.map((request) => (
+                      {pagedStaffRequests.rows.map((request) => (
                         <LeaveRequestCard key={request.id} request={request} canEdit={EDITABLE_STATUSES.has(String(request.status || ""))} onEdit={() => openEditRequest(request)} toast={toast} />
                       ))}
+                      {renderLeavePagination(pagedStaffRequests.page, pagedStaffRequests.totalPages, pagedStaffRequests.setPage)}
                     </div>
                   )}
                 </CardContent>
@@ -2323,11 +2355,14 @@ export function LeaveManagementClient({
                   </CardContent>
                 </Card>
               ) : (
-                <div className="grid gap-4 lg:grid-cols-2">
-                  {approvedRequests.map((request) => (
-                    <LeaveRequestCard key={request.id} request={request} emphasizeApproved toast={toast} />
-                  ))}
-                </div>
+                <>
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {pagedApprovedRequests.rows.map((request) => (
+                      <LeaveRequestCard key={request.id} request={request} emphasizeApproved toast={toast} />
+                    ))}
+                  </div>
+                  {renderLeavePagination(pagedApprovedRequests.page, pagedApprovedRequests.totalPages, pagedApprovedRequests.setPage)}
+                </>
               )}
             </>
           )}
