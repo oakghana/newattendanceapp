@@ -36,7 +36,8 @@ export default function AttendancePage() {
         const supabase = createClient()
 
         // Check authentication
-        const { data: authData, error: authError } = await supabase.auth.getUser()
+        const { data: authData, error: initialAuthError } = await supabase.auth.getUser()
+        let authError = initialAuthError
         authUser = authData.user
         if (authError || !authUser) {
           const { data: sessionData } = await supabase.auth.getSession()
