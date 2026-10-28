@@ -64,34 +64,41 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
         authedUser = data.user
         setUser(data.user)
 
-        // Get user profile with department info - optimized query with specific fields
-        const { data: profileData, error: profileError } = await supabase
-          .from("user_profiles")
-          .select(`
-            id,
-            first_name,
-            last_name,
-            employee_id,
-            role,
-            profile_image_url,
-            region_id,
-            assigned_location_id,
-            assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
+        // Load the shared shell data together so navigation does not wait on a second round trip.
+        const [{ data: profileData, error: profileError }, { data: hodLink }] = await Promise.all([
+          supabase
+            .from("user_profiles")
+            .select(`
               id,
-              name,
-              location_type
-            ),
-            departments (
-              name,
-              code
-            )
-          `)
-          .eq("id", data.user.id)
-          .single()
+              first_name,
+              last_name,
+              employee_id,
+              role,
+              profile_image_url,
+              region_id,
+              assigned_location_id,
+              assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
+                id,
+                name,
+                location_type
+              ),
+              departments (
+                name,
+                code
+              )
+            `)
+            .eq("id", data.user.id)
+            .single(),
+          supabase
+            .from("loan_hod_linkages")
+            .select("id")
+            .eq("hod_user_id", data.user.id)
+            .limit(1)
+            .maybeSingle(),
+        ])
 
         if (profileError) {
           console.error("[v0] Profile fetch error:", profileError)
-          // Set default profile so dashboard still loads
           setProfile({
             id: data.user.id,
             first_name: data.user.user_metadata?.first_name || "User",
@@ -102,14 +109,7 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
           setProfile(profileData)
         }
 
-        const { data: hodLink } = await supabase
-          .from("loan_hod_linkages")
-          .select("id")
-          .eq("hod_user_id", data.user.id)
-          .limit(1)
-          .maybeSingle()
         setIsAssignedHod(Boolean(hodLink))
-
         setLoading(false)
       } catch (err) {
         console.error("[v0] Auth check error:", err)
@@ -252,7 +252,7 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
     <div className="min-h-screen bg-gradient-to-br from-background via-background/98 to-muted/10">
       <Sidebar user={user} profile={profile} isAssignedHod={isAssignedHod} isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
       <div className={`min-w-0 w-full overflow-x-hidden transition-all duration-300 ease-in-out ${isCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
-        <main className="mx-auto min-w-0 w-full max-w-[min(100%-1rem,96rem)] overflow-x-hidden px-4 pb-28 pt-4 sm:px-5 sm:pb-32 sm:pt-5 lg:px-8 lg:pb-12 lg:pt-8 xl:px-10">
+        <main className="mx-auto min-w-0 w-full max-w-[min(100%-1rem,96rem)] overflow-x-hidden px-3 pb-28 pt-3 sm:px-5 sm:pb-32 sm:pt-5 lg:px-8 lg:pb-12 lg:pt-8 xl:px-10">
           <div className="relative">
             <div key={pathname}>{children}</div>
             <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.02] via-transparent to-accent/[0.02] pointer-events-none -z-10 rounded-3xl" />

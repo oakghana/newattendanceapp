@@ -36,7 +36,7 @@ export default function AttendancePage() {
         const supabase = createClient()
 
         // Check authentication
-        let { data: authData, error: authError } = await supabase.auth.getUser()
+        const { data: authData, error: authError } = await supabase.auth.getUser()
         authUser = authData.user
         if (authError || !authUser) {
           const { data: sessionData } = await supabase.auth.getSession()
@@ -60,7 +60,12 @@ export default function AttendancePage() {
           supabase
             .from("attendance_records")
             .select(`
-              *,
+              id,
+              check_in_time,
+              check_out_time,
+              work_hours,
+              check_in_location_name,
+              check_out_location_name,
               geofence_locations!check_in_location_id (
                 name
               ),
@@ -79,7 +84,7 @@ export default function AttendancePage() {
             .single(),
           supabase
             .from("geofence_locations")
-            .select("*")
+            .select("id, name, address, latitude, longitude, radius_meters, location_type, is_active, check_in_start_time, check_in_end_time, check_out_start_time, check_out_end_time")
             .eq("is_active", true)
             .order("name"),
         ])
