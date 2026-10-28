@@ -897,7 +897,7 @@ export async function GET() {
     if (uniqueUserIds.length > 0) {
       const { data: staffProfiles } = await admin
         .from("user_profiles")
-        .select("id, first_name, last_name, employee_id, position, email, assigned_location_id, geofence_locations!assigned_location_id(name, address, districts(name, regions(name)))")
+        .select("id, first_name, last_name, employee_id, position, email, assigned_location_id, geofence_locations!user_profiles_assigned_location_id_fkey(name, address, districts(name, regions(name)))")
         .in("id", uniqueUserIds)
       for (const sp of staffProfiles || []) {
         staffProfileMap.set(sp.id, sp)
