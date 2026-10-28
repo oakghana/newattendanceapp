@@ -37,7 +37,6 @@ export async function GET() {
     const { data, error } = await admin
       .from("attendance_records")
       .select("id, user_id, check_in_time, check_out_time, check_in_location_name")
-      .or("check_out_time.is.null,check_out_time.eq.")
       .order("check_in_time", { ascending: true })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -99,12 +98,11 @@ export async function POST(request: NextRequest) {
       .from("attendance_records")
       .select("id, user_id, check_in_time, check_out_time")
       .in("id", recordIds)
-      .or("check_out_time.is.null,check_out_time.eq.")
 
     if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 })
 
     const updated: string[] = []
-    for (const record of openRecords || []) {
+    for (const record of (openRecords || []).filter((item: any) => item.check_out_time == null || String(item.check_out_time).trim() === "")) {
       const workHours = Math.round(((now.getTime() - new Date(record.check_in_time).getTime()) / 3_600_000) * 100) / 100
       const { error } = await admin.from("attendance_records").update({
         check_out_time: now.toISOString(),
@@ -113,7 +111,7 @@ export async function POST(request: NextRequest) {
         auto_checkout: true,
         notes: body.note?.trim() || "Administrator checked out an attendance record open for more than 20 hours.",
         updated_at: now.toISOString(),
-      }).eq("id", record.id).or("check_out_time.is.null,check_out_time.eq.")
+      }).eq("id", record.id).is("check_out_time", null)
       if (!error) updated.push(record.id)
     }
 
