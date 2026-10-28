@@ -26,6 +26,8 @@ interface LoanRequest {
   request_number: string
   staff_number: string
   staff_full_name: string
+  staff_location_name?: string | null
+  staff_district_name?: string | null
   requested_amount: number
   repayment_duration_months: number
   recovery_months?: number | null
@@ -349,6 +351,9 @@ export function FDCalculationSubmission({
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Staff No: {loanRequest.staff_number} &bull; {loanRequest.request_number}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Location: {loanRequest.staff_location_name || loanRequest.staff_district_name || 'Not recorded'}
                 </p>
               </div>
             </div>

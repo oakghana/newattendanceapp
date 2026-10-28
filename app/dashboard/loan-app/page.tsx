@@ -1291,6 +1291,7 @@ export default function LoanAppPage() {
   const [loanOfficeDept, setLoanOfficeDept] = useState("all")
 
   const [accountsSearch, setAccountsSearch] = useState("")
+  const [pendingFdSearch, setPendingFdSearch] = useState("")
   const [accountsStatus, setAccountsStatus] = useState("all")
   const [accountsSort, setAccountsSort] = useState<"newest" | "oldest">("newest")
   const [accountsPage, setAccountsPage] = useState(1)
@@ -1878,6 +1879,15 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
       monthlyIntake,
     }
   }, [loanOfficeWorkspaceRows])
+
+  const pendingFdRequests = useMemo(() => {
+    const query = pendingFdSearch.trim().toLowerCase()
+    return (data?.inbox?.accounts || []).filter((request) => {
+      if (request.fd_score) return false
+      if (!query) return true
+      return `${request.staff_full_name || ""} ${request.staff_number || ""} ${request.request_number || ""} ${request.loan_type_label || ""} ${request.staff_location_name || ""} ${request.staff_district_name || ""}`.toLowerCase().includes(query)
+    })
+  }, [data?.inbox?.accounts, pendingFdSearch])
 
   const filteredAccounts = useMemo(
     () => filterAndSortRows(data?.inbox?.accounts || [], accountsSearch, accountsStatus, accountsSort, accountsLocation, accountsDept),
@@ -4806,9 +4816,13 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {data?.inbox?.accounts && data.inbox.accounts.filter(r => !r.fd_score).length > 0 ? (
+                  {data?.inbox?.accounts && data.inbox.accounts.some((request) => !request.fd_score) ? (
                     <div className="space-y-4">
-                      {data.inbox.accounts.filter(r => !r.fd_score).map(loanReq => (
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                        <Input value={pendingFdSearch} onChange={(event) => setPendingFdSearch(event.target.value)} placeholder="Search requesting staff name, staff no., loan, or location" aria-label="Search pending FD loan requests" className="pl-9" />
+                      </div>
+                      {pendingFdRequests.map(loanReq => (
                         <FDCalculationSubmission 
                           key={loanReq.id}
                           loanRequest={{
@@ -4828,7 +4842,13 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-blue-700">No loans awaiting FD calculation submission.</p>
+                    <div className="space-y-3">
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                        <Input value={pendingFdSearch} onChange={(event) => setPendingFdSearch(event.target.value)} placeholder="Search requesting staff name, staff no., loan, or location" aria-label="Search pending FD loan requests" className="pl-9" />
+                      </div>
+                      <p className="text-sm text-blue-700">{pendingFdSearch ? "No matching loans awaiting FD calculation submission." : "No loans awaiting FD calculation submission."}</p>
+                    </div>
                   )}
                 </CardContent>
               </Card>
