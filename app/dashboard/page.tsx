@@ -24,7 +24,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import RequestLeaveButtonWrapper from "@/components/leave/request-leave-button-client"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { GPSStatusBanner } from "@/components/attendance/gps-status-banner"
 import { SecurityHealthCard } from "@/components/admin/security-health-card"
@@ -44,7 +44,7 @@ export const dynamic = "force-dynamic"
 export default async function DashboardPage() {
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const { user } = await getAuthenticatedUser(supabase)
   if (!user) redirect("/auth/login")
 
   // Fetch profile to check role

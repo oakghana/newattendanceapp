@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation"
 import { ClipboardList, Construction } from "lucide-react"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 
 export default async function WeeklyReturnsPage() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { user } = await getAuthenticatedUser(supabase)
 
   if (!user) redirect("/auth/login")
 

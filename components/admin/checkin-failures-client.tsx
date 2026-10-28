@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { format } from "date-fns"
-import { AlertTriangle, CheckCircle2, Download, Loader2, LogIn, LogOut, RefreshCw, Search, Trash2 } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Clock3, Download, Loader2, LogIn, LogOut, RefreshCw, Search, Trash2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -63,6 +63,17 @@ type SummaryReason = {
   attempts: number
 }
 
+type LongCheckin = {
+  id: string
+  user_id: string
+  employee_id: string
+  full_name: string
+  department_name: string
+  check_in_time: string
+  location_name: string
+  hours_open: number
+}
+
 export function CheckinFailuresClient() {
   const [records, setRecords] = useState<FailureRecord[]>([])
   const [summaryUsers, setSummaryUsers] = useState<SummaryUser[]>([])
@@ -97,6 +108,46 @@ export function CheckinFailuresClient() {
   const [forceBusy, setForceBusy] = useState(false)
   const [forceNote, setForceNote] = useState("")
   const [forceError, setForceError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<"failures" | "long-checkins">("failures")
+  const [longCheckins, setLongCheckins] = useState<LongCheckin[]>([])
+  const [selectedLongCheckins, setSelectedLongCheckins] = useState<Set<string>>(new Set())
+  const [longLoading, setLongLoading] = useState(false)
+  const [longCheckoutBusy, setLongCheckoutBusy] = useState(false)
+
+  const fetchLongCheckins = useCallback(async () => {
+    try {
+      setLongLoading(true)
+      const response = await fetch("/api/admin/long-checkins", { cache: "no-store" })
+      const result = await response.json()
+      if (!response.ok || !result.success) throw new Error(result.error || "Failed to load long check-ins")
+      setLongCheckins(result.records || [])
+      setSelectedLongCheckins(new Set())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load long check-ins")
+    } finally {
+      setLongLoading(false)
+    }
+  }, [])
+
+  const checkoutLongCheckins = useCallback(async () => {
+    if (!selectedLongCheckins.size) return
+    try {
+      setLongCheckoutBusy(true)
+      const response = await fetch("/api/admin/long-checkins", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recordIds: Array.from(selectedLongCheckins) }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.success) throw new Error(result.error || "Failed to check out users")
+      setSuccessMsg(result.message)
+      await fetchLongCheckins()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to check out users")
+    } finally {
+      setLongCheckoutBusy(false)
+    }
+  }, [fetchLongCheckins, selectedLongCheckins])
 
   const formatAttemptType = (attemptType: string) => {
     switch (attemptType) {
@@ -164,6 +215,10 @@ export function CheckinFailuresClient() {
   useEffect(() => {
     void fetchData()
   }, [fetchData])
+
+  useEffect(() => {
+    if (activeTab === "long-checkins") void fetchLongCheckins()
+  }, [activeTab, fetchLongCheckins])
 
   useEffect(() => {
     setPage(1)
@@ -316,6 +371,67 @@ export function CheckinFailuresClient() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold">Attendance Monitoring</h1>
+          <p className="text-sm text-muted-foreground">
+            Review failed attempts and safely resolve unusually long open check-ins.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button variant={activeTab === "failures" ? "default" : "outline"} onClick={() => setActiveTab("failures")}>
+            <AlertTriangle className="h-4 w-4 mr-2" /> Failed Attempts
+          </Button>
+          <Button variant={activeTab === "long-checkins" ? "default" : "outline"} onClick={() => setActiveTab("long-checkins")}>
+            <Clock3 className="h-4 w-4 mr-2" /> Over 20 Hours
+          </Button>
+        </div>
+      </div>
+
+      {activeTab === "long-checkins" ? (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <CardTitle>Open Check-Ins Over 20 Hours</CardTitle>
+                <CardDescription>These users have not checked out. Select records and check them out in one action.</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => void fetchLongCheckins()} disabled={longLoading}>
+                  <RefreshCw className={`h-4 w-4 mr-2 ${longLoading ? "animate-spin" : ""}`} /> Refresh
+                </Button>
+                <Button onClick={() => void checkoutLongCheckins()} disabled={!selectedLongCheckins.size || longCheckoutBusy}>
+                  {longCheckoutBusy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <LogOut className="h-4 w-4 mr-2" />}
+                  Check Out Selected ({selectedLongCheckins.size})
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4 flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2">
+              <input
+                type="checkbox"
+                aria-label="Select all long check-ins"
+                checked={longCheckins.length > 0 && selectedLongCheckins.size === longCheckins.length}
+                onChange={(event) => setSelectedLongCheckins(event.target.checked ? new Set(longCheckins.map((row) => row.id)) : new Set())}
+              />
+              <span className="text-sm font-medium">Select all {longCheckins.length} records</span>
+            </div>
+            <Table>
+              <TableHeader><TableRow><TableHead className="w-10" /><TableHead>Name</TableHead><TableHead>Employee ID</TableHead><TableHead>Department</TableHead><TableHead>Checked In</TableHead><TableHead>Hours Open</TableHead><TableHead>Location</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {longLoading ? <TableRow><TableCell colSpan={7} className="py-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></TableCell></TableRow> : longCheckins.length === 0 ? <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No open check-ins over 20 hours.</TableCell></TableRow> : longCheckins.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell><input type="checkbox" aria-label={`Select ${row.full_name}`} checked={selectedLongCheckins.has(row.id)} onChange={(event) => setSelectedLongCheckins((current) => { const next = new Set(current); event.target.checked ? next.add(row.id) : next.delete(row.id); return next })} /></TableCell>
+                    <TableCell className="font-medium">{row.full_name}</TableCell><TableCell>{row.employee_id}</TableCell><TableCell>{row.department_name}</TableCell><TableCell>{format(new Date(row.check_in_time), "PPpp")}</TableCell><TableCell><Badge variant="destructive">{row.hours_open}h</Badge></TableCell><TableCell>{row.location_name}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : <>
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">Failed Attendance Attempts</h1>
@@ -714,6 +830,7 @@ export function CheckinFailuresClient() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </>}
     </div>
   )
 }

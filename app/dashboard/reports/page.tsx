@@ -1,7 +1,7 @@
 import { AttendanceReports } from "@/components/admin/attendance-reports"
 import { SimpleHrReports } from "@/components/admin/simple-hr-reports"
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { BarChart3, TrendingUp } from "lucide-react"
 import { normalizeAppRole } from "@/lib/role-capabilities"
 

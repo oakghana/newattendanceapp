@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { TransportWorkspace } from "@/components/transport/transport-workspace"
-import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { canCreateTransportRequest, canManageTransport, isChiefDriverRole, isNonRegionalTransportLocation, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 
@@ -14,7 +14,7 @@ const PENDING_STAGES = new Set(["submitted", "regional_manager_endorsement", "ch
 
 export default async function TransportPage() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { user } = await getAuthenticatedUser(supabase)
   if (!user) redirect("/auth/login")
 
   const { data: profile } = await supabase

@@ -1,6 +1,6 @@
 
 import { DeviceRadiusSettings } from "@/components/admin/device-radius-settings"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 
 export const metadata = {

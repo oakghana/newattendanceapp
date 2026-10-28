@@ -1,4 +1,4 @@
-import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { StaffRequestsClient } from "./staff-requests-client"
 
 export default async function StaffRequestsPage() {

@@ -1,5 +1,5 @@
 import { ProfileClient } from "@/components/profile/profile-client"
-import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 
 export default async function ProfilePage() {

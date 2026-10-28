@@ -1,5 +1,5 @@
 import { LocationManagement } from "@/components/admin/location-management"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 
 export default async function LocationsPage() {

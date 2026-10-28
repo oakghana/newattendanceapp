@@ -55,6 +55,7 @@ import {
   Send,
   UserCheck,
   ShieldCheck,
+  ChevronLeft,
   ChevronRight,
   ChevronUp,
   ChevronDown,
@@ -769,7 +770,7 @@ function WorkflowStages({ status }: { status: string }) {
   )
 }
 
-// ─── InfoPill ────────────────────────────────────────────────────────────��───
+// ─── InfoPill ────────────────────────────────────────────────────────────���───
 function InfoPill({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className={`rounded-lg p-2 text-center border ${highlight ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
@@ -1248,8 +1249,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const [allRequestsSearch, setAllRequestsSearch] = useState("")
   const [allRequestsStatusFilter, setAllRequestsStatusFilter] = useState("all")
   const [allRequestsLocationFilter, setAllRequestsLocationFilter] = useState("all")
-  const [allRequestsDeptFilter, setAllRequestsDeptFilter] = useState("all")
-  const [hodLocationFilter, setHodLocationFilter] = useState("all")
+ const [allRequestsDeptFilter, setAllRequestsDeptFilter] = useState("all")
+ const [allRequestsPage, setAllRequestsPage] = useState(1)
+ const [hodLocationFilter, setHodLocationFilter] = useState("all")
   const [hodDeptFilter, setHodDeptFilter] = useState("all")
   const [hodReviewView, setHodReviewView] = useState<"requests" | "yet-to-apply">("requests")
   const [allRequestsView, setAllRequestsView] = useState<"requests" | "yet-to-apply">("requests")
@@ -2427,6 +2429,13 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
     }
     return rows.sort((a: any, b: any) => new Date(String(b?.created_at || 0)).getTime() - new Date(String(a?.created_at || 0)).getTime())
   }, [data, allRequestsSearch, allRequestsStatusFilter, allRequestsLocationFilter, allRequestsDeptFilter])
+
+  const allRequestsPageSize = 25
+  const allRequestsTotalPages = Math.max(1, Math.ceil(allRequestsFiltered.length / allRequestsPageSize))
+  const paginatedAllRequests = allRequestsFiltered.slice(
+    (allRequestsPage - 1) * allRequestsPageSize,
+    allRequestsPage * allRequestsPageSize,
+  )
 
   const hrOfficeAnalytics = useMemo(() => {
     if (analyticsData?.analytics) return analyticsData.analytics
@@ -5553,12 +5562,12 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                       <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
                       <Input
                         value={allRequestsSearch}
-                        onChange={(e) => setAllRequestsSearch(e.target.value)}
+                        onChange={(e) => { setAllRequestsSearch(e.target.value); setAllRequestsPage(1) }}
                         className="pl-8 h-9 w-48"
                         placeholder="Search staff, type, status"
                       />
                     </div>
-                    <Select value={allRequestsStatusFilter} onValueChange={setAllRequestsStatusFilter}>
+                    <Select value={allRequestsStatusFilter} onValueChange={(value) => { setAllRequestsStatusFilter(value); setAllRequestsPage(1) }}>
                       <SelectTrigger className="h-9 w-44">
                         <SelectValue placeholder="Filter by status" />
                       </SelectTrigger>
@@ -5574,14 +5583,14 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                         <SelectItem value="hr_rejected">HR Rejected</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Select value={allRequestsLocationFilter} onValueChange={setAllRequestsLocationFilter}>
+                    <Select value={allRequestsLocationFilter} onValueChange={(value) => { setAllRequestsLocationFilter(value); setAllRequestsPage(1) }}>
                       <SelectTrigger className="h-9 w-44"><SelectValue placeholder="All locations" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All locations</SelectItem>
                         {allLeaveLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <Select value={allRequestsDeptFilter} onValueChange={setAllRequestsDeptFilter}>
+                    <Select value={allRequestsDeptFilter} onValueChange={(value) => { setAllRequestsDeptFilter(value); setAllRequestsPage(1) }}>
                       <SelectTrigger className="h-9 w-44"><SelectValue placeholder="All departments" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All departments</SelectItem>
@@ -5598,7 +5607,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {allRequestsFiltered.map((req: any) => (
+                  {paginatedAllRequests.map((req: any) => (
                     <Card key={req.id} className="border-slate-200 hover:shadow-sm transition-shadow">
                       <CardContent className="p-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -5685,6 +5694,19 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                       </CardContent>
                     </Card>
                   ))}
+                </div>
+              )}
+              {allRequestsFiltered.length > 0 && allRequestsTotalPages > 1 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-xs text-slate-500">Page {allRequestsPage} of {allRequestsTotalPages} · Showing {(allRequestsPage - 1) * allRequestsPageSize + 1}–{Math.min(allRequestsPage * allRequestsPageSize, allRequestsFiltered.length)} of {allRequestsFiltered.length}</p>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setAllRequestsPage((page) => Math.max(1, page - 1))} disabled={allRequestsPage === 1}>
+                      <ChevronLeft className="mr-1 h-4 w-4" /> Previous
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setAllRequestsPage((page) => Math.min(allRequestsTotalPages, page + 1))} disabled={allRequestsPage === allRequestsTotalPages}>
+                      Next <ChevronRight className="ml-1 h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>}

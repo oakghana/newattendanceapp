@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import StaffActivation from "@/components/admin/staff-activation"
 
 export default async function StaffActivationPage() {

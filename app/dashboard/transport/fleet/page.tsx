@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { FleetInventoryWorkspace } from "@/components/transport/fleet-inventory-workspace"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { canEditFleetInventory, canViewFleetInventory, hasNationwideFleetScope, isAdminRole, isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 import { isChiefDriverRole } from "@/lib/role-capabilities"
@@ -8,7 +8,7 @@ import { isNonRegionalLocation } from "@/lib/location-mappings"
 
 export default async function FleetInventoryPage() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { user } = await getAuthenticatedUser(supabase)
   if (!user) redirect("/auth/login")
   const { data: profile } = await supabase.from("user_profiles").select("role, is_active, region_id, assigned_location_id").eq("id", user.id).maybeSingle()
   if (!profile?.is_active || !canViewFleetInventory(profile.role)) redirect("/dashboard")

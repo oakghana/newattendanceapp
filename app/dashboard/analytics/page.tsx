@@ -1,6 +1,6 @@
 import { AnalyticsDashboard } from "@/components/admin/analytics-dashboard"
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { Activity, Sparkles } from "lucide-react"
 
 export default async function AnalyticsPage() {

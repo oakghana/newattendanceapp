@@ -2,7 +2,7 @@ import { BulkUpload } from "@/components/admin/bulk-upload"
 import { BulkImportLeaveLoan } from "@/components/admin/bulk-import-leave-loan"
 import { HistoricalLoanImport } from "@/components/admin/historical-loan-import"
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 
 export default async function DataManagementPage() {
   const supabase = await createClient()

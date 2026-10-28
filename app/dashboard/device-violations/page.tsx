@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import DeviceViolationsClient from "@/components/admin/device-violations-client"
 
 const DeviceViolationsRoutePage = async () => {

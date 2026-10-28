@@ -1,10 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { MdApprovalsClient } from "./md-approvals-client"
 
 export default async function MdApprovalsPage() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { user } = await getAuthenticatedUser(supabase)
   
   if (!user) {
     console.error("[v0] MD Approvals Page - No authenticated user found")

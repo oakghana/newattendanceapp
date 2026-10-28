@@ -3,14 +3,14 @@ import { ArrowLeft, Bus, Plus } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { TransportRequestRegister } from "@/components/transport/transport-request-register"
-import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { canManageTransport, isChiefDriverRole, isDistrictOfficerRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole, isTransportManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 import { moveMisfiledRegionalRequests } from "@/lib/transport-reclassify"
 
 export default async function TransportRequestsPage() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { user } = await getAuthenticatedUser(supabase)
   if (!user) redirect("/auth/login")
   const { data: profile } = await supabase
     .from("user_profiles")

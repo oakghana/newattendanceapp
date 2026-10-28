@@ -1,5 +1,5 @@
 import { RuntimeFeatureControls } from "@/components/admin/runtime-feature-controls"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { DEFAULT_RUNTIME_FLAGS, parseRuntimeFlags } from "@/lib/runtime-flags"
 import { redirect } from "next/navigation"
 

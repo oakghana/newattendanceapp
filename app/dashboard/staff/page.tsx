@@ -1,6 +1,6 @@
 import { StaffManagement } from "@/components/admin/staff-management"
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { normalizeAppRole } from "@/lib/role-capabilities"
 
 export default async function StaffPage() {

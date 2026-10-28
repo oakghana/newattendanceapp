@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import { DriverLicenseWorkspace } from "@/components/transport/driver-license-workspace"
 import { canEditDriverLicenses, canManageTransport, hasNationwideFleetScope, isChiefDriverRole, isRegionalDriverRole, isRegionalHrRole, isRegionalManagerRole } from "@/lib/role-capabilities"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
@@ -7,7 +7,7 @@ import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager
 
 export default async function DriverLicensesPage() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { user } = await getAuthenticatedUser(supabase)
   if (!user) redirect("/auth/login")
   const { data: profile } = await supabase
     .from("user_profiles")

@@ -3,7 +3,7 @@
 import { memo, useMemo } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, Clock, FileText, BarChart3, Settings, UserCheck, Users } from "lucide-react"
+import { Home, Clock, FileText, BarChart3, Settings, UserCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { isAdminRole, normalizeAppRole } from "@/lib/role-capabilities"
 
@@ -72,9 +72,9 @@ export const MobileBottomNav = memo(function MobileBottomNav({ profile }: Mobile
             <Link
               key={item.href}
               href={item.href}
-              prefetch={false}
+              prefetch
               className={cn(
-                "relative flex h-full min-w-0 flex-col items-center justify-center rounded-2xl px-2 py-2 transition-all duration-200 touch-manipulation active:scale-[0.98]",
+                "relative flex min-h-12 h-full min-w-0 flex-col items-center justify-center rounded-2xl px-1.5 py-2 transition-colors duration-150 touch-manipulation active:scale-[0.98]",
                 isActive
                   ? "bg-primary/10 text-primary shadow-sm"
                   : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"

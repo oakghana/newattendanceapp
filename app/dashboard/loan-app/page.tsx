@@ -67,6 +67,7 @@ import {
   Plus,
   Radio,
   Receipt,
+  Search,
   Save,
   Send,
   Sparkles,
@@ -952,7 +953,7 @@ function filterAndSortRows(
   if (search.trim()) {
     const q = search.trim().toLowerCase()
     next = next.filter((r) =>
-      `${r.request_number || ""} ${r.loan_type_label || ""} ${r.staff_number || ""} ${r.staff_rank || ""} ${r.staff_location_name || ""}`
+      `${r.request_number || ""} ${r.loan_type_label || ""} ${r.staff_full_name || ""} ${r.staff_number || ""} ${r.staff_rank || ""} ${r.staff_location_name || ""} ${r.staff_district_name || ""}`
         .toLowerCase()
         .includes(q),
     )
@@ -1290,6 +1291,7 @@ export default function LoanAppPage() {
   const [loanOfficeDept, setLoanOfficeDept] = useState("all")
 
   const [accountsSearch, setAccountsSearch] = useState("")
+  const [pendingFdSearch, setPendingFdSearch] = useState("")
   const [accountsStatus, setAccountsStatus] = useState("all")
   const [accountsSort, setAccountsSort] = useState<"newest" | "oldest">("newest")
   const [accountsPage, setAccountsPage] = useState(1)
@@ -1877,6 +1879,15 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
       monthlyIntake,
     }
   }, [loanOfficeWorkspaceRows])
+
+  const pendingFdRequests = useMemo(() => {
+    const query = pendingFdSearch.trim().toLowerCase()
+    return (data?.inbox?.accounts || []).filter((request) => {
+      if (request.fd_score) return false
+      if (!query) return true
+      return `${request.staff_full_name || ""} ${request.staff_number || ""} ${request.request_number || ""} ${request.loan_type_label || ""} ${request.staff_location_name || ""} ${request.staff_district_name || ""}`.toLowerCase().includes(query)
+    })
+  }, [data?.inbox?.accounts, pendingFdSearch])
 
   const filteredAccounts = useMemo(
     () => filterAndSortRows(data?.inbox?.accounts || [], accountsSearch, accountsStatus, accountsSort, accountsLocation, accountsDept),
@@ -4805,9 +4816,13 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {data?.inbox?.accounts && data.inbox.accounts.filter(r => !r.fd_score).length > 0 ? (
+                  {data?.inbox?.accounts && data.inbox.accounts.some((request) => !request.fd_score) ? (
                     <div className="space-y-4">
-                      {data.inbox.accounts.filter(r => !r.fd_score).map(loanReq => (
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                        <Input value={pendingFdSearch} onChange={(event) => setPendingFdSearch(event.target.value)} placeholder="Search requesting staff name, staff no., loan, or location" aria-label="Search pending FD loan requests" className="pl-9" />
+                      </div>
+                      {pendingFdRequests.map(loanReq => (
                         <FDCalculationSubmission 
                           key={loanReq.id}
                           loanRequest={{
@@ -4827,7 +4842,13 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-blue-700">No loans awaiting FD calculation submission.</p>
+                    <div className="space-y-3">
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                        <Input value={pendingFdSearch} onChange={(event) => setPendingFdSearch(event.target.value)} placeholder="Search requesting staff name, staff no., loan, or location" aria-label="Search pending FD loan requests" className="pl-9" />
+                      </div>
+                      <p className="text-sm text-blue-700">{pendingFdSearch ? "No matching loans awaiting FD calculation submission." : "No loans awaiting FD calculation submission."}</p>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -4901,7 +4922,10 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredAccounts, "accounts-queue-filtered.csv")}>Export Filtered CSV</Button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 items-end">
-                <Input value={accountsSearch} onChange={(e) => setAccountsSearch(e.target.value)} placeholder="Search requests" />
+                <div className="relative sm:col-span-2 lg:col-span-2">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                  <Input value={accountsSearch} onChange={(e) => setAccountsSearch(e.target.value)} placeholder="Search staff name, loan, request no., or location" aria-label="Search Accounts loan requests" className="pl-9" />
+                </div>
                 <Select value={accountsStatus} onValueChange={setAccountsStatus}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -4967,7 +4991,8 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
                           <TableCell className="whitespace-nowrap font-medium uppercase">{row.staff_full_name || "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "�����"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.staff_location_name || row.staff_district_name || "—"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs font-semibold">{row.fd_score ?? "—"}</TableCell>
@@ -6351,8 +6376,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                         <TableHead className="whitespace-nowrap">Request No.</TableHead>
   <TableHead className="whitespace-nowrap">Staff Name</TableHead>
   <TableHead className="whitespace-nowrap">Region</TableHead>
-  <TableHead className="whitespace-nowrap">Staff No.</TableHead>
-                        <TableHead className="whitespace-nowrap">Rank</TableHead>
+                      <TableHead className="whitespace-nowrap">Staff No.</TableHead>
+                      <TableHead className="whitespace-nowrap">Location</TableHead>
+                      <TableHead className="whitespace-nowrap">Rank</TableHead>
                         <TableHead className="whitespace-nowrap">Loan Type</TableHead>
                         <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
                         <TableHead className="whitespace-nowrap">Status</TableHead>

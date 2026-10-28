@@ -1,6 +1,6 @@
 import { AuditLogsClient } from "@/components/admin/audit-logs-client"
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 
 export default async function AuditLogsPage() {
   const supabase = await createClient()
