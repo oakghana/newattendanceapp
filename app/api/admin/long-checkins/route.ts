@@ -36,15 +36,23 @@ export async function GET() {
     const cutoff = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString()
     const { data, error } = await admin
       .from("attendance_records")
-      .select("id, user_id, check_in_time, check_in_location_name, user_profiles(employee_id, first_name, last_name, department_id, departments(name))")
+      .select("id, user_id, check_in_time, check_in_location_name")
       .is("check_out_time", null)
       .lt("check_in_time", cutoff)
       .order("check_in_time", { ascending: true })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    const records = ((data || []) as OpenAttendance[]).map((record) => {
-      const person = record.user_profiles
+    const rows = (data || []) as Array<Omit<OpenAttendance, "user_profiles">>
+    const userIds = [...new Set(rows.map((row) => row.user_id).filter(Boolean))]
+    const { data: profiles, error: profilesError } = userIds.length
+      ? await admin.from("user_profiles").select("id, employee_id, first_name, last_name, department_id, departments(name)").in("id", userIds)
+      : { data: [], error: null }
+    if (profilesError) return NextResponse.json({ error: profilesError.message }, { status: 500 })
+    const profileMap = new Map((profiles || []).map((profile: any) => [profile.id, profile]))
+
+    const records = rows.map((record) => {
+      const person = profileMap.get(record.user_id) as any
       return {
         id: record.id,
         user_id: record.user_id,

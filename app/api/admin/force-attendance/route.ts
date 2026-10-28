@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
           check_in_time: now.toISOString(),
           note: forceNote,
         },
-      }).catch(() => {})
+      })
 
       return NextResponse.json({
         success: true,
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
           work_hours: workedHours,
           note: forceNote,
         },
-      }).catch(() => {})
+      })
 
       return NextResponse.json({
         success: true,
