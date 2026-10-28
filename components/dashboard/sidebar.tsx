@@ -428,7 +428,7 @@ function Sidebar({ user, profile, isAssignedHod = false, isCollapsed, setIsColla
       console.error("Failed to log logout action:", error)
     }
 
-    await supabase.auth.signOut()
+    await supabase.auth.signOut({ scope: "local" })
 
     window.location.href = "/auth/login"
   }

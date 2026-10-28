@@ -1,4 +1,4 @@
-import { updateSession } from "@/lib/supabase/middleware";
+import { updateSession, updateSessionWithUser } from "@/lib/supabase/middleware";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
@@ -163,8 +163,9 @@ export default async function proxy(request: NextRequest) {
   }
 
   try {
-    // Refresh/propagate auth cookies first
-    const response = await updateSession(request);
+    // Refresh/propagate auth cookies once and reuse the resolved user, so each
+    // navigation costs one Supabase Auth call instead of two.
+    const { response, user } = await updateSessionWithUser(request);
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
@@ -183,10 +184,6 @@ export default async function proxy(request: NextRequest) {
         },
       },
     });
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
 
     if (!user) {
       // Let unknown public paths reach Next.js so the branded 404 page can

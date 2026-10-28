@@ -15,7 +15,6 @@ import { ToastAction } from "@/components/ui/toast"
 import { Button } from "@/components/ui/button"
 
 const POLL_INTERVAL_MS = 120_000
-const SESSION_REFRESH_INTERVAL_MS = 5 * 60 * 1000
 
 
 interface DashboardLayoutProps {
@@ -36,36 +35,21 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
   const [priorityCircular, setPriorityCircular] = useState<any>(null)
 
   useEffect(() => {
-    if (!user) return
-
-    const supabase = createClient()
-    const refreshSession = () => {
-      if (!document.hidden && navigator.onLine) {
-        void supabase.auth.refreshSession()
-      }
-    }
-
-    const sessionRefreshTimer = window.setInterval(refreshSession, SESSION_REFRESH_INTERVAL_MS)
-    window.addEventListener("focus", refreshSession)
-
-    return () => {
-      window.clearInterval(sessionRefreshTimer)
-      window.removeEventListener("focus", refreshSession)
-    }
-  }, [user])
-
-  useEffect(() => {
     const checkAuth = async () => {
+      let authedUser: any = null
       try {
         const supabase = createClient()
 
+        // The browser client already auto-refreshes tokens. Extra manual refreshes
+        // (interval/focus) raced the proxy's refresh and invalidated sessions.
         let { data, error } = await supabase.auth.getUser()
         if (error || !data?.user) {
-          // Navigation can briefly race Supabase's browser token refresh. Retry once
-          // before treating the session as expired and sending the user to login.
-          const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession()
-          if (!refreshError && refreshed.session?.user) {
-            data = { user: refreshed.session.user }
+          // getUser() can fail on a network blip or a navigation racing a token
+          // refresh. The local session (auto-refreshed if needed) is the source of
+          // truth before treating the user as logged out.
+          const { data: sessionData } = await supabase.auth.getSession()
+          if (sessionData.session?.user) {
+            data = { user: sessionData.session.user }
             error = null
           }
         }
@@ -77,6 +61,7 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
           return
         }
 
+        authedUser = data.user
         setUser(data.user)
 
         // Get user profile with department info - optimized query with specific fields
@@ -128,6 +113,17 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
         setLoading(false)
       } catch (err) {
         console.error("[v0] Auth check error:", err)
+        if (authedUser) {
+          // A failed data query is not an expired session; keep the user in the app.
+          setProfile((current: any) => current ?? {
+            id: authedUser.id,
+            first_name: authedUser.user_metadata?.first_name || "User",
+            last_name: authedUser.user_metadata?.last_name || "",
+            role: "staff",
+          })
+          setLoading(false)
+          return
+        }
         setUser(null)
         setProfile(null)
         setLoading(true)

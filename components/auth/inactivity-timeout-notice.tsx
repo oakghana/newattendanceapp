@@ -7,42 +7,97 @@ import { clearAllDataAndLogout } from "@/lib/cache-manager"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000
-const WARNING_TIMEOUT_MS = 25 * 60 * 1000 // warn with five minutes remaining before logout
+const WARNING_BEFORE_LOGOUT_MS = 5 * 60 * 1000
+const ACTIVITY_KEY = "qcc_last_activity_at"
+const ACTIVITY_WRITE_THROTTLE_MS = 5_000
+
+function readLastActivity(): number {
+  try {
+    const stored = Number(window.localStorage.getItem(ACTIVITY_KEY))
+    return Number.isFinite(stored) && stored > 0 ? stored : Date.now()
+  } catch {
+    return Date.now()
+  }
+}
 
 export function InactivityTimeoutNotice() {
   const [warningVisible, setWarningVisible] = useState(false)
   const warningTimer = useRef<number | null>(null)
   const logoutTimer = useRef<number | null>(null)
+  const lastWriteRef = useRef(0)
+  const warningVisibleRef = useRef(false)
+  warningVisibleRef.current = warningVisible
 
   useEffect(() => {
     let active = true
 
+    const clearTimers = () => {
+      if (warningTimer.current) window.clearTimeout(warningTimer.current)
+      if (logoutTimer.current) window.clearTimeout(logoutTimer.current)
+    }
+
     const logoutForInactivity = async () => {
       if (!active) return
+      // Activity in ANY open tab counts. Re-check the shared timestamp so an idle
+      // background tab can never sign out a user who is working in another tab.
+      if (Date.now() - readLastActivity() < IDLE_TIMEOUT_MS) {
+        scheduleFromLastActivity()
+        return
+      }
       setWarningVisible(false)
       await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined)
-      await createClient().auth.signOut().catch(() => undefined)
+      // "local" ends only this browser's session instead of revoking every
+      // session the account has on other devices.
+      await createClient().auth.signOut({ scope: "local" }).catch(() => undefined)
       await clearAllDataAndLogout().catch(() => undefined)
       window.location.href = "/auth/login?reason=inactivity"
     }
 
-    const resetIdleTimers = () => {
-      setWarningVisible(false)
-      if (warningTimer.current) window.clearTimeout(warningTimer.current)
-      if (logoutTimer.current) window.clearTimeout(logoutTimer.current)
-      warningTimer.current = window.setTimeout(() => setWarningVisible(true), WARNING_TIMEOUT_MS)
-      logoutTimer.current = window.setTimeout(() => void logoutForInactivity(), IDLE_TIMEOUT_MS)
+    function scheduleFromLastActivity() {
+      clearTimers()
+      const idleFor = Date.now() - readLastActivity()
+      const untilLogout = Math.max(0, IDLE_TIMEOUT_MS - idleFor)
+      const untilWarning = Math.max(0, untilLogout - WARNING_BEFORE_LOGOUT_MS)
+      setWarningVisible(untilLogout <= WARNING_BEFORE_LOGOUT_MS)
+      warningTimer.current = window.setTimeout(() => setWarningVisible(true), untilWarning)
+      logoutTimer.current = window.setTimeout(() => void logoutForInactivity(), untilLogout)
+    }
+
+    const recordActivity = () => {
+      const now = Date.now()
+      if (now - lastWriteRef.current < ACTIVITY_WRITE_THROTTLE_MS && !warningVisibleRef.current) return
+      lastWriteRef.current = now
+      try {
+        window.localStorage.setItem(ACTIVITY_KEY, String(now))
+      } catch {
+        // Storage can be unavailable (private mode); fall back to per-tab timing.
+      }
+      scheduleFromLastActivity()
+    }
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === ACTIVITY_KEY) scheduleFromLastActivity()
+    }
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") scheduleFromLastActivity()
     }
 
     const activityEvents = ["mousedown", "mousemove", "keydown", "scroll", "touchstart", "click"]
-    activityEvents.forEach((eventName) => window.addEventListener(eventName, resetIdleTimers, { passive: true }))
-    resetIdleTimers()
+    activityEvents.forEach((eventName) => window.addEventListener(eventName, recordActivity, { passive: true }))
+    window.addEventListener("storage", onStorage)
+    document.addEventListener("visibilitychange", onVisible)
+
+    // Opening or navigating within the app is itself activity.
+    lastWriteRef.current = 0
+    recordActivity()
 
     return () => {
       active = false
-      if (warningTimer.current) window.clearTimeout(warningTimer.current)
-      if (logoutTimer.current) window.clearTimeout(logoutTimer.current)
-      activityEvents.forEach((eventName) => window.removeEventListener(eventName, resetIdleTimers))
+      clearTimers()
+      activityEvents.forEach((eventName) => window.removeEventListener(eventName, recordActivity))
+      window.removeEventListener("storage", onStorage)
+      document.removeEventListener("visibilitychange", onVisible)
     }
   }, [])
 
