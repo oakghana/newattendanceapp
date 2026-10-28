@@ -384,7 +384,7 @@ export function CheckinFailuresClient() {
             <AlertTriangle className="h-4 w-4 mr-2" /> Failed Attempts
           </Button>
           <Button variant={activeTab === "long-checkins" ? "default" : "outline"} onClick={() => setActiveTab("long-checkins")}>
-            <Clock3 className="h-4 w-4 mr-2" /> Over 20 Hours
+            <Clock3 className="h-4 w-4 mr-2" /> Over 15 Hours
           </Button>
         </div>
       </div>
@@ -394,7 +394,7 @@ export function CheckinFailuresClient() {
           <CardHeader>
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
-                <CardTitle>Open Check-Ins Over 20 Hours</CardTitle>
+                <CardTitle>Open Check-Ins Over 15 Hours</CardTitle>
                 <CardDescription>These users have not checked out. Select records and check them out in one action.</CardDescription>
               </div>
               <div className="flex items-center gap-2">
@@ -421,7 +421,7 @@ export function CheckinFailuresClient() {
             <Table>
               <TableHeader><TableRow><TableHead className="w-10" /><TableHead>Name</TableHead><TableHead>Employee ID</TableHead><TableHead>Department</TableHead><TableHead>Checked In</TableHead><TableHead>Hours Open</TableHead><TableHead>Location</TableHead></TableRow></TableHeader>
               <TableBody>
-                {longLoading ? <TableRow><TableCell colSpan={7} className="py-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></TableCell></TableRow> : longCheckins.length === 0 ? <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No open check-ins over 20 hours.</TableCell></TableRow> : longCheckins.map((row) => (
+                {longLoading ? <TableRow><TableCell colSpan={7} className="py-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></TableCell></TableRow> : longCheckins.length === 0 ? <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No open check-ins over 15 hours.</TableCell></TableRow> : longCheckins.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell><input type="checkbox" aria-label={`Select ${row.full_name}`} checked={selectedLongCheckins.has(row.id)} onChange={(event) => setSelectedLongCheckins((current) => { const next = new Set(current); event.target.checked ? next.add(row.id) : next.delete(row.id); return next })} /></TableCell>
                     <TableCell className="font-medium">{row.full_name}</TableCell><TableCell>{row.employee_id}</TableCell><TableCell>{row.department_name}</TableCell><TableCell>{format(new Date(row.check_in_time), "PPpp")}</TableCell><TableCell><Badge variant="destructive">{row.hours_open}h</Badge></TableCell><TableCell>{row.location_name}</TableCell>
