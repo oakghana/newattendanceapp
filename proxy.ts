@@ -186,11 +186,13 @@ export default async function proxy(request: NextRequest) {
     });
 
     if (!user) {
-      // Let unknown public paths reach Next.js so the branded 404 page can
-      // decide whether to guide the visitor to sign in or elsewhere.
-      if (!isProtectedRoute(pathname)) {
-        return response;
-      }
+      // A refresh can briefly resolve without a user while valid Supabase
+      // cookies are still present. Do not replace the selected module with
+      // the login page during that race; the dashboard layout will retry.
+      const hasAuthCookie = request.cookies.getAll().some(({ name }) =>
+        name.startsWith("sb-") && (name.includes("access-token") || name.includes("refresh-token")),
+      )
+      if (!isProtectedRoute(pathname) || hasAuthCookie) return response
 
       return NextResponse.redirect(new URL("/auth/login", request.url));
     }
