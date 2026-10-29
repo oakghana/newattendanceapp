@@ -1733,8 +1733,11 @@ export async function POST(request: NextRequest) {
   if (leaveTypeKey === "annual") {
     const annualStart = `${annualPlanningYear}-01-01`
     const annualEnd = `${annualPlanningYear}-12-31`
-    if (preferred_start_date < annualStart || preferred_start_date > annualEnd || preferred_end_date < annualStart || preferred_end_date > annualEnd) {
-      return NextResponse.json({ error: `Annual leave dates must be within ${annualPlanningYear}.` }, { status: 400 })
+    // Annual leave must begin within the selected planning year. The leave
+    // period may finish in the following year when the return date crosses
+    // 31 December (for example, 16 Dec 2027 through 18 Jan 2028).
+    if (preferred_start_date < annualStart || preferred_start_date > annualEnd || preferred_end_date < preferred_start_date) {
+      return NextResponse.json({ error: `Annual leave must start between 1 January and 31 December ${annualPlanningYear}; the return date may fall in the following year.` }, { status: 400 })
     }
   }
   const dependentLeaveEligibility = await validateDependentLeaveEligibility(
