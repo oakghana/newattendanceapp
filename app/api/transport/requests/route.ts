@@ -11,6 +11,7 @@ import {
 } from "@/lib/role-capabilities"
 import { isAssignableRegionalStage, isCompletableTransportStage } from "@/lib/transport-workflow"
 import { sendWebPushToUsers } from "@/lib/web-push"
+import { emailService } from "@/lib/email-service"
 
 /** Best-effort in-app notice; never fails the transport action. */
 async function notifyTransportActors(entries: { user_id: string; message: string; type: string; reference_id: string }[]) {
@@ -30,6 +31,20 @@ async function notifyTransportActors(entries: { user_id: string; message: string
     if (!payload.length) return
     const { error } = await admin.from("staff_notifications").insert(payload)
     if (error) console.warn("[transport] staff_notifications insert skipped:", error.message)
+
+    const recipientIds = payload.map((entry) => entry.user_id)
+    const { data: recipients } = await admin.from("user_profiles").select("id, email").in("id", recipientIds).eq("is_active", true)
+    const emailById = new Map((recipients || []).map((recipient: any) => [String(recipient.id), String(recipient.email || "")]))
+    await Promise.allSettled(payload.map(async (entry) => {
+      const email = emailById.get(entry.user_id)
+      if (!email) return
+      const safeMessage = entry.message.replace(/[<>&\"']/g, (character) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '\"': "&quot;", "'": "&#39;" }[character] || character))
+      await emailService.sendEmail(email, {
+        subject: `[Action Required] Transport request awaiting your review`,
+        html: `<div style="margin:0;background:#eef6f5;padding:32px;font-family:Arial,sans-serif"><div style="max-width:600px;margin:auto;background:#fff;border-radius:16px;overflow:hidden"><div style="background:#0b3f46;padding:28px;color:#fff"><div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:.8">QCC National Service Portal</div><h1 style="margin:12px 0 0;font-size:24px">Transport request requires your action</h1></div><div style="padding:28px;color:#17333a"><p>${safeMessage}</p><p style="background:#f0fdfa;border-left:4px solid #159a87;padding:14px">Please sign in to the portal to review, endorse, or approve this request.</p><a href="${process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://www.qccgh.com"}/dashboard/transport" style="display:inline-block;background:#117a6b;color:#fff;padding:13px 22px;border-radius:8px;text-decoration:none;font-weight:700">Open transport queue</a></div><div style="background:#0b3f46;color:#c8dede;padding:18px 28px;font-size:12px">Automated notification from the QCC National Service Portal. Please do not reply.</div></div></div>`,
+        text: `${entry.message} Please sign in to the portal to review this transport request.`,
+      }, { emailModule: "transport", emailEvent: "assignment", recipientUserId: entry.user_id, idempotencyKey: `transport/${entry.type}/${entry.reference_id}/${entry.user_id}` })
+    }))
 
     // Push alerts are grouped per reference_id + type so a reviewer only gets one
     // popup per distinct transport event, even when several actors are notified.

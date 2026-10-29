@@ -29,6 +29,9 @@ export interface EmailOptions {
   cc?: string
   bcc?: string
   replyTo?: string
+  module?: string
+  recipientUserId?: string
+  metadata?: Record<string, any>
 }
 
 /**
@@ -67,11 +70,14 @@ export async function sendNotification(options: NotificationOptions) {
     }
 
     // Optionally send email for high-priority notifications
-    if (severity === 'high' || severity === 'critical') {
+    if (severity === 'high' || severity === 'critical' || actionUrl) {
       await sendEmail({
         to: user.email,
         subject: `${title} - Action Required`,
-        html: generateNotificationEmailHTML(title, message, severity),
+        html: generateNotificationEmailHTML(title, message, severity, actionUrl),
+        module: inferModule(title, data),
+        recipientUserId: userId,
+        metadata: data,
       })
     }
   } catch (error) {
@@ -84,17 +90,23 @@ export async function sendNotification(options: NotificationOptions) {
  */
 export async function sendEmail(options: EmailOptions) {
   try {
-    const { to, subject, html, cc, bcc, replyTo } = options
+    const { to, subject, html, cc, bcc, replyTo, module = 'system', recipientUserId, metadata } = options
 
-    // Use the email service to send
-    await (emailService as any).sendEmail({
+    await emailService.sendEmail(
       to,
-      subject,
-      html,
-      cc,
-      bcc,
-      replyTo,
-    })
+      {
+        subject,
+        html,
+        text: html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+      },
+      {
+        emailModule: module,
+        emailEvent: 'notification',
+        recipientUserId,
+        metadata: { ...metadata, cc, bcc, replyTo },
+        idempotencyKey: `notification/${recipientUserId || to}/${subject}/${new Date().toISOString().slice(0, 16)}`,
+      },
+    )
   } catch (error) {
     console.error('[v0] Error sending email:', error)
   }
@@ -134,10 +146,21 @@ export async function createDashboardNotification(
 /**
  * Generate HTML for notification emails
  */
+function inferModule(title: string, data?: Record<string, any>): string {
+  const hint = `${title} ${JSON.stringify(data || {})}`.toLowerCase()
+  if (hint.includes('loan')) return 'loan'
+  if (hint.includes('leave')) return 'leave'
+  if (hint.includes('transport')) return 'transport'
+  if (hint.includes('off-premises') || hint.includes('off premises')) return 'off_premises'
+  if (hint.includes('account') || hint.includes('fd')) return 'accounts'
+  return 'system'
+}
+
 function generateNotificationEmailHTML(
   title: string,
   message: string,
-  severity: string
+  severity: string,
+  actionUrl?: string
 ): string {
   const severityColors = {
     low: '#3b82f6',
@@ -146,7 +169,9 @@ function generateNotificationEmailHTML(
     critical: '#7f1d1d',
   }
 
-  const color = severityColors[severity as keyof typeof severityColors] || '#3b82f6'
+  const color = severityColors[severity as keyof typeof severityColors] || '#0f766e'
+  const portalUrl = actionUrl || process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || '#'
+  const actionButton = actionUrl ? `<a href="${portalUrl}" style="display:inline-block;background:${color};color:#fff;padding:13px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">Open request in portal</a>` : ''
 
   return `
 <!DOCTYPE html>
@@ -174,17 +199,19 @@ function generateNotificationEmailHTML(
 <body>
   <div class="container">
     <div class="header">
+      <div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:.8">QCC National Service Portal</div>
       <h1>${title}</h1>
     </div>
     <div class="body">
       <div class="message">
-        <p>${message}</p>
+        <p style="font-size:16px;color:#17333a">${message}</p>
       </div>
-      <div style="background-color: white; padding: 15px; border-radius: 5px; margin-top: 20px;">
-        <p><strong>Action Required:</strong> Please log into your account to view full details and take any necessary action.</p>
+      <div style="background-color:#f0fdfa;padding:18px;border-radius:10px;margin-top:20px;border:1px solid #ccfbf1;">
+        <p style="margin:0;color:#115e59"><strong>Action required:</strong> This request is waiting for your attention in the portal.</p>
       </div>
+      <div style="margin-top:24px">${actionButton}</div>
       <div class="footer">
-        <p>This is an automated notification from the Leave Management System. Please do not reply to this email.</p>
+        <p>This is an automated notification from the QCC National Service Portal. Please do not reply to this email.</p>
       </div>
     </div>
   </div>
