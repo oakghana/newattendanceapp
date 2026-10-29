@@ -2,6 +2,9 @@ import { redirect } from "next/navigation"
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server"
 import EmailCenterClient from "./email-center-client"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export default async function EmailCenterPage() {
   const supabase = await createClient()
   const { user } = await getAuthenticatedUser(supabase)
