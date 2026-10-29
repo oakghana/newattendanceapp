@@ -48,9 +48,15 @@ export async function GET() {
     if (attendanceError) return NextResponse.json({ error: attendanceError.message }, { status: 500 })
     const userIds = [...new Set(rows.map((row) => row.user_id).filter(Boolean))]
     const { data: profiles, error: profilesError } = userIds.length
-      ? await admin.from("user_profiles").select("id, employee_id, first_name, last_name, department_id, departments(name)").in("id", userIds)
+      ? await admin.from("user_profiles").select("id, employee_id, first_name, last_name, department_id").in("id", userIds)
       : { data: [], error: null }
     if (profilesError) return NextResponse.json({ error: profilesError.message }, { status: 500 })
+    const departmentIds = [...new Set((profiles || []).map((person: any) => person.department_id).filter(Boolean))]
+    const { data: departments, error: departmentsError } = departmentIds.length
+      ? await admin.from("departments").select("id, name").in("id", departmentIds)
+      : { data: [], error: null }
+    if (departmentsError) return NextResponse.json({ error: departmentsError.message }, { status: 500 })
+    const departmentMap = new Map((departments || []).map((department: any) => [department.id, department.name]))
     const profileMap = new Map((profiles || []).map((profile: any) => [profile.id, profile]))
 
     const records = rows.map((record) => {
@@ -60,7 +66,7 @@ export async function GET() {
         user_id: record.user_id,
         employee_id: person?.employee_id || "N/A",
         full_name: `${person?.first_name || ""} ${person?.last_name || ""}`.trim() || "Unknown User",
-        department_name: person?.departments?.name || "Unassigned",
+        department_name: departmentMap.get(person?.department_id) || "Unassigned",
         department_id: person?.department_id || null,
         check_in_time: record.check_in_time,
         location_name: record.check_in_location_name || "Unknown",

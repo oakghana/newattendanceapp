@@ -770,7 +770,7 @@ function WorkflowStages({ status }: { status: string }) {
   )
 }
 
-// ─── InfoPill ────────────────────────────────────────────────────────────���───
+// ─── InfoPill ───────────────────────────────────────────────────────��────���───
 function InfoPill({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className={`rounded-lg p-2 text-center border ${highlight ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
@@ -2455,7 +2455,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       return
     }
     if (leaveType === "annual" && (startDate < annualPlanningYearStart || startDate > annualPlanningYearEnd)) {
-      toast({ title: "Annual leave date restricted", description: `Annual leave dates must be within ${annualPlanningYear}.`, variant: "destructive" })
+      toast({ title: "Annual leave start date restricted", description: `Choose a start date between 1 January and 31 December ${annualPlanningYear}. The return date may fall in the following year.`, variant: "destructive" })
       return
     }
     if (!canBackdateLeaveApplication && startDate < todayIsoDate) {
