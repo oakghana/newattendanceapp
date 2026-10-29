@@ -343,6 +343,13 @@ const navigationItems = [
     category: "admin",
   },
   {
+    title: "Email Center",
+    href: "/dashboard/email-center",
+    icon: Mail,
+    roles: ["admin", "administrator"],
+    category: "admin",
+  },
+  {
     title: "Settings",
     href: "/dashboard/settings",
     icon: Settings,

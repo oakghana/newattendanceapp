@@ -13,13 +13,13 @@
 import "server-only"
 import { emailService } from "@/lib/email-service"
 
-const APP_URL = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://updates.qccapps.com").replace(/\/$/, "")
+const APP_URL = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://www.qccgh.com").replace(/\/$/, "")
 
 // ─── Brand palette ───────────────────────────────────────────────────────────
-const GREEN       = "#1a6b30"
-const DARK_GREEN  = "#0d3d1a"
-const MID_GREEN   = "#1e7a3e"
-const LOGO_URL    = `${APP_URL}/images/qcc-logo.png`
+const GREEN       = "#117a6b"
+const DARK_GREEN  = "#0b3f46"
+const MID_GREEN   = "#159a87"
+const LOGO_URL    = `${APP_URL}/logos/qcc-logo.png`
 
 // ─── Base email shell ────────────────────────────────────────────────────────
 function baseLayout(title: string, body: string): string {
@@ -332,7 +332,11 @@ async function send(
   const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
   const results = await Promise.allSettled(
     recipients.map((email) =>
-      emailService.sendEmail(email, { subject, html, text }, {}),
+      emailService.sendEmail(email, { subject, html, text }, {
+        emailModule: context.toLowerCase().includes("leave") ? "leave" : context.toLowerCase().includes("loan") ? "loan" : "system",
+        emailEvent: context.toLowerCase().includes("submitted") || context.toLowerCase().includes("pending") ? "assignment" : "notification",
+        idempotencyKey: `workflow/${context}/${email}/${subject}`,
+      }),
     ),
   )
   // Notify admin for any hard failures
@@ -706,8 +710,8 @@ export async function notifyLeaveResumeReminder(
   }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// ════════════════════════════════════════════════════════════════════════════
+// ═══���════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════���════════════════════════════
 
 /**
  * Staff submitted a loan request → notify HOD(s).

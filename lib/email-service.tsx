@@ -16,6 +16,7 @@ interface EmailTemplate {
   subject: string
   html: string
   text: string
+  cc?: string[]
 }
 
 const EMAIL_WATERMARK_TEXT = "QCC-LOANLEAVE-APP"
@@ -191,7 +192,106 @@ class EmailService {
     return this.isConfigured && !!this.transporter
   }
 
+  private async logDelivery(to: string, subject: string, status: "sent" | "failed", data: Record<string, any>, messageId?: string, errorMessage?: string) {
+    try {
+      const adminClient = await createAdminClient()
+      await adminClient.from("email_delivery_logs").insert({
+        recipient_user_id: data.recipientUserId || null,
+        recipient_email: to,
+        module: String(data.emailModule || "system"),
+        event_key: String(data.emailEvent || "notification"),
+        subject,
+        status,
+        provider_message_id: messageId || null,
+        error_message: errorMessage || null,
+        metadata: data.metadata || {},
+        sent_by: data.sentBy || null,
+      })
+    } catch (error) {
+      console.warn("[EmailService] Failed to write delivery log:", error)
+    }
+  }
+
   async sendEmail(to: string, template: EmailTemplate, data: Record<string, any> = {}) {
+    const subjectHint = String(template.subject || "").toLowerCase()
+    const inferredModule = subjectHint.includes("loan") ? "loan" : subjectHint.includes("off-premises") || subjectHint.includes("off premises") ? "off_premises" : subjectHint.includes("leave") ? "leave" : "system"
+    const module = String(data.emailModule || inferredModule).trim()
+    const eventKey = String(data.emailEvent || (subjectHint.includes("approv") ? "approval" : "notification")).trim()
+    data = { ...data, emailModule: module, emailEvent: eventKey }
+    if (module !== "system") {
+      try {
+        const adminClient = await createAdminClient()
+        const { data: savedTemplate } = await adminClient
+          .from("email_templates")
+          .select("subject, html_body, text_body, accent_color, is_active")
+          .eq("module", module)
+          .eq("event_key", eventKey)
+          .maybeSingle()
+        if (savedTemplate?.is_active) {
+          template = {
+            subject: savedTemplate.subject,
+            html: savedTemplate.html_body,
+            text: savedTemplate.text_body,
+            cc: template.cc,
+          }
+          data = { ...data, accentColor: savedTemplate.accent_color }
+        }
+      } catch (error) {
+        console.warn("[EmailService] Failed to load editable template; using workflow default", error)
+      }
+    }
+
+    // Normalize the logo URL at send time so templates saved from Preview still
+    // point at the deployed portal asset instead of a temporary preview origin.
+    const deployedAppUrl = String(process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "")
+    const normalizedHtml = deployedAppUrl
+      ? template.html.replace(/https?:\/\/[^\"']+\/logos\/qcc-logo\.png|\/logos\/qcc-logo\.png/g, `${deployedAppUrl}/logos/qcc-logo.png`)
+      : template.html
+
+    // Replace template variables before selecting the delivery provider.
+    const subject = this.replaceTemplateVariables(template.subject, data)
+    const html = this.replaceTemplateVariables(normalizedHtml, data)
+    const text = this.replaceTemplateVariables(template.text, data)
+
+    // Resend is the primary transactional provider when connected. Calling its
+    // HTTP API directly keeps the server dependency-free and works in serverless
+    // deployments where SMTP connections are unreliable.
+    const resendApiKey = String(process.env.RESEND_API_KEY || "").trim()
+    const resendDomain = String(process.env.RESEND_EMAIL_DOMAIN || "").trim()
+    if (resendApiKey && resendDomain) {
+      try {
+        const response = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${resendApiKey}`,
+            "Content-Type": "application/json",
+            "Idempotency-Key": `workflow-email/${encodeURIComponent(String(data.idempotencyKey || data.referenceId || data.requestId || data.id || `${to}-${subject}`))}`,
+          },
+          body: JSON.stringify({
+            from: `${this.senderName} <notifications@${resendDomain}>`,
+            to: [to],
+            subject,
+            html,
+            text,
+            ...(template.cc?.length ? { cc: template.cc } : {}),
+          }),
+        })
+        const result = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          const errorMessage = result?.message || response.statusText
+          await this.logDelivery(to, subject, "failed", data, undefined, errorMessage)
+          console.warn("[EmailService] Resend rejected email:", errorMessage)
+          return { success: false, error: errorMessage }
+        }
+        await this.logDelivery(to, subject, "sent", data, result?.id)
+        console.log("[EmailService] Resend email sent successfully:", result?.id)
+        return { success: true, messageId: result?.id }
+      } catch (error: any) {
+        console.error("[EmailService] Resend request failed:", error)
+        return { success: false, error: error?.message || "Resend request failed" }
+      }
+    }
+
     await this.ensureInitialized()
 
     if (!this.isConfigured || !this.transporter) {
@@ -200,17 +300,13 @@ class EmailService {
     }
 
     try {
-      // Replace template variables
-      const subject = this.replaceTemplateVariables(template.subject, data)
-      const html = this.replaceTemplateVariables(template.html, data)
-      const text = this.replaceTemplateVariables(template.text, data)
-
       const mailOptions = {
         from: `"${this.senderName}" <${this.senderEmail}>`,
         to,
         subject,
         html,
         text,
+        ...(template.cc?.length ? { cc: template.cc } : {}),
       }
 
       const result = await this.transporter.sendMail(mailOptions)
@@ -318,7 +414,7 @@ export async function sendEmergencyCheckoutNotification(payload: {
         <p><strong>Work Hours:</strong> ${payload.workHours}</p>
         <p><strong>Reason:</strong> ${payload.emergencyReason}</p>
         <hr>
-        <p style="color:#666; font-size:12px">This is an automated notification from QCC Attendance System.</p>
+        <p style="color:#666; font-size:12px">QCC MANAGEMENT</p>
     `)
 
     const text = `Emergency Check-out by ${payload.userName} (${payload.employeeId})\nDepartment: ${payload.department}\nLocation: ${payload.location}\nCheck-in: ${payload.checkInTime}\nCheck-out: ${payload.checkOutTime}\nWork Hours: ${payload.workHours}\nReason: ${payload.emergencyReason}`
