@@ -38,7 +38,24 @@ export async function GET(request: NextRequest) {
   }
   const { data, error } = await auth.supabase.from("email_delivery_logs").select("*").order("created_at", { ascending: false }).limit(250)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ logs: data || [] })
+  const logs = data || []
+  const resendApiKey = String(process.env.RESEND_API_KEY || "").trim()
+  if (resendApiKey) {
+    await Promise.allSettled(logs.filter((log) => log.provider_message_id).map(async (log) => {
+      const response = await fetch(`https://api.resend.com/emails/${encodeURIComponent(log.provider_message_id)}`, { headers: { Authorization: `Bearer ${resendApiKey}` }, cache: "no-store" })
+      if (!response.ok) return
+      const provider = await response.json() as { last_event?: string }
+      const failed = ["failed", "bounced", "complained"].includes(String(provider.last_event || "").toLowerCase())
+      const nextStatus = failed ? "failed" : log.status
+      const nextError = failed && !log.error_message ? `Provider event: ${provider.last_event}` : log.error_message
+      if (nextStatus !== log.status || nextError !== log.error_message) {
+        await auth.supabase.from("email_delivery_logs").update({ status: nextStatus, error_message: nextError }).eq("id", log.id)
+        log.status = nextStatus
+        log.error_message = nextError
+      }
+    }))
+  }
+  return NextResponse.json({ logs })
 }
 
 export async function DELETE() {
