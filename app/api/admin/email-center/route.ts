@@ -41,6 +41,14 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ logs: data || [] })
 }
 
+export async function DELETE() {
+  const auth = await requireAdmin()
+  if (auth.error) return auth.error
+  const { error } = await auth.supabase.from("email_delivery_logs").delete().not("id", "is", null)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
+}
+
 export async function PATCH(request: NextRequest) {
   const auth = await requireAdmin()
   if (auth.error) return auth.error
