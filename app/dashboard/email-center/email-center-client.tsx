@@ -1,66 +1,82 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Mail, Save, Send, FileText, History } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { AlertCircle, CheckCircle2, Eye, History, Palette, Save, Send, ShieldCheck, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Textarea } from "@/components/ui/textarea"
+
+const logoUrl = "https://www.qccgh.com/images/qcc-logo.png"
+const presets = {
+  announcement: { label: "Formal staff announcement", subject: "Important update from QCC National Service Portal", title: "Important update from QCC National Service Portal", accent: "#117a6b", message: "We are writing to share an important update with you. Please sign in to the portal to review the details and any action required." },
+  reminder: { label: "Action required reminder", subject: "Action required: please review your pending request", title: "Action required on your pending request", accent: "#b45309", message: "A request is waiting for your attention. Please sign in to the portal and complete the required review." },
+  appreciation: { label: "Formal appreciation", subject: "Thank you from QCC National Service Portal", title: "Thank you for your contribution", accent: "#1d4ed8", message: "Thank you for your continued service and contribution to QCC. We appreciate your commitment to the organization." },
+}
+
+function buildEmailHtml(title: string, message: string, accent: string, ctaLabel: string, ctaUrl: string) {
+  return `<div style="margin:0;background:#eef6f5;padding:32px;font-family:Arial,sans-serif"><div style="max-width:620px;margin:auto;background:#fff;border-radius:18px;overflow:hidden;border:1px solid #d8e9e6"><div style="background:${accent};padding:26px 30px;color:#fff"><img src="${logoUrl}" alt="QCC logo" width="48" height="48" style="display:block;border-radius:10px;margin-bottom:18px"><div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:.85">QCC National Service Portal</div><h1 style="margin:12px 0 0;font-size:28px;line-height:1.2">${title}</h1></div><div style="padding:32px;color:#17333a"><p style="font-size:16px;line-height:1.7;white-space:pre-line">${message}</p><a href="${ctaUrl}" style="display:inline-block;margin-top:14px;background:${accent};color:#fff;padding:13px 22px;border-radius:8px;text-decoration:none;font-weight:700">${ctaLabel}</a></div><div style="background:#f7fbfa;padding:20px 30px;color:#6a7d80;font-size:12px;line-height:1.6">This is an official communication from the QCC National Service Portal. Please do not reply to this automated email.</div></div></div>`
+}
 
 export default function EmailCenterClient() {
   const [templates, setTemplates] = useState<any[]>([])
   const [logs, setLogs] = useState<any[]>([])
   const [selected, setSelected] = useState<any>(null)
   const [recipients, setRecipients] = useState("")
-  const [subject, setSubject] = useState("")
-  const [html, setHtml] = useState("")
+  const [subject, setSubject] = useState(presets.announcement.subject)
+  const [broadcastTitle, setBroadcastTitle] = useState(presets.announcement.title)
+  const [broadcastMessage, setBroadcastMessage] = useState(presets.announcement.message)
+  const [broadcastAccent, setBroadcastAccent] = useState(presets.announcement.accent)
+  const [ctaLabel, setCtaLabel] = useState("Open the QCC portal")
+  const [ctaUrl, setCtaUrl] = useState("https://www.qccgh.com")
+  const [templateMessage, setTemplateMessage] = useState("")
+  const [templateAccent, setTemplateAccent] = useState("#117a6b")
+  const [templateCta, setTemplateCta] = useState("Open request in portal")
+  const [tab, setTab] = useState("compose")
+  const [historyFilter, setHistoryFilter] = useState("all")
   const [message, setMessage] = useState("")
+
+  const filteredLogs = useMemo(() => historyFilter === "all" ? logs : logs.filter((log) => log.status === historyFilter), [historyFilter, logs])
+  const sentCount = logs.filter((log) => log.status === "sent").length
+  const failedCount = logs.filter((log) => log.status === "failed").length
+  const previewHtml = buildEmailHtml(broadcastTitle, broadcastMessage, broadcastAccent, ctaLabel, ctaUrl)
 
   async function load() {
     const [templateResponse, logResponse] = await Promise.all([fetch("/api/admin/email-center?view=templates"), fetch("/api/admin/email-center")])
-    const templateData = await templateResponse.json()
-    const logData = await logResponse.json()
-    setTemplates(templateData.templates || [])
-    setLogs(logData.logs || [])
+    if (templateResponse.status === 403 || logResponse.status === 403) { setMessage("Administrator access is required to open the Email Center."); return }
+    const templateData = await templateResponse.json(); const logData = await logResponse.json()
+    setTemplates(templateData.templates || []); setLogs(logData.logs || [])
     if (!selected && templateData.templates?.[0]) selectTemplate(templateData.templates[0])
   }
-
   function selectTemplate(template: any) {
-    setSelected(template)
-    setSubject(template.subject)
-    setHtml(template.html_body)
+    setSelected(template); setSubject(template.subject); setTemplateAccent(template.accent_color || "#117a6b")
+    setTemplateMessage(template.html_body.match(/<p>(.*?)<\/p>/)?.[1] || "Your request requires your attention in the QCC portal.")
   }
-
+  function applyPreset(key: keyof typeof presets) {
+    const preset = presets[key]; setSubject(preset.subject); setBroadcastTitle(preset.title); setBroadcastAccent(preset.accent); setBroadcastMessage(preset.message)
+  }
   useEffect(() => { load() }, [])
 
   async function saveTemplate() {
     if (!selected) return
-    const response = await fetch("/api/admin/email-center", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: selected.id, subject, html_body: html, text_body: selected.text_body, accent_color: selected.accent_color, is_active: selected.is_active }) })
-    setMessage(response.ok ? "Template saved. Future alerts will use this version." : "Unable to save template.")
-    await load()
+    const html = buildEmailHtml(selected.name, templateMessage, templateAccent, templateCta, ctaUrl)
+    const response = await fetch("/api/admin/email-center", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: selected.id, subject, html_body: html, text_body: templateMessage, accent_color: templateAccent, is_active: selected.is_active }) })
+    setMessage(response.ok ? "Template saved. Future alerts will use this design." : "Unable to save template."); await load()
   }
-
   async function sendEmail() {
-    const response = await fetch("/api/admin/email-center", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recipients: recipients.split(/[,\n]/), subject, html }) })
-    const data = await response.json()
-    setMessage(data.success ? "Email sent successfully." : data.error || "Some emails could not be sent.")
-    await load()
+    const html = buildEmailHtml(broadcastTitle, broadcastMessage, broadcastAccent, ctaLabel, ctaUrl)
+    const response = await fetch("/api/admin/email-center", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recipients: recipients.split(/[,\n]/), subject, html, text: broadcastMessage }) })
+    const data = await response.json(); setMessage(data.success ? "Broadcast sent successfully and recorded in history." : data.error || "Some emails failed. Open Sent history for details."); await load(); setTab("history")
   }
 
-  return <main className="min-h-screen bg-slate-950 p-6 text-slate-100 md:p-10">
-    <div className="mx-auto max-w-7xl space-y-8">
-      <header className="flex flex-col gap-4 rounded-3xl bg-gradient-to-br from-teal-900 via-slate-900 to-slate-950 p-8 shadow-2xl md:flex-row md:items-end md:justify-between">
-        <div><p className="text-sm font-semibold uppercase tracking-[0.22em] text-teal-300">Administrator tools</p><h1 className="mt-2 text-4xl font-bold tracking-tight">Email center</h1><p className="mt-3 max-w-2xl text-slate-300">Compose staff emails, refine module-specific alert designs, and audit every delivery from one place.</p></div>
-        <div className="rounded-2xl border border-teal-700/50 bg-teal-950/50 px-5 py-4 text-sm text-teal-100"><Mail className="mb-2 h-5 w-5" />Resend delivery is active</div>
-      </header>
-      {message && <div className="rounded-xl border border-teal-700 bg-teal-950/60 px-4 py-3 text-teal-100">{message}</div>}
-      <Tabs defaultValue="compose" className="space-y-6">
-        <TabsList className="bg-slate-900"><TabsTrigger value="compose"><Send className="mr-2 h-4 w-4" />Compose</TabsTrigger><TabsTrigger value="templates"><FileText className="mr-2 h-4 w-4" />Alert templates</TabsTrigger><TabsTrigger value="history"><History className="mr-2 h-4 w-4" />Sent history</TabsTrigger></TabsList>
-        <TabsContent value="compose"><Card className="border-slate-800 bg-slate-900 text-slate-100"><CardHeader><CardTitle>Send an email to staff</CardTitle></CardHeader><CardContent className="space-y-4"><Input value={recipients} onChange={(event) => setRecipients(event.target.value)} placeholder="Corporate emails, separated by commas" className="border-slate-700 bg-slate-950" /><Input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Subject" className="border-slate-700 bg-slate-950" /><Textarea value={html} onChange={(event) => setHtml(event.target.value)} placeholder="Write your message or HTML email" className="min-h-64 border-slate-700 bg-slate-950 font-mono" /><Button onClick={sendEmail} className="bg-teal-600 hover:bg-teal-500"><Send className="mr-2 h-4 w-4" />Send email</Button></CardContent></Card></TabsContent>
-        <TabsContent value="templates" className="grid gap-6 lg:grid-cols-[280px_1fr]"><Card className="border-slate-800 bg-slate-900 text-slate-100"><CardHeader><CardTitle>Modules</CardTitle></CardHeader><CardContent className="space-y-2">{templates.map((template) => <button key={template.id} onClick={() => selectTemplate(template)} className={`w-full rounded-xl p-3 text-left text-sm ${selected?.id === template.id ? "bg-teal-700" : "bg-slate-950 hover:bg-slate-800"}`}><span className="block font-semibold capitalize">{template.module.replace("_", " ")}</span><span className="text-slate-400">{template.name}</span></button>)}</CardContent></Card><Card className="border-slate-800 bg-slate-900 text-slate-100"><CardHeader><CardTitle>{selected ? `Edit ${selected.name}` : "Choose a template"}</CardTitle></CardHeader><CardContent className="space-y-4">{selected && <><Input value={subject} onChange={(event) => setSubject(event.target.value)} className="border-slate-700 bg-slate-950" /><Textarea value={html} onChange={(event) => setHtml(event.target.value)} className="min-h-[420px] border-slate-700 bg-slate-950 font-mono text-xs" /><p className="text-sm text-slate-400">Available variables: {'{{firstName}}'}, {'{{requestTitle}}'}, {'{{details}}'}, {'{{accentColor}}'}</p><Button onClick={saveTemplate} className="bg-teal-600 hover:bg-teal-500"><Save className="mr-2 h-4 w-4" />Save template</Button></>}</CardContent></Card></TabsContent>
-        <TabsContent value="history"><Card className="border-slate-800 bg-slate-900 text-slate-100"><CardHeader><CardTitle>System email history</CardTitle></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-slate-700 text-slate-400"><tr><th className="p-3">Date</th><th className="p-3">Recipient</th><th className="p-3">Module</th><th className="p-3">Subject</th><th className="p-3">Status</th></tr></thead><tbody>{logs.map((log) => <tr key={log.id} className="border-b border-slate-800"><td className="p-3">{new Date(log.created_at).toLocaleString()}</td><td className="p-3">{log.recipient_email}</td><td className="p-3 capitalize">{String(log.module).replace("_", " ")}</td><td className="p-3">{log.subject}</td><td className={`p-3 font-semibold ${log.status === "sent" ? "text-emerald-400" : "text-red-400"}`}>{log.status}</td></tr>)}</tbody></table></div></CardContent></Card></TabsContent>
-      </Tabs>
-    </div>
-  </main>
+  return <main className="min-h-screen bg-slate-950 p-4 text-slate-100 md:p-8"><div className="mx-auto max-w-7xl space-y-6">
+    <header className="flex flex-col gap-6 rounded-3xl bg-gradient-to-br from-teal-900 via-slate-900 to-slate-950 p-7 shadow-2xl md:flex-row md:items-center md:justify-between"><div className="flex items-start gap-4"><div className="rounded-2xl bg-white p-2"><img src={logoUrl} alt="QCC logo" className="h-12 w-12 rounded-xl object-contain" /></div><div><p className="text-xs font-bold uppercase tracking-[0.24em] text-teal-300">Administrator tools</p><h1 className="mt-2 text-3xl font-bold tracking-tight md:text-4xl">Email center</h1><p className="mt-2 max-w-2xl text-slate-300">Send formal staff communications, edit alert designs without writing HTML, and monitor every Resend delivery.</p></div></div><div className="flex items-center gap-3 rounded-2xl border border-teal-700/50 bg-teal-950/50 px-5 py-4 text-sm text-teal-100"><ShieldCheck className="h-5 w-5 text-teal-300" /><span><strong className="block">Admin only</strong>Resend delivery is active</span></div></header>
+    {message && <div className="rounded-xl border border-teal-700 bg-teal-950/60 px-4 py-3 text-teal-100">{message}</div>}
+    <div className="grid gap-4 md:grid-cols-3"><Card className="border-slate-800 bg-slate-900 text-slate-100"><CardContent className="flex items-center gap-4 p-5"><CheckCircle2 className="h-8 w-8 text-emerald-400" /><div><p className="text-sm text-slate-400">Delivered</p><p className="text-2xl font-bold">{sentCount}</p></div></CardContent></Card><Card className="border-slate-800 bg-slate-900 text-slate-100"><CardContent className="flex items-center gap-4 p-5"><AlertCircle className="h-8 w-8 text-red-400" /><div><p className="text-sm text-slate-400">Failed</p><p className="text-2xl font-bold">{failedCount}</p></div></CardContent></Card><Card className="border-slate-800 bg-slate-900 text-slate-100"><CardContent className="flex items-center gap-4 p-5"><Users className="h-8 w-8 text-teal-300" /><div><p className="text-sm text-slate-400">Tracked messages</p><p className="text-2xl font-bold">{logs.length}</p></div></CardContent></Card></div>
+    <Tabs value={tab} onValueChange={setTab} className="space-y-6"><TabsList className="bg-slate-900"><TabsTrigger value="compose"><Send className="mr-2 h-4 w-4" />Broadcast</TabsTrigger><TabsTrigger value="templates"><Palette className="mr-2 h-4 w-4" />Alert templates</TabsTrigger><TabsTrigger value="history"><History className="mr-2 h-4 w-4" />Delivery history</TabsTrigger></TabsList>
+      <TabsContent value="compose"><div className="grid gap-6 lg:grid-cols-[1fr_420px]"><Card className="border-slate-800 bg-slate-900 text-slate-100"><CardHeader><CardTitle>Formal staff broadcast</CardTitle><p className="text-sm text-slate-400">Choose a starting format, then personalize the message. No HTML knowledge is required.</p></CardHeader><CardContent className="space-y-4"><div className="grid gap-2 sm:grid-cols-3">{Object.entries(presets).map(([key, preset]) => <button key={key} onClick={() => applyPreset(key as keyof typeof presets)} className="rounded-xl border border-slate-700 bg-slate-950 p-3 text-left text-sm hover:border-teal-500"><span className="font-semibold">{preset.label}</span><span className="mt-1 block text-xs text-slate-400">Use formal QCC format</span></button>)}</div><label className="block text-sm font-medium">Recipients<textarea value={recipients} onChange={(event) => setRecipients(event.target.value)} placeholder="Enter corporate emails, one per line or separated by commas" className="mt-2 min-h-24 w-full rounded-md border border-slate-700 bg-slate-950 p-3 text-sm" /></label><label className="block text-sm font-medium">Email subject<Input value={subject} onChange={(event) => setSubject(event.target.value)} className="mt-2 border-slate-700 bg-slate-950" /></label><label className="block text-sm font-medium">Headline<Input value={broadcastTitle} onChange={(event) => setBroadcastTitle(event.target.value)} className="mt-2 border-slate-700 bg-slate-950" /></label><label className="block text-sm font-medium">Message<Textarea value={broadcastMessage} onChange={(event) => setBroadcastMessage(event.target.value)} className="mt-2 min-h-32 border-slate-700 bg-slate-950" /></label><div className="grid gap-4 sm:grid-cols-2"><label className="block text-sm font-medium">Button label<Input value={ctaLabel} onChange={(event) => setCtaLabel(event.target.value)} className="mt-2 border-slate-700 bg-slate-950" /></label><label className="block text-sm font-medium">Button link<Input value={ctaUrl} onChange={(event) => setCtaUrl(event.target.value)} className="mt-2 border-slate-700 bg-slate-950" /></label></div><Button onClick={sendEmail} className="bg-teal-600 hover:bg-teal-500"><Send className="mr-2 h-4 w-4" />Send formal broadcast</Button></CardContent></Card><Card className="border-slate-800 bg-slate-900 text-slate-100"><CardHeader><CardTitle className="flex items-center gap-2"><Eye className="h-4 w-4" />Live preview</CardTitle></CardHeader><CardContent><div className="overflow-hidden rounded-xl border border-slate-700 bg-[#eef6f5] p-3" dangerouslySetInnerHTML={{ __html: previewHtml }} /></CardContent></Card></div></TabsContent>
+      <TabsContent value="templates"><div className="grid gap-6 lg:grid-cols-[280px_1fr]"><Card className="border-slate-800 bg-slate-900 text-slate-100"><CardHeader><CardTitle>Alert types</CardTitle></CardHeader><CardContent className="space-y-2">{templates.map((template) => <button key={template.id} onClick={() => selectTemplate(template)} className={`w-full rounded-xl p-3 text-left text-sm ${selected?.id === template.id ? "bg-teal-700" : "bg-slate-950 hover:bg-slate-800"}`}><span className="block font-semibold capitalize">{template.module.replace("_", " ")}</span><span className="text-slate-400">{template.name}</span></button>)}</CardContent></Card><Card className="border-slate-800 bg-slate-900 text-slate-100"><CardHeader><CardTitle>{selected ? `Edit ${selected.name}` : "Choose an alert type"}</CardTitle><p className="text-sm text-slate-400">Use the guided fields below. The system keeps the professional QCC layout for you.</p></CardHeader><CardContent className="space-y-4">{selected && <><label className="block text-sm font-medium">Subject<Input value={subject} onChange={(event) => setSubject(event.target.value)} className="mt-2 border-slate-700 bg-slate-950" /></label><label className="block text-sm font-medium">Alert message<Textarea value={templateMessage} onChange={(event) => setTemplateMessage(event.target.value)} className="mt-2 min-h-36 border-slate-700 bg-slate-950" /></label><div className="grid gap-4 sm:grid-cols-2"><label className="block text-sm font-medium">Brand color<Input type="color" value={templateAccent} onChange={(event) => setTemplateAccent(event.target.value)} className="mt-2 h-10 border-slate-700 bg-slate-950 p-1" /></label><label className="block text-sm font-medium">Button label<Input value={templateCta} onChange={(event) => setTemplateCta(event.target.value)} className="mt-2 border-slate-700 bg-slate-950" /></label></div><div className="rounded-xl border border-slate-700 bg-slate-950 p-4 text-sm text-slate-400">Personalized values such as the staff name, request title, and request details are inserted automatically by the workflow.</div><Button onClick={saveTemplate} className="bg-teal-600 hover:bg-teal-500"><Save className="mr-2 h-4 w-4" />Save alert design</Button></>}</CardContent></Card></div></TabsContent>
+      <TabsContent value="history"><Card className="border-slate-800 bg-slate-900 text-slate-100"><CardHeader className="flex flex-row items-center justify-between"><div><CardTitle>Delivery history and failures</CardTitle><p className="mt-1 text-sm text-slate-400">Review exactly what Resend accepted or rejected.</p></div><select value={historyFilter} onChange={(event) => setHistoryFilter(event.target.value)} className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"><option value="all">All messages</option><option value="sent">Delivered</option><option value="failed">Failed only</option></select></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-slate-700 text-slate-400"><tr><th className="p-3">Date</th><th className="p-3">Recipient</th><th className="p-3">Module</th><th className="p-3">Subject</th><th className="p-3">Status</th><th className="p-3">Failure details</th></tr></thead><tbody>{filteredLogs.map((log) => <tr key={log.id} className="border-b border-slate-800 align-top"><td className="p-3 whitespace-nowrap">{new Date(log.created_at).toLocaleString()}</td><td className="p-3">{log.recipient_email}</td><td className="p-3 capitalize">{String(log.module).replace("_", " ")}</td><td className="max-w-xs p-3">{log.subject}</td><td className={`p-3 font-semibold ${log.status === "sent" ? "text-emerald-400" : "text-red-400"}`}>{log.status === "sent" ? "Delivered" : "Failed"}</td><td className="max-w-sm p-3 text-xs text-red-300">{log.error_message || (log.provider_message_id ? `Provider ID: ${log.provider_message_id}` : "—")}</td></tr>)}</tbody></table>{!filteredLogs.length && <div className="p-10 text-center text-slate-400">No delivery records match this filter.</div>}</div></CardContent></Card></TabsContent>
+    </Tabs></div></main>
 }

@@ -346,7 +346,7 @@ const navigationItems = [
     title: "Email Center",
     href: "/dashboard/email-center",
     icon: Mail,
-    roles: ["admin", "administrator", "it-admin", "it_admin"],
+    roles: ["admin", "administrator"],
     category: "admin",
   },
   {

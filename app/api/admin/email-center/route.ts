@@ -8,7 +8,7 @@ async function requireAdmin() {
   if (!user) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) }
   const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
   const role = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-  if (!["admin", "administrator", "super_admin", "god", "it_admin"].includes(role)) {
+  if (!["admin", "administrator"].includes(role)) {
     return { error: NextResponse.json({ error: "Administrator access required" }, { status: 403 }) }
   }
   return { supabase: await createAdminClient(), user }
