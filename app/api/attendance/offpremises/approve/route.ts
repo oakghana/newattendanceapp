@@ -242,6 +242,14 @@ export async function POST(request: NextRequest) {
               data: { request_id },
               is_read: false,
             })
+            const staffEmail = String(pendingRequest.user_profiles?.email || '').trim()
+            if (staffEmail) {
+              await emailService.sendEmail(staffEmail, {
+                subject: 'Off-Premises Request Approved',
+                html: '<p>Your off-premises request has been approved by your manager.</p><p>No active check-in was found, so HR or your manager must complete the manual correction.</p>',
+                text: 'Your off-premises request has been approved by your manager. No active check-in was found, so HR or your manager must complete the manual correction.',
+              }, { idempotencyKey: `offpremises-approved/${request_id}` })
+            }
           } catch (err) {
             console.warn('[v0] Failed to send notification (no open attendance):', err)
           }
