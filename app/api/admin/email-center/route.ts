@@ -43,10 +43,17 @@ export async function POST(request: NextRequest) {
   const auth = await requireAdmin()
   if (auth.error) return auth.error
   const body = await request.json()
-  const recipients = Array.isArray(body.recipients) ? body.recipients.map((value: unknown) => String(value).trim()).filter(Boolean) : []
+  let recipients = Array.isArray(body.recipients) ? [...new Set(body.recipients.map((value: unknown) => String(value).trim().toLowerCase()).filter((value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)))] : []
+  if (body.broadcastAll === true) {
+    const { data: staff, error: staffError } = await auth.supabase.from("user_profiles").select("email").eq("is_active", true).not("email", "is", null)
+    if (staffError) return NextResponse.json({ error: "Unable to load active staff recipients", details: staffError.message }, { status: 500 })
+    recipients = [...new Set((staff || []).map((profile: { email?: string | null }) => String(profile.email || "").trim().toLowerCase()).filter((value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)))]
+  }
   const subject = String(body.subject || "").trim()
   const html = String(body.html || "").trim()
-  if (!recipients.length || !subject || !html) return NextResponse.json({ error: "Recipients, subject, and message are required" }, { status: 400 })
+  if (!recipients.length || !subject || !html) return NextResponse.json({ error: body.broadcastAll ? "No active staff members have a valid registered email address." : "Add at least one valid recipient, a subject, and a message before sending." }, { status: 400 })
   const results = await Promise.all(recipients.map((recipient: string) => emailService.sendEmail(recipient, { subject, html, text: String(body.text || html.replace(/<[^>]+>/g, " ")) }, { emailModule: "admin", emailEvent: "broadcast", sentBy: auth.user.id, idempotencyKey: `admin-broadcast/${auth.user.id}/${Date.now()}/${recipient}` })))
-  return NextResponse.json({ success: results.every((result) => result.success), results })
+  const sentCount = results.filter((result) => result.success).length
+  const failedCount = results.length - sentCount
+  return NextResponse.json({ success: failedCount === 0, sentCount, failedCount, results })
 }
