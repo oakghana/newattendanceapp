@@ -35,30 +35,17 @@ export async function GET() {
 
     const admin = await createAdminClient()
     const nowMs = Date.now()
-    // Only open sessions are fetched, and in pages: an unfiltered select is silently
-    // capped at 1000 rows (oldest first), which hid every currently open session.
-    const PAGE_SIZE = 1000
-    const data: any[] = []
-    for (let from = 0; ; from += PAGE_SIZE) {
-      const { data: page, error: pageError } = await admin
-        .from("attendance_records")
-        .select("id, user_id, check_in_time, check_out_time, check_in_location_name")
-        .is("check_out_time", null)
-        .not("check_in_time", "is", null)
-        .order("check_in_time", { ascending: true })
-        .range(from, from + PAGE_SIZE - 1)
-      if (pageError) return NextResponse.json({ error: pageError.message }, { status: 500 })
-      data.push(...(page || []))
-      if (!page || page.length < PAGE_SIZE) break
-    }
+    // Let PostgreSQL compare the stored timestamp directly. This avoids silently
+    // dropping valid sessions when JavaScript parses timestamp formats differently
+    // from the database timezone.
+    const { data: rows, error: attendanceError } = await admin
+      .from("attendance_records")
+      .select("id, user_id, check_in_time, check_out_time, check_in_location_name")
+      .is("check_out_time", null)
+      .lte("check_in_time", new Date(nowMs - THRESHOLD_HOURS * 60 * 60 * 1000).toISOString())
+      .order("check_in_time", { ascending: true })
 
-    // Elapsed time is calculated in JavaScript so timestamp-with/without-time-zone
-    // values are handled consistently instead of relying on a database cast.
-    const rows = data.filter((row: any) => {
-      const checkInMs = Date.parse(row.check_in_time)
-      const hasNoCheckout = row.check_out_time == null || String(row.check_out_time).trim() === ""
-      return hasNoCheckout && Number.isFinite(checkInMs) && nowMs - checkInMs >= THRESHOLD_HOURS * 60 * 60 * 1000
-    }) as Array<Omit<OpenAttendance, "user_profiles">>
+    if (attendanceError) return NextResponse.json({ error: attendanceError.message }, { status: 500 })
     const userIds = [...new Set(rows.map((row) => row.user_id).filter(Boolean))]
     const { data: profiles, error: profilesError } = userIds.length
       ? await admin.from("user_profiles").select("id, employee_id, first_name, last_name, department_id, departments(name)").in("id", userIds)
