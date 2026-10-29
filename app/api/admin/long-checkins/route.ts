@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 
 const ALLOWED_ROLES = new Set(["admin"])
+const THRESHOLD_HOURS = 10
 
 type OpenAttendance = {
   id: string
@@ -46,7 +47,7 @@ export async function GET() {
     const rows = (data || []).filter((row: any) => {
       const checkInMs = Date.parse(row.check_in_time)
       const hasNoCheckout = row.check_out_time == null || String(row.check_out_time).trim() === ""
-      return hasNoCheckout && Number.isFinite(checkInMs) && nowMs - checkInMs >= 12 * 60 * 60 * 1000
+      return hasNoCheckout && Number.isFinite(checkInMs) && nowMs - checkInMs >= THRESHOLD_HOURS * 60 * 60 * 1000
     }) as Array<Omit<OpenAttendance, "user_profiles">>
     const userIds = [...new Set(rows.map((row) => row.user_id).filter(Boolean))]
     const { data: profiles, error: profilesError } = userIds.length
@@ -73,7 +74,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       records,
-      thresholdHours: 12,
+      thresholdHours: THRESHOLD_HOURS,
       calculatedAt: new Date(nowMs).toISOString(),
     })
   } catch (error) {
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest) {
         check_out_method: "admin_long_checkin_cleanup",
         work_hours: Math.max(0, workHours),
         auto_checkout: true,
-        notes: body.note?.trim() || "Administrator checked out an attendance record open for more than 12 hours.",
+        notes: body.note?.trim() || `Administrator checked out an attendance record open for more than ${THRESHOLD_HOURS} hours.`,
         updated_at: now.toISOString(),
       }).eq("id", record.id).is("check_out_time", null)
       if (!error) updated.push(record.id)
