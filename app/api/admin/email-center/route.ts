@@ -80,12 +80,12 @@ export async function POST(request: NextRequest) {
     while (nextRecipientIndex < recipients.length) {
       const index = nextRecipientIndex++
       const recipient = recipients[index]
-      let result = await emailService.sendEmail(recipient, { subject, html, text }, { emailModule: "admin", emailEvent: "broadcast", sentBy: auth.user.id, idempotencyKey: `admin-broadcast/${auth.user.id}/${broadcastStartedAt}/${recipient}` })
+      let result = await emailService.sendEmail(recipient, { subject, html, text }, { emailModule: "broadcast", emailEvent: "broadcast", sentBy: auth.user.id, idempotencyKey: `admin-broadcast/${auth.user.id}/${broadcastStartedAt}/${recipient}` })
       let retryIndex = 0
       while (!result.success && /too many requests|rate limit/i.test(String(result.error || "")) && retryIndex < RATE_LIMIT_RETRY_DELAYS_MS.length) {
         await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_RETRY_DELAYS_MS[retryIndex]))
         retryIndex += 1
-        result = await emailService.sendEmail(recipient, { subject, html, text }, { emailModule: "admin", emailEvent: "broadcast", sentBy: auth.user.id, idempotencyKey: `admin-broadcast/${auth.user.id}/${broadcastStartedAt}/${recipient}` })
+        result = await emailService.sendEmail(recipient, { subject, html, text }, { emailModule: "broadcast", emailEvent: "broadcast", sentBy: auth.user.id, idempotencyKey: `admin-broadcast/${auth.user.id}/${broadcastStartedAt}/${recipient}` })
       }
       results[index] = result
       await new Promise((resolve) => setTimeout(resolve, WORKER_INTERVAL_MS))
