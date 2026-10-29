@@ -1,5 +1,6 @@
 import "server-only"
 import nodemailer from "nodemailer"
+import { createHash } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/server"
 
 interface EmailConfig {
@@ -258,6 +259,9 @@ class EmailService {
     // deployments where SMTP connections are unreliable.
     const resendApiKey = String(process.env.RESEND_API_KEY || "").trim()
     const resendDomain = String(process.env.RESEND_EMAIL_DOMAIN || "").trim()
+    const idempotencyBase = String(data.idempotencyKey || data.referenceId || data.requestId || data.id || "email")
+    const messageFingerprint = createHash("sha256").update(JSON.stringify({ to, subject, html, text, cc: template.cc || [] })).digest("hex").slice(0, 24)
+    const providerIdempotencyKey = `workflow-email/${encodeURIComponent(`${idempotencyBase}/${to}/${messageFingerprint}`)}`
     if (resendApiKey && resendDomain) {
       try {
         const response = await fetch("https://api.resend.com/emails", {
@@ -265,11 +269,12 @@ class EmailService {
           headers: {
             Authorization: `Bearer ${resendApiKey}`,
             "Content-Type": "application/json",
-            "Idempotency-Key": `workflow-email/${encodeURIComponent(String(data.idempotencyKey || data.referenceId || data.requestId || data.id || `${to}-${subject}`))}`,
+            "Idempotency-Key": providerIdempotencyKey,
           },
           body: JSON.stringify({
             from: `${this.senderName} <notifications@${resendDomain}>`,
             to: [to],
+            reply_to: this.senderEmail ? [this.senderEmail] : undefined,
             subject,
             html,
             text,
@@ -303,6 +308,7 @@ class EmailService {
       const mailOptions = {
         from: `"${this.senderName}" <${this.senderEmail}>`,
         to,
+        replyTo: this.senderEmail,
         subject,
         html,
         text,

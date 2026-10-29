@@ -38,7 +38,32 @@ export async function GET(request: NextRequest) {
   }
   const { data, error } = await auth.supabase.from("email_delivery_logs").select("*").order("created_at", { ascending: false }).limit(250)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ logs: data || [] })
+  const logs = data || []
+  const resendApiKey = String(process.env.RESEND_API_KEY || "").trim()
+  if (resendApiKey) {
+    await Promise.allSettled(logs.filter((log) => log.provider_message_id).map(async (log) => {
+      const response = await fetch(`https://api.resend.com/emails/${encodeURIComponent(log.provider_message_id)}`, { headers: { Authorization: `Bearer ${resendApiKey}` }, cache: "no-store" })
+      if (!response.ok) return
+      const provider = await response.json() as { last_event?: string }
+      const failed = ["failed", "bounced", "complained"].includes(String(provider.last_event || "").toLowerCase())
+      const nextStatus = failed ? "failed" : log.status
+      const nextError = failed && !log.error_message ? `Provider event: ${provider.last_event}` : log.error_message
+      if (nextStatus !== log.status || nextError !== log.error_message) {
+        await auth.supabase.from("email_delivery_logs").update({ status: nextStatus, error_message: nextError }).eq("id", log.id)
+        log.status = nextStatus
+        log.error_message = nextError
+      }
+    }))
+  }
+  return NextResponse.json({ logs })
+}
+
+export async function DELETE() {
+  const auth = await requireAdmin()
+  if (auth.error) return auth.error
+  const { error } = await auth.supabase.from("email_delivery_logs").delete().not("id", "is", null)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
 }
 
 export async function PATCH(request: NextRequest) {
@@ -56,6 +81,16 @@ export async function POST(request: NextRequest) {
   const auth = await requireAdmin()
   if (auth.error) return auth.error
   const body = await request.json()
+  if (body.retryLogId) {
+    const { data: failedLog, error: logError } = await auth.supabase.from("email_delivery_logs").select("id, recipient, subject, module").eq("id", String(body.retryLogId)).maybeSingle()
+    if (logError || !failedLog) return NextResponse.json({ error: "Failed alert record could not be found." }, { status: 404 })
+    const retrySubject = String(failedLog.subject || "Email alert retry")
+    const safeSubject = retrySubject.replace(/[&<>]/g, (character: string) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[character] || character)
+    const retryText = `This is a retry of the email alert: ${retrySubject}. Please review the original notification details in the QCC portal.`
+    const retryHtml = `<p>This is a retry of the email alert <strong>${safeSubject}</strong>.</p><p>Please review the notification details in the QCC portal.</p>`
+    const result = await emailService.sendEmail(String(failedLog.recipient), { subject: retrySubject, html: retryHtml, text: retryText }, { emailEvent: "alert_retry", emailModule: String(failedLog.module || "admin"), idempotencyKey: `retry/${failedLog.id}/${Date.now()}` })
+    return NextResponse.json({ success: result.success, error: result.error || null })
+  }
   let recipients = Array.isArray(body.recipients) ? [...new Set(body.recipients.map((value: unknown) => String(value).trim().toLowerCase()).filter((value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)))] : []
   const requestedAudiences = Array.isArray(body.audienceRoles) ? body.audienceRoles.map((value: unknown) => String(value)) : []
   const isAllStaff = body.broadcastAll === true || requestedAudiences.includes("all")
