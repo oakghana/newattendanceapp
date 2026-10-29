@@ -191,7 +191,54 @@ class EmailService {
     return this.isConfigured && !!this.transporter
   }
 
+  private async logDelivery(to: string, subject: string, status: "sent" | "failed", data: Record<string, any>, messageId?: string, errorMessage?: string) {
+    try {
+      const adminClient = await createAdminClient()
+      await adminClient.from("email_delivery_logs").insert({
+        recipient_user_id: data.recipientUserId || null,
+        recipient_email: to,
+        module: String(data.emailModule || "system"),
+        event_key: String(data.emailEvent || "notification"),
+        subject,
+        status,
+        provider_message_id: messageId || null,
+        error_message: errorMessage || null,
+        metadata: data.metadata || {},
+        sent_by: data.sentBy || null,
+      })
+    } catch (error) {
+      console.warn("[EmailService] Failed to write delivery log:", error)
+    }
+  }
+
   async sendEmail(to: string, template: EmailTemplate, data: Record<string, any> = {}) {
+    const subjectHint = String(template.subject || "").toLowerCase()
+    const inferredModule = subjectHint.includes("loan") ? "loan" : subjectHint.includes("off-premises") || subjectHint.includes("off premises") ? "off_premises" : subjectHint.includes("leave") ? "leave" : "system"
+    const module = String(data.emailModule || inferredModule).trim()
+    const eventKey = String(data.emailEvent || (subjectHint.includes("approv") ? "approval" : "notification")).trim()
+    data = { ...data, emailModule: module, emailEvent: eventKey }
+    if (module !== "system") {
+      try {
+        const adminClient = await createAdminClient()
+        const { data: savedTemplate } = await adminClient
+          .from("email_templates")
+          .select("subject, html_body, text_body, accent_color, is_active")
+          .eq("module", module)
+          .eq("event_key", eventKey)
+          .maybeSingle()
+        if (savedTemplate?.is_active) {
+          template = {
+            subject: savedTemplate.subject,
+            html: savedTemplate.html_body,
+            text: savedTemplate.text_body,
+          }
+          data = { ...data, accentColor: savedTemplate.accent_color }
+        }
+      } catch (error) {
+        console.warn("[EmailService] Failed to load editable template; using workflow default", error)
+      }
+    }
+
     // Replace template variables before selecting the delivery provider.
     const subject = this.replaceTemplateVariables(template.subject, data)
     const html = this.replaceTemplateVariables(template.html, data)
@@ -221,9 +268,12 @@ class EmailService {
         })
         const result = await response.json().catch(() => ({}))
         if (!response.ok) {
-          console.warn("[EmailService] Resend rejected email:", result?.message || response.statusText)
-          return { success: false, error: result?.message || response.statusText }
+          const errorMessage = result?.message || response.statusText
+          await this.logDelivery(to, subject, "failed", data, undefined, errorMessage)
+          console.warn("[EmailService] Resend rejected email:", errorMessage)
+          return { success: false, error: errorMessage }
         }
+        await this.logDelivery(to, subject, "sent", data, result?.id)
         console.log("[EmailService] Resend email sent successfully:", result?.id)
         return { success: true, messageId: result?.id }
       } catch (error: any) {
