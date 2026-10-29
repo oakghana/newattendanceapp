@@ -16,6 +16,7 @@ interface EmailTemplate {
   subject: string
   html: string
   text: string
+  cc?: string[]
 }
 
 const EMAIL_WATERMARK_TEXT = "QCC-LOANLEAVE-APP"
@@ -231,6 +232,7 @@ class EmailService {
             subject: savedTemplate.subject,
             html: savedTemplate.html_body,
             text: savedTemplate.text_body,
+            cc: template.cc,
           }
           data = { ...data, accentColor: savedTemplate.accent_color }
         }
@@ -271,6 +273,7 @@ class EmailService {
             subject,
             html,
             text,
+            ...(template.cc?.length ? { cc: template.cc } : {}),
           }),
         })
         const result = await response.json().catch(() => ({}))
@@ -303,6 +306,7 @@ class EmailService {
         subject,
         html,
         text,
+        ...(template.cc?.length ? { cc: template.cc } : {}),
       }
 
       const result = await this.transporter.sendMail(mailOptions)
