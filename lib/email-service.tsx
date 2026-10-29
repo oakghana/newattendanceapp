@@ -270,6 +270,7 @@ class EmailService {
           body: JSON.stringify({
             from: `${this.senderName} <notifications@${resendDomain}>`,
             to: [to],
+            reply_to: this.senderEmail ? [this.senderEmail] : undefined,
             subject,
             html,
             text,
@@ -303,6 +304,7 @@ class EmailService {
       const mailOptions = {
         from: `"${this.senderName}" <${this.senderEmail}>`,
         to,
+        replyTo: this.senderEmail,
         subject,
         html,
         text,
