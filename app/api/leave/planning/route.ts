@@ -903,7 +903,8 @@ export async function GET(request: NextRequest) {
             geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
           )
         `)
-        .order("created_at", { ascending: false })
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
 
       if (!includeArchived) {
         officeQuery = officeQuery.eq("is_archived", false)
@@ -957,7 +958,8 @@ export async function GET(request: NextRequest) {
           let fallbackQuery = admin
             .from("leave_plan_requests")
             .select("*")
-            .order("created_at", { ascending: false })
+            .order("created_at", { ascending: true })
+            .order("id", { ascending: true })
           if (!includeArchived) fallbackQuery = fallbackQuery.eq("is_archived", false)
           if (isRegionalHr) {
             fallbackQuery = fallbackQuery
@@ -996,7 +998,7 @@ export async function GET(request: NextRequest) {
           `)
                 .eq("workflow_route", "regional")
                 .in("user_id", ids)
-                .order("created_at", { ascending: false })
+                .order("created_at", { ascending: true })
                 .order("id", { ascending: true })
                 .range(from, to),
             ),
@@ -1005,7 +1007,7 @@ export async function GET(request: NextRequest) {
         const regionalRowsError = regionalChunks.find((chunk) => chunk.error)?.error
         const regionalRows = regionalChunks
           .flatMap((chunk) => chunk.data)
-          .sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+.sort((a: any, b: any) => String(a.created_at || "").localeCompare(String(b.created_at || "")))
 
         if (regionalRowsError) throw regionalRowsError
         allRegionalRequests = regionalRows || []
