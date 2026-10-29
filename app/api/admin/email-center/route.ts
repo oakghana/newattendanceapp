@@ -7,6 +7,13 @@ export const maxDuration = 120
 const BROADCAST_CONCURRENCY = 8
 const WORKER_INTERVAL_MS = 1000
 const RATE_LIMIT_RETRY_DELAYS_MS = [1500, 3500]
+const AUDIENCE_ROLES: Record<string, string[]> = {
+  staff: ["staff", "nsp", "intern", "contract", "contract_role", "contract_staff", "contract_worker"],
+  leadership: ["department_head", "head_of_department", "regional_manager"],
+  hr_accounts: ["hr", "hr_executive", "hr_executive_officer", "director_hr", "manager_hr", "regional_hr", "regional_hr_office", "accounts_executive"],
+  operations: ["transport_manager", "chief_driver", "audit_staff", "it-admin", "it_admin"],
+  administrators: ["admin", "administrator"],
+}
 
 async function requireAdmin() {
   const supabase = await createClient()
@@ -50,14 +57,20 @@ export async function POST(request: NextRequest) {
   if (auth.error) return auth.error
   const body = await request.json()
   let recipients = Array.isArray(body.recipients) ? [...new Set(body.recipients.map((value: unknown) => String(value).trim().toLowerCase()).filter((value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)))] : []
-  if (body.broadcastAll === true) {
-    const { data: staff, error: staffError } = await auth.supabase.from("user_profiles").select("email").eq("is_active", true).not("email", "is", null)
-    if (staffError) return NextResponse.json({ error: "Unable to load active staff recipients", details: staffError.message }, { status: 500 })
+  const requestedAudiences = Array.isArray(body.audienceRoles) ? body.audienceRoles.map((value: unknown) => String(value)) : []
+  const isAllStaff = body.broadcastAll === true || requestedAudiences.includes("all")
+  if (isAllStaff || requestedAudiences.length) {
+    const selectedRoles = isAllStaff ? null : [...new Set(requestedAudiences.flatMap((audience: string) => AUDIENCE_ROLES[audience] || []))]
+    if (!isAllStaff && !selectedRoles.length) return NextResponse.json({ error: "Choose at least one supported staff category." }, { status: 400 })
+    let staffQuery = auth.supabase.from("user_profiles").select("email").eq("is_active", true).not("email", "is", null)
+    if (selectedRoles) staffQuery = staffQuery.in("role", selectedRoles)
+    const { data: staff, error: staffError } = await staffQuery
+    if (staffError) return NextResponse.json({ error: "Unable to load selected staff recipients", details: staffError.message }, { status: 500 })
     recipients = [...new Set((staff || []).map((profile: { email?: string | null }) => String(profile.email || "").trim().toLowerCase()).filter((value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)))]
   }
   const subject = String(body.subject || "").trim()
   const html = String(body.html || "").trim()
-  if (!recipients.length || !subject || !html) return NextResponse.json({ error: body.broadcastAll ? "No active staff members have a valid registered email address." : "Add at least one valid recipient, a subject, and a message before sending." }, { status: 400 })
+  if (!recipients.length || !subject || !html) return NextResponse.json({ error: (body.broadcastAll || requestedAudiences.length) ? "No active staff members in the selected category have a valid registered email address." : "Add at least one valid recipient, a subject, and a message before sending." }, { status: 400 })
   const text = String(body.text || html.replace(/<[^>]+>/g, " "))
   const broadcastStartedAt = Date.now()
   const results = new Array(recipients.length)
