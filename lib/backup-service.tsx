@@ -278,7 +278,7 @@ class BackupService {
             {{tableSummary}}
           </ul>
           <hr style="margin: 20px 0;">
-          <p style="color: #666; font-size: 12px;">This is an automated notification from QCC Attendance System.</p>
+          <p style="color: #666; font-size: 12px;">QCC MANAGEMENT</p>
       `),
       text: "System backup completed successfully. Backup ID: {{backupId}}, Size: {{sizeKB}} KB, Tables: {{tableCount}}",
     }

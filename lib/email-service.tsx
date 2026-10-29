@@ -403,7 +403,7 @@ export async function sendEmergencyCheckoutNotification(payload: {
         <p><strong>Work Hours:</strong> ${payload.workHours}</p>
         <p><strong>Reason:</strong> ${payload.emergencyReason}</p>
         <hr>
-        <p style="color:#666; font-size:12px">This is an automated notification from QCC Attendance System.</p>
+        <p style="color:#666; font-size:12px">QCC MANAGEMENT</p>
     `)
 
     const text = `Emergency Check-out by ${payload.userName} (${payload.employeeId})\nDepartment: ${payload.department}\nLocation: ${payload.location}\nCheck-in: ${payload.checkInTime}\nCheck-out: ${payload.checkOutTime}\nWork Hours: ${payload.workHours}\nReason: ${payload.emergencyReason}`

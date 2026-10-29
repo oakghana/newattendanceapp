@@ -211,7 +211,7 @@ function generateNotificationEmailHTML(
       </div>
       <div style="margin-top:24px">${actionButton}</div>
       <div class="footer">
-        <p>This is an automated notification from the QCC National Service Portal. Please do not reply to this email.</p>
+        <p>QCC MANAGEMENT</p>
       </div>
     </div>
   </div>
