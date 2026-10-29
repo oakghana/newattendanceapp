@@ -19,7 +19,7 @@ const APP_URL = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http
 const GREEN       = "#117a6b"
 const DARK_GREEN  = "#0b3f46"
 const MID_GREEN   = "#159a87"
-const LOGO_URL    = `${APP_URL}/images/qcc-logo.png`
+const LOGO_URL    = `${APP_URL}/logos/qcc-logo.png`
 
 // ─── Base email shell ────────────────────────────────────────────────────────
 function baseLayout(title: string, body: string): string {
@@ -710,7 +710,7 @@ export async function notifyLeaveResumeReminder(
   }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
+// ═══���════════════════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════���════════════════════════════
 
 /**

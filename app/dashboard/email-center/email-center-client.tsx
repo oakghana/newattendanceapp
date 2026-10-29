@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 
-const logoUrl = "https://www.qccgh.com/images/qcc-logo.png"
+const logoUrl = typeof window === "undefined" ? "/logos/qcc-logo.png" : `${window.location.origin}/logos/qcc-logo.png`
 const presets = {
   announcement: { label: "Formal staff announcement", subject: "Important update from QCC Portal", title: "Important update from QCC Portal", accent: "#117a6b", message: "We are writing to share an important update with you. Please sign in to the portal to review the details and any action required." },
   reminder: { label: "Action required reminder", subject: "Action required: please review your pending request", title: "Action required on your pending request", accent: "#b45309", message: "A request is waiting for your attention. Please sign in to the portal and complete the required review." },
