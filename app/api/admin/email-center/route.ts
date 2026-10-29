@@ -4,8 +4,9 @@ import { emailService } from "@/lib/email-service"
 
 export const maxDuration = 120
 
-const DELIVERY_INTERVAL_MS = 125
-const RATE_LIMIT_RETRY_DELAYS_MS = [1000, 2500]
+const BROADCAST_CONCURRENCY = 8
+const WORKER_INTERVAL_MS = 1000
+const RATE_LIMIT_RETRY_DELAYS_MS = [1500, 3500]
 
 async function requireAdmin() {
   const supabase = await createClient()
@@ -58,20 +59,27 @@ export async function POST(request: NextRequest) {
   const html = String(body.html || "").trim()
   if (!recipients.length || !subject || !html) return NextResponse.json({ error: body.broadcastAll ? "No active staff members have a valid registered email address." : "Add at least one valid recipient, a subject, and a message before sending." }, { status: 400 })
   const text = String(body.text || html.replace(/<[^>]+>/g, " "))
-  const results = []
   const broadcastStartedAt = Date.now()
+  const results = new Array(recipients.length)
+  let nextRecipientIndex = 0
 
-  for (const [index, recipient] of recipients.entries()) {
-    if (index > 0) await new Promise((resolve) => setTimeout(resolve, DELIVERY_INTERVAL_MS))
-    let result = await emailService.sendEmail(recipient, { subject, html, text }, { emailModule: "admin", emailEvent: "broadcast", sentBy: auth.user.id, idempotencyKey: `admin-broadcast/${auth.user.id}/${broadcastStartedAt}/${recipient}` })
-    let retryIndex = 0
-    while (!result.success && /too many requests|rate limit/i.test(String(result.error || "")) && retryIndex < RATE_LIMIT_RETRY_DELAYS_MS.length) {
-      await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_RETRY_DELAYS_MS[retryIndex]))
-      retryIndex += 1
-      result = await emailService.sendEmail(recipient, { subject, html, text }, { emailModule: "admin", emailEvent: "broadcast", sentBy: auth.user.id, idempotencyKey: `admin-broadcast/${auth.user.id}/${broadcastStartedAt}/${recipient}` })
+  async function sendNextRecipient() {
+    while (nextRecipientIndex < recipients.length) {
+      const index = nextRecipientIndex++
+      const recipient = recipients[index]
+      let result = await emailService.sendEmail(recipient, { subject, html, text }, { emailModule: "admin", emailEvent: "broadcast", sentBy: auth.user.id, idempotencyKey: `admin-broadcast/${auth.user.id}/${broadcastStartedAt}/${recipient}` })
+      let retryIndex = 0
+      while (!result.success && /too many requests|rate limit/i.test(String(result.error || "")) && retryIndex < RATE_LIMIT_RETRY_DELAYS_MS.length) {
+        await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_RETRY_DELAYS_MS[retryIndex]))
+        retryIndex += 1
+        result = await emailService.sendEmail(recipient, { subject, html, text }, { emailModule: "admin", emailEvent: "broadcast", sentBy: auth.user.id, idempotencyKey: `admin-broadcast/${auth.user.id}/${broadcastStartedAt}/${recipient}` })
+      }
+      results[index] = result
+      await new Promise((resolve) => setTimeout(resolve, WORKER_INTERVAL_MS))
     }
-    results.push(result)
   }
+
+  await Promise.all(Array.from({ length: Math.min(BROADCAST_CONCURRENCY, recipients.length) }, () => sendNextRecipient()))
   const sentCount = results.filter((result) => result.success).length
   const failedCount = results.length - sentCount
   return NextResponse.json({ success: failedCount === 0, sentCount, failedCount, results })
