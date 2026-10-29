@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
 import { isRegionalManagerLocationMatch, loadLocationHierarchyMap } from "@/lib/regional-manager-scope"
+import { emailService } from "@/lib/email-service"
 
 export async function POST(request: NextRequest) {
   try {
@@ -204,6 +205,14 @@ export async function POST(request: NextRequest) {
               data: { request_id, attendance_record_id: updated?.id },
               is_read: false,
             })
+            const staffEmail = String(pendingRequest.user_profiles?.email || '').trim()
+            if (staffEmail) {
+              await emailService.sendEmail(staffEmail, {
+                subject: 'Off-Premises Check-Out Approved',
+                html: `<p>Your off-premises check-out request has been approved.</p><p>You were checked out remotely at ${new Date(checkOutTime).toLocaleString()}.</p>`,
+                text: `Your off-premises check-out request has been approved. You were checked out remotely at ${new Date(checkOutTime).toLocaleString()}.`,
+              }, { idempotencyKey: `offpremises-approved/${request_id}` })
+            }
           } catch (err) {
             console.warn('[v0] Failed to send checkout approval notification:', err)
           }

@@ -192,6 +192,46 @@ class EmailService {
   }
 
   async sendEmail(to: string, template: EmailTemplate, data: Record<string, any> = {}) {
+    // Replace template variables before selecting the delivery provider.
+    const subject = this.replaceTemplateVariables(template.subject, data)
+    const html = this.replaceTemplateVariables(template.html, data)
+    const text = this.replaceTemplateVariables(template.text, data)
+
+    // Resend is the primary transactional provider when connected. Calling its
+    // HTTP API directly keeps the server dependency-free and works in serverless
+    // deployments where SMTP connections are unreliable.
+    const resendApiKey = String(process.env.RESEND_API_KEY || "").trim()
+    const resendDomain = String(process.env.RESEND_EMAIL_DOMAIN || "").trim()
+    if (resendApiKey && resendDomain) {
+      try {
+        const response = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${resendApiKey}`,
+            "Content-Type": "application/json",
+            "Idempotency-Key": `workflow-email/${encodeURIComponent(String(data.idempotencyKey || data.referenceId || data.requestId || data.id || `${to}-${subject}`))}`,
+          },
+          body: JSON.stringify({
+            from: `${this.senderName} <notifications@${resendDomain}>`,
+            to: [to],
+            subject,
+            html,
+            text,
+          }),
+        })
+        const result = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          console.warn("[EmailService] Resend rejected email:", result?.message || response.statusText)
+          return { success: false, error: result?.message || response.statusText }
+        }
+        console.log("[EmailService] Resend email sent successfully:", result?.id)
+        return { success: true, messageId: result?.id }
+      } catch (error: any) {
+        console.error("[EmailService] Resend request failed:", error)
+        return { success: false, error: error?.message || "Resend request failed" }
+      }
+    }
+
     await this.ensureInitialized()
 
     if (!this.isConfigured || !this.transporter) {
@@ -200,11 +240,6 @@ class EmailService {
     }
 
     try {
-      // Replace template variables
-      const subject = this.replaceTemplateVariables(template.subject, data)
-      const html = this.replaceTemplateVariables(template.html, data)
-      const text = this.replaceTemplateVariables(template.text, data)
-
       const mailOptions = {
         from: `"${this.senderName}" <${this.senderEmail}>`,
         to,
