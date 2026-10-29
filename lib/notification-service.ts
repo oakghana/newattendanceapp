@@ -199,7 +199,7 @@ function generateNotificationEmailHTML(
 <body>
   <div class="container">
     <div class="header">
-      <div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:.8">QCC National Service Portal</div>
+      <div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:.8">QCC Portal</div>
       <h1>${title}</h1>
     </div>
     <div class="body">
