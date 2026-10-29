@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 
 const ALLOWED_ROLES = new Set(["admin"])
+const THRESHOLD_HOURS = 10
 
 type OpenAttendance = {
   id: string
@@ -33,17 +34,21 @@ export async function GET() {
     if (!profile) return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
 
     const admin = await createAdminClient()
-    const cutoff = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString()
+    const nowMs = Date.now()
     const { data, error } = await admin
       .from("attendance_records")
-      .select("id, user_id, check_in_time, check_in_location_name")
-      .is("check_out_time", null)
-      .lt("check_in_time", cutoff)
+      .select("id, user_id, check_in_time, check_out_time, check_in_location_name")
       .order("check_in_time", { ascending: true })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    const rows = (data || []) as Array<Omit<OpenAttendance, "user_profiles">>
+    // Calculate elapsed time in JavaScript so timestamp-with/without-time-zone
+    // values are handled consistently instead of relying on a database cast.
+    const rows = (data || []).filter((row: any) => {
+      const checkInMs = Date.parse(row.check_in_time)
+      const hasNoCheckout = row.check_out_time == null || String(row.check_out_time).trim() === ""
+      return hasNoCheckout && Number.isFinite(checkInMs) && nowMs - checkInMs >= THRESHOLD_HOURS * 60 * 60 * 1000
+    }) as Array<Omit<OpenAttendance, "user_profiles">>
     const userIds = [...new Set(rows.map((row) => row.user_id).filter(Boolean))]
     const { data: profiles, error: profilesError } = userIds.length
       ? await admin.from("user_profiles").select("id, employee_id, first_name, last_name, department_id, departments(name)").in("id", userIds)
@@ -62,11 +67,16 @@ export async function GET() {
         department_id: person?.department_id || null,
         check_in_time: record.check_in_time,
         location_name: record.check_in_location_name || "Unknown",
-        hours_open: Math.round(((Date.now() - new Date(record.check_in_time).getTime()) / 3_600_000) * 100) / 100,
+        hours_open: Math.round(((nowMs - Date.parse(record.check_in_time)) / 3_600_000) * 100) / 100,
       }
     })
 
-    return NextResponse.json({ success: true, records, cutoff })
+    return NextResponse.json({
+      success: true,
+      records,
+      thresholdHours: THRESHOLD_HOURS,
+      calculatedAt: new Date(nowMs).toISOString(),
+    })
   } catch (error) {
     console.error("[long-checkins GET]", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
@@ -87,21 +97,20 @@ export async function POST(request: NextRequest) {
     const now = new Date()
     const { data: openRecords, error: fetchError } = await admin
       .from("attendance_records")
-      .select("id, user_id, check_in_time")
+      .select("id, user_id, check_in_time, check_out_time")
       .in("id", recordIds)
-      .is("check_out_time", null)
 
     if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 })
 
     const updated: string[] = []
-    for (const record of openRecords || []) {
+    for (const record of (openRecords || []).filter((item: any) => item.check_out_time == null || String(item.check_out_time).trim() === "")) {
       const workHours = Math.round(((now.getTime() - new Date(record.check_in_time).getTime()) / 3_600_000) * 100) / 100
       const { error } = await admin.from("attendance_records").update({
         check_out_time: now.toISOString(),
         check_out_method: "admin_long_checkin_cleanup",
         work_hours: Math.max(0, workHours),
         auto_checkout: true,
-        notes: body.note?.trim() || "Administrator checked out an attendance record open for more than 20 hours.",
+        notes: body.note?.trim() || `Administrator checked out an attendance record open for more than ${THRESHOLD_HOURS} hours.`,
         updated_at: now.toISOString(),
       }).eq("id", record.id).is("check_out_time", null)
       if (!error) updated.push(record.id)

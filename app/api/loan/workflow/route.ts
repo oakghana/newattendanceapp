@@ -894,18 +894,30 @@ export async function GET() {
     ]
     const uniqueUserIds = Array.from(new Set(allInboxRows.map((r: any) => r.user_id).filter(Boolean))) as string[]
     const staffProfileMap: Map<string, any> = new Map()
+    const locationMap: Map<string, any> = new Map()
     if (uniqueUserIds.length > 0) {
       const { data: staffProfiles } = await admin
         .from("user_profiles")
-        .select("id, first_name, last_name, employee_id, position, email, assigned_location_id, geofence_locations!assigned_location_id(name, address, districts(name, regions(name)))")
+        .select("id, first_name, last_name, employee_id, position, email, assigned_location_id")
         .in("id", uniqueUserIds)
+      const assignedLocationIds = Array.from(new Set((staffProfiles || []).map((profile: any) => profile.assigned_location_id).filter(Boolean)))
+      if (assignedLocationIds.length > 0) {
+        const { data: locations } = await admin
+          .from("geofence_locations")
+          .select("id, name, address, districts(name, regions(name))")
+          .in("id", assignedLocationIds)
+        for (const location of locations || []) {
+          locationMap.set(String(location.id), location)
+        }
+      }
       for (const sp of staffProfiles || []) {
-        staffProfileMap.set(sp.id, sp)
+        staffProfileMap.set(String(sp.id), sp)
       }
     }
     const attachName = (rows: any[]) =>
       rows.map((r: any) => {
-        const sp = staffProfileMap.get(r.user_id)
+        const sp = staffProfileMap.get(String(r.user_id))
+        const location = sp?.assigned_location_id ? locationMap.get(String(sp.assigned_location_id)) : null
         const fullName = sp ? `${sp.first_name || ""} ${sp.last_name || ""}`.trim() : null
         return {
           ...r,
@@ -914,18 +926,10 @@ export async function GET() {
           staff_number: sp?.employee_id || r.staff_number || null,
           staff_rank: sp?.position || r.staff_rank || null,
           staff_location_id: sp?.assigned_location_id || r.staff_location_id || null,
-          staff_location_name:
-            (sp as any)?.geofence_locations?.name ||
-            (sp as any)?.geofence_locations?.[0]?.name ||
-            r.staff_location_name ||
-            null,
-          staff_location_address: (sp as any)?.geofence_locations?.address || r.staff_location_address || null,
-          staff_district_name: (sp as any)?.geofence_locations?.districts?.name || r.staff_district_name || null,
-          staff_region_name:
-            (sp as any)?.geofence_locations?.districts?.regions?.name ||
-            (sp as any)?.geofence_locations?.districts?.regions?.[0]?.name ||
-            r.staff_region_name ||
-            null,
+          staff_location_name: location?.name || r.staff_location_name || null,
+          staff_location_address: location?.address || r.staff_location_address || null,
+          staff_district_name: location?.districts?.name || r.staff_district_name || null,
+          staff_region_name: location?.districts?.regions?.name || r.staff_region_name || null,
         }
       })
 

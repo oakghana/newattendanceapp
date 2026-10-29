@@ -48,25 +48,19 @@ export function daysUntilAnnualLeaveDeadline(): number {
 }
 
 /**
- * Check if annual leave submission is locked for current calendar year
- * (After Sept 1 or staff has already submitted)
+ * Check whether the staff member already has an annual leave plan.
+ * Staff may submit annual leave plans throughout the leave year, including
+ * December; only an existing active submission locks a duplicate entry.
  */
 export async function isAnnualLeaveLocked(
   userId: string,
   admin: any
 ): Promise<boolean> {
-  const today = new Date()
-  const currentYear = 2027
-  
-  // Check if past the November 30, 2026 submission deadline.
-  const deadline = new Date(2026, 10, 30)
-  deadline.setHours(0, 0, 0, 0)
-  
-  if (today > deadline) {
-    return true
-  }
-  
-  // Check if already submitted
+  const currentYear = new Date().getFullYear() + 1
+
+  // Prevent duplicate active annual leave plans for the same leave year.
+  // Do not apply a November/December calendar deadline here: December leave
+  // dates are valid annual leave entries and must remain selectable.
   const { data: submitted } = await admin
     .from('leave_plan_requests')
     .select('id')
