@@ -45,6 +45,7 @@ export default function EmailCenterClient() {
   const [historyFilter, setHistoryFilter] = useState("all")
   const [message, setMessage] = useState("")
   const [isSending, setIsSending] = useState(false)
+  const [accessDenied, setAccessDenied] = useState(false)
   const [audience, setAudience] = useState(["all"])
 
   const filteredLogs = useMemo(() => historyFilter === "all" ? logs : logs.filter((log) => log.status === historyFilter), [historyFilter, logs])
@@ -54,7 +55,8 @@ export default function EmailCenterClient() {
 
   async function load() {
     const [templateResponse, logResponse] = await Promise.all([fetch("/api/admin/email-center?view=templates"), fetch("/api/admin/email-center")])
-    if (templateResponse.status === 403 || logResponse.status === 403) { setMessage("Administrator access is required to open the Email Center."); return }
+    if (templateResponse.status === 401 || logResponse.status === 401) { window.location.href = "/auth/login"; return }
+    if (templateResponse.status === 403 || logResponse.status === 403) { setAccessDenied(true); return }
     const templateData = await templateResponse.json(); const logData = await logResponse.json()
     setTemplates(templateData.templates || []); setLogs(logData.logs || [])
     if (!selected && templateData.templates?.[0]) selectTemplate(templateData.templates[0])
@@ -94,6 +96,8 @@ export default function EmailCenterClient() {
       setIsSending(false)
     }
   }
+
+  if (accessDenied) return <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-slate-100"><section className="w-full max-w-lg rounded-3xl border border-slate-800 bg-slate-900 p-8 text-center shadow-2xl"><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-teal-950 text-teal-300"><ShieldCheck className="h-7 w-7" /></div><h1 className="mt-5 text-2xl font-bold">Administrator access required</h1><p className="mt-3 text-slate-400">The Email Center is restricted to authorized administrators. Your session does not have permission to view it.</p><Button className="mt-6 bg-teal-600 hover:bg-teal-500" onClick={() => { window.location.href = "/dashboard" }}>Return to dashboard</Button></section></main>
 
   return <main className="min-h-screen bg-slate-950 p-4 text-slate-100 md:p-8"><div className="mx-auto max-w-7xl space-y-6">
     <header className="flex flex-col gap-6 rounded-3xl bg-gradient-to-br from-teal-900 via-slate-900 to-slate-950 p-7 shadow-2xl md:flex-row md:items-center md:justify-between"><div className="flex items-start gap-4"><div className="rounded-2xl bg-white p-2"><img src={logoUrl} alt="QCC logo" className="h-12 w-12 rounded-xl object-contain" /></div><div><p className="text-xs font-bold uppercase tracking-[0.24em] text-teal-300">Administrator tools</p><h1 className="mt-2 text-3xl font-bold tracking-tight md:text-4xl">Email center</h1><p className="mt-2 max-w-2xl text-slate-300">Send formal staff communications, edit alert designs without writing HTML, and monitor every Resend delivery.</p></div></div><div className="flex items-center gap-3 rounded-2xl border border-teal-700/50 bg-teal-950/50 px-5 py-4 text-sm text-teal-100"><ShieldCheck className="h-5 w-5 text-teal-300" /><span><strong className="block">Admin only</strong>Resend delivery is active</span></div></header>
