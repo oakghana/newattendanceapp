@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Dialog,
@@ -82,6 +83,8 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
   const [reviewStatus, setReviewStatus] = useState<"approved" | "rejected">("approved")
   const [reviewNotes, setReviewNotes] = useState("")
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(new Set())
+  const [bulkSubmitting, setBulkSubmitting] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   // Default to pending to speed initial load; department heads see their department by default
   const [statusFilter, setStatusFilter] = useState("pending")
@@ -95,18 +98,19 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
   const [page, setPage] = useState<number>(1)
   const [perPage, setPerPage] = useState<number>(20)
   const [hasMore, setHasMore] = useState<boolean>(false)
+  const requestIdRef = useRef(0)
 
   useEffect(() => {
-    // When filters change, reset to first page
-    setPage(1)
-  }, [statusFilter, departmentFilter, docTypeFilter, dateFrom, dateTo, userRole, userDepartment])
+    const requestId = ++requestIdRef.current
+    const timer = window.setTimeout(() => {
+      void fetchExcuseDocuments(requestId)
+    }, 120)
+    return () => window.clearTimeout(timer)
+  }, [statusFilter, departmentFilter, docTypeFilter, dateFrom, dateTo, page, perPage, userRole])
 
   useEffect(() => {
-    fetchExcuseDocuments()
-    if (userRole === "admin") {
-      fetchDepartments()
-    }
-  }, [statusFilter, departmentFilter, docTypeFilter, dateFrom, dateTo, page, perPage, userRole, userDepartment])
+    if (userRole === "admin") void fetchDepartments()
+  }, [userRole])
 
   const fetchDepartments = async () => {
     try {
@@ -120,7 +124,7 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
     }
   }
 
-  const fetchExcuseDocuments = async () => {
+  const fetchExcuseDocuments = async (requestId = requestIdRef.current) => {
     try {
       setLoading(true)
       setError("")
@@ -141,16 +145,16 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
 
       const response = await fetch(`/api/admin/excuse-duty?${params.toString()}`)
 
-      if (!response.ok) {
-        throw new Error("Unable to load excuse documents. Please try again.")
-      }
-
       const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.details || data.error || "Unable to load excuse documents. Please try again.")
+      }
+      if (requestId !== requestIdRef.current) return
       setExcuseDocuments(data.excuseDocuments || [])
       setHasMore(Boolean(data.pagination && data.pagination.hasMore))
     } catch (error) {
       console.error("Failed to fetch excuse documents:", error)
-      setError("Failed to load excuse documents")
+      setError(error instanceof Error ? error.message : "Failed to load excuse documents")
     } finally {
       setLoading(false)
     }
@@ -200,6 +204,38 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
       setError(error instanceof Error ? error.message : "Failed to review document")
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const toggleDocument = (documentId: string, checked: boolean) => {
+    setSelectedDocumentIds((current) => {
+      const next = new Set(current)
+      if (checked) next.add(documentId)
+      else next.delete(documentId)
+      return next
+    })
+  }
+
+  const selectAllPending = () => {
+    const pendingIds = excuseDocuments.filter((doc) => doc.status === "pending").map((doc) => doc.id)
+    setSelectedDocumentIds((current) => current.size === pendingIds.length ? new Set() : new Set(pendingIds))
+  }
+
+  const approveSelected = async () => {
+    const ids = excuseDocuments.filter((doc) => doc.status === "pending" && selectedDocumentIds.has(doc.id)).map((doc) => doc.id)
+    if (!ids.length) return
+    setBulkSubmitting(true)
+    setError(null)
+    try {
+      const results = await Promise.all(ids.map((documentId) => fetch("/api/admin/excuse-duty", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ documentId, status: "approved", reviewNotes: null }) })))
+      const failed = results.filter((response) => !response.ok)
+      if (failed.length) throw new Error(`${failed.length} approval${failed.length === 1 ? "" : "s"} failed. Please refresh and retry.`)
+      setSelectedDocumentIds(new Set())
+      await fetchExcuseDocuments()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to approve selected submissions")
+    } finally {
+      setBulkSubmitting(false)
     }
   }
 
@@ -407,6 +443,16 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
               )}
             </div>
           </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4">
+            <Button type="button" variant="outline" size="sm" onClick={selectAllPending} disabled={loading || !excuseDocuments.some((doc) => doc.status === "pending")}>
+              <Checkbox checked={excuseDocuments.filter((doc) => doc.status === "pending").length > 0 && selectedDocumentIds.size === excuseDocuments.filter((doc) => doc.status === "pending").length} className="mr-2 pointer-events-none" aria-hidden="true" />
+              Select all pending
+            </Button>
+            <Button type="button" size="sm" onClick={approveSelected} disabled={bulkSubmitting || selectedDocumentIds.size === 0}>
+              {bulkSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+              Approve selected ({selectedDocumentIds.size})
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {error && (
@@ -430,6 +476,7 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10"><span className="sr-only">Select</span></TableHead>
                     <TableHead>Staff Member</TableHead>
                     <TableHead>Department</TableHead>
                     <TableHead>Date</TableHead>
@@ -443,6 +490,9 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
                 <TableBody>
                   {excuseDocuments.map((doc) => (
                     <TableRow key={doc.id}>
+                      <TableCell>
+                        {doc.status === "pending" && <Checkbox checked={selectedDocumentIds.has(doc.id)} onCheckedChange={(checked) => toggleDocument(doc.id, checked === true)} aria-label={`Select ${doc.user_profiles?.first_name || "staff"} excuse duty submission`} />}
+                      </TableCell>
                       <TableCell>
                         <div>
                           <div className="font-medium">
