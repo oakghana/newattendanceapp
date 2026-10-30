@@ -244,10 +244,7 @@ class EmailService {
 
     // Normalize the logo URL at send time so templates saved from Preview still
     // point at the deployed portal asset instead of a temporary preview origin.
-    const deployedAppUrl = String(process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "")
-    const normalizedHtml = deployedAppUrl
-      ? template.html.replace(/https?:\/\/[^\"']+\/(?:logos|images)\/qcc-logo\.png|\/(?:logos|images)\/qcc-logo\.png/g, `${deployedAppUrl}/images/qcc-logo.png`)
-      : template.html
+    const normalizedHtml = template.html.replace(/<img[^>]+(?:logos|images)\/qcc-logo\.png[^>]*>/gi, "")
 
     // Replace template variables before selecting the delivery provider.
     const subject = this.replaceTemplateVariables(template.subject, data)

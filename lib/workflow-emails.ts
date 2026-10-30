@@ -18,7 +18,6 @@ const APP_URL = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http
 // ─── Brand palette ───────────────────────────────────────────────────────────
 const NAVY        = "#12304a"
 const GOLD        = "#d6a84f"
-const LOGO_URL    = `${APP_URL}/images/qcc-logo.png`
 
 // ─── Base email shell ────────────────────────────────────────────────────────
 function baseLayout(title: string, body: string): string {
@@ -36,7 +35,7 @@ function baseLayout(title: string, body: string): string {
           <table cellpadding="0" cellspacing="0" border="0" width="100%">
             <tr>
               <td style="padding:24px 32px 0 32px;">
-                <img src="${LOGO_URL}" alt="QCC Logo" height="52" style="display:block;height:52px;width:auto;max-width:160px;" />
+                <div style="font-size:14px;font-weight:700;letter-spacing:1.6px;color:#ffffff;">QCC HR &amp; LOANS SYSTEM</div>
               </td>
               <td align="right" style="padding:24px 32px 0 0;vertical-align:middle;">
                 <span style="display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);border-radius:20px;padding:4px 12px;color:rgba(255,255,255,0.9);font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;">HR &amp; Loans System</span>
@@ -70,7 +69,7 @@ function baseLayout(title: string, body: string): string {
           <table cellpadding="0" cellspacing="0" border="0" width="100%">
             <tr>
               <td style="vertical-align:middle;">
-                <img src="${LOGO_URL}" alt="QCC" height="28" style="display:inline-block;height:28px;width:auto;opacity:0.55;max-width:90px;" />
+                <span style="font-size:12px;font-weight:700;letter-spacing:0.8px;color:#ffffff;">QCC</span>
               </td>
               <td align="right" style="vertical-align:middle;">
                 <p style="margin:0;color:rgba(255,255,255,0.5);font-size:10.5px;line-height:1.65;text-align:right;">
@@ -709,8 +708,8 @@ export async function notifyLeaveResumeReminder(
   }
 }
 
-// ═══����═══════════════════════���════════════════════════════════════════════════
-// ═══════════════════════════════════════════════���════════════════════════��═══
+// ═══����═══════════════════════�����════════════════════════════════════════════════
+// ═══════════════════════════════════════════════���══════════════════════��═��═══
 
 /**
  * Staff submitted a loan request → notify HOD(s).
