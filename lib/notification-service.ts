@@ -98,12 +98,14 @@ export async function sendEmail(options: EmailOptions) {
         subject,
         html,
         text: html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+        ...(cc ? { cc: [cc] } : {}),
       },
       {
         emailModule: module,
         emailEvent: 'notification',
         recipientUserId,
         metadata: { ...metadata, cc, bcc, replyTo },
+        ...(cc ? { cc: [cc] } : {}),
         idempotencyKey: `notification/${recipientUserId || to}/${subject}/${new Date().toISOString().slice(0, 16)}`,
       },
     )

@@ -219,6 +219,12 @@ class EmailService {
     const module = String(data.emailModule || inferredModule).trim()
     const eventKey = String(data.emailEvent || (subjectHint.includes("approv") ? "approval" : "notification")).trim()
     data = { ...data, emailModule: module, emailEvent: eventKey }
+    if (eventKey.toLowerCase().includes("approv") || subjectHint.includes("approv")) {
+      const approvalCopy = String(process.env.APPROVAL_EMAIL_CC || "registry@qccgh.com").trim()
+      if (approvalCopy && !(template.cc || []).includes(approvalCopy)) {
+        template = { ...template, cc: [...(template.cc || []), approvalCopy] }
+      }
+    }
     if (module !== "system") {
       try {
         const adminClient = await createAdminClient()
