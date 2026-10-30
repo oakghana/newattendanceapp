@@ -2049,6 +2049,11 @@ export async function POST(request: NextRequest) {
     const staffName = staffProfile.data
       ? `${staffProfile.data.first_name || ""} ${staffProfile.data.last_name || ""}`.trim()
       : "Staff Member"
+  const submissionRecipientUserIds = isRegionalWorkflow && regionalHrOffice?.user_id
+    ? [regionalHrOffice.user_id]
+    : isSelfLeaveWorkflow
+      ? ((await admin.from("user_profiles").select("id").eq("is_active", true).in("role", ["hr_leave_office", "leave_loan_officer", "hr_officer", "hr_office", "manager_hr", "admin"])).data || []).map((profile) => profile.id)
+      : undefined
   notifyLeaveSubmitted(admin, {
   leavePlanRequestId: requestRow.id,
   staffName,
@@ -2056,7 +2061,8 @@ export async function POST(request: NextRequest) {
   startDate: preferred_start_date,
   endDate: preferred_end_date,
   requestedDays,
-  }).catch(() => {})
+  recipientUserIds: submissionRecipientUserIds,
+  }).catch((error) => console.warn("[v0] Leave submission email failed:", error))
 
   if (leaveTypeKey === "annual" || leaveTypeKey === "annual_leave") {
   const regionalHrRecipient = regionalHrOffice?.user_id

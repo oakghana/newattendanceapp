@@ -369,11 +369,21 @@ export async function notifyLeaveSubmitted(
     startDate: string
     endDate: string
     requestedDays: number
+    recipientUserIds?: string[]
   },
 ): Promise<void> {
   try {
-    const hodEmails = await hodEmailsFromReviews(admin, opts.leavePlanRequestId)
-    if (!hodEmails.length) return
+    const [reviewerEmails, explicitRecipients] = await Promise.all([
+      hodEmailsFromReviews(admin, opts.leavePlanRequestId),
+      opts.recipientUserIds?.length
+        ? admin.from("user_profiles").select("email").in("id", opts.recipientUserIds)
+        : Promise.resolve({ data: [] as { email: string | null }[] }),
+    ])
+    const recipientEmails = Array.from(new Set([
+      ...reviewerEmails,
+      ...((explicitRecipients.data || []).map((profile) => String(profile.email || "").trim()).filter(Boolean)),
+    ]))
+    if (!recipientEmails.length) return
 
     const link = `${APP_URL}/dashboard/leave-planning`
     const subject = `[Action Required] New Leave Request from ${opts.staffName}`
@@ -390,7 +400,7 @@ export async function notifyLeaveSubmitted(
       )}
       ${btn(link, "Review Leave Request")}`,
     )
-    await send(admin, hodEmails, subject, html, "leave submitted notification")
+    await send(admin, recipientEmails, subject, html, "leave submitted notification")
   } catch (e) {
     console.warn("[workflow-emails] notifyLeaveSubmitted failed:", e)
   }
@@ -708,7 +718,7 @@ export async function notifyLeaveResumeReminder(
   }
 }
 
-// ═══����═══════════════════════�����════════════════════════════════════════════════
+// ═══����═══════════════════════�����══════════════════════════════��═════════════════
 // ═══════════════════════════════════════════════���══════════════════════��═��═══
 
 /**
