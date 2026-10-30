@@ -4,7 +4,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 
 const PUBLISHERS = new Set(["admin", "administrator", "hr_records", "hr_records_officer", "hr_records_manager"])
 const ADMINISTRATORS = new Set(["admin", "administrator"])
-const ANALYSTS = new Set(["admin", "administrator", "hod", "department_head", "regional_manager", "regional_hr_office", "regional_hr_officer", "hr_records", "hr_records_officer", "hr_records_manager", "managing_director"])
+const ANALYSTS = new Set(["admin", "administrator", "hr_records", "hr_records_officer", "hr_records_manager"])
 
 async function actor() {
   const supabase = await createClient()
