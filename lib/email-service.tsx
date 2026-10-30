@@ -246,7 +246,7 @@ class EmailService {
     // point at the deployed portal asset instead of a temporary preview origin.
     const deployedAppUrl = String(process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "")
     const normalizedHtml = deployedAppUrl
-      ? template.html.replace(/https?:\/\/[^\"']+\/logos\/qcc-logo\.png|\/logos\/qcc-logo\.png/g, `${deployedAppUrl}/logos/qcc-logo.png`)
+      ? template.html.replace(/https?:\/\/[^\"']+\/(?:logos|images)\/qcc-logo\.png|\/(?:logos|images)\/qcc-logo\.png/g, `${deployedAppUrl}/images/qcc-logo.png`)
       : template.html
 
     // Replace template variables before selecting the delivery provider.
