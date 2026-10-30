@@ -16,28 +16,26 @@ import { emailService } from "@/lib/email-service"
 const APP_URL = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://www.qccgh.com").replace(/\/$/, "")
 
 // ─── Brand palette ───────────────────────────────────────────────────────────
-const GREEN       = "#117a6b"
-const DARK_GREEN  = "#0b3f46"
-const MID_GREEN   = "#159a87"
-const LOGO_URL    = `${APP_URL}/logos/qcc-logo.png`
+const NAVY        = "#12304a"
+const GOLD        = "#d6a84f"
 
 // ─── Base email shell ────────────────────────────────────────────────────────
 function baseLayout(title: string, body: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><title>${title}</title></head>
-<body style="margin:0;padding:0;background-color:#eef2ee;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
-<table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#eef2ee;padding:32px 16px;">
+<body style="margin:0;padding:0;background-color:#f4f7fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f4f7fa;padding:32px 16px;">
   <tr><td align="center">
     <table cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;width:100%;">
 
       <!-- ── HEADER ── -->
       <tr>
-        <td style="background:linear-gradient(160deg,${DARK_GREEN} 0%,${GREEN} 55%,${MID_GREEN} 100%);border-radius:12px 12px 0 0;padding:0;">
+        <td style="background:${NAVY};border-radius:12px 12px 0 0;padding:0;">
           <table cellpadding="0" cellspacing="0" border="0" width="100%">
             <tr>
               <td style="padding:24px 32px 0 32px;">
-                <img src="${LOGO_URL}" alt="QCC Logo" height="52" style="display:block;height:52px;width:auto;max-width:160px;" />
+                <div style="font-size:14px;font-weight:700;letter-spacing:1.6px;color:#ffffff;">QCC HR &amp; LOANS SYSTEM</div>
               </td>
               <td align="right" style="padding:24px 32px 0 0;vertical-align:middle;">
                 <span style="display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);border-radius:20px;padding:4px 12px;color:rgba(255,255,255,0.9);font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;">HR &amp; Loans System</span>
@@ -55,7 +53,7 @@ function baseLayout(title: string, body: string): string {
 
       <!-- ── DIVIDER STRIP ── -->
       <tr>
-        <td style="background:linear-gradient(90deg,${MID_GREEN},#2ecc71,${MID_GREEN});height:4px;font-size:0;line-height:0;">&nbsp;</td>
+        <td style="background:${GOLD};height:4px;font-size:0;line-height:0;">&nbsp;</td>
       </tr>
 
       <!-- ── BODY ── -->
@@ -67,11 +65,11 @@ function baseLayout(title: string, body: string): string {
 
       <!-- ── FOOTER ── -->
       <tr>
-        <td style="background:#0d3d1a;border-radius:0 0 12px 12px;padding:20px 32px;">
+        <td style="background:${NAVY};border-radius:0 0 12px 12px;padding:20px 32px;">
           <table cellpadding="0" cellspacing="0" border="0" width="100%">
             <tr>
               <td style="vertical-align:middle;">
-                <img src="${LOGO_URL}" alt="QCC" height="28" style="display:inline-block;height:28px;width:auto;opacity:0.55;max-width:90px;" />
+                <span style="font-size:12px;font-weight:700;letter-spacing:0.8px;color:#ffffff;">QCC</span>
               </td>
               <td align="right" style="vertical-align:middle;">
                 <p style="margin:0;color:rgba(255,255,255,0.5);font-size:10.5px;line-height:1.65;text-align:right;">
@@ -96,7 +94,7 @@ function btn(url: string, label: string): string {
   const fullUrl = url.startsWith("http") ? url : `${APP_URL}${url.startsWith("/") ? "" : "/"}${url}`
   return `<table cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;">
     <tr>
-      <td style="background:linear-gradient(135deg,${DARK_GREEN} 0%,${GREEN} 100%);border-radius:8px;box-shadow:0 2px 8px rgba(13,61,26,0.35);">
+      <td style="background:${NAVY};border-radius:8px;box-shadow:0 2px 8px rgba(18,48,74,0.28);">
         <a href="${fullUrl}" style="display:inline-block;padding:13px 32px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;letter-spacing:0.02em;white-space:nowrap;">${label} &rarr;</a>
       </td>
     </tr>
@@ -385,7 +383,7 @@ export async function notifyLeaveSubmitted(
       <p style="margin:0 0 22px;">${statusBadge("Pending HOD Review", "warning")}</p>
       ${sectionHeading("Request Details")}
       ${table(
-        row("Staff Member", opts.staffName) +
+        row("Staff Member", opts.staffName?.trim() || "Staff Member") +
         row("Leave Type", opts.leaveType) +
         row("Period", `${opts.startDate} — ${opts.endDate}`) +
         row("Days Requested", String(opts.requestedDays))
@@ -426,7 +424,7 @@ export async function notifyLeaveHodApproved(
       <p style="margin:0 0 22px;">${statusBadge("HOD Approved — Awaiting HR Office", "info")}</p>
       ${sectionHeading("Request Details")}
       ${table(
-        row("Staff Member", opts.staffName) +
+        row("Staff Member", opts.staffName?.trim() || "Staff Member") +
         row("Leave Type", opts.leaveType) +
         row("Period", `${opts.startDate} — ${opts.endDate}`) +
         row("Days Requested", String(opts.requestedDays)) +
@@ -517,7 +515,7 @@ export async function notifyLeaveHrOfficeForwarded(
       <p style="margin:0 0 22px;">${statusBadge("Awaiting Final HR Approval", "info")}</p>
       ${sectionHeading("Approved Leave Details")}
       ${table(
-        row("Staff Member", opts.staffName) +
+        row("Staff Member", opts.staffName?.trim() || "Staff Member") +
         row("Leave Type", opts.leaveType) +
         row("Approved Period", `${opts.adjustedStartDate} — ${opts.adjustedEndDate}`) +
         row("Approved Days", String(opts.adjustedDays)) +
@@ -584,7 +582,7 @@ export async function notifyLeaveHrApproved(
         <p style="margin:0 0 22px;">${statusBadge("Fully Approved", "success")}</p>
         ${sectionHeading("Approved Leave Details")}
         ${table(
-          row("Staff Member", opts.staffName) +
+          row("Staff Member", opts.staffName?.trim() || "Staff Member") +
           row("Leave Type", opts.leaveType) +
           row("Period", `${opts.effectiveStart} — ${opts.effectiveEnd}`) +
           row("Approved Days", String(opts.effectiveDays))
@@ -710,8 +708,8 @@ export async function notifyLeaveResumeReminder(
   }
 }
 
-// ═══���════════════════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════���════════════════════════════
+// ═══����═══════════════════════�����════════════════════════════════════════════════
+// ═══════════════════════════════════════════════���══════════════════════��═��═══
 
 /**
  * Staff submitted a loan request → notify HOD(s).
@@ -739,7 +737,7 @@ export async function notifyLoanSubmitted(
       <p style="margin:0 0 22px;">${statusBadge("Pending HOD Approval", "warning")}</p>
       ${sectionHeading("Loan Request Details")}
       ${table(
-        row("Staff Member", opts.staffName) +
+        row("Staff Member", opts.staffName?.trim() || "Staff Member") +
         row("Loan Type", opts.loanType) +
         row("Reference No.", opts.requestNumber) +
         (opts.amount ? row("Amount", `GH₵ ${Number(opts.amount).toLocaleString()}`) : "")
@@ -779,7 +777,7 @@ export async function notifyLoanHodApproved(
       <p style="margin:0 0 22px;">${statusBadge("HOD Approved — Awaiting Loan Office", "info")}</p>
       ${sectionHeading("Loan Request Details")}
       ${table(
-        row("Staff Member", opts.staffName) +
+        row("Staff Member", opts.staffName?.trim() || "Staff Member") +
         row("Loan Type", opts.loanType) +
         row("Reference No.", opts.requestNumber) +
         (opts.amount ? row("Amount", `GH₵ ${Number(opts.amount).toLocaleString()}`) : "") +
@@ -852,15 +850,15 @@ export async function notifyLoanStageAdvanced(
     const emails = await emailsForRoles(admin, opts.toRoles)
     if (!emails.length) return
 
-    const link = `${APP_URL}/dashboard/loans`
-    const subject = `[Action Required] Loan at ${opts.toStage} — ${opts.staffName}`
+    const link = "https://updates.qccapps.com/auth/login"
+    const subject = `[Action Required] Loan at ${opts.toStage} — ${opts.staffName?.trim() || "Staff Member"}`
     const html = baseLayout(
       `Loan Request Advanced to ${opts.toStage}`,
       `<p style="margin:0 0 6px;font-size:14px;color:#374151;">A loan request has advanced through the approval workflow and requires your action.</p>
       <p style="margin:0 0 22px;">${statusBadge(`${opts.fromStage} → ${opts.toStage}`, "info")}</p>
       ${sectionHeading("Loan Request Details")}
       ${table(
-        row("Staff Member", opts.staffName) +
+        row("Staff Member", opts.staffName?.trim() || "Staff Member") +
         row("Loan Type", opts.loanType) +
         row("Reference No.", opts.requestNumber) +
         (opts.amount ? row("Amount", `GH₵ ${Number(opts.amount).toLocaleString()}`) : "")
