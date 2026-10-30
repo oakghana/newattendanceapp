@@ -65,12 +65,16 @@ export async function GET(request: NextRequest) {
     const status = url.searchParams.get("status")
     const departmentFilter = url.searchParams.get("department")
     const docType = url.searchParams.get("document_type")
-    const dateFrom = url.searchParams.get("date_from")
-    const dateTo = url.searchParams.get("date_to")
+const requestedDateFrom = url.searchParams.get("date_from")
+  const requestedDateTo = url.searchParams.get("date_to")
     const detailId = url.searchParams.get("id")
     const pageParam = parseInt(url.searchParams.get("page") || "1", 10)
     const perPageParam = parseInt(url.searchParams.get("per_page") || "50", 10)
     const perPage = Number.isFinite(perPageParam) ? Math.min(Math.max(perPageParam, 1), 200) : 50
+  const defaultDateFrom = new Date()
+  defaultDateFrom.setFullYear(defaultDateFrom.getFullYear() - 2)
+  const dateFrom = requestedDateFrom || defaultDateFrom.toISOString().slice(0, 10)
+  const dateTo = requestedDateTo
 
     if (status && status !== "all") {
       query = query.eq("status", status)
