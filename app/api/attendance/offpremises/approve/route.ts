@@ -398,6 +398,15 @@ export async function POST(request: NextRequest) {
           },
           is_read: false,
         })
+
+        const staffEmail = String(pendingRequest.user_profiles?.email || "").trim()
+        if (staffEmail) {
+          await emailService.sendEmail(staffEmail, {
+            subject: "Off-Premises Check-In Approved",
+            html: `<p>Your off-premises check-in request has been approved.</p><p>You have been checked in on official duty at ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "the approved location"}.</p>`,
+            text: `Your off-premises check-in request has been approved. You have been checked in on official duty at ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "the approved location"}.`,
+          }, { idempotencyKey: `offpremises-approved/${request_id}` })
+        }
       } catch (err) {
         console.warn("[v0] Failed to send approval notification:", err)
       }
@@ -446,6 +455,16 @@ export async function POST(request: NextRequest) {
           },
           is_read: false,
         })
+
+        const staffEmail = String(pendingRequest.user_profiles?.email || "").trim()
+        if (staffEmail) {
+          const reason = comments ? ` Reason: ${comments}` : ""
+          await emailService.sendEmail(staffEmail, {
+            subject: "Off-Premises Check-In Rejected",
+            html: `<p>Your off-premises check-in request has been rejected.</p>${comments ? `<p>Reason: ${comments}</p>` : ""}`,
+            text: `Your off-premises check-in request has been rejected.${reason}`,
+          }, { idempotencyKey: `offpremises-rejected/${request_id}` })
+        }
       } catch (err) {
         console.warn("[v0] Failed to send rejection notification:", err)
       }
