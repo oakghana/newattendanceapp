@@ -41,7 +41,8 @@ export async function GET() {
     const { data: rows, error: attendanceError } = await admin
       .from("attendance_records")
       .select("id, user_id, check_in_time, check_out_time, check_in_location_name")
-      .is("check_out_time", null)
+      // Some legacy check-ins store an empty string instead of NULL for an open checkout.
+      .or("check_out_time.is.null,check_out_time.eq.")
       .lte("check_in_time", new Date(nowMs - THRESHOLD_HOURS * 60 * 60 * 1000).toISOString())
       .order("check_in_time", { ascending: true })
 
