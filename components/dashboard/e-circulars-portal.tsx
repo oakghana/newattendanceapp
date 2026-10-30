@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { CheckCheck, ChevronLeft, ChevronRight, Eye, FileText, Megaphone, Pencil, Quote, RefreshCw, Send, ShieldCheck, Trash2, Upload } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
@@ -54,6 +55,14 @@ export function ECircularsPortal() {
   const [busy, setBusy] = useState(false)
   const [refreshingAnalytics, setRefreshingAnalytics] = useState(false)
   const [selectedCircular, setSelectedCircular] = useState<Circular | null>(null)
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const circularId = searchParams.get("circular")
+    if (!circularId || selectedCircular) return
+    const circular = items.find((item) => item.id === circularId)
+    if (circular) setSelectedCircular(circular)
+  }, [items, searchParams, selectedCircular])
 
   const load = useCallback(async () => {
     const response = await fetch("/api/e-circulars", { cache: "no-store" })
