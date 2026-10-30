@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
 
     let query = admin
       .from("audit_logs")
-      .select("id, user_id, action, created_at, ip_address, new_values", { count: "planned" })
+      .select("id, user_id, action, created_at, ip_address, new_values")
       .in("action", FAILURE_ACTIONS)
       .order("created_at", { ascending: false })
 
@@ -263,8 +263,8 @@ export async function GET(request: NextRequest) {
       pagination: {
         page,
         limit,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / limit),
+        total: count ?? rows.length,
+        totalPages: Math.max(1, Math.ceil((count ?? rows.length) / limit)),
       },
     })
   } catch (error) {

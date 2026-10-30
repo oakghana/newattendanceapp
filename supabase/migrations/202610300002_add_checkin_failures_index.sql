@@ -1,5 +1,5 @@
-CREATE INDEX IF NOT EXISTS audit_logs_failure_action_created_at_idx
-  ON public.audit_logs (action, created_at DESC)
+CREATE INDEX IF NOT EXISTS audit_logs_failure_actions_created_at_idx
+  ON public.audit_logs (created_at DESC, id DESC)
   WHERE action IN (
     'check_in_failed',
     'offpremises_checkin_failed',
