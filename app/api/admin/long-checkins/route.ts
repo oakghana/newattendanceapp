@@ -116,6 +116,7 @@ export async function POST(request: NextRequest) {
     if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 })
 
     const updated: string[] = []
+    const updatedUserIds: string[] = []
     for (const record of (openRecords || []).filter((item: any) => item.check_out_time == null || String(item.check_out_time).trim() === "")) {
       const workHours = Math.round(((now.getTime() - new Date(record.check_in_time).getTime()) / 3_600_000) * 100) / 100
       const { error } = await admin.from("attendance_records").update({
@@ -126,7 +127,24 @@ export async function POST(request: NextRequest) {
         notes: body.note?.trim() || `Administrator checked out an attendance record open for more than ${THRESHOLD_HOURS} hours.`,
         updated_at: now.toISOString(),
       }).eq("id", record.id).is("check_out_time", null)
-      if (!error) updated.push(record.id)
+      if (!error) {
+        updated.push(record.id)
+        if (record.user_id) updatedUserIds.push(record.user_id)
+      }
+    }
+
+    const notifiedUserIds = [...new Set(updatedUserIds)]
+    if (notifiedUserIds.length) {
+      const { error: notificationError } = await admin.from("staff_notifications").insert(
+        notifiedUserIds.map((userId) => ({
+          user_id: userId,
+          title: "Check-out completed successfully",
+          message: "An administrator has checked you out successfully. Your next login will start a new check-in record.",
+          type: "info",
+          is_read: false,
+        })),
+      )
+      if (notificationError) console.warn("[long-checkins] Failed to notify checked-out staff:", notificationError.message)
     }
 
     await admin.from("audit_logs").insert({
@@ -135,7 +153,7 @@ export async function POST(request: NextRequest) {
       new_values: { record_ids: updated, requested_record_ids: recordIds, note: body.note || null },
     })
 
-    return NextResponse.json({ success: true, checkedOut: updated.length, message: `${updated.length} user(s) checked out.` })
+    return NextResponse.json({ success: true, checkedOut: updated.length, notified: notifiedUserIds.length, message: `${updated.length} user(s) checked out and notified.` })
   } catch (error) {
     console.error("[long-checkins POST]", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
