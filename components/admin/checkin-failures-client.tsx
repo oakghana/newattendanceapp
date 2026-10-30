@@ -223,7 +223,10 @@ export function CheckinFailuresClient() {
   }, [fetchData])
 
   useEffect(() => {
-    if (activeTab === "long-checkins") void fetchLongCheckins()
+    if (activeTab !== "long-checkins") return
+    void fetchLongCheckins()
+    const refreshTimer = window.setInterval(() => void fetchLongCheckins(), 30_000)
+    return () => window.clearInterval(refreshTimer)
   }, [activeTab, fetchLongCheckins])
 
   useEffect(() => {
