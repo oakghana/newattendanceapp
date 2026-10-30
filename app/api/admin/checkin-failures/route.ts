@@ -101,8 +101,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const page = Math.max(1, Number.parseInt(searchParams.get("page") || "1", 10))
     const limit = Math.min(500, Math.max(1, Number.parseInt(searchParams.get("limit") || "100", 10)))
-    const startDate = searchParams.get("start_date")
-    const endDate = searchParams.get("end_date")
+    const rawStartDate = searchParams.get("start_date")?.trim() || ""
+    const rawEndDate = searchParams.get("end_date")?.trim() || ""
+    const isDateOnly = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
+    const startDate = isDateOnly(rawStartDate) ? rawStartDate : null
+    const endDate = isDateOnly(rawEndDate) ? rawEndDate : null
     const reasonQuery = (searchParams.get("reason") || "").trim().toLowerCase()
     const typeFilter = searchParams.get("type") || "all"
     const departmentFilter = searchParams.get("department_id") || "all"
