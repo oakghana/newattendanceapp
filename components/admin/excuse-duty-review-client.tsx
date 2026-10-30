@@ -141,16 +141,15 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
 
       const response = await fetch(`/api/admin/excuse-duty?${params.toString()}`)
 
-      if (!response.ok) {
-        throw new Error("Unable to load excuse documents. Please try again.")
-      }
-
       const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.details || data.error || "Unable to load excuse documents. Please try again.")
+      }
       setExcuseDocuments(data.excuseDocuments || [])
       setHasMore(Boolean(data.pagination && data.pagination.hasMore))
     } catch (error) {
       console.error("Failed to fetch excuse documents:", error)
-      setError("Failed to load excuse documents")
+      setError(error instanceof Error ? error.message : "Failed to load excuse documents")
     } finally {
       setLoading(false)
     }
