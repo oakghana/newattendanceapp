@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -95,18 +95,19 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
   const [page, setPage] = useState<number>(1)
   const [perPage, setPerPage] = useState<number>(20)
   const [hasMore, setHasMore] = useState<boolean>(false)
+  const requestIdRef = useRef(0)
 
   useEffect(() => {
-    // When filters change, reset to first page
-    setPage(1)
-  }, [statusFilter, departmentFilter, docTypeFilter, dateFrom, dateTo, userRole, userDepartment])
+    const requestId = ++requestIdRef.current
+    const timer = window.setTimeout(() => {
+      void fetchExcuseDocuments(requestId)
+    }, 120)
+    return () => window.clearTimeout(timer)
+  }, [statusFilter, departmentFilter, docTypeFilter, dateFrom, dateTo, page, perPage, userRole])
 
   useEffect(() => {
-    fetchExcuseDocuments()
-    if (userRole === "admin") {
-      fetchDepartments()
-    }
-  }, [statusFilter, departmentFilter, docTypeFilter, dateFrom, dateTo, page, perPage, userRole, userDepartment])
+    if (userRole === "admin") void fetchDepartments()
+  }, [userRole])
 
   const fetchDepartments = async () => {
     try {
@@ -120,7 +121,7 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
     }
   }
 
-  const fetchExcuseDocuments = async () => {
+  const fetchExcuseDocuments = async (requestId = requestIdRef.current) => {
     try {
       setLoading(true)
       setError("")
@@ -145,6 +146,7 @@ export function ExcuseDutyReviewClient({ userRole, userDepartment }: ExcuseDutyR
       if (!response.ok) {
         throw new Error(data.details || data.error || "Unable to load excuse documents. Please try again.")
       }
+      if (requestId !== requestIdRef.current) return
       setExcuseDocuments(data.excuseDocuments || [])
       setHasMore(Boolean(data.pagination && data.pagination.hasMore))
     } catch (error) {
