@@ -183,7 +183,8 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, isNaN(pageParam) ? 1 : pageParam)
     const start = (page - 1) * perPage
     const end = start + perPage // request perPage+1 rows
-    const { data: excuseDocsRaw, error } = await query.order("created_at", { ascending: false }).order("id", { ascending: false }).range(start, end)
+    // Use the primary-key order to avoid a full-table sort on large document archives.
+    const { data: excuseDocsRaw, error } = await query.order("id", { ascending: false }).range(start, end)
     const excuseDocs = excuseDocsRaw || []
 
     if (error) {
