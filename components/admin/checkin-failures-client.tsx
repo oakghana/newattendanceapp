@@ -110,24 +110,30 @@ export function CheckinFailuresClient() {
   const [forceError, setForceError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"failures" | "long-checkins">("failures")
   const [longCheckins, setLongCheckins] = useState<LongCheckin[]>([])
+  const [longPage, setLongPage] = useState(1)
+  const [longTotalPages, setLongTotalPages] = useState(1)
+  const [longTotal, setLongTotal] = useState(0)
   const [selectedLongCheckins, setSelectedLongCheckins] = useState<Set<string>>(new Set())
   const [longLoading, setLongLoading] = useState(false)
   const [longCheckoutBusy, setLongCheckoutBusy] = useState(false)
 
-  const fetchLongCheckins = useCallback(async () => {
+  const fetchLongCheckins = useCallback(async (requestedPage = longPage) => {
     try {
       setLongLoading(true)
-      const response = await fetch("/api/admin/long-checkins", { cache: "no-store" })
+      const response = await fetch(`/api/admin/long-checkins?page=${requestedPage}&limit=20`, { cache: "no-store" })
       const result = await response.json()
       if (!response.ok || !result.success) throw new Error(result.error || "Failed to load long check-ins")
       setLongCheckins(result.records || [])
+      setLongPage(result.page || requestedPage)
+      setLongTotalPages(result.totalPages || 1)
+      setLongTotal(result.total || 0)
       setSelectedLongCheckins(new Set())
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load long check-ins")
     } finally {
       setLongLoading(false)
     }
-  }, [])
+  }, [longPage])
 
   const checkoutLongCheckins = useCallback(async () => {
     if (!selectedLongCheckins.size) return
@@ -384,7 +390,7 @@ export function CheckinFailuresClient() {
             <AlertTriangle className="h-4 w-4 mr-2" /> Failed Attempts
           </Button>
           <Button variant={activeTab === "long-checkins" ? "default" : "outline"} onClick={() => setActiveTab("long-checkins")}>
-            <Clock3 className="h-4 w-4 mr-2" /> Over 10 Hours
+            <Clock3 className="h-4 w-4 mr-2" /> Over 5 Hours
           </Button>
         </div>
       </div>
@@ -394,8 +400,8 @@ export function CheckinFailuresClient() {
           <CardHeader>
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
-                <CardTitle>Open Check-Ins Over 10 Hours</CardTitle>
-                <CardDescription>These users have not checked out. Select records and check them out in one action.</CardDescription>
+                <CardTitle>Open Check-Ins Over 5 Hours</CardTitle>
+                <CardDescription>{longTotal} open check-in{longTotal === 1 ? "" : "s"} currently exceed the five-hour review threshold.</CardDescription>
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" onClick={() => void fetchLongCheckins()} disabled={longLoading}>
@@ -421,14 +427,21 @@ export function CheckinFailuresClient() {
             <Table>
               <TableHeader><TableRow><TableHead className="w-10" /><TableHead>Name</TableHead><TableHead>Employee ID</TableHead><TableHead>Department</TableHead><TableHead>Checked In</TableHead><TableHead>Hours Open</TableHead><TableHead>Location</TableHead></TableRow></TableHeader>
               <TableBody>
-                {longLoading ? <TableRow><TableCell colSpan={7} className="py-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></TableCell></TableRow> : longCheckins.length === 0 ? <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No open check-ins over 10 hours.</TableCell></TableRow> : longCheckins.map((row) => (
+                {longLoading ? <TableRow><TableCell colSpan={7} className="py-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></TableCell></TableRow> : longCheckins.length === 0 ? <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No open check-ins over 5 hours.</TableCell></TableRow> : longCheckins.map((row) => (
                   <TableRow key={row.id}>
-                    <TableCell><input type="checkbox" aria-label={`Select ${row.full_name}`} checked={selectedLongCheckins.has(row.id)} onChange={(event) => setSelectedLongCheckins((current) => { const next = new Set(current); event.target.checked ? next.add(row.id) : next.delete(row.id); return next })} /></TableCell>
+                    <TableCell><input type="checkbox" aria-label={`Select ${row.full_name}`} checked={selectedLongCheckins.has(row.id)} onChange={(event) => setSelectedLongCheckins((current) => { const next = new Set(current); if (event.target.checked) next.add(row.id); else next.delete(row.id); return next })} /></TableCell>
                     <TableCell className="font-medium">{row.full_name}</TableCell><TableCell>{row.employee_id}</TableCell><TableCell>{row.department_name}</TableCell><TableCell>{format(new Date(row.check_in_time), "PPpp")}</TableCell><TableCell><Badge variant="destructive">{row.hours_open}h</Badge></TableCell><TableCell>{row.location_name}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            {longTotalPages > 1 && <div className="mt-4 flex items-center justify-between gap-3 border-t pt-4">
+              <p className="text-sm text-muted-foreground">Page {longPage} of {longTotalPages} · {longTotal} users</p>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" disabled={longPage <= 1 || longLoading} onClick={() => void fetchLongCheckins(longPage - 1)}>Previous</Button>
+                <Button variant="outline" size="sm" disabled={longPage >= longTotalPages || longLoading} onClick={() => void fetchLongCheckins(longPage + 1)}>Next</Button>
+              </div>
+            </div>}
           </CardContent>
         </Card>
       ) : <>

@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 
 const ALLOWED_ROLES = new Set(["admin"])
-const THRESHOLD_HOURS = 10
+const THRESHOLD_HOURS = 5
+const DEFAULT_PAGE_SIZE = 20
+const MAX_PAGE_SIZE = 100
 
 type OpenAttendance = {
   id: string
@@ -27,8 +29,11 @@ async function requireAdmin() {
   return { supabase, user, profile }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const searchParams = request.nextUrl.searchParams
+    const page = Math.max(1, Number.parseInt(searchParams.get("page") || "1", 10) || 1)
+    const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number.parseInt(searchParams.get("limit") || String(DEFAULT_PAGE_SIZE), 10) || DEFAULT_PAGE_SIZE))
     const { user, profile } = await requireAdmin()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     if (!profile) return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
@@ -38,13 +43,13 @@ export async function GET() {
     // Let PostgreSQL compare the stored timestamp directly. This avoids silently
     // dropping valid sessions when JavaScript parses timestamp formats differently
     // from the database timezone.
-    const { data: rows, error: attendanceError } = await admin
+    const { data: rows, error: attendanceError, count: attendanceCount } = await admin
       .from("attendance_records")
-      .select("id, user_id, check_in_time, check_out_time, check_in_location_name")
-      // Some legacy check-ins store an empty string instead of NULL for an open checkout.
-      .or("check_out_time.is.null,check_out_time.eq.")
+      .select("id, user_id, check_in_time, check_out_time, check_in_location_name", { count: "exact" })
+      .is("check_out_time", null)
       .lte("check_in_time", new Date(nowMs - THRESHOLD_HOURS * 60 * 60 * 1000).toISOString())
       .order("check_in_time", { ascending: true })
+      .range((page - 1) * limit, page * limit - 1)
 
     if (attendanceError) return NextResponse.json({ error: attendanceError.message }, { status: 500 })
     const userIds = [...new Set(rows.map((row) => row.user_id).filter(Boolean))]
@@ -79,6 +84,10 @@ export async function GET() {
       success: true,
       records,
       thresholdHours: THRESHOLD_HOURS,
+      page,
+      limit,
+      total: attendanceCount || 0,
+      totalPages: Math.max(1, Math.ceil((attendanceCount || 0) / limit)),
       calculatedAt: new Date(nowMs).toISOString(),
     })
   } catch (error) {
