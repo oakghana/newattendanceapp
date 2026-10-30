@@ -231,10 +231,11 @@ export async function POST(request: NextRequest) {
 
     const { data: requesterProfile } = await admin
       .from("user_profiles")
-.select("id, department_id, assigned_location_id, region_id")
+.select("id, department_id, assigned_location_id, region_id, first_name, last_name")
         .eq("id", req.user_id)
       .maybeSingle()
 
+    const requesterDisplayName = String(req.staff_full_name || `${requesterProfile?.first_name || ""} ${requesterProfile?.last_name || ""}`).trim() || "Staff Member"
     const role = normalizeRole((profile as any).role)
     const deptName = (profile as any)?.departments?.name || null
     const deptCode = (profile as any)?.departments?.code || null
@@ -339,7 +340,7 @@ export async function POST(request: NextRequest) {
       update.hod_decision_at = new Date().toISOString()
 
       const hodActorName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "HOD"
-      const staffNameForHod = String(req.staff_full_name || "").trim() || "Staff Member"
+      const staffNameForHod = requesterDisplayName
       if (decision === "approve") {
         await notifyUsers(
           admin,
@@ -451,7 +452,7 @@ export async function POST(request: NextRequest) {
           update.fd_checked_at = null
         }
 
-        const loanStaffName = String(req.staff_full_name || "").trim() || "Staff Member"
+        const loanStaffName = requesterDisplayName
         if (requiresFdCheck) {
           const { data: accountsUsers } = await admin
             .from("user_profiles")
@@ -1092,7 +1093,7 @@ export async function POST(request: NextRequest) {
       update.director_note = note
       update.director_decision_at = new Date().toISOString()
 
-      const dirStaffName = String(req.staff_full_name || "").trim() || "Staff Member"
+      const dirStaffName = requesterDisplayName
 
       if (isHrExecutiveStage && decision === "approve") {
         // HR Executive signed — route the memo through HR Records before MD approval.

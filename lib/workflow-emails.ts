@@ -709,8 +709,8 @@ export async function notifyLeaveResumeReminder(
   }
 }
 
-// ═══����════════════════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════���════════════════════════════
+// ═══����═══════════════════════���════════════════════════════════════════════════
+// ═══════════════════════════════════════════════���════════════════════════��═══
 
 /**
  * Staff submitted a loan request → notify HOD(s).
@@ -851,8 +851,8 @@ export async function notifyLoanStageAdvanced(
     const emails = await emailsForRoles(admin, opts.toRoles)
     if (!emails.length) return
 
-    const link = `${APP_URL}/dashboard/loans`
-    const subject = `[Action Required] Loan at ${opts.toStage} — ${opts.staffName}`
+    const link = "https://updates.qccapps.com/auth/login"
+    const subject = `[Action Required] Loan at ${opts.toStage} — ${opts.staffName?.trim() || "Staff Member"}`
     const html = baseLayout(
       `Loan Request Advanced to ${opts.toStage}`,
       `<p style="margin:0 0 6px;font-size:14px;color:#374151;">A loan request has advanced through the approval workflow and requires your action.</p>
