@@ -43,16 +43,24 @@ export async function GET(request: NextRequest) {
     // Let PostgreSQL compare the stored timestamp directly. This avoids silently
     // dropping valid sessions when JavaScript parses timestamp formats differently
     // from the database timezone.
-    const { data: rows, error: attendanceError, count: attendanceCount } = await admin
+    const { data: openRows, error: attendanceError } = await admin
       .from("attendance_records")
-      .select("id, user_id, check_in_time, check_out_time, check_in_location_name", { count: "exact" })
+      .select("id, user_id, check_in_time, check_out_time, check_in_location_name, check_in_method, last_activity, notes")
       .is("check_out_time", null)
-      .lte("check_in_time", new Date(nowMs - THRESHOLD_HOURS * 60 * 60 * 1000).toISOString())
-      .order("check_in_time", { ascending: true })
-      .range((page - 1) * limit, page * limit - 1)
+      .order("check_in_time", { ascending: false })
 
     if (attendanceError) return NextResponse.json({ error: attendanceError.message }, { status: 500 })
-    const userIds = [...new Set(rows.map((row) => row.user_id).filter(Boolean))]
+    const latestByUser = new Map<string, any>()
+    for (const row of openRows || []) {
+      if (row.user_id && !latestByUser.has(row.user_id)) latestByUser.set(row.user_id, row)
+    }
+    const thresholdTime = nowMs - THRESHOLD_HOURS * 60 * 60 * 1000
+    const rows = [...latestByUser.values()]
+      .filter((row) => Date.parse(row.check_in_time) <= thresholdTime)
+      .sort((a, b) => Date.parse(a.check_in_time) - Date.parse(b.check_in_time))
+    const attendanceCount = rows.length
+    const pagedRows = rows.slice((page - 1) * limit, page * limit)
+    const userIds = [...new Set(pagedRows.map((row) => row.user_id).filter(Boolean))]
     const { data: profiles, error: profilesError } = userIds.length
       ? await admin.from("user_profiles").select("id, employee_id, first_name, last_name, department_id").in("id", userIds)
       : { data: [], error: null }
@@ -65,7 +73,7 @@ export async function GET(request: NextRequest) {
     const departmentMap = new Map((departments || []).map((department: any) => [department.id, department.name]))
     const profileMap = new Map((profiles || []).map((profile: any) => [profile.id, profile]))
 
-    const records = rows.map((record) => {
+    const records = pagedRows.map((record) => {
       const person = profileMap.get(record.user_id) as any
       return {
         id: record.id,
@@ -75,6 +83,8 @@ export async function GET(request: NextRequest) {
         department_name: departmentMap.get(person?.department_id) || "Unassigned",
         department_id: person?.department_id || null,
         check_in_time: record.check_in_time,
+        last_check_in: record.check_in_time,
+        activity: record.last_activity || record.notes || record.check_in_method || "Check-in remains open",
         location_name: record.check_in_location_name || "Unknown",
         hours_open: Math.round(((nowMs - Date.parse(record.check_in_time)) / 3_600_000) * 100) / 100,
       }

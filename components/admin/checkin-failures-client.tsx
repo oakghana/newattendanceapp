@@ -70,6 +70,8 @@ type LongCheckin = {
   full_name: string
   department_name: string
   check_in_time: string
+  last_check_in: string
+  activity: string
   location_name: string
   hours_open: number
 }
@@ -428,12 +430,12 @@ export function CheckinFailuresClient() {
               <span className="text-sm font-medium">Select all {longCheckins.length} records</span>
             </div>
             <Table>
-              <TableHeader><TableRow><TableHead className="w-10" /><TableHead>Name</TableHead><TableHead>Employee ID</TableHead><TableHead>Department</TableHead><TableHead>Checked In</TableHead><TableHead>Hours Open</TableHead><TableHead>Location</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead className="w-10" /><TableHead>Name</TableHead><TableHead>Employee ID</TableHead><TableHead>Department</TableHead><TableHead>Last Check-In</TableHead><TableHead>Activity</TableHead><TableHead>Hours Open</TableHead><TableHead>Location</TableHead></TableRow></TableHeader>
               <TableBody>
                 {longLoading ? <TableRow><TableCell colSpan={7} className="py-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></TableCell></TableRow> : longCheckins.length === 0 ? <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No open check-ins over 5 hours.</TableCell></TableRow> : longCheckins.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell><input type="checkbox" aria-label={`Select ${row.full_name}`} checked={selectedLongCheckins.has(row.id)} onChange={(event) => setSelectedLongCheckins((current) => { const next = new Set(current); if (event.target.checked) next.add(row.id); else next.delete(row.id); return next })} /></TableCell>
-                    <TableCell className="font-medium">{row.full_name}</TableCell><TableCell>{row.employee_id}</TableCell><TableCell>{row.department_name}</TableCell><TableCell>{format(new Date(row.check_in_time), "PPpp")}</TableCell><TableCell><Badge variant="destructive">{row.hours_open}h</Badge></TableCell><TableCell>{row.location_name}</TableCell>
+                    <TableCell className="font-medium">{row.full_name}</TableCell><TableCell>{row.employee_id}</TableCell><TableCell>{row.department_name}</TableCell><TableCell>{format(new Date(row.last_check_in), "PPpp")}</TableCell><TableCell className="max-w-xs text-sm text-muted-foreground">{row.activity}</TableCell><TableCell><Badge variant="destructive">{row.hours_open}h</Badge></TableCell><TableCell>{row.location_name}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

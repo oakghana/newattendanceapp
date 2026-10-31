@@ -219,6 +219,15 @@ class EmailService {
     const module = String(data.emailModule || inferredModule).trim()
     const eventKey = String(data.emailEvent || (subjectHint.includes("approv") ? "approval" : "notification")).trim()
     data = { ...data, emailModule: module, emailEvent: eventKey }
+    try {
+      const adminClient = await createAdminClient()
+      const { data: settingsRow } = await adminClient.from("system_settings").select("settings").eq("id", 1).maybeSingle()
+      const configuredCopy = settingsRow?.settings?.emailCcByModule?.[module]
+      const moduleCopy = Array.isArray(configuredCopy) ? configuredCopy.filter((value: unknown) => typeof value === "string" && value.includes("@")) : []
+      if (moduleCopy.length) template = { ...template, cc: [...new Set([...(template.cc || []), ...moduleCopy])] }
+    } catch (error) {
+      console.warn("[EmailService] Failed to load module CC settings:", error)
+    }
     if (eventKey.toLowerCase().includes("approv") || subjectHint.includes("approv")) {
       const approvalCopy = String(process.env.APPROVAL_EMAIL_CC || "registry@qccgh.com").trim()
       if (approvalCopy && !(template.cc || []).includes(approvalCopy)) {
