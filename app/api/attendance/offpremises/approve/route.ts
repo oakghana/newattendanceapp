@@ -421,6 +421,8 @@ export async function POST(request: NextRequest) {
             text: `Your off-premises check-in request has been approved. Location: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "the approved location"}. Head of Department: ${headOfDepartment}. Reason given: ${requestReason}. You have been checked in on official duty.`,
           }, {
             idempotencyKey: `offpremises-approved/${request_id}`,
+            emailModule: "off_premises",
+            emailEvent: "approval",
             firstName: pendingRequest.user_profiles?.first_name || pendingRequest.user_profiles?.full_name || "Staff member",
             requestTitle: "Off-premises check-in approval",
             details: `Request ID: ${request_id}\nHead of Department: ${headOfDepartment}\nLocation: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "Approved location"}\nReason given by staff: ${requestReason}\nStatus: Approved and checked in on official duty.`,
@@ -484,6 +486,8 @@ export async function POST(request: NextRequest) {
             text: `Your off-premises check-in request has been rejected.${reason}`,
           }, {
             idempotencyKey: `offpremises-rejected/${request_id}`,
+            emailModule: "off_premises",
+            emailEvent: "decision",
             firstName: pendingRequest.user_profiles?.first_name || pendingRequest.user_profiles?.full_name || "Staff member",
             requestTitle: "Off-premises check-in decision",
             details: `Request ID: ${request_id}\nHead of Department: ${headOfDepartment}\nLocation: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "Requested location"}\nReason given by staff: ${requestReason}\nStatus: Rejected.${comments ? `\nReviewer comments: ${comments}` : ""}`,
