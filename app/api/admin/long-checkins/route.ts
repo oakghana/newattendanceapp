@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     // from the database timezone.
     const { data: openRows, error: attendanceError } = await admin
       .from("attendance_records")
-      .select("id, user_id, check_in_time, check_out_time, check_in_location_name, check_in_method, last_activity, notes")
+      .select("id, user_id, check_in_time, check_out_time, check_in_location_name, check_in_method")
       .is("check_out_time", null)
       .order("check_in_time", { ascending: false })
 
@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
         department_id: person?.department_id || null,
         check_in_time: record.check_in_time,
         last_check_in: record.check_in_time,
-        activity: record.last_activity || record.notes || record.check_in_method || "Check-in remains open",
+        activity: record.check_in_method || "Check-in remains open",
         location_name: record.check_in_location_name || "Unknown",
         hours_open: Math.round(((nowMs - Date.parse(record.check_in_time)) / 3_600_000) * 100) / 100,
       }
