@@ -334,8 +334,20 @@ class EmailService {
   }
 
   private replaceTemplateVariables(template: string, data: Record<string, any>): string {
+    const values = {
+      ...data,
+      firstName: data.firstName || data.first_name || data.staffName || data.staff_name || data.name,
+      staffName: data.staffName || data.staff_name || data.fullName || data.full_name || data.name,
+      requestTitle: data.requestTitle || data.request_title || data.title || data.subject,
+      details: data.details || data.description || data.message || data.reason || data.comments,
+    }
+
     return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-      return data[key] || match
+      const value = values[key]
+      if (value === undefined || value === null || String(value).trim() === "") {
+        return "Not provided"
+      }
+      return String(value)
     })
   }
 
