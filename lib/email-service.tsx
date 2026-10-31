@@ -205,7 +205,7 @@ class EmailService {
         status,
         provider_message_id: messageId || null,
         error_message: errorMessage || null,
-        metadata: data.metadata || {},
+        metadata: { ...(data.metadata || {}), ccRecipients: data.ccRecipients || [] },
         sent_by: data.sentBy || null,
       })
     } catch (error) {
@@ -222,8 +222,11 @@ class EmailService {
     try {
       const adminClient = await createAdminClient()
       const { data: settingsRow } = await adminClient.from("system_settings").select("settings").eq("id", 1).maybeSingle()
-      const configuredCopy = settingsRow?.settings?.emailCcByModule?.[module]
-      const moduleCopy = Array.isArray(configuredCopy) ? configuredCopy.filter((value: unknown) => typeof value === "string" && value.includes("@")) : []
+      const settings = settingsRow?.settings || {}
+      const ccByModule = typeof settings.emailCcByModule === "string" ? JSON.parse(settings.emailCcByModule) : settings.emailCcByModule || {}
+      const configuredCopy = ccByModule[module] || ccByModule[module.replace("_", "-")] || []
+      const configuredList = Array.isArray(configuredCopy) ? configuredCopy : String(configuredCopy).split(/[,\\n]/)
+      const moduleCopy = configuredList.map((value: unknown) => String(value).trim().toLowerCase()).filter((value: string) => /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value))
       if (moduleCopy.length) template = { ...template, cc: [...new Set([...(template.cc || []), ...moduleCopy])] }
     } catch (error) {
       console.warn("[EmailService] Failed to load module CC settings:", error)
@@ -256,6 +259,8 @@ class EmailService {
         console.warn("[EmailService] Failed to load editable template; using workflow default", error)
       }
     }
+
+    data = { ...data, ccRecipients: template.cc || [] }
 
     // Normalize the logo URL at send time so templates saved from Preview still
     // point at the deployed portal asset instead of a temporary preview origin.
