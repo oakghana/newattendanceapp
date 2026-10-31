@@ -31,6 +31,11 @@ export async function GET(request: NextRequest) {
   const auth = await requireAdmin()
   if (auth.error) return auth.error
   const view = request.nextUrl.searchParams.get("view") || "logs"
+  if (view === "cc") {
+    const { data, error } = await auth.supabase.from("system_settings").select("settings").eq("id", 1).maybeSingle()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ccSettings: data?.settings?.emailCcByModule || {} })
+  }
   if (view === "templates") {
     const { data, error } = await auth.supabase.from("email_templates").select("*").order("module").order("event_key")
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -70,6 +75,13 @@ export async function PATCH(request: NextRequest) {
   const auth = await requireAdmin()
   if (auth.error) return auth.error
   const body = await request.json()
+  if (body.ccSettings && typeof body.ccSettings === "object") {
+    const { data: current } = await auth.supabase.from("system_settings").select("settings").eq("id", 1).maybeSingle()
+    const nextSettings = { ...(current?.settings || {}), emailCcByModule: body.ccSettings }
+    const { error } = await auth.supabase.from("system_settings").upsert({ id: 1, settings: nextSettings, updated_at: new Date().toISOString() })
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true, ccSettings: body.ccSettings })
+  }
   const { id, subject, html_body, text_body, accent_color, is_active } = body
   if (!id || !subject || !html_body) return NextResponse.json({ error: "Template id, subject, and HTML are required" }, { status: 400 })
   const { data, error } = await auth.supabase.from("email_templates").update({ subject, html_body, text_body: text_body || "", accent_color: accent_color || "#0f766e", is_active: is_active !== false, updated_by: auth.user.id, updated_at: new Date().toISOString() }).eq("id", id).select().single()
