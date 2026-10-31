@@ -405,7 +405,12 @@ export async function POST(request: NextRequest) {
             subject: "Off-Premises Check-In Approved",
             html: `<p>Your off-premises check-in request has been approved.</p><p>You have been checked in on official duty at ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "the approved location"}.</p>`,
             text: `Your off-premises check-in request has been approved. You have been checked in on official duty at ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "the approved location"}.`,
-          }, { idempotencyKey: `offpremises-approved/${request_id}` })
+          }, {
+            idempotencyKey: `offpremises-approved/${request_id}`,
+            firstName: pendingRequest.user_profiles?.first_name || pendingRequest.user_profiles?.full_name || "Staff member",
+            requestTitle: "Off-premises check-in approval",
+            details: `Request ID: ${request_id}\nLocation: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "Approved location"}\nReason: ${pendingRequest.reason || pendingRequest.purpose || "Official duty"}\nStatus: Approved and checked in on official duty.`,
+          })
         }
       } catch (err) {
         console.warn("[v0] Failed to send approval notification:", err)
@@ -463,7 +468,12 @@ export async function POST(request: NextRequest) {
             subject: "Off-Premises Check-In Rejected",
             html: `<p>Your off-premises check-in request has been rejected.</p>${comments ? `<p>Reason: ${comments}</p>` : ""}`,
             text: `Your off-premises check-in request has been rejected.${reason}`,
-          }, { idempotencyKey: `offpremises-rejected/${request_id}` })
+          }, {
+            idempotencyKey: `offpremises-rejected/${request_id}`,
+            firstName: pendingRequest.user_profiles?.first_name || pendingRequest.user_profiles?.full_name || "Staff member",
+            requestTitle: "Off-premises check-in decision",
+            details: `Request ID: ${request_id}\nLocation: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "Requested location"}\nReason: ${pendingRequest.reason || pendingRequest.purpose || "Official duty"}\nStatus: Rejected.${comments ? `\nReviewer comments: ${comments}` : ""}`,
+          })
         }
       } catch (err) {
         console.warn("[v0] Failed to send rejection notification:", err)
