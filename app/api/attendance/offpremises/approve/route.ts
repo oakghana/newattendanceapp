@@ -95,6 +95,20 @@ export async function POST(request: NextRequest) {
     const locationMap = await loadLocationHierarchyMap(supabase, [approverProfile.assigned_location_id, staffLocationId])
     const staffLocation = locationMap.get(String(staffLocationId || ""))
 
+    const { data: hodLinks } = await supabase
+      .from("loan_hod_linkages")
+      .select("hod_user_id")
+      .eq("staff_user_id", pendingRequest.user_id)
+    const hodIds = (hodLinks || []).map((link) => link.hod_user_id).filter(Boolean)
+    const { data: hodProfiles } = hodIds.length
+      ? await supabase.from("user_profiles").select("first_name, last_name").in("id", hodIds)
+      : { data: [] as { first_name: string | null; last_name: string | null }[] }
+    const headOfDepartment = (hodProfiles || [])
+      .map((hod) => `${hod.first_name || ""} ${hod.last_name || ""}`.trim())
+      .filter(Boolean)
+      .join(", ") || "Not assigned"
+    const requestReason = pendingRequest.reason || pendingRequest.purpose || "Not provided"
+
     if (canApproveAsAdmin) {
       // Admins can approve all requests
       console.log("[v0] Admin approving request")
@@ -403,13 +417,13 @@ export async function POST(request: NextRequest) {
         if (staffEmail) {
           await emailService.sendEmail(staffEmail, {
             subject: "Off-Premises Check-In Approved",
-            html: `<p>Your off-premises check-in request has been approved.</p><p>You have been checked in on official duty at ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "the approved location"}.</p>`,
-            text: `Your off-premises check-in request has been approved. You have been checked in on official duty at ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "the approved location"}.`,
+            html: `<p>Your off-premises check-in request has been approved.</p><p>Location: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "the approved location"}</p><p>Head of Department: ${headOfDepartment}</p><p>Reason given: ${requestReason}</p><p>You have been checked in on official duty.</p>`,
+            text: `Your off-premises check-in request has been approved. Location: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "the approved location"}. Head of Department: ${headOfDepartment}. Reason given: ${requestReason}. You have been checked in on official duty.`,
           }, {
             idempotencyKey: `offpremises-approved/${request_id}`,
             firstName: pendingRequest.user_profiles?.first_name || pendingRequest.user_profiles?.full_name || "Staff member",
             requestTitle: "Off-premises check-in approval",
-            details: `Request ID: ${request_id}\nLocation: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "Approved location"}\nReason: ${pendingRequest.reason || pendingRequest.purpose || "Official duty"}\nStatus: Approved and checked in on official duty.`,
+            details: `Request ID: ${request_id}\nHead of Department: ${headOfDepartment}\nLocation: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "Approved location"}\nReason given by staff: ${requestReason}\nStatus: Approved and checked in on official duty.`,
           })
         }
       } catch (err) {
@@ -472,7 +486,7 @@ export async function POST(request: NextRequest) {
             idempotencyKey: `offpremises-rejected/${request_id}`,
             firstName: pendingRequest.user_profiles?.first_name || pendingRequest.user_profiles?.full_name || "Staff member",
             requestTitle: "Off-premises check-in decision",
-            details: `Request ID: ${request_id}\nLocation: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "Requested location"}\nReason: ${pendingRequest.reason || pendingRequest.purpose || "Official duty"}\nStatus: Rejected.${comments ? `\nReviewer comments: ${comments}` : ""}`,
+            details: `Request ID: ${request_id}\nHead of Department: ${headOfDepartment}\nLocation: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "Requested location"}\nReason given by staff: ${requestReason}\nStatus: Rejected.${comments ? `\nReviewer comments: ${comments}` : ""}`,
           })
         }
       } catch (err) {
