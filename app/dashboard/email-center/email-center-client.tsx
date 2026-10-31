@@ -91,7 +91,8 @@ export default function EmailCenterClient() {
     const normalized = Object.fromEntries(Object.entries(ccSettings).map(([module, value]) => [module, value.split(/[,\\n]/).map((email) => email.trim().toLowerCase()).filter((email) => /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))]))
     try {
       const response = await fetch("/api/admin/email-center", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ccSettings: normalized }) })
-      setMessage(response.ok ? `Saved successfully at ${new Date().toLocaleTimeString()}. Future alerts will copy these module recipients.` : "Unable to save module CC recipients. No changes were applied.")
+      const result = await response.json().catch(() => ({}))
+      setMessage(response.ok && result.success ? `CC recipients saved successfully at ${new Date().toLocaleTimeString()}. Future alerts will copy these module recipients.` : result.error || "Unable to save module CC recipients. No changes were applied.")
     } catch {
       setMessage("Unable to save module CC recipients. Check your connection and try again.")
     }
