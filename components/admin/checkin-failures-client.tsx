@@ -148,7 +148,12 @@ export function CheckinFailuresClient() {
       })
       const result = await response.json()
       if (!response.ok || !result.success) throw new Error(result.error || "Failed to check out users")
+      setError(null)
       setSuccessMsg(result.message)
+      const removedIds = new Set(selectedLongCheckins)
+      setLongCheckins((current) => current.filter((row) => !removedIds.has(row.id)))
+      setLongTotal((current) => Math.max(0, current - (result.checkedOut ?? removedIds.size)))
+      setSelectedLongCheckins(new Set())
       await fetchLongCheckins()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to check out users")
@@ -420,6 +425,18 @@ export function CheckinFailuresClient() {
             </div>
           </CardHeader>
           <CardContent>
+            {successMsg && (
+              <Alert className="mb-4 border-emerald-300 bg-emerald-50 text-emerald-800">
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertDescription>{successMsg}</AlertDescription>
+              </Alert>
+            )}
+            {error && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
             <div className="mb-4 flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2">
               <input
                 type="checkbox"

@@ -224,10 +224,13 @@ class EmailService {
       const { data: settingsRow } = await adminClient.from("system_settings").select("settings").eq("id", 1).maybeSingle()
       const settings = settingsRow?.settings || {}
       const ccByModule = typeof settings.emailCcByModule === "string" ? JSON.parse(settings.emailCcByModule) : settings.emailCcByModule || {}
-      const configuredCopy = ccByModule[module] || ccByModule[module.replace("_", "-")] || []
-      const configuredList = Array.isArray(configuredCopy) ? configuredCopy : String(configuredCopy).split(/[,\\n]/)
-      const moduleCopy = configuredList.map((value: unknown) => String(value).trim().toLowerCase()).filter((value: string) => /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value))
-      if (moduleCopy.length) template = { ...template, cc: [...new Set([...(template.cc || []), ...moduleCopy])] }
+      const moduleKey = module.toLowerCase().replace(/-/g, "_")
+      const configuredCopy = ccByModule[module] || ccByModule[moduleKey] || ccByModule[moduleKey.replace(/_/g, "-")] || []
+      const configuredList = Array.isArray(configuredCopy) ? configuredCopy : String(configuredCopy).split(/[,;\n\s]+/)
+      const moduleCopy = configuredList.map((value: unknown) => String(value).trim().toLowerCase()).filter((value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
+      const primaryRecipient = to.trim().toLowerCase()
+      const copyList = moduleCopy.filter((value: string) => value !== primaryRecipient)
+      if (copyList.length) template = { ...template, cc: [...new Set([...(template.cc || []), ...copyList])] }
     } catch (error) {
       console.warn("[EmailService] Failed to load module CC settings:", error)
     }

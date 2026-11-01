@@ -5,6 +5,8 @@ const ALLOWED_ROLES = new Set(["admin"])
 const THRESHOLD_HOURS = 5
 const DEFAULT_PAGE_SIZE = 20
 const MAX_PAGE_SIZE = 100
+const FETCH_CHUNK = 1000
+const USER_CHUNK = 100
 
 type OpenAttendance = {
   id: string
@@ -43,20 +45,60 @@ export async function GET(request: NextRequest) {
     // Let PostgreSQL compare the stored timestamp directly. This avoids silently
     // dropping valid sessions when JavaScript parses timestamp formats differently
     // from the database timezone.
-    const { data: openRows, error: attendanceError } = await admin
-      .from("attendance_records")
-      .select("id, user_id, check_in_time, check_out_time, check_in_location_name, check_in_method")
-      .is("check_out_time", null)
-      .order("check_in_time", { ascending: false })
+    const thresholdTime = nowMs - THRESHOLD_HOURS * 60 * 60 * 1000
+    const thresholdIso = new Date(thresholdTime).toISOString()
 
-    if (attendanceError) return NextResponse.json({ error: attendanceError.message }, { status: 500 })
+    // Supabase caps a single response at 1000 rows, so page through every stale open record.
+    const openRows: any[] = []
+    for (let from = 0; ; from += FETCH_CHUNK) {
+      const { data, error } = await admin
+        .from("attendance_records")
+        .select("id, user_id, check_in_time, check_in_location_name, check_in_method")
+        .is("check_out_time", null)
+        .lte("check_in_time", thresholdIso)
+        .order("check_in_time", { ascending: false })
+        .range(from, from + FETCH_CHUNK - 1)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      openRows.push(...(data || []))
+      if (!data || data.length < FETCH_CHUNK) break
+    }
+
     const latestByUser = new Map<string, any>()
-    for (const row of openRows || []) {
+    for (const row of openRows) {
       if (row.user_id && !latestByUser.has(row.user_id)) latestByUser.set(row.user_id, row)
     }
-    const thresholdTime = nowMs - THRESHOLD_HOURS * 60 * 60 * 1000
+
+    // A user is only still "checked in" if nothing happened after the stale record:
+    // no newer session and no check-out recorded at or after its check-in time.
+    const candidateIds = [...latestByUser.keys()]
+    const resolvedUserIds = new Set<string>()
+    for (let i = 0; i < candidateIds.length; i += USER_CHUNK) {
+      const chunkIds = candidateIds.slice(i, i + USER_CHUNK)
+      const earliest = chunkIds.reduce((min, id) => Math.min(min, Date.parse(latestByUser.get(id).check_in_time)), Infinity)
+      const earliestIso = new Date(earliest).toISOString()
+      for (let from = 0; ; from += FETCH_CHUNK) {
+        const { data, error } = await admin
+          .from("attendance_records")
+          .select("id, user_id, check_in_time, check_out_time")
+          .in("user_id", chunkIds)
+          .or(`check_in_time.gt.${earliestIso},check_out_time.gte.${earliestIso}`)
+          .order("check_in_time", { ascending: true })
+          .range(from, from + FETCH_CHUNK - 1)
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        for (const other of data || []) {
+          const stale = latestByUser.get(other.user_id)
+          if (!stale || other.id === stale.id) continue
+          const staleIn = Date.parse(stale.check_in_time)
+          const newerSession = Date.parse(other.check_in_time) > staleIn
+          const checkedOutAfter = other.check_out_time && Date.parse(other.check_out_time) >= staleIn
+          if (newerSession || checkedOutAfter) resolvedUserIds.add(other.user_id)
+        }
+        if (!data || data.length < FETCH_CHUNK) break
+      }
+    }
+
     const rows = [...latestByUser.values()]
-      .filter((row) => Date.parse(row.check_in_time) <= thresholdTime)
+      .filter((row) => !resolvedUserIds.has(row.user_id))
       .sort((a, b) => Date.parse(a.check_in_time) - Date.parse(b.check_in_time))
     const attendanceCount = rows.length
     const pagedRows = rows.slice((page - 1) * limit, page * limit)
@@ -127,19 +169,50 @@ export async function POST(request: NextRequest) {
 
     const updated: string[] = []
     const updatedUserIds: string[] = []
-    for (const record of (openRecords || []).filter((item: any) => item.check_out_time == null || String(item.check_out_time).trim() === "")) {
-      const workHours = Math.round(((now.getTime() - new Date(record.check_in_time).getTime()) / 3_600_000) * 100) / 100
-      const { error } = await admin.from("attendance_records").update({
-        check_out_time: now.toISOString(),
+    const failures: string[] = []
+    const openOnly = (openRecords || []).filter((item: any) => item.check_out_time == null || String(item.check_out_time).trim() === "")
+    for (const record of openOnly) {
+      // work_hours is DECIMAL(4,2) (max 99.99), and a single duty period is capped at 24h
+      // everywhere else in the app, so never write the raw elapsed time.
+      const elapsedHours = Math.round(((now.getTime() - new Date(record.check_in_time).getTime()) / 3_600_000) * 100) / 100
+      const workHours = Math.min(24, Math.max(0, elapsedHours))
+      const checkoutAt = now.toISOString()
+      const note = body.note?.trim() || `Administrator checked out an attendance record open for more than ${THRESHOLD_HOURS} hours.`
+
+      let { error } = await admin.from("attendance_records").update({
+        check_out_time: checkoutAt,
         check_out_method: "admin_long_checkin_cleanup",
-        work_hours: Math.max(0, workHours),
+        work_hours: workHours,
         auto_checkout: true,
-        notes: body.note?.trim() || `Administrator checked out an attendance record open for more than ${THRESHOLD_HOURS} hours.`,
-        updated_at: now.toISOString(),
+        notes: note,
+        updated_at: checkoutAt,
       }).eq("id", record.id).is("check_out_time", null)
-      if (!error) {
+
+      if (error) {
+        console.warn("[long-checkins] Full update failed, retrying minimal:", record.id, error.message)
+        const retry = await admin.from("attendance_records").update({
+          check_out_time: checkoutAt,
+          work_hours: workHours,
+        }).eq("id", record.id).is("check_out_time", null)
+        error = retry.error
+      }
+
+      if (error) {
+        failures.push(error.message)
+        continue
+      }
+      {
         updated.push(record.id)
-        if (record.user_id) updatedUserIds.push(record.user_id)
+        if (record.user_id) {
+          updatedUserIds.push(record.user_id)
+          // Close any older orphaned open sessions too so the user cannot reappear in this list.
+          await admin.from("attendance_records").update({
+            check_out_time: now.toISOString(),
+            check_out_method: "admin_long_checkin_cleanup",
+            auto_checkout: true,
+            updated_at: now.toISOString(),
+          }).eq("user_id", record.user_id).is("check_out_time", null).lte("check_in_time", record.check_in_time)
+        }
       }
     }
 
@@ -163,7 +236,21 @@ export async function POST(request: NextRequest) {
       new_values: { record_ids: updated, requested_record_ids: recordIds, note: body.note || null },
     })
 
-    return NextResponse.json({ success: true, checkedOut: updated.length, notified: notifiedUserIds.length, message: `${updated.length} user(s) checked out and notified.` })
+    if (!updated.length) {
+      const reason = failures[0]
+        ? `Check-out failed: ${failures[0]}`
+        : "The selected records are no longer open. Refresh the list."
+      return NextResponse.json({ success: false, error: reason, checkedOut: 0 }, { status: failures.length ? 500 : 409 })
+    }
+
+    const failedNote = failures.length ? ` ${failures.length} record(s) could not be checked out.` : ""
+    return NextResponse.json({
+      success: true,
+      checkedOut: updated.length,
+      notified: notifiedUserIds.length,
+      failed: failures.length,
+      message: `${updated.length} user(s) checked out and notified.${failedNote}`,
+    })
   } catch (error) {
     console.error("[long-checkins POST]", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
