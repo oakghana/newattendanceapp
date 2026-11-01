@@ -266,10 +266,15 @@ export default async function TransportPage() {
     try {
       const stage = isManagingDirector ? "managing_director_approval" : "hr_executive_signing"
       const { count: total } = await supabase.from("transport_requests").select("id", { count: "exact", head: true })
-      const { data: pendingRows, count: pending } = await supabase.from("transport_requests").select("id, purpose, origin, destination, event_date, reference_number", { count: "exact" }).eq("workflow_stage", stage).order("created_at", { ascending: false }).limit(4)
+      const [{ count: pending }, { data: allRows }] = await Promise.all([
+        supabase.from("transport_requests").select("id", { count: "exact", head: true }).eq("workflow_stage", stage),
+        supabase.from("transport_requests").select("id, purpose, origin, destination, event_date, reference_number").order("created_at", { ascending: false }).limit(100),
+      ])
       totalCount = total ?? totalCount
       regionalPendingCount = pending ?? 0
-      queueRows = (pendingRows ?? []).map((row) => ({ ...row, request_type: "regional" as const }))
+      // Managing Directors have read-only nationwide visibility of every regional request,
+      // not only requests currently waiting for their approval.
+      queueRows = (allRows ?? []).map((row) => ({ ...row, request_type: "regional" as const }))
     } catch (error) {
       console.error("[v0] Transport landing: approval queue unavailable", error)
     }
@@ -283,9 +288,11 @@ export default async function TransportPage() {
           .eq("md_decision", "pending")
           .neq("status", "awaiting_hod_approval")
           .neq("hod_decision", "pending")
-        const { data: nonRegionalRows } = await supabase.from("nonregional_transport_requisitions").select("id, purpose, origin, destination, required_at, department, location, status, hod_decision, md_decision").eq("md_decision", "pending").neq("status", "awaiting_hod_approval").neq("hod_decision", "pending").order("created_at", { ascending: false }).limit(4)
+        const { data: nonRegionalRows } = await supabase.from("nonregional_transport_requisitions").select("id, purpose, origin, destination, required_at, department, location, status, hod_decision, md_decision").order("created_at", { ascending: false }).limit(100)
         totalCount += nonRegionalTotal ?? 0
         nonRegionalPendingCount = nonRegionalPending ?? 0
+        // Include submitted, pending, approved, assigned and completed non-regional
+        // requests so the MD can view the full transport history from this dashboard.
         queueRows = [...queueRows, ...(nonRegionalRows ?? []).map((row) => ({ id: row.id, purpose: row.purpose, origin: row.origin, destination: row.destination, event_date: row.required_at, reference_number: `${row.department} · ${row.location}`, request_type: "nonregional" as const }))]
       } catch (error) {
         console.error("[v0] Transport landing: non-regional queue unavailable", error)
