@@ -20,27 +20,19 @@ interface EmailTemplate {
   cc?: string[]
 }
 
-const EMAIL_WATERMARK_TEXT = "QCC-LOANLEAVE-APP"
-
-function buildEmailWatermarkLayer(): string {
-  const line = Array.from({ length: 3 }).map(() => EMAIL_WATERMARK_TEXT).join("   ")
-  return `
-    <div style="position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1;">
-      <div style="position:absolute;left:-10%;top:12%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
-      <div style="position:absolute;left:-10%;top:44%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
-      <div style="position:absolute;left:-10%;top:76%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
-    </div>
-  `
-}
-
 function wrapEmailWithWatermark(content: string): string {
   return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #ffffff;">
-      <div style="position: relative; background: #f0f7ec; padding: 20px 22px;">
-        ${buildEmailWatermarkLayer()}
-        <div style="position: relative; z-index: 2;">
+    <div style="margin:0;background:#f4f7fb;padding:32px 16px;font-family:Arial,Helvetica,sans-serif;color:#172554;">
+      <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #dbe5f0;border-radius:18px;overflow:hidden;box-shadow:0 8px 24px rgba(15,23,42,.08);">
+        <div style="background:#2563eb;padding:30px 34px;color:#ffffff;">
+          <div style="font-size:12px;letter-spacing:2px;font-weight:700;opacity:.85;">QCC ATTENDANCE</div>
+          <div style="margin-top:12px;font-size:28px;line-height:1.15;font-weight:700;">{{emailHeading}}</div>
+          <div style="margin-top:10px;font-size:15px;line-height:1.5;opacity:.9;">{{emailSubtitle}}</div>
+        </div>
+        <div style="padding:30px 34px;font-size:15px;line-height:1.6;">
           ${content}
         </div>
+        <div style="border-top:1px solid #e2e8f0;padding:16px 34px;color:#64748b;font-size:12px;">QCC Attendance System · Automated notification</div>
       </div>
     </div>
   `
@@ -218,7 +210,13 @@ class EmailService {
     const inferredModule = subjectHint.includes("loan") ? "loan" : subjectHint.includes("off-premises") || subjectHint.includes("off premises") ? "off_premises" : subjectHint.includes("transport") || subjectHint.includes("vehicle") ? "transport" : subjectHint.includes("leave") ? "leave" : "system"
     const module = String(data.emailModule || inferredModule).trim()
     const eventKey = String(data.emailEvent || (subjectHint.includes("approv") ? "approval" : "notification")).trim()
-    data = { ...data, emailModule: module, emailEvent: eventKey }
+    data = {
+      ...data,
+      emailModule: module,
+      emailEvent: eventKey,
+      emailHeading: data.emailHeading || template.subject.replace(/^QCC Attendance\s*[-:|]\s*/i, "").trim(),
+      emailSubtitle: data.emailSubtitle || "A clear update from the QCC Attendance System.",
+    }
     try {
       const adminClient = await createAdminClient()
       const { data: settingsRow } = await adminClient.from("system_settings").select("settings").eq("id", 1).maybeSingle()
@@ -240,7 +238,7 @@ class EmailService {
         template = { ...template, cc: [...(template.cc || []), approvalCopy] }
       }
     }
-    if (module !== "system") {
+    if (module !== "system" && !data.useInlineTemplate) {
       try {
         const adminClient = await createAdminClient()
         const { data: savedTemplate } = await adminClient
@@ -252,11 +250,15 @@ class EmailService {
         if (savedTemplate?.is_active) {
           template = {
             subject: savedTemplate.subject,
-            html: savedTemplate.html_body,
+            html: wrapEmailWithWatermark(savedTemplate.html_body),
             text: savedTemplate.text_body,
             cc: template.cc,
           }
-          data = { ...data, accentColor: savedTemplate.accent_color }
+          data = {
+            ...data,
+            accentColor: savedTemplate.accent_color,
+            emailHeading: savedTemplate.subject.replace(/^QCC Attendance\s*[-:|]\s*/i, "").trim(),
+          }
         }
       } catch (error) {
         console.warn("[EmailService] Failed to load editable template; using workflow default", error)

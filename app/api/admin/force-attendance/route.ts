@@ -81,6 +81,12 @@ export async function POST(request: NextRequest) {
 
       if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 })
 
+      // A successful administrative check-in resolves the failed-attempt queue for this user.
+      // Preserve the failure details for reports, but move them out of the unresolved queue.
+      for (const action of ["check_in_failed", "offpremises_checkin_failed", "manual_checkin_failed"]) {
+        await admin.from("audit_logs").update({ action: `${action}_resolved` }).eq("user_id", userId).eq("action", action)
+      }
+
       // Audit log
       await supabase.from("audit_logs").insert({
         user_id: user.id,
