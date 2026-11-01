@@ -417,8 +417,32 @@ export async function POST(request: NextRequest) {
         if (staffEmail) {
           await emailService.sendEmail(staffEmail, {
             subject: "Off-Premises Check-In Approved",
-            html: `<p>Your off-premises check-in request has been approved.</p><p>Location: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "the approved location"}</p><p>Head of Department: ${headOfDepartment}</p><p>Reason given: ${requestReason}</p><p>You have been checked in on official duty.</p>`,
-            text: `Your off-premises check-in request has been approved. Location: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "the approved location"}. Head of Department: ${headOfDepartment}. Reason given: ${requestReason}. You have been checked in on official duty.`,
+            html: `
+              <div style="margin:0;background:#f4f7fb;padding:32px 16px;font-family:Arial,Helvetica,sans-serif;color:#172554;">
+                <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #dbe5f0;border-radius:18px;overflow:hidden;box-shadow:0 8px 24px rgba(15,23,42,.08);">
+                  <div style="background:#2563eb;padding:30px 34px;color:#ffffff;">
+                    <div style="font-size:12px;letter-spacing:2px;font-weight:700;opacity:.85;">QCC ATTENDANCE</div>
+                    <h1 style="margin:12px 0 0;font-size:28px;line-height:1.15;">Off-premises approval</h1>
+                    <p style="margin:10px 0 0;font-size:15px;opacity:.9;">Your attendance request has been completed.</p>
+                  </div>
+                  <div style="padding:30px 34px;">
+                    <p style="margin:0 0 22px;font-size:16px;line-height:1.6;">Hello ${pendingRequest.user_profiles?.first_name || "there"},</p>
+                    <div style="border:1px solid #dbe5f0;border-radius:12px;padding:18px 20px;margin-bottom:22px;">
+                      <div style="font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:1px;">Status</div>
+                      <div style="margin-top:6px;color:#15803d;font-size:19px;font-weight:700;">Approved and checked in</div>
+                    </div>
+                    <p style="margin:0 0 10px;font-size:15px;font-weight:700;">Request details</p>
+                    <table role="presentation" style="width:100%;border-collapse:collapse;font-size:14px;line-height:1.5;">
+                      <tr><td style="padding:9px 0;color:#64748b;width:34%;">Location</td><td style="padding:9px 0;font-weight:600;">${pendingRequest.google_maps_name || pendingRequest.current_location_name || "Approved location"}</td></tr>
+                      <tr><td style="padding:9px 0;color:#64748b;">Reason</td><td style="padding:9px 0;">${requestReason}</td></tr>
+                      <tr><td style="padding:9px 0;color:#64748b;">Reviewed by</td><td style="padding:9px 0;">${headOfDepartment}</td></tr>
+                    </table>
+                    <p style="margin:24px 0 0;color:#475569;font-size:14px;line-height:1.6;">You have been checked in on official duty. Keep this email for your records.</p>
+                  </div>
+                  <div style="border-top:1px solid #e2e8f0;padding:16px 34px;color:#64748b;font-size:12px;">QCC Attendance System · Automated notification</div>
+                </div>
+              </div>`,
+            text: `Off-premises approval\n\nHello ${pendingRequest.user_profiles?.first_name || "there"},\nYour request was approved and you were checked in on official duty.\n\nLocation: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "Approved location"}\nReason: ${requestReason}\nReviewed by: ${headOfDepartment}`,
           }, {
             idempotencyKey: `offpremises-approved/${request_id}`,
             emailModule: "off_premises",

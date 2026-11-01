@@ -204,10 +204,32 @@ export async function GET(request: NextRequest) {
 
     // Ensure we have a non-empty array to query
     let userProfiles: any[] = []
+    const adminClient = await createAdminClient()
+    const { data: failureLogs } = userIds.length
+      ? await adminClient
+          .from("audit_logs")
+          .select("user_id, created_at, new_values")
+          .in("user_id", userIds)
+          .in("action", ["check_in_failed", "offpremises_checkin_failed", "manual_checkin_failed"])
+          .order("created_at", { ascending: false })
+          .limit(Math.min(5000, Math.max(100, userIds.length * 10)))
+      : { data: [] }
+    const failureLocationByUser = new Map<string, { name: string; at: number }>()
+    for (const log of failureLogs || []) {
+      let values: any = log.new_values
+      try {
+        if (typeof values === "string") values = JSON.parse(values)
+      } catch {
+        values = null
+      }
+      const location = String(values?.nearest_location_name || "").trim()
+      if (location && !failureLocationByUser.has(log.user_id)) {
+        failureLocationByUser.set(log.user_id, { name: location, at: Date.parse(log.created_at) })
+      }
+    }
     if (userIds.length > 0) {
       // Use adminClient to bypass RLS — the user client can only see its own profile row,
       // so all other staff would return empty and show as "Staff at [location]".
-      const adminClient = await createAdminClient()
       const profiles = await selectByIds(
         adminClient,
         "user_profiles",
@@ -412,8 +434,14 @@ export async function GET(request: NextRequest) {
         })
       }
 
+      const failureLocation = failureLocationByUser.get(record.user_id)
+      const recordedLocation = record.check_in_location_name || record.actual_location_name || record.check_in_location?.name
       return {
         ...record,
+        // Admin check-ins can be created after repeated failed attempts. Preserve the
+        // point captured by the failed attempt instead of rendering "Not recorded".
+        check_in_location_name: recordedLocation || failureLocation?.name || null,
+        actual_location_name: record.actual_location_name || failureLocation?.name || null,
         user_profiles: enrichedProfile,
         is_check_in_outside_location: isCheckInOutsideLocation,
         is_check_out_outside_location: isCheckOutOutsideLocation,
