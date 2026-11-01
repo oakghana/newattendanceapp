@@ -210,7 +210,7 @@ export async function GET(request: NextRequest) {
           .from("audit_logs")
           .select("user_id, created_at, new_values")
           .in("user_id", userIds)
-          .in("action", ["check_in_failed", "offpremises_checkin_failed", "manual_checkin_failed"])
+          .in("action", ["check_in_failed", "offpremises_checkin_failed", "manual_checkin_failed", "check_in_failed_resolved", "offpremises_checkin_failed_resolved", "manual_checkin_failed_resolved"])
           .order("created_at", { ascending: false })
           .limit(Math.min(5000, Math.max(100, userIds.length * 10)))
       : { data: [] }
