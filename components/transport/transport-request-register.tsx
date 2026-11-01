@@ -13,6 +13,7 @@ import {
   Clock3,
   Users,
   Trash2,
+  X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -165,6 +166,7 @@ export function TransportRequestRegister({
     null,
   );
   const [openRequest, setOpenRequest] = React.useState<TransportRequestRow | null>(null);
+ const [previewDocument, setPreviewDocument] = React.useState<{ name?: string; url: string } | null>(null);
   const [memoPreview, setMemoPreview] =
     React.useState<TransportRequestRow | null>(null);
   const [memoView, setMemoView] = React.useState<"original" | "rejoinder">(
@@ -1049,9 +1051,8 @@ export function TransportRequestRegister({
                         {row.supporting_documents?.[0]?.url ? (
                           <a
                             className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
-                            href={row.supporting_documents[0].url}
-                            target="_blank"
-                            rel="noreferrer"
+href={row.supporting_documents[0].url}
+                      onClick={(event) => { event.preventDefault(); setPreviewDocument({ name: row.supporting_documents[0].name, url: row.supporting_documents[0].url! }); }}
                           >
                             {row.supporting_documents[0].name ??
                               "Open evidence"}
@@ -1436,11 +1437,9 @@ export function TransportRequestRegister({
       {openRequest.supporting_documents.filter((document) => document.url).map((document, index) => (
         <a
           key={`${document.url}-${index}`}
-          href={document.url}
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center justify-between rounded-md border bg-background px-3 py-2 text-sm text-primary hover:bg-primary/5"
-        >
+href={document.url}
+                      onClick={(event) => { event.preventDefault(); setPreviewDocument({ name: document.name, url: document.url! }); }}
+                    >
           <span className="truncate">{document.name ?? `Supporting document ${index + 1}`}</span>
           <ExternalLink className="ml-2 size-4 shrink-0" />
         </a>
@@ -1457,7 +1456,7 @@ export function TransportRequestRegister({
                 </div>
                 <div><p className="text-xs text-muted-foreground">Previous requests</p><p className="font-medium">{openRequest.previous_request_count ?? 0}</p></div>
               </div>
-              {openRequest.supporting_documents?.length ? <div><p className="mb-2 text-sm font-medium">Supporting documents</p>{openRequest.supporting_documents.map((document) => document.url ? <a key={document.url} className="block text-sm text-primary underline" href={document.url} target="_blank" rel="noreferrer">{document.name ?? "Open document"}</a> : null)}</div> : null}
+              {openRequest.supporting_documents?.length ? <div><p className="mb-2 text-sm font-medium">Supporting documents</p>{openRequest.supporting_documents.map((document) => document.url ? <a key={document.url} className="block text-sm text-primary underline" href={document.url} onClick={(event) => { event.preventDefault(); setPreviewDocument({ name: document.name, url: document.url! }); }}>{document.name ?? "Open document"}</a> : null)}</div> : null}
               <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
                 {canDistrictOfficer && (openRequest.workflow_stage === "district_officer_review" || openRequest.workflow_stage === "awaiting_do_regional_hr_endorsement") && <><Button disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "approve"); }}>Endorse</Button><Button variant="outline" disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "reject"); }}>Deny</Button></>}
                 {canRegionalHr && <>{openRequest.workflow_stage === "district_officer_review" || openRequest.workflow_stage === "awaiting_do_regional_hr_endorsement" ? <><Button disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "approve"); }}>Endorse for Regional Manager</Button><Button variant="outline" disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "reject"); }}>Reject</Button></> : <><Button disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "approve_within_authority"); }}>Treat within region → RM endorsement → Chief Driver</Button><Button variant="outline" disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "forward_to_rm"); }}>Refer to RM endorsement → Chief Driver</Button><Button variant="outline" disabled={busy === openRequest.id} onClick={() => { setOpenRequest(null); requestDecision(openRequest.id, "reject"); }}>Reject</Button></>}</>}
@@ -1465,6 +1464,33 @@ export function TransportRequestRegister({
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+      {previewDocument && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label={previewDocument.name ?? "Supporting document preview"}
+          onClick={() => setPreviewDocument(null)}
+        >
+          <div className="relative flex max-h-[92vh] max-w-5xl items-center justify-center" onClick={(event) => event.stopPropagation()}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon"
+              className="absolute right-2 top-2 z-10 rounded-full shadow-lg"
+              aria-label="Close document preview"
+              onClick={() => setPreviewDocument(null)}
+            >
+              <X className="size-4" />
+            </Button>
+            <img
+              src={previewDocument.url}
+              alt={previewDocument.name ?? "Supporting document"}
+              className="max-h-[88vh] max-w-[min(90vw,1100px)] rounded-lg object-contain shadow-2xl"
+            />
+          </div>
         </div>
       )}
       {commentRequest && (
