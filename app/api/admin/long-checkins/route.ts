@@ -5,6 +5,8 @@ const ALLOWED_ROLES = new Set(["admin"])
 const THRESHOLD_HOURS = 5
 const DEFAULT_PAGE_SIZE = 20
 const MAX_PAGE_SIZE = 100
+const FETCH_CHUNK = 1000
+const USER_CHUNK = 100
 
 type OpenAttendance = {
   id: string
@@ -43,20 +45,60 @@ export async function GET(request: NextRequest) {
     // Let PostgreSQL compare the stored timestamp directly. This avoids silently
     // dropping valid sessions when JavaScript parses timestamp formats differently
     // from the database timezone.
-    const { data: openRows, error: attendanceError } = await admin
-      .from("attendance_records")
-      .select("id, user_id, check_in_time, check_out_time, check_in_location_name, check_in_method")
-      .is("check_out_time", null)
-      .order("check_in_time", { ascending: false })
+    const thresholdTime = nowMs - THRESHOLD_HOURS * 60 * 60 * 1000
+    const thresholdIso = new Date(thresholdTime).toISOString()
 
-    if (attendanceError) return NextResponse.json({ error: attendanceError.message }, { status: 500 })
+    // Supabase caps a single response at 1000 rows, so page through every stale open record.
+    const openRows: any[] = []
+    for (let from = 0; ; from += FETCH_CHUNK) {
+      const { data, error } = await admin
+        .from("attendance_records")
+        .select("id, user_id, check_in_time, check_in_location_name, check_in_method")
+        .is("check_out_time", null)
+        .lte("check_in_time", thresholdIso)
+        .order("check_in_time", { ascending: false })
+        .range(from, from + FETCH_CHUNK - 1)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      openRows.push(...(data || []))
+      if (!data || data.length < FETCH_CHUNK) break
+    }
+
     const latestByUser = new Map<string, any>()
-    for (const row of openRows || []) {
+    for (const row of openRows) {
       if (row.user_id && !latestByUser.has(row.user_id)) latestByUser.set(row.user_id, row)
     }
-    const thresholdTime = nowMs - THRESHOLD_HOURS * 60 * 60 * 1000
+
+    // A user is only still "checked in" if nothing happened after the stale record:
+    // no newer session and no check-out recorded at or after its check-in time.
+    const candidateIds = [...latestByUser.keys()]
+    const resolvedUserIds = new Set<string>()
+    for (let i = 0; i < candidateIds.length; i += USER_CHUNK) {
+      const chunkIds = candidateIds.slice(i, i + USER_CHUNK)
+      const earliest = chunkIds.reduce((min, id) => Math.min(min, Date.parse(latestByUser.get(id).check_in_time)), Infinity)
+      const earliestIso = new Date(earliest).toISOString()
+      for (let from = 0; ; from += FETCH_CHUNK) {
+        const { data, error } = await admin
+          .from("attendance_records")
+          .select("id, user_id, check_in_time, check_out_time")
+          .in("user_id", chunkIds)
+          .or(`check_in_time.gt.${earliestIso},check_out_time.gte.${earliestIso}`)
+          .order("check_in_time", { ascending: true })
+          .range(from, from + FETCH_CHUNK - 1)
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        for (const other of data || []) {
+          const stale = latestByUser.get(other.user_id)
+          if (!stale || other.id === stale.id) continue
+          const staleIn = Date.parse(stale.check_in_time)
+          const newerSession = Date.parse(other.check_in_time) > staleIn
+          const checkedOutAfter = other.check_out_time && Date.parse(other.check_out_time) >= staleIn
+          if (newerSession || checkedOutAfter) resolvedUserIds.add(other.user_id)
+        }
+        if (!data || data.length < FETCH_CHUNK) break
+      }
+    }
+
     const rows = [...latestByUser.values()]
-      .filter((row) => Date.parse(row.check_in_time) <= thresholdTime)
+      .filter((row) => !resolvedUserIds.has(row.user_id))
       .sort((a, b) => Date.parse(a.check_in_time) - Date.parse(b.check_in_time))
     const attendanceCount = rows.length
     const pagedRows = rows.slice((page - 1) * limit, page * limit)
@@ -139,7 +181,16 @@ export async function POST(request: NextRequest) {
       }).eq("id", record.id).is("check_out_time", null)
       if (!error) {
         updated.push(record.id)
-        if (record.user_id) updatedUserIds.push(record.user_id)
+        if (record.user_id) {
+          updatedUserIds.push(record.user_id)
+          // Close any older orphaned open sessions too so the user cannot reappear in this list.
+          await admin.from("attendance_records").update({
+            check_out_time: now.toISOString(),
+            check_out_method: "admin_long_checkin_cleanup",
+            auto_checkout: true,
+            updated_at: now.toISOString(),
+          }).eq("user_id", record.user_id).is("check_out_time", null).lte("check_in_time", record.check_in_time)
+        }
       }
     }
 

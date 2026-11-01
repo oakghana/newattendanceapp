@@ -76,11 +76,24 @@ export async function PATCH(request: NextRequest) {
   if (auth.error) return auth.error
   const body = await request.json()
   if (body.ccSettings && typeof body.ccSettings === "object") {
-    const { data: current } = await auth.supabase.from("system_settings").select("settings").eq("id", 1).maybeSingle()
-    const nextSettings = { ...(current?.settings || {}), emailCcByModule: body.ccSettings }
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    const cleaned: Record<string, string[]> = {}
+    for (const [moduleName, rawValue] of Object.entries(body.ccSettings as Record<string, unknown>)) {
+      const entries = (Array.isArray(rawValue) ? rawValue : String(rawValue || "").split(/[,;\n\s]+/)).map((value) => String(value).trim().toLowerCase()).filter(Boolean)
+      cleaned[moduleName.replace(/-/g, "_")] = [...new Set(entries.filter((value) => emailPattern.test(value)))]
+    }
+    const { data: current, error: readError } = await auth.supabase.from("system_settings").select("settings").eq("id", 1).maybeSingle()
+    if (readError) return NextResponse.json({ error: `Unable to read current settings: ${readError.message}` }, { status: 500 })
+    const nextSettings = { ...(current?.settings || {}), emailCcByModule: cleaned }
     const { error } = await auth.supabase.from("system_settings").upsert({ id: 1, settings: nextSettings, updated_at: new Date().toISOString() })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ success: true, ccSettings: body.ccSettings })
+    const { data: saved, error: verifyError } = await auth.supabase.from("system_settings").select("settings").eq("id", 1).maybeSingle()
+    const persisted = saved?.settings?.emailCcByModule
+    if (verifyError || JSON.stringify(persisted || {}) !== JSON.stringify(cleaned)) {
+      return NextResponse.json({ error: "The CC recipients could not be confirmed in the database. Nothing was applied." }, { status: 500 })
+    }
+    await auth.supabase.from("audit_logs").insert({ user_id: auth.user.id, action: "EMAIL_CC_SETTINGS_UPDATED", new_values: { emailCcByModule: cleaned } })
+    return NextResponse.json({ success: true, ccSettings: persisted })
   }
   const { id, subject, html_body, text_body, accent_color, is_active } = body
   if (!id || !subject || !html_body) return NextResponse.json({ error: "Template id, subject, and HTML are required" }, { status: 400 })
