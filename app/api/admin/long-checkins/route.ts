@@ -169,17 +169,39 @@ export async function POST(request: NextRequest) {
 
     const updated: string[] = []
     const updatedUserIds: string[] = []
-    for (const record of (openRecords || []).filter((item: any) => item.check_out_time == null || String(item.check_out_time).trim() === "")) {
-      const workHours = Math.round(((now.getTime() - new Date(record.check_in_time).getTime()) / 3_600_000) * 100) / 100
-      const { error } = await admin.from("attendance_records").update({
-        check_out_time: now.toISOString(),
+    const failures: string[] = []
+    const openOnly = (openRecords || []).filter((item: any) => item.check_out_time == null || String(item.check_out_time).trim() === "")
+    for (const record of openOnly) {
+      // work_hours is DECIMAL(4,2) (max 99.99), and a single duty period is capped at 24h
+      // everywhere else in the app, so never write the raw elapsed time.
+      const elapsedHours = Math.round(((now.getTime() - new Date(record.check_in_time).getTime()) / 3_600_000) * 100) / 100
+      const workHours = Math.min(24, Math.max(0, elapsedHours))
+      const checkoutAt = now.toISOString()
+      const note = body.note?.trim() || `Administrator checked out an attendance record open for more than ${THRESHOLD_HOURS} hours.`
+
+      let { error } = await admin.from("attendance_records").update({
+        check_out_time: checkoutAt,
         check_out_method: "admin_long_checkin_cleanup",
-        work_hours: Math.max(0, workHours),
+        work_hours: workHours,
         auto_checkout: true,
-        notes: body.note?.trim() || `Administrator checked out an attendance record open for more than ${THRESHOLD_HOURS} hours.`,
-        updated_at: now.toISOString(),
+        notes: note,
+        updated_at: checkoutAt,
       }).eq("id", record.id).is("check_out_time", null)
-      if (!error) {
+
+      if (error) {
+        console.warn("[long-checkins] Full update failed, retrying minimal:", record.id, error.message)
+        const retry = await admin.from("attendance_records").update({
+          check_out_time: checkoutAt,
+          work_hours: workHours,
+        }).eq("id", record.id).is("check_out_time", null)
+        error = retry.error
+      }
+
+      if (error) {
+        failures.push(error.message)
+        continue
+      }
+      {
         updated.push(record.id)
         if (record.user_id) {
           updatedUserIds.push(record.user_id)
@@ -214,7 +236,21 @@ export async function POST(request: NextRequest) {
       new_values: { record_ids: updated, requested_record_ids: recordIds, note: body.note || null },
     })
 
-    return NextResponse.json({ success: true, checkedOut: updated.length, notified: notifiedUserIds.length, message: `${updated.length} user(s) checked out and notified.` })
+    if (!updated.length) {
+      const reason = failures[0]
+        ? `Check-out failed: ${failures[0]}`
+        : "The selected records are no longer open. Refresh the list."
+      return NextResponse.json({ success: false, error: reason, checkedOut: 0 }, { status: failures.length ? 500 : 409 })
+    }
+
+    const failedNote = failures.length ? ` ${failures.length} record(s) could not be checked out.` : ""
+    return NextResponse.json({
+      success: true,
+      checkedOut: updated.length,
+      notified: notifiedUserIds.length,
+      failed: failures.length,
+      message: `${updated.length} user(s) checked out and notified.${failedNote}`,
+    })
   } catch (error) {
     console.error("[long-checkins POST]", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
