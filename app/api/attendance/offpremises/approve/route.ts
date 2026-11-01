@@ -447,9 +447,24 @@ export async function POST(request: NextRequest) {
             idempotencyKey: `offpremises-approved/${request_id}`,
             emailModule: "off_premises",
             emailEvent: "approval",
+            useInlineTemplate: true,
             firstName: pendingRequest.user_profiles?.first_name || pendingRequest.user_profiles?.full_name || "Staff member",
             requestTitle: "Off-premises check-in approval",
-            details: `Request ID: ${request_id}\nHead of Department: ${headOfDepartment}\nLocation: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "Approved location"}\nReason given by staff: ${requestReason}\nStatus: Approved and checked in on official duty.`,
+            details: `OFF-PREMISES CHECK-IN APPROVAL
+
+STAFF MEMBER
+Name: ${pendingRequest.user_profiles?.first_name || "Staff member"} ${pendingRequest.user_profiles?.last_name || ""}
+
+REQUEST
+Request ID: ${request_id}
+Location: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "Approved location"}
+
+STAFF REASON
+${requestReason || "No reason provided."}
+
+APPROVAL
+Reviewed by: ${headOfDepartment || "Authorized approver"}
+Status: Approved and checked in on official duty.`,
           })
         }
       } catch (err) {

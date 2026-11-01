@@ -240,7 +240,7 @@ class EmailService {
         template = { ...template, cc: [...(template.cc || []), approvalCopy] }
       }
     }
-    if (module !== "system") {
+    if (module !== "system" && !data.useInlineTemplate) {
       try {
         const adminClient = await createAdminClient()
         const { data: savedTemplate } = await adminClient
