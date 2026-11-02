@@ -26,19 +26,21 @@ export async function POST(request: Request) {
     const { data: existing } = await admin.from("audit_logs").select("id").eq("user_id", userId).eq("action", "attendance_failure_escalated").gte("created_at", start.toISOString()).limit(1).maybeSingle()
     if (existing && !body.forceSend) continue
     const { data: profile } = await admin.from("user_profiles").select("id, email, first_name, last_name, rank, role, assigned_location_id, region_id, departments(name)").eq("id", userId).maybeSingle()
-    const currentEmail = String(profile?.email || "").trim().toLowerCase()
+    const { data: authUser } = await admin.auth.admin.getUserById(userId)
+    const currentEmail = String(profile?.email || authUser.user?.email || "").trim().toLowerCase()
     if (!currentEmail) continue
     const { data: location } = profile?.assigned_location_id ? await admin.from("geofence_locations").select("name").eq("id", profile.assigned_location_id).maybeSingle() : { data: null }
-    const { data: allSupportProfiles } = await admin.from("user_profiles").select("email, role, assigned_location_id, region_id, it_admin_scope").eq("is_active", true)
+    const { data: allSupportProfiles } = await admin.from("user_profiles").select("email, role, is_active, assigned_location_id, region_id, it_admin_scope")
     const itAdmins = (allSupportProfiles || []).filter((it: any) => {
       const role = String(it.role || "").toLowerCase().replace(/[ _-]/g, "")
+      if (it.is_active === false) return false
       return IT_ROLES.map((value) => value.replace(/[ _-]/g, "")).includes(role) || (role.includes("it") && role.includes("admin"))
     })
     const matches = itAdmins.filter((it: any) => it.assigned_location_id === profile?.assigned_location_id || it.region_id === profile?.region_id || it.it_admin_scope === "head_office_it_admin")
     const matchingProfiles = matches.length ? matches : itAdmins
     const itEmails = [...new Set(matchingProfiles.map((it: any) => String(it.email || "").trim().toLowerCase()).filter(Boolean))]
-    const { data: admins } = await admin.from("user_profiles").select("email").in("role", ["admin", "administrator"]).eq("is_active", true)
-    const cc = [...new Set([...itEmails.slice(1), ...(admins || []).map((a: any) => String(a.email || "").trim().toLowerCase()), currentEmail])].filter((email) => email && email !== itEmails[0])
+    const { data: admins } = await admin.from("user_profiles").select("email, is_active").in("role", ["admin", "administrator"])
+    const cc = [...new Set([...itEmails.slice(1), ...(admins || []).filter((a: any) => a.is_active !== false).map((a: any) => String(a.email || "").trim().toLowerCase()), currentEmail])].filter((email) => email && email !== itEmails[0])
     if (!itEmails[0]) continue
     const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Staff member"
     const department = (profile as any)?.departments?.name || "Not available"
