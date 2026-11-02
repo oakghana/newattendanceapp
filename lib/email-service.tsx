@@ -18,6 +18,7 @@ interface EmailTemplate {
   html: string
   text: string
   cc?: string[]
+  replyTo?: string
 }
 
 function wrapEmailWithWatermark(content: string): string {
@@ -296,7 +297,7 @@ class EmailService {
           body: JSON.stringify({
             from: `${this.senderName} <notifications@${resendDomain}>`,
             to: [to],
-            reply_to: this.senderEmail ? [this.senderEmail] : undefined,
+            reply_to: template.replyTo ? [template.replyTo] : this.senderEmail ? [this.senderEmail] : undefined,
             subject,
             html,
             text,
@@ -330,7 +331,7 @@ class EmailService {
       const mailOptions = {
         from: `"${this.senderName}" <${this.senderEmail}>`,
         to,
-        replyTo: this.senderEmail,
+        replyTo: template.replyTo || this.senderEmail,
         subject,
         html,
         text,
