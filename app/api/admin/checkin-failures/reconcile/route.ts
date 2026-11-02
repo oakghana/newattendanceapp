@@ -6,7 +6,7 @@ const FAILURE_ACTIONS = ["check_in_failed", "offpremises_checkin_failed", "check
 const IT_ROLES = ["it-admin", "it_admin", "regional_it_admin", "head_office_it_admin"]
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({})) as { userId?: string; forceSend?: boolean }
+  const body = await request.json().catch(() => ({})) as { userId?: string; forceSend?: boolean; recipientIds?: string[] }
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -38,7 +38,10 @@ export async function POST(request: Request) {
     })
     const matches = itAdmins.filter((it: any) => it.assigned_location_id === profile?.assigned_location_id || it.region_id === profile?.region_id || it.it_admin_scope === "head_office_it_admin")
     const matchingProfiles = matches.length ? matches : itAdmins
-    const itEmails = [...new Set(matchingProfiles.map((it: any) => String(it.email || "").trim().toLowerCase()).filter(Boolean))]
+    const selectedProfiles = body.recipientIds?.length
+      ? matchingProfiles.filter((profile: any) => body.recipientIds?.includes(profile.id))
+      : matchingProfiles
+    const itEmails = [...new Set(selectedProfiles.map((it: any) => String(it.email || "").trim().toLowerCase()).filter(Boolean))]
     const { data: admins } = await admin.from("user_profiles").select("email, is_active").in("role", ["admin", "administrator"])
     const adminEmails = (admins || []).filter((a: any) => a.is_active !== false).map((a: any) => String(a.email || "").trim().toLowerCase()).filter(Boolean)
     const primaryRecipient = itEmails[0] || adminEmails[0] || currentEmail

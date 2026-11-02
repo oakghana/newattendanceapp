@@ -63,6 +63,13 @@ type SummaryReason = {
   attempts: number
 }
 
+type AlertRecipient = {
+  id: string
+  email: string
+  name: string
+  category: string
+}
+
 type LongCheckin = {
   id: string
   user_id: string
@@ -110,6 +117,8 @@ export function CheckinFailuresClient() {
   const [forceBusy, setForceBusy] = useState(false)
   const [forceNote, setForceNote] = useState("")
   const [forceError, setForceError] = useState<string | null>(null)
+  const [alertRecipients, setAlertRecipients] = useState<AlertRecipient[]>([])
+  const [selectedAlertRecipients, setSelectedAlertRecipients] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<"failures" | "long-checkins">("failures")
   const [longCheckins, setLongCheckins] = useState<LongCheckin[]>([])
   const [longPage, setLongPage] = useState(1)
@@ -281,7 +290,19 @@ export function CheckinFailuresClient() {
     setForceAction(action)
     setForceNote("")
     setForceError(null)
+    setAlertRecipients([])
+    setSelectedAlertRecipients([])
     setForceDialogOpen(true)
+    if (user.attempts > 5 && user.user_id) {
+      void fetch(`/api/admin/checkin-failures/recipients?userId=${encodeURIComponent(user.user_id)}`)
+        .then((response) => response.json())
+        .then((result) => {
+          const recipients = [...(result.regional || []), ...(result.headOffice || [])] as AlertRecipient[]
+          setAlertRecipients(recipients)
+          setSelectedAlertRecipients(recipients.map((recipient) => recipient.id))
+        })
+        .catch(() => setForceError("Unable to load IT Admin recipients"))
+    }
   }, [])
 
   const sendForceAlert = useCallback(async () => {
@@ -292,7 +313,7 @@ export function CheckinFailuresClient() {
       const response = await fetch("/api/admin/checkin-failures/reconcile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: forceTarget.user_id, forceSend: true }),
+        body: JSON.stringify({ userId: forceTarget.user_id, forceSend: true, recipientIds: selectedAlertRecipients }),
       })
       const result = await response.json()
       if (!response.ok || !result.success || result.sent < 1) throw new Error(result.error || "No alert email was sent")
@@ -302,7 +323,7 @@ export function CheckinFailuresClient() {
     } finally {
       setForceBusy(false)
     }
-  }, [forceTarget])
+  }, [forceTarget, selectedAlertRecipients])
 
   const handleForceAttendance = useCallback(async () => {
     if (!forceTarget?.user_id) {
@@ -852,6 +873,31 @@ export function CheckinFailuresClient() {
                 <AlertDescription className="text-xs">{forceError}</AlertDescription>
               </Alert>
             )}
+            {forceTarget && forceTarget.attempts > 5 && (
+              <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+                <div>
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Email alert recipients</Label>
+                  <p className="mt-1 text-xs text-emerald-700">Select the IT Admins who should receive this failure alert.</p>
+                </div>
+                {alertRecipients.length ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {alertRecipients.map((recipient) => (
+                      <label key={recipient.id} className="flex cursor-pointer items-start gap-2 rounded-lg border border-emerald-100 bg-background p-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={selectedAlertRecipients.includes(recipient.id)}
+                          onChange={(event) => setSelectedAlertRecipients((current) => event.target.checked ? [...current, recipient.id] : current.filter((id) => id !== recipient.id))}
+                          className="mt-0.5 accent-emerald-600"
+                        />
+                        <span className="min-w-0"><span className="block font-medium truncate">{recipient.name}</span><span className="block truncate text-xs text-muted-foreground">{recipient.category} · {recipient.email}</span></span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-amber-700">No matching IT Admins found. Configure active IT Admin profiles before sending.</p>
+                )}
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Optional Note</Label>
               <Input
@@ -866,7 +912,7 @@ export function CheckinFailuresClient() {
               Cancel
             </Button>
             {forceTarget && forceTarget.attempts > 5 && (
-              <Button variant="outline" onClick={() => void sendForceAlert()} disabled={forceBusy}>
+              <Button variant="outline" onClick={() => void sendForceAlert()} disabled={forceBusy || !selectedAlertRecipients.length}>
                 <Mail className="h-4 w-4 mr-2" /> Send Email Alert
               </Button>
             )}

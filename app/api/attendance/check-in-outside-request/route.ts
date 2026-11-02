@@ -3,6 +3,7 @@ import { isExemptFromAttendanceReasons } from "@/lib/attendance-utils"
 import { validateAttendanceReason } from "@/lib/meaningful-text"
 import { parseRuntimeFlags } from "@/lib/runtime-flags"
 import { findRegionalManagersForLocation } from "@/lib/regional-manager-scope"
+import { emailService } from "@/lib/email-service"
 import { type NextRequest, NextResponse } from "next/server"
 
 console.log("[v0] check-in-outside-request route module loaded")
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
     // Get user's direct manager (department head or regional manager they report to)
     const { data: userProfile, error: userProfileError } = await supabase
       .from("user_profiles")
-      .select("id, department_id, role, first_name, last_name, email, assigned_location_id")
+      .select("id, employee_id, department_id, role, first_name, last_name, email, assigned_location_id, region_id")
       .eq("id", user_id)
       .maybeSingle()
 
@@ -240,7 +241,21 @@ export async function POST(request: NextRequest) {
 
     const managers = Object.values(managersMap)
 
-    console.log('[v0] Approvers resolved:', { admins: admins?.length || 0, departmentHeads: departmentHeads.length, regionalManagers: regionalManagers.length, total: managers.length })
+    // IT support recipients are deliberately separate from approval recipients.
+    // This ensures a technical support alert is sent even when an IT Admin is not an approver.
+    const { data: itAdmins } = await supabase
+      .from('user_profiles')
+      .select('id, email, first_name, last_name, role, it_admin_scope, region_id, assigned_location_id')
+      .eq('is_active', true)
+      .in('it_admin_scope', ['regional_it_admin', 'head_office_it_admin'])
+
+    const supportRecipients = (itAdmins || []).filter((recipient: any) =>
+      recipient.it_admin_scope === 'head_office_it_admin' ||
+      (recipient.region_id && recipient.region_id === userProfile.region_id) ||
+      (recipient.assigned_location_id && recipient.assigned_location_id === userProfile.assigned_location_id),
+    )
+
+    console.log('[v0] Approvers resolved:', { admins: admins?.length || 0, departmentHeads: departmentHeads.length, regionalManagers: regionalManagers.length, supportRecipients: supportRecipients.length, total: managers.length })
 
     if (managers.length === 0) {
       console.error('[v0] No approvers resolved for off-premises request')
@@ -384,6 +399,23 @@ export async function POST(request: NextRequest) {
     if (notificationError) {
       console.warn("[v0] Failed to send notifications:", notificationError)
       // Don't fail the request if notifications fail
+    }
+
+    // Send a professional, actionable support alert with the exact context IT needs.
+    if (!isAutoApprovedAudit && supportRecipients.length > 0) {
+      const departmentName = userProfile.department_id
+        ? (await supabase.from('departments').select('name').eq('id', userProfile.department_id).maybeSingle()).data?.name
+        : null
+      const staffName = `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim() || 'Staff member'
+      const locationName = current_location.display_name || current_location.name || 'Location unavailable'
+      const gps = `${Number(current_location.latitude).toFixed(6)}, ${Number(current_location.longitude).toFixed(6)}`
+      const mapsUrl = `https://www.google.com/maps?q=${encodeURIComponent(`${current_location.latitude},${current_location.longitude}`)}`
+      const requestLabel = isCheckoutRequest ? 'off-premises check-out' : 'off-premises check-in'
+      const subject = `IT Support Alert: ${staffName} needs help with ${requestLabel}`
+      const html = `<p>A staff member has submitted an off-premises ${isCheckoutRequest ? 'check-out' : 'check-in'} request and may need technical assistance.</p><table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:20px 0"><tr><td style="padding:10px 0;color:#64748b;width:34%">Staff member</td><td style="padding:10px 0;font-weight:700">${staffName}</td></tr><tr><td style="padding:10px 0;color:#64748b">Department</td><td style="padding:10px 0">${departmentName || 'Not available'}</td></tr><tr><td style="padding:10px 0;color:#64748b">Employee ID</td><td style="padding:10px 0">${userProfile.employee_id || userProfile.id}</td></tr><tr><td style="padding:10px 0;color:#64748b">GPS location</td><td style="padding:10px 0"><a href="${mapsUrl}">${locationName}</a><br><span style="font-size:12px;color:#64748b">${gps} · accuracy ±${Number(current_location.accuracy || 0).toFixed(0)}m</span></td></tr><tr><td style="padding:10px 0;color:#64748b">Reason</td><td style="padding:10px 0">${normalizedReason || 'Not provided'}</td></tr></table><p>Please contact the staff member and help them resolve the login or location issue. The approval workflow remains with the assigned manager.</p>`
+      const text = `IT Support Alert\\n\\nStaff: ${staffName}\\nDepartment: ${departmentName || 'Not available'}\\nEmployee ID: ${userProfile.id}\\nLocation: ${locationName}\\nGPS: ${gps}\\nReason: ${normalizedReason || 'Not provided'}\\n\\nPlease contact the staff member and help resolve the login or location issue.`
+      const emailResults = await Promise.allSettled(supportRecipients.map((recipient: any) => emailService.sendEmail(String(recipient.email).trim(), { subject, html, text }, { recipientUserId: recipient.id, emailModule: 'off_premises', emailEvent: 'it_support_alert', emailHeading: 'Off-Premises Support Alert', emailSubtitle: 'A staff member needs help completing an attendance request.' , idempotencyKey: `offpremises-it-support/${requestRecord.id}/${recipient.id}` })))
+      console.log('[v0] IT support email results:', emailResults.map((result) => result.status))
     }
 
     return NextResponse.json(
