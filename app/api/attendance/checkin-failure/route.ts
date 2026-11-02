@@ -94,7 +94,8 @@ export async function POST(request: NextRequest) {
       .in("action", Object.values(ACTION_BY_ATTEMPT_TYPE))
       .gte("created_at", todayStart.toISOString())
 
-    const shouldEscalate = (failureCount || 0) >= 5
+    // The current failed attempt is logged after this handler, so four previous failures means this attempt is number five.
+    const shouldEscalate = (failureCount || 0) >= 4
     let escalationSent = false
 
     if (shouldEscalate) {
