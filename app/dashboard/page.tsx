@@ -48,14 +48,14 @@ export default async function DashboardPage() {
   if (!user) redirect("/auth/login")
 
   // Fetch profile to check role
-  const { data: profile } = await supabase
+  const { data: initialProfile } = await supabase
     .from("user_profiles")
-    .select("*, departments(name, code)")
+    .select("id, first_name, last_name, role, leave_status, leave_start_date, leave_end_date, leave_reason, departments(name, code)")
     .eq("id", user.id)
     .maybeSingle()
 
   // MD and Secretary: fetch executive data and render their dedicated dashboard
-  if (profile?.role === "managing_director" || profile?.role === "secretary") {
+  if (initialProfile?.role === "managing_director" || initialProfile?.role === "secretary") {
     const today = new Date().toISOString().split("T")[0]
     const [{ data: todayData }, { count: monthCount }, { count: mdCount }] = await Promise.all([
       supabase
@@ -72,14 +72,14 @@ export default async function DashboardPage() {
         .gte("check_in_time", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
       supabase
         .from("loan_requests")
-        .select("*", { count: "exact", head: true })
+        .select("id", { count: "exact", head: true })
         .eq("status", "approved_director")
         .is("md_approved_at", null),
     ])
     return (
       <DashboardOverviewClient
         user={user}
-        profile={profile}
+        profile={initialProfile}
         todayAttendance={todayData}
         monthlyAttendance={monthCount || 0}
         pendingApprovals={0}
@@ -98,19 +98,12 @@ export default async function DashboardPage() {
 
     // Parallel fetch for better performance
     const [
-      profileResult,
       todayAttendanceResult,
       monthlyAttendanceResult,
       yearlyAttendanceResult,
       leaveRequestsResult,
-      notificationsResult,
-      leaveStatusResult
+      notificationsResult
     ] = await Promise.all([
-      supabase
-        .from("user_profiles")
-        .select(`id, first_name, last_name, role, departments (name, code)`)
-        .eq("id", user.id)
-        .single(),
       supabase
         .from("attendance_records")
         .select("id, check_in_time, check_out_time, work_hours, status")
@@ -122,12 +115,14 @@ export default async function DashboardPage() {
         .from("attendance_records")
         .select("work_hours, status, check_in_time")
         .eq("user_id", user.id)
-        .gte("check_in_time", startOfMonth.toISOString()),
+        .gte("check_in_time", startOfMonth.toISOString())
+        .limit(31),
       supabase
         .from("attendance_records")
         .select("work_hours, status, check_in_time")
         .eq("user_id", user.id)
-        .gte("check_in_time", startOfYear.toISOString()),
+        .gte("check_in_time", startOfYear.toISOString())
+        .limit(366),
       supabase
         .from("leave_requests")
         .select("id, status, start_date, end_date")
@@ -141,20 +136,15 @@ export default async function DashboardPage() {
         .eq("is_read", false)
         .order("created_at", { ascending: false })
         .limit(3),
-      supabase
-        .from("user_profiles")
-        .select("leave_status, leave_start_date, leave_end_date, leave_reason")
-        .eq("id", user.id)
-        .single()
     ])
 
-    const profile = profileResult.data
+    const profile = initialProfile
     const todayAttendance = todayAttendanceResult.data
     const monthlyAttendance = monthlyAttendanceResult.data || []
     const yearlyAttendance = yearlyAttendanceResult.data || []
     const leaveRequests = leaveRequestsResult.data || []
     const notifications = notificationsResult.data || []
-    const leaveStatus = leaveStatusResult.data
+    const leaveStatus = profile
 
     // Calculate comprehensive metrics
     const monthlyStats = {
