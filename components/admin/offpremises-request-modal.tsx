@@ -130,7 +130,7 @@ export function OffPremisesRequestModal({
       if (!response.ok) throw new Error(result.error || 'Unable to send IT support alert')
       toast({ title: 'IT support alert sent', description: `Sent to ${result.sent} configured IT Admin recipient${result.sent === 1 ? '' : 's'}.` })
     } catch (error: any) {
-      toast({ title: 'Support alert failed', description: error.message || 'Unable to send support alert', variant: 'destructive' })
+      toast({ title: 'Support alert failed', description: error.message || 'No email was delivered. Verify active IT Admin recipients and the configured email provider.', variant: 'destructive' })
     } finally {
       setIsSendingSupportAlert(false)
     }
