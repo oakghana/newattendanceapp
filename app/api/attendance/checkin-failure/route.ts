@@ -113,17 +113,21 @@ export async function POST(request: NextRequest) {
           ? "Not available"
           : `${latitude}, ${longitude}`
         const itRoles = ["it-admin", "it_admin", "regional_it_admin", "head_office_it_admin"]
-        const { data: itAdmins } = await admin
+        const { data: allSupportProfiles } = await admin
           .from("user_profiles")
           .select("id, email, first_name, last_name, role, it_admin_scope, assigned_location_id, region_id")
-          .in("role", itRoles)
           .eq("is_active", true)
-        const matchingAdmins = (itAdmins || []).filter((candidate: any) =>
+        const itAdmins = (allSupportProfiles || []).filter((candidate: any) => {
+          const role = String(candidate.role || "").toLowerCase().replace(/[ _-]/g, "")
+          return itRoles.map((value) => value.replace(/[ _-]/g, "")).includes(role) || (role.includes("it") && role.includes("admin"))
+        })
+        const matchingAdmins = itAdmins.filter((candidate: any) =>
           (candidate.assigned_location_id && candidate.assigned_location_id === profile?.assigned_location_id) ||
           (candidate.region_id && candidate.region_id === profile?.region_id) ||
           candidate.it_admin_scope === "head_office_it_admin",
         )
-        const itAdminEmails = [...new Set(matchingAdmins.map((candidate: any) => String(candidate.email || "").trim().toLowerCase()).filter(Boolean))]
+        const recipientProfiles = matchingAdmins.length ? matchingAdmins : itAdmins
+        const itAdminEmails = [...new Set(recipientProfiles.map((candidate: any) => String(candidate.email || "").trim().toLowerCase()).filter(Boolean))]
         const { data: systemAdmins } = await admin
           .from("user_profiles")
           .select("email")

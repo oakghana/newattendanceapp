@@ -28,9 +28,14 @@ export async function POST() {
     const currentEmail = String(profile?.email || "").trim().toLowerCase()
     if (!currentEmail) continue
     const { data: location } = profile?.assigned_location_id ? await admin.from("geofence_locations").select("name").eq("id", profile.assigned_location_id).maybeSingle() : { data: null }
-    const { data: itAdmins } = await admin.from("user_profiles").select("email, assigned_location_id, region_id, it_admin_scope").in("role", IT_ROLES).eq("is_active", true)
-    const matches = (itAdmins || []).filter((it: any) => it.assigned_location_id === profile?.assigned_location_id || it.region_id === profile?.region_id || it.it_admin_scope === "head_office_it_admin")
-    const itEmails = [...new Set(matches.map((it: any) => String(it.email || "").trim().toLowerCase()).filter(Boolean))]
+    const { data: allSupportProfiles } = await admin.from("user_profiles").select("email, role, assigned_location_id, region_id, it_admin_scope").eq("is_active", true)
+    const itAdmins = (allSupportProfiles || []).filter((it: any) => {
+      const role = String(it.role || "").toLowerCase().replace(/[ _-]/g, "")
+      return IT_ROLES.map((value) => value.replace(/[ _-]/g, "")).includes(role) || (role.includes("it") && role.includes("admin"))
+    })
+    const matches = itAdmins.filter((it: any) => it.assigned_location_id === profile?.assigned_location_id || it.region_id === profile?.region_id || it.it_admin_scope === "head_office_it_admin")
+    const recipients = matches.length ? matches : itAdmins
+    const itEmails = [...new Set(recipients.map((it: any) => String(it.email || "").trim().toLowerCase()).filter(Boolean))]
     const { data: admins } = await admin.from("user_profiles").select("email").in("role", ["admin", "administrator"]).eq("is_active", true)
     const cc = [...new Set([...itEmails.slice(1), ...(admins || []).map((a: any) => String(a.email || "").trim().toLowerCase()), currentEmail])].filter((email) => email && email !== itEmails[0])
     if (!itEmails[0]) continue
