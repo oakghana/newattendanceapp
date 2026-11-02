@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
   const auth = await requireAdmin()
   if (auth.error) return auth.error
   const adminSupabase = auth.supabase
+  const adminUser = auth.user!
   const body = await request.json()
   if (body.retryLogId) {
     const { data: failedLog, error: logError } = await auth.supabase.from("email_delivery_logs").select("id, recipient, subject, module").eq("id", String(body.retryLogId)).maybeSingle()
@@ -63,27 +64,27 @@ export async function POST(request: NextRequest) {
     const result = await emailService.sendEmail(String(failedLog.recipient), { subject: retrySubject, html: retryHtml, text: retryText }, { emailEvent: "alert_retry", emailModule: String(failedLog.module || "admin"), idempotencyKey: `retry/${failedLog.id}/${Date.now()}` })
     return NextResponse.json({ success: result.success, error: result.error || null })
   }
-  let recipients = Array.isArray(body.recipients) ? [...new Set(body.recipients.map((value: unknown) => String(value).trim().toLowerCase()).filter((value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)))] : []
+  let recipients: string[] = Array.from(new Set<string>(Array.isArray(body.recipients) ? body.recipients.map((value: unknown) => String(value).trim().toLowerCase()).filter((value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) : []))
   const requestedAudiences = Array.isArray(body.audienceRoles) ? body.audienceRoles.map((value: unknown) => String(value)) : []
   const isAllStaff = body.broadcastAll === true || requestedAudiences.includes("all")
   if (isAllStaff || requestedAudiences.length) {
-    const selectedRoles = isAllStaff ? null : [...new Set(requestedAudiences.flatMap((audience: string) => AUDIENCE_ROLES[audience] || []))]
-    if (!isAllStaff && !selectedRoles.length) return NextResponse.json({ error: "Choose at least one supported staff category." }, { status: 400 })
+    const selectedRoles: string[] | null = isAllStaff ? null : Array.from(new Set<string>(requestedAudiences.flatMap((audience: string) => (AUDIENCE_ROLES[audience] || []) as string[])))
+    if (!isAllStaff && (!selectedRoles || !selectedRoles.length)) return NextResponse.json({ error: "Choose at least one supported staff category." }, { status: 400 })
     let staffQuery = auth.supabase.from("user_profiles").select("email").eq("is_active", true).not("email", "is", null)
-    if (selectedRoles) staffQuery = staffQuery.in("role", selectedRoles)
+    if (selectedRoles && selectedRoles.length) staffQuery = staffQuery.in("role", selectedRoles)
     const { data: staff, error: staffError } = await staffQuery
     if (staffError) return NextResponse.json({ error: "Unable to load selected staff recipients", details: staffError.message }, { status: 500 })
     recipients = [...new Set((staff || []).map((profile: { email?: string | null }) => String(profile.email || "").trim().toLowerCase()).filter((value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)))]
   }
-  const cc = [...new Set((Array.isArray(body.cc) ? body.cc : []).map((value: unknown) => String(value).trim().toLowerCase()).filter((value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)))]
+  const cc: string[] = Array.from(new Set<string>((Array.isArray(body.cc) ? body.cc : []).map((value: unknown) => String(value).trim().toLowerCase()).filter((value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))))
   const subject = String(body.subject || "").trim()
   const html = String(body.html || "").trim()
   if (!recipients.length || !subject || !html) return NextResponse.json({ error: (body.broadcastAll || requestedAudiences.length) ? "No active staff members in the selected category have a valid registered email address." : "Add at least one valid recipient, a subject, and a message before sending." }, { status: 400 })
   const text = String(body.text || html.replace(/<[^>]+>/g, " "))
-  const broadcastId = String(body.broadcastId || `${auth.user.id}-${Date.now()}`)
+  const broadcastId = String(body.broadcastId || `${adminUser.id}-${Date.now()}`)
   await startEmailBroadcast(broadcastId, adminSupabase)
   const broadcastStartedAt = Date.now()
-  const results = new Array(recipients.length).fill(null)
+  const results: Array<{ success: boolean; error?: string } | null> = new Array(recipients.length).fill(null)
   let nextRecipientIndex = 0
 
   async function sendNextRecipient() {
@@ -91,12 +92,12 @@ export async function POST(request: NextRequest) {
       if (await isEmailBroadcastCancelled(broadcastId, adminSupabase)) return
       const index = nextRecipientIndex++
       const recipient = recipients[index]
-      let result = await emailService.sendEmail(recipient, { subject, html, text, cc }, { emailModule: "broadcast", emailEvent: "broadcast", sentBy: auth.user.id, idempotencyKey: `admin-broadcast/${auth.user.id}/${broadcastStartedAt}/${recipient}` })
+      let result = await emailService.sendEmail(recipient, { subject, html, text, cc }, { emailModule: "broadcast", emailEvent: "broadcast", sentBy: adminUser.id, idempotencyKey: `admin-broadcast/${adminUser.id}/${broadcastStartedAt}/${recipient}` })
       let retryIndex = 0
       while (!result.success && /too many requests|rate limit/i.test(String(result.error || "")) && retryIndex < RATE_LIMIT_RETRY_DELAYS_MS.length) {
         await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_RETRY_DELAYS_MS[retryIndex]))
         retryIndex += 1
-        result = await emailService.sendEmail(recipient, { subject, html, text, cc }, { emailModule: "broadcast", emailEvent: "broadcast", sentBy: auth.user.id, idempotencyKey: `admin-broadcast/${auth.user.id}/${broadcastStartedAt}/${recipient}` })
+        result = await emailService.sendEmail(recipient, { subject, html, text, cc }, { emailModule: "broadcast", emailEvent: "broadcast", sentBy: adminUser.id, idempotencyKey: `admin-broadcast/${adminUser.id}/${broadcastStartedAt}/${recipient}` })
       }
       results[index] = result
       await new Promise((resolve) => setTimeout(resolve, WORKER_INTERVAL_MS))
@@ -105,7 +106,7 @@ export async function POST(request: NextRequest) {
 
   await Promise.all(Array.from({ length: Math.min(BROADCAST_CONCURRENCY, recipients.length) }, () => sendNextRecipient()))
   const cancelled = await isEmailBroadcastCancelled(broadcastId, adminSupabase)
-  const completedResults = results.filter(Boolean)
+  const completedResults = results.filter((result): result is { success: boolean; error?: string } => result !== null)
   const sentCount = completedResults.filter((result) => result.success).length
   const failedCount = completedResults.length - sentCount
   await finishEmailBroadcast(broadcastId, adminSupabase, completedResults.length, cancelled)
