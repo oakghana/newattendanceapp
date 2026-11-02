@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   for (const [userId, count] of candidates) {
     const { data: existing } = await admin.from("audit_logs").select("id").eq("user_id", userId).eq("action", "attendance_failure_escalated").gte("created_at", start.toISOString()).limit(1).maybeSingle()
     if (existing && !body.forceSend) continue
-    const { data: profile } = await admin.from("user_profiles").select("id, email, first_name, last_name, rank, role, assigned_location_id, region_id, departments(name)").eq("id", userId).maybeSingle()
+    const { data: profile } = await admin.from("user_profiles").select("id, email, first_name, last_name, rank, role, department_id, assigned_location_id, region_id").eq("id", userId).maybeSingle()
     const { data: authUser } = await admin.auth.admin.getUserById(userId)
     const currentEmail = String(profile?.email || authUser.user?.email || "").trim().toLowerCase()
     if (!currentEmail) continue
@@ -43,7 +43,8 @@ export async function POST(request: Request) {
     const cc = [...new Set([...itEmails.slice(1), ...(admins || []).filter((a: any) => a.is_active !== false).map((a: any) => String(a.email || "").trim().toLowerCase()), currentEmail])].filter((email) => email && email !== itEmails[0])
     if (!itEmails[0]) continue
     const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Staff member"
-    const department = (profile as any)?.departments?.name || "Not available"
+    const { data: departmentRow } = profile?.department_id ? await admin.from("departments").select("name").eq("id", profile.department_id).maybeSingle() : { data: null }
+    const department = departmentRow?.name || profile?.department_id || "Not available"
     const region = profile?.region_id || "Not available"
     const html = `<div style="font-family:Arial,sans-serif;color:#17324d;line-height:1.6;max-width:680px;margin:auto"><div style="background:#0b5d3b;color:#fff;padding:28px 32px;border-radius:12px 12px 0 0"><div style="font-size:14px;letter-spacing:1px;text-transform:uppercase">QCC Attendance Support • Ghana</div><h1 style="margin:10px 0 0;font-size:24px">We are on it — help is on the way 🤝</h1></div><div style="border:1px solid #d8e2ea;border-top:0;padding:28px 32px;border-radius:0 0 12px 12px"><p>Hello IT Support Team,</p><p><strong>${name}</strong> has exceeded five failed attendance attempts today. Please assist promptly.</p><div style="background:#f3f8f5;border-left:4px solid #0b5d3b;padding:16px 18px"><strong>Staff and incident details</strong><br>👤 Staff member: ${name}<br>🏢 Department: ${department}<br>🎖️ Rank: ${profile?.rank || "Not available"}<br>🛡️ Role: ${profile?.role || "Not available"}<br>📍 Location: ${location?.name || "Not available"}<br>🌍 Region: ${region}<br>🔁 Failed attempts: ${count}</div><p>The affected staff member is copied. All relevant IT Admins and Administrators are copied on this single email to coordinate one response.</p><p>Thank you for supporting our colleagues across Ghana. 🇬🇭</p></div></div>`
     const emailRecipients = [...new Set([itEmails[0], ...cc])]

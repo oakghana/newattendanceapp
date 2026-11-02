@@ -46,9 +46,15 @@ export async function POST(request: NextRequest) {
       data: profile,
     } = await supabase
       .from("user_profiles")
-        .select("employee_id, first_name, last_name, email, rank, role, department_id, assigned_location_id, region_id, departments(name, code)")
+        .select("employee_id, first_name, last_name, email, rank, role, department_id, assigned_location_id, region_id")
       .eq("id", user.id)
       .maybeSingle()
+
+    const { data: departmentRow } = profile?.department_id
+      ? await supabase.from("departments").select("name, code").eq("id", profile.department_id).maybeSingle()
+      : { data: null }
+    const departmentName = departmentRow?.name || (profile as any)?.department_id || null
+    const departmentCode = departmentRow?.code || (profile as any)?.department_id || null
 
     const payload = {
       attempt_type: attemptType,
@@ -66,8 +72,8 @@ export async function POST(request: NextRequest) {
         employee_id: profile?.employee_id || null,
         full_name: [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || null,
         role: profile?.role || null,
-        department_name: (profile as any)?.departments?.name || null,
-        department_code: (profile as any)?.departments?.code || null,
+        department_name: departmentName,
+        department_code: departmentCode,
       },
     }
 
@@ -140,7 +146,7 @@ export async function POST(request: NextRequest) {
 
         if (primaryRecipient && currentUserEmail) {
           const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "A staff member"
-          const department = (profile as any)?.departments?.name || "Not available"
+          const department = departmentName || "Not available"
           const rank = (profile as any)?.rank || "Not available"
           const role = profile?.role || "Not available"
           const subject = `Ghana Attendance Support: ${name} needs IT assistance`
