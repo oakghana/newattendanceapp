@@ -770,7 +770,7 @@ function WorkflowStages({ status }: { status: string }) {
   )
 }
 
-// ─── InfoPill ───────────────────────────────────────────────────────��────���───
+// ─── InfoPill ───────────────────────────────────────────────────────���────���───
 function InfoPill({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className={`rounded-lg p-2 text-center border ${highlight ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
@@ -1533,27 +1533,19 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       // Fetch outstanding leave for annual leave requests in HR queue
       const hrRequests = (json.requests || []).filter((r: any) => String(r.leave_type_key || "").toLowerCase() === "annual")
       if (hrRequests.length > 0) {
-        const outstandingMap: Record<string, string> = {}
-        for (const req of hrRequests) {
+        const outstandingEntries = await Promise.all(hrRequests.map(async (req: any) => {
           try {
-            const outRes = await fetch(`/api/leave/hr-admin/outstanding?userId=${String(req.user_id || req.user?.id || "")}&leaveYearPeriod=${req.leave_year_period || String(new Date().getFullYear() + 1)}`, {
-              cache: "no-store",
-            })
-            if (outRes.ok) {
-              const outJson = await outRes.json()
-              const records = Array.isArray(outJson.data) ? outJson.data : []
-              if (records.length > 0) {
-                outstandingMap[req.id] = String(Math.max(0, records[0].carryover_to_next_year || 0))
-              }
-            }
-          } catch (e) {
-            console.error("[v0] Failed to fetch outstanding for request", req.id, e)
+            const outRes = await fetch(`/api/leave/hr-admin/outstanding?userId=${String(req.user_id || req.user?.id || "")}&leaveYearPeriod=${req.leave_year_period || String(new Date().getFullYear() + 1)}`, { cache: "no-store" })
+            if (!outRes.ok) return null
+            const outJson = await outRes.json()
+            const records = Array.isArray(outJson.data) ? outJson.data : []
+            return records.length > 0 ? [req.id, String(Math.max(0, records[0].carryover_to_next_year || 0))] as const : null
+          } catch {
+            return null
           }
-        }
-        if (Object.keys(outstandingMap).length > 0) {
-          console.log("[v0] Fetched outstanding leave for requests:", outstandingMap)
-          setOfficeOutstandingDays(outstandingMap)
-        }
+        }))
+        const outstandingMap = Object.fromEntries(outstandingEntries.filter((entry): entry is readonly [string, string] => entry !== null))
+        if (Object.keys(outstandingMap).length > 0) setOfficeOutstandingDays(outstandingMap)
       }
     } catch (e) {
       console.error("[v0] Load data error:", e)

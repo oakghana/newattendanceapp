@@ -2441,7 +2441,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
   const loadLookups = async () => {
     setLookupLoading(true)
     try {
-      const res = await fetch("/api/loan/lookups?limit=20000", { cache: "no-store" })
+      const res = await fetch("/api/loan/lookups?limit=2000", { cache: "no-store" })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || "Failed to load lookup data")
       setLookupData(result)
