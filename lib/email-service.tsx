@@ -198,7 +198,7 @@ class EmailService {
         status,
         provider_message_id: messageId || null,
         error_message: errorMessage || null,
-        metadata: { ...(data.metadata || {}), ccRecipients: data.ccRecipients || [] },
+        metadata: { ...(data.metadata || {}), ccRecipients: data.ccRecipients || [], replyTo: template.replyTo || null },
         sent_by: data.sentBy || null,
       })
     } catch (error) {
@@ -254,6 +254,7 @@ class EmailService {
             html: wrapEmailWithWatermark(savedTemplate.html_body),
             text: savedTemplate.text_body,
             cc: template.cc,
+            replyTo: template.replyTo,
           }
           data = {
             ...data,
