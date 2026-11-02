@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { emailService } from "@/lib/email-service"
+import { finishEmailBroadcast, isEmailBroadcastCancelled, startEmailBroadcast } from "@/lib/email-broadcast-control"
 
 export const maxDuration = 120
 
@@ -135,12 +136,15 @@ export async function POST(request: NextRequest) {
   const html = String(body.html || "").trim()
   if (!recipients.length || !subject || !html) return NextResponse.json({ error: (body.broadcastAll || requestedAudiences.length) ? "No active staff members in the selected category have a valid registered email address." : "Add at least one valid recipient, a subject, and a message before sending." }, { status: 400 })
   const text = String(body.text || html.replace(/<[^>]+>/g, " "))
+  const broadcastId = String(body.broadcastId || `${auth.user.id}-${Date.now()}`)
+  startEmailBroadcast(broadcastId)
   const broadcastStartedAt = Date.now()
-  const results = new Array(recipients.length)
+  const results = new Array(recipients.length).fill(null)
   let nextRecipientIndex = 0
 
   async function sendNextRecipient() {
     while (nextRecipientIndex < recipients.length) {
+      if (isEmailBroadcastCancelled(broadcastId)) return
       const index = nextRecipientIndex++
       const recipient = recipients[index]
       let result = await emailService.sendEmail(recipient, { subject, html, text, cc }, { emailModule: "broadcast", emailEvent: "broadcast", sentBy: auth.user.id, idempotencyKey: `admin-broadcast/${auth.user.id}/${broadcastStartedAt}/${recipient}` })
@@ -156,7 +160,10 @@ export async function POST(request: NextRequest) {
   }
 
   await Promise.all(Array.from({ length: Math.min(BROADCAST_CONCURRENCY, recipients.length) }, () => sendNextRecipient()))
-  const sentCount = results.filter((result) => result.success).length
-  const failedCount = results.length - sentCount
-  return NextResponse.json({ success: failedCount === 0, sentCount, failedCount, results })
+  const cancelled = isEmailBroadcastCancelled(broadcastId)
+  const completedResults = results.filter(Boolean)
+  const sentCount = completedResults.filter((result) => result.success).length
+  const failedCount = completedResults.length - sentCount
+  finishEmailBroadcast(broadcastId)
+  return NextResponse.json({ success: !cancelled && failedCount === 0, cancelled, sentCount, failedCount, attemptedCount: completedResults.length, totalCount: recipients.length, results: completedResults })
 }
