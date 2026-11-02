@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { format } from "date-fns"
-import { AlertTriangle, CheckCircle2, Clock3, Download, Loader2, LogIn, LogOut, RefreshCw, Search, Trash2 } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Clock3, Download, Loader2, LogIn, LogOut, Mail, RefreshCw, Search, Trash2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -283,6 +283,26 @@ export function CheckinFailuresClient() {
     setForceError(null)
     setForceDialogOpen(true)
   }, [])
+
+  const sendForceAlert = useCallback(async () => {
+    if (!forceTarget?.user_id) return
+    try {
+      setForceBusy(true)
+      setForceError(null)
+      const response = await fetch("/api/admin/checkin-failures/reconcile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: forceTarget.user_id, forceSend: true }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.success || result.sent < 1) throw new Error(result.error || "No alert email was sent")
+      setSuccessMsg(`Email alert sent for ${forceTarget.full_name}`)
+    } catch (err) {
+      setForceError(err instanceof Error ? err.message : "Failed to send email alert")
+    } finally {
+      setForceBusy(false)
+    }
+  }, [forceTarget])
 
   const handleForceAttendance = useCallback(async () => {
     if (!forceTarget?.user_id) {
@@ -845,6 +865,11 @@ export function CheckinFailuresClient() {
             <Button variant="outline" onClick={() => setForceDialogOpen(false)} disabled={forceBusy}>
               Cancel
             </Button>
+            {forceTarget && forceTarget.attempts > 5 && (
+              <Button variant="outline" onClick={() => void sendForceAlert()} disabled={forceBusy}>
+                <Mail className="h-4 w-4 mr-2" /> Send Email Alert
+              </Button>
+            )}
             <Button
               onClick={() => void handleForceAttendance()}
               disabled={forceBusy || !forceTarget?.user_id}
