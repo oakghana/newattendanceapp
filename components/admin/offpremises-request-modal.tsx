@@ -48,6 +48,7 @@ export function OffPremisesRequestModal({
 }: OffPremisesRequestModalProps) {
   const [isApproving, setIsApproving] = useState(false)
   const [approvalComments, setApprovalComments] = useState('')
+  const [isSendingSupportAlert, setIsSendingSupportAlert] = useState(false)
   const { toast } = useToast()
 
   const handleApprove = async (approved: boolean) => {
@@ -117,6 +118,21 @@ export function OffPremisesRequestModal({
       })
     } finally {
       setIsApproving(false)
+    }
+  }
+
+  const sendSupportAlert = async () => {
+    if (isSendingSupportAlert) return
+    setIsSendingSupportAlert(true)
+    try {
+      const response = await fetch('/api/attendance/offpremises/support-alert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: request.id }) })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || 'Unable to send IT support alert')
+      toast({ title: 'IT support alert sent', description: `Sent to ${result.sent} configured IT Admin recipient${result.sent === 1 ? '' : 's'}.` })
+    } catch (error: any) {
+      toast({ title: 'Support alert failed', description: error.message || 'Unable to send support alert', variant: 'destructive' })
+    } finally {
+      setIsSendingSupportAlert(false)
     }
   }
 
@@ -230,7 +246,7 @@ export function OffPremisesRequestModal({
 
           {/* Staff-provided reason (visible to approver) */}
           <div className="border rounded-lg p-4 bg-white/50">
-            <h4 className="font-semibold text-sm mb-2">Staff Reason</h4>
+            <h4 className="font-semibold text-sm mb-2">Support context for IT Admin</h4>
             <p className="text-sm text-foreground whitespace-pre-wrap">{request.reason || 'Not provided'}</p>
           </div>
 
@@ -285,6 +301,15 @@ export function OffPremisesRequestModal({
         </div>
 
         <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-4 border-t">
+          <Button
+            variant="outline"
+            onClick={sendSupportAlert}
+            disabled={isApproving || isSendingSupportAlert}
+            className="w-full sm:w-auto border-blue-200 text-blue-700 hover:bg-blue-50"
+          >
+            {isSendingSupportAlert ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
+            {isSendingSupportAlert ? 'Sending alert…' : 'Send IT Support Alert'}
+          </Button>
           <Button
             variant="outline"
             onClick={onClose}
