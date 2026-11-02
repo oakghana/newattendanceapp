@@ -1299,7 +1299,7 @@ export function AttendanceRecorder({
     nearestLocationDistanceM?: number | null
   }) => {
     try {
-      await fetch("/api/attendance/checkin-failure", {
+      const response = await fetch("/api/attendance/checkin-failure", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1309,6 +1309,13 @@ export function AttendanceRecorder({
           deviceInfo: getDeviceInfo(),
         }),
       })
+      const result = await response.json().catch(() => null)
+      if (result?.escalationSent) {
+        toast({
+          title: "IT Department notified",
+          description: "Your Regional/Location IT Admin has been contacted and will reach out shortly to help resolve this. Please reply to the support email with any extra details — we are on it.",
+        })
+      }
     } catch (logErr) {
       console.warn("[v0] Failed to log attendance failure event:", logErr)
     }
