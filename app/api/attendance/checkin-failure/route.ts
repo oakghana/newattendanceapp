@@ -42,16 +42,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid attempt type" }, { status: 400 })
     }
 
+    const admin = await createAdminClient()
     const {
       data: profile,
-    } = await supabase
+    } = await admin
       .from("user_profiles")
-        .select("id, employee_id, first_name, last_name, email, rank, role, department_id, assigned_location_id, region_id")
+      .select("id, employee_id, first_name, last_name, email, rank, role, department_id, assigned_location_id, region_id")
       .eq("id", user.id)
       .maybeSingle()
 
     const { data: departmentRow } = profile?.department_id
-      ? await supabase.from("departments").select("name, code").eq("id", profile.department_id).maybeSingle()
+      ? await admin.from("departments").select("name, code").eq("id", profile.department_id).maybeSingle()
       : { data: null }
     const departmentName = departmentRow?.name || (profile as any)?.department_id || null
     const departmentCode = departmentRow?.code || (profile as any)?.department_id || null
@@ -83,7 +84,6 @@ export async function POST(request: NextRequest) {
       request.headers.get("x-real-ip") ||
       null
 
-    const admin = await createAdminClient()
     const failureAction = ACTION_BY_ATTEMPT_TYPE[attemptType] || "check_in_failed"
     const todayStart = new Date()
     todayStart.setHours(0, 0, 0, 0)
@@ -146,8 +146,9 @@ export async function POST(request: NextRequest) {
         const ccWithUser = [...new Set([...cc, currentUserEmail])].filter((email) => email && email !== primaryRecipient)
 
         if (primaryRecipient) {
-          const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "A staff member"
-          const staffId = profile?.employee_id || user.id
+          const metadataName = [user.user_metadata?.first_name, user.user_metadata?.last_name, user.user_metadata?.full_name].filter(Boolean).join(" ").trim()
+          const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() || metadataName || currentUserEmail.split("@")[0] || "A staff member"
+          const staffId = profile?.employee_id || user.user_metadata?.employee_id || user.id
           const department = departmentName || "Not available"
           const itAdminList = itAdminEmails.length ? itAdminEmails.join(", ") : "No scoped IT Admin found; Administrator notified"
           const rank = (profile as any)?.rank || "Not available"

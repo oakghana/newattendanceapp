@@ -209,7 +209,6 @@ export function CheckinFailuresClient() {
         params.set("reason", reasonFilter.trim())
       }
 
-      await fetch("/api/admin/checkin-failures/reconcile", { method: "POST" })
       const response = await fetch(`/api/admin/checkin-failures?${params}`, {
         cache: "no-store",
       })

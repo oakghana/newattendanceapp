@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { emailService } from "@/lib/email-service"
+import { finishEmailBroadcast, isEmailBroadcastCancelled, startEmailBroadcast } from "@/lib/email-broadcast-control"
 
 export const maxDuration = 120
 
@@ -44,67 +45,13 @@ export async function GET(request: NextRequest) {
   const { data, error } = await auth.supabase.from("email_delivery_logs").select("*").order("created_at", { ascending: false }).limit(250)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const logs = data || []
-  const resendApiKey = String(process.env.RESEND_API_KEY || "").trim()
-  if (resendApiKey) {
-    await Promise.allSettled(logs.filter((log) => log.provider_message_id).map(async (log) => {
-      const response = await fetch(`https://api.resend.com/emails/${encodeURIComponent(log.provider_message_id)}`, { headers: { Authorization: `Bearer ${resendApiKey}` }, cache: "no-store" })
-      if (!response.ok) return
-      const provider = await response.json() as { last_event?: string }
-      const failed = ["failed", "bounced", "complained"].includes(String(provider.last_event || "").toLowerCase())
-      const nextStatus = failed ? "failed" : log.status
-      const nextError = failed && !log.error_message ? `Provider event: ${provider.last_event}` : log.error_message
-      if (nextStatus !== log.status || nextError !== log.error_message) {
-        await auth.supabase.from("email_delivery_logs").update({ status: nextStatus, error_message: nextError }).eq("id", log.id)
-        log.status = nextStatus
-        log.error_message = nextError
-      }
-    }))
-  }
   return NextResponse.json({ logs })
-}
-
-export async function DELETE() {
-  const auth = await requireAdmin()
-  if (auth.error) return auth.error
-  const { error } = await auth.supabase.from("email_delivery_logs").delete().not("id", "is", null)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ success: true })
-}
-
-export async function PATCH(request: NextRequest) {
-  const auth = await requireAdmin()
-  if (auth.error) return auth.error
-  const body = await request.json()
-  if (body.ccSettings && typeof body.ccSettings === "object") {
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    const cleaned: Record<string, string[]> = {}
-    for (const [moduleName, rawValue] of Object.entries(body.ccSettings as Record<string, unknown>)) {
-      const entries = (Array.isArray(rawValue) ? rawValue : String(rawValue || "").split(/[,;\n\s]+/)).map((value) => String(value).trim().toLowerCase()).filter(Boolean)
-      cleaned[moduleName.replace(/-/g, "_")] = [...new Set(entries.filter((value) => emailPattern.test(value)))]
-    }
-    const { data: current, error: readError } = await auth.supabase.from("system_settings").select("settings").eq("id", 1).maybeSingle()
-    if (readError) return NextResponse.json({ error: `Unable to read current settings: ${readError.message}` }, { status: 500 })
-    const nextSettings = { ...(current?.settings || {}), emailCcByModule: cleaned }
-    const { error } = await auth.supabase.from("system_settings").upsert({ id: 1, settings: nextSettings, updated_at: new Date().toISOString() })
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    const { data: saved, error: verifyError } = await auth.supabase.from("system_settings").select("settings").eq("id", 1).maybeSingle()
-    const persisted = saved?.settings?.emailCcByModule
-    if (verifyError || JSON.stringify(persisted || {}) !== JSON.stringify(cleaned)) {
-      return NextResponse.json({ error: "The CC recipients could not be confirmed in the database. Nothing was applied." }, { status: 500 })
-    }
-    await auth.supabase.from("audit_logs").insert({ user_id: auth.user.id, action: "EMAIL_CC_SETTINGS_UPDATED", new_values: { emailCcByModule: cleaned } })
-    return NextResponse.json({ success: true, ccSettings: persisted })
-  }
-  const { id, subject, html_body, text_body, accent_color, is_active } = body
-  if (!id || !subject || !html_body) return NextResponse.json({ error: "Template id, subject, and HTML are required" }, { status: 400 })
-  const { data, error } = await auth.supabase.from("email_templates").update({ subject, html_body, text_body: text_body || "", accent_color: accent_color || "#0f766e", is_active: is_active !== false, updated_by: auth.user.id, updated_at: new Date().toISOString() }).eq("id", id).select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ template: data })
 }
 
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin()
   if (auth.error) return auth.error
+  const adminSupabase = auth.supabase
   const body = await request.json()
   if (body.retryLogId) {
     const { data: failedLog, error: logError } = await auth.supabase.from("email_delivery_logs").select("id, recipient, subject, module").eq("id", String(body.retryLogId)).maybeSingle()
@@ -133,12 +80,15 @@ export async function POST(request: NextRequest) {
   const html = String(body.html || "").trim()
   if (!recipients.length || !subject || !html) return NextResponse.json({ error: (body.broadcastAll || requestedAudiences.length) ? "No active staff members in the selected category have a valid registered email address." : "Add at least one valid recipient, a subject, and a message before sending." }, { status: 400 })
   const text = String(body.text || html.replace(/<[^>]+>/g, " "))
+  const broadcastId = String(body.broadcastId || `${auth.user.id}-${Date.now()}`)
+  await startEmailBroadcast(broadcastId, adminSupabase)
   const broadcastStartedAt = Date.now()
-  const results = new Array(recipients.length)
+  const results = new Array(recipients.length).fill(null)
   let nextRecipientIndex = 0
 
   async function sendNextRecipient() {
     while (nextRecipientIndex < recipients.length) {
+      if (await isEmailBroadcastCancelled(broadcastId, adminSupabase)) return
       const index = nextRecipientIndex++
       const recipient = recipients[index]
       let result = await emailService.sendEmail(recipient, { subject, html, text, cc }, { emailModule: "broadcast", emailEvent: "broadcast", sentBy: auth.user.id, idempotencyKey: `admin-broadcast/${auth.user.id}/${broadcastStartedAt}/${recipient}` })
@@ -154,7 +104,10 @@ export async function POST(request: NextRequest) {
   }
 
   await Promise.all(Array.from({ length: Math.min(BROADCAST_CONCURRENCY, recipients.length) }, () => sendNextRecipient()))
-  const sentCount = results.filter((result) => result.success).length
-  const failedCount = results.length - sentCount
-  return NextResponse.json({ success: failedCount === 0, sentCount, failedCount, results })
+  const cancelled = await isEmailBroadcastCancelled(broadcastId, adminSupabase)
+  const completedResults = results.filter(Boolean)
+  const sentCount = completedResults.filter((result) => result.success).length
+  const failedCount = completedResults.length - sentCount
+  await finishEmailBroadcast(broadcastId, adminSupabase, completedResults.length, cancelled)
+  return NextResponse.json({ success: !cancelled && failedCount === 0, cancelled, sentCount, failedCount, attemptedCount: completedResults.length, totalCount: recipients.length, results: completedResults })
 }
