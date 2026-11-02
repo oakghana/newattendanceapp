@@ -50,8 +50,10 @@ export async function GET(request: NextRequest) {
       const response = await fetch(`https://api.resend.com/emails/${encodeURIComponent(log.provider_message_id)}`, { headers: { Authorization: `Bearer ${resendApiKey}` }, cache: "no-store" })
       if (!response.ok) return
       const provider = await response.json() as { last_event?: string }
-      const failed = ["failed", "bounced", "complained"].includes(String(provider.last_event || "").toLowerCase())
-      const nextStatus = failed ? "failed" : log.status
+      const providerEvent = String(provider.last_event || "").toLowerCase()
+      const failed = ["failed", "bounced", "complained"].includes(providerEvent)
+      const delivered = ["delivered", "delivery_delayed"].includes(providerEvent)
+      const nextStatus = failed ? "failed" : delivered ? "delivered" : log.status
       const nextError = failed && !log.error_message ? `Provider event: ${provider.last_event}` : log.error_message
       if (nextStatus !== log.status || nextError !== log.error_message) {
         await auth.supabase.from("email_delivery_logs").update({ status: nextStatus, error_message: nextError }).eq("id", log.id)
