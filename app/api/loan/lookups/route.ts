@@ -99,13 +99,13 @@ async function locationsMapForProfiles(admin: any, profiles: any[]): Promise<Map
   return loadLocationHierarchyMap(admin, ids)
 }
 
-async function fetchAllRows(queryFactory: (from: number, to: number) => any, chunkSize = 500) {
+async function fetchAllRows(queryFactory: (from: number, to: number) => any, chunkSize = 500, maxRows = 10000) {
   const rows: any[] = []
   const seenIds = new Set<string>()
   let from = 0
 
-  while (true) {
-    const to = from + chunkSize - 1
+  while (rows.length < maxRows) {
+    const to = Math.min(from + chunkSize - 1, maxRows - 1)
     const { data, error } = await queryFactory(from, to)
     if (error) throw error
 
@@ -183,6 +183,8 @@ export async function GET(request: NextRequest) {
             .order("first_name", { ascending: true })
             .order("id", { ascending: true })
             .range(from, to),
+        500,
+        requestedLimit,
       ),
       fetchAllRows(
         (from, to) =>
@@ -194,6 +196,8 @@ export async function GET(request: NextRequest) {
             .order("first_name", { ascending: true })
             .order("id", { ascending: true })
             .range(from, to),
+        500,
+        5000,
       ),
       fetchAllRows(
         (from, to) =>
