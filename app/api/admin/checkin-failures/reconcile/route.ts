@@ -5,7 +5,8 @@ import { emailService } from "@/lib/email-service"
 const FAILURE_ACTIONS = ["check_in_failed", "offpremises_checkin_failed", "check_out_failed", "offpremises_checkout_failed", "qr_check_out_failed", "auto_checkout_failed", "force_checkout_after_failed_attempts"]
 const IT_ROLES = ["it-admin", "it_admin", "regional_it_admin", "head_office_it_admin"]
 
-export async function POST() {
+export async function POST(request: Request) {
+  const body = await request.json().catch(() => ({})) as { userId?: string; forceSend?: boolean }
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -18,12 +19,12 @@ export async function POST() {
   const { data: failures } = await admin.from("audit_logs").select("user_id, new_values").in("action", FAILURE_ACTIONS).gte("created_at", start.toISOString()).not("user_id", "is", null).limit(10000)
   const counts = new Map<string, number>()
   for (const failure of failures || []) counts.set(failure.user_id, (counts.get(failure.user_id) || 0) + 1)
-  const candidates = [...counts.entries()].filter(([, count]) => count > 5)
+  const candidates = [...counts.entries()].filter(([userId, count]) => count > 5 && (!body.userId || body.userId === userId))
   let sent = 0
 
   for (const [userId, count] of candidates) {
     const { data: existing } = await admin.from("audit_logs").select("id").eq("user_id", userId).eq("action", "attendance_failure_escalated").gte("created_at", start.toISOString()).limit(1).maybeSingle()
-    if (existing) continue
+    if (existing && !body.forceSend) continue
     const { data: profile } = await admin.from("user_profiles").select("id, email, first_name, last_name, rank, role, assigned_location_id, region_id, departments(name)").eq("id", userId).maybeSingle()
     const currentEmail = String(profile?.email || "").trim().toLowerCase()
     if (!currentEmail) continue
