@@ -1,8 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useSearchParams } from "next/navigation"
-import { CheckCheck, ChevronLeft, ChevronRight, Eye, FileText, Megaphone, Pencil, Quote, RefreshCw, Send, ShieldCheck, Trash2, Upload } from "lucide-react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { CalendarDays, CheckCheck, ChevronLeft, ChevronRight, Eye, FileText, Info, Megaphone, Pencil, Quote, RefreshCw, Send, ShieldCheck, Trash2, Upload, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -56,7 +56,17 @@ export function ECircularsPortal() {
   const [busy, setBusy] = useState(false)
   const [refreshingAnalytics, setRefreshingAnalytics] = useState(false)
   const [selectedCircular, setSelectedCircular] = useState<Circular | null>(null)
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
+
+  const closeCircular = useCallback(() => {
+    setSelectedCircular(null)
+    const nextParams = new URLSearchParams(searchParams.toString())
+    nextParams.delete("circular")
+    const nextUrl = nextParams.toString() ? `${pathname}?${nextParams.toString()}` : pathname
+    router.replace(nextUrl, { scroll: false })
+  }, [pathname, router, searchParams])
 
   useEffect(() => {
     const circularId = searchParams.get("circular")
@@ -280,16 +290,25 @@ export function ECircularsPortal() {
           <Card className="max-w-2xl border-cyan-900 bg-slate-900 text-slate-100"><CardHeader><CardTitle className="flex items-center gap-2"><Send className="h-5 w-5 text-cyan-400" /> Post a circular</CardTitle><p className="text-sm text-slate-400">Share a clear, official notice with the right audience.</p></CardHeader><CardContent><form onSubmit={publish} className="space-y-5"><div><Label htmlFor="circular-title">Title</Label><Input id="circular-title" value={title} onChange={(event) => setTitle(event.target.value)} required className="mt-1 border-slate-700 bg-slate-950" placeholder="Circular subject" /></div><div><Label htmlFor="circular-commentary">Commentary for readers</Label><Textarea id="circular-commentary" value={commentary} onChange={(event) => setCommentary(event.target.value)} className="mt-1 border-slate-700 bg-slate-950" placeholder="Briefly explain what staff should know or do." /></div><div><Label htmlFor="circular-audience">Audience</Label><select id="circular-audience" value={audience} onChange={(event) => setAudience(event.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 p-2 text-sm">{AUDIENCES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div><div><Label htmlFor="circular-file">PDF or image</Label><Input id="circular-file" type="file" accept="application/pdf,image/png,image/jpeg,image/webp" onChange={(event) => setFile(event.target.files?.[0] ?? null)} required className="mt-1 border-slate-700 bg-slate-950" /></div><label className="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-950/70 p-3 text-sm text-slate-300"><input type="checkbox" checked={isDownloadable} onChange={(event) => setIsDownloadable(event.target.checked)} className="mt-1 h-4 w-4 accent-cyan-500" /><span><span className="font-medium text-slate-100">Allow readers to download</span><span className="mt-1 block text-xs text-slate-500">When disabled, staff can only open and read the circular online.</span></span></label><Button disabled={busy} className="w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400"><Upload className="mr-2 h-4 w-4" />{busy ? "Publishing..." : "Publish circular"}</Button></form></CardContent></Card>
         )}
         {selectedCircular && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="circular-reader-title">
-            <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-cyan-400/30 bg-slate-900 shadow-2xl shadow-cyan-950/50">
-              <div className="flex items-center justify-between gap-4 border-b border-slate-800 px-5 py-4">
-                <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">Source: Registry</p><h2 id="circular-reader-title" className="truncate text-lg font-semibold text-slate-100">{selectedCircular.title}</h2></div>
-                <Button type="button" variant="outline" onClick={() => setSelectedCircular(null)} className="shrink-0 border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white">Close</Button>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-3 backdrop-blur-md sm:p-6" role="dialog" aria-modal="true" aria-labelledby="circular-reader-title">
+            <div className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-[1.75rem] border border-cyan-400/30 bg-slate-900 shadow-2xl shadow-cyan-950/50">
+              <div className="flex items-start justify-between gap-4 bg-gradient-to-r from-cyan-950 via-slate-900 to-slate-900 px-5 py-5 sm:px-8">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300"><FileText className="h-4 w-4" /> Official circular</div>
+                  <h2 id="circular-reader-title" className="mt-2 text-xl font-semibold leading-tight text-slate-50 sm:text-2xl">{selectedCircular.title}</h2>
+                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-400"><span className="inline-flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5 text-cyan-300" /> Published {new Date(selectedCircular.published_at).toLocaleDateString()}</span><span>Source: Registry</span></div>
+                </div>
+                <Button type="button" variant="ghost" size="icon" aria-label="Close circular" onClick={closeCircular} className="shrink-0 rounded-full text-slate-300 hover:bg-slate-800 hover:text-white"><X className="h-5 w-5" /></Button>
               </div>
               <div className="min-h-0 flex-1 overflow-auto bg-slate-950 p-3 sm:p-6">
-                {selectedCircular.mime_type === "application/pdf" ? <iframe src={selectedCircular.file_url} title={selectedCircular.title} className="h-[70vh] min-h-[420px] w-full rounded-xl border border-slate-800 bg-white" /> : <img src={selectedCircular.file_url} alt={`Full official circular: ${selectedCircular.title}`} className="mx-auto block h-auto max-h-[75vh] w-auto max-w-full rounded-xl object-contain" />}
+                <section className="mb-4 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.07] p-4 sm:p-5" aria-label="Circular summary">
+                  <div className="flex items-start gap-3"><div className="rounded-xl bg-cyan-400/15 p-2 text-cyan-300"><Info className="h-5 w-5" /></div><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300">Please note</p><p className="mt-1 text-sm leading-6 text-slate-200">{selectedCircular.commentary || "Please review this official circular for full details and any action required."}</p></div></div>
+                </section>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-2 sm:p-3">
+                  {selectedCircular.mime_type === "application/pdf" ? <iframe src={selectedCircular.file_url} title={selectedCircular.title} className="h-[58vh] min-h-[360px] w-full rounded-xl border border-slate-800 bg-white" /> : <img src={selectedCircular.file_url} alt={`Full official circular: ${selectedCircular.title}`} className="mx-auto block h-auto max-h-[62vh] w-auto max-w-full rounded-xl object-contain" />}
+                </div>
               </div>
-              <div className="flex flex-col gap-3 border-t border-slate-800 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm leading-6 text-slate-400">{selectedCircular.commentary || "Please review this official circular for full details."}</p>{selectedCircular.is_downloadable && <Button type="button" onClick={() => void downloadCircular(selectedCircular)} variant="outline" className="shrink-0 border-emerald-500/40 bg-transparent text-emerald-300 hover:bg-emerald-500/10">Download</Button>}</div>
+              <div className="flex flex-col gap-3 border-t border-slate-800 bg-slate-900 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8"><p className="text-xs text-slate-500">Your read status has been recorded.</p>{selectedCircular.is_downloadable && <Button type="button" onClick={() => void downloadCircular(selectedCircular)} className="bg-cyan-500 text-slate-950 hover:bg-cyan-400">Download circular</Button>}</div>
             </div>
           </div>
         )}
