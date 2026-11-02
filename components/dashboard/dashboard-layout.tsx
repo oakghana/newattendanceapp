@@ -52,7 +52,6 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
           data = userResult.data
           error = userResult.error
         }
-        }
         if (error || !data?.user) {
           setUser(null)
           setProfile(null)
