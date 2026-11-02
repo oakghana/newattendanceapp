@@ -115,10 +115,10 @@ export async function POST(request: NextRequest) {
         const itRoles = ["it-admin", "it_admin", "regional_it_admin", "head_office_it_admin"]
         const { data: allSupportProfiles } = await admin
           .from("user_profiles")
-          .select("id, email, first_name, last_name, role, it_admin_scope, assigned_location_id, region_id")
-          .eq("is_active", true)
+          .select("id, email, first_name, last_name, role, is_active, it_admin_scope, assigned_location_id, region_id")
         const itAdmins = (allSupportProfiles || []).filter((candidate: any) => {
           const role = String(candidate.role || "").toLowerCase().replace(/[ _-]/g, "")
+          if (candidate.is_active === false) return false
           return itRoles.map((value) => value.replace(/[ _-]/g, "")).includes(role) || (role.includes("it") && role.includes("admin"))
         })
         const matchingAdmins = itAdmins.filter((candidate: any) =>
@@ -132,7 +132,6 @@ export async function POST(request: NextRequest) {
           .from("user_profiles")
           .select("email")
           .in("role", ["admin", "administrator"])
-          .eq("is_active", true)
         const administratorEmails = [...new Set((systemAdmins || []).map((candidate: any) => String(candidate.email || "").trim().toLowerCase()).filter(Boolean))]
         const primaryRecipient = itAdminEmails[0]
         const cc = [...new Set([...itAdminEmails.slice(1), ...administratorEmails])].filter((email) => email !== primaryRecipient)
