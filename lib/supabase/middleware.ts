@@ -13,7 +13,7 @@ export async function updateSession(request: NextRequest) {
 export async function updateSessionWithUser(request: NextRequest): Promise<{ response: NextResponse; user: any | null }> {
   // Avoid expensive network calls for public pages (login, static assets)
   const pathname = request.nextUrl?.pathname || request.url || ''
-  if (pathname.startsWith('/auth/login') || pathname.startsWith('/_next') || pathname.startsWith('/favicon.ico')) {
+  if (pathname === '/' || pathname.startsWith('/auth') || pathname.startsWith('/_next') || pathname.startsWith('/favicon.ico')) {
     return { response: NextResponse.next({ request }), user: null }
   }
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
@@ -42,11 +42,14 @@ export async function updateSessionWithUser(request: NextRequest): Promise<{ res
         },
       },
       global: {
-        fetch: (url, options) => {
-          return fetch(url, {
-            ...options,
-            signal: undefined,
-          })
+        fetch: async (url, options) => {
+          const controller = new AbortController()
+          const timeout = setTimeout(() => controller.abort(), 5000)
+          try {
+            return await fetch(url, { ...options, signal: controller.signal })
+          } finally {
+            clearTimeout(timeout)
+          }
         },
       },
     })
@@ -58,6 +61,11 @@ export async function updateSessionWithUser(request: NextRequest): Promise<{ res
 
     return { response: supabaseResponse, user: user ?? null }
   } catch (error: any) {
+    if (error?.code === "refresh_token_not_found" || error?.message?.includes("Invalid Refresh Token")) {
+      request.cookies.getAll().filter(({ name }) => name.startsWith("sb-")).forEach(({ name }) => {
+        supabaseResponse.cookies.set(name, "", { maxAge: 0, expires: new Date(0), path: "/" })
+      })
+    }
     return { response: supabaseResponse, user: null }
   }
 }
