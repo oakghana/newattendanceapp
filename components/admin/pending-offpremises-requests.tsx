@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { AlertTriangle, MapPin, Clock, User, CheckCircle2, XCircle, Loader2, Search } from 'lucide-react'
+import { AlertTriangle, MapPin, Clock, User, CheckCircle2, XCircle, Loader2, Search, Mail } from 'lucide-react'
 import { OffPremisesRequestModal } from './offpremises-request-modal'
 
 interface PendingRequest {
@@ -501,17 +501,18 @@ CREATE INDEX IF NOT EXISTS idx_pending_offpremises_created_at ON public.pending_
                         ) : (
                           <div className="flex items-center">
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
-                              className="ml-4 flex-shrink-0"
+                              className="ml-4 flex-shrink-0 border-blue-200 text-blue-700 hover:bg-blue-50"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 setSelectedRequest(request)
                                 setIsModalOpen(true)
                               }}
-                            >
-                              Review
-                            </Button>
+                              >
+                                <Mail className="mr-1 h-4 w-4" />
+                                Review &amp; Alert IT
+                              </Button>
                           </div>
                         )
                       )}
