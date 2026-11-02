@@ -208,15 +208,18 @@ export async function resolveYetToApply(
   const staffIds = staffRows.map((row) => String(row.id))
   const appliedUserIds = new Set<string>()
   const lastRejectedStatus = new Map<string, string>()
-  for (const part of chunk(staffIds)) {
-    const { data: requests, error: requestsError } = await admin
+  const requestBatches = await Promise.all(chunk(staffIds).map(async (part) => {
+    const { data, error } = await admin
       .from("leave_plan_requests")
       .select("user_id, status, leave_year_period, is_archived")
       .in("user_id", part)
       .in("leave_type_key", ANNUAL_LEAVE_KEYS)
       .eq("is_archived", false)
-    if (requestsError) throw requestsError
-    for (const req of requests || []) {
+    if (error) throw error
+    return data || []
+  }))
+  for (const requests of requestBatches) {
+    for (const req of requests) {
       // Legacy rows may have no period; treat them as the planning year so
       // nobody who actually applied is wrongly reported as outstanding.
       const requestYear = req.leave_year_period ? normalizeYear(req.leave_year_period, "") : year

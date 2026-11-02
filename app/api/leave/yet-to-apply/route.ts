@@ -24,13 +24,16 @@ export async function GET(request: NextRequest) {
 
     const locationIds = Array.from(new Set(pending.map((row) => row.assigned_location_id).filter(Boolean).map(String)))
     const locationNames = new Map<string, string>()
-    for (const part of chunk(locationIds)) {
-      const { data: locations, error: locationsError } = await admin
+    const locationBatches = await Promise.all(chunk(locationIds).map(async (part) => {
+      const { data, error } = await admin
         .from("geofence_locations")
         .select("id, name")
         .in("id", part)
-      if (locationsError) throw locationsError
-      for (const location of locations || []) locationNames.set(String(location.id), String(location.name || ""))
+      if (error) throw error
+      return data || []
+    }))
+    for (const locations of locationBatches) {
+      for (const location of locations) locationNames.set(String(location.id), String(location.name || ""))
     }
 
     const staff = pending
