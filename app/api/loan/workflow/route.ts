@@ -597,9 +597,13 @@ export async function GET() {
     // must never blank out the identity/HOD data we already resolved above — that is
     // exactly what a staff member needs to see even when something else is degraded.
     try {
-  await autoAdvanceStaleHodRequests(admin)
-  await normalizeImportedCommitteeLoans(admin)
-  await broadcastDelayedPostLoanOfficeRequests(admin)
+  // These repair/notification jobs are maintenance work. Do not block the
+  // workflow response while they scan and update older records.
+  void Promise.all([
+    autoAdvanceStaleHodRequests(admin),
+    normalizeImportedCommitteeLoans(admin),
+    broadcastDelayedPostLoanOfficeRequests(admin),
+  ]).catch((error) => console.error("[v0] Loan maintenance failed:", error))
 
     const isManagingDirector = role === "managing_director"
   const viewAllTabs = isAdminRole(role) || isManagingDirector

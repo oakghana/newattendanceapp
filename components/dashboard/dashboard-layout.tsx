@@ -42,16 +42,16 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
 
         // The browser client already auto-refreshes tokens. Extra manual refreshes
         // (interval/focus) raced the proxy's refresh and invalidated sessions.
-        let { data, error } = await supabase.auth.getUser()
-        if (error || !data?.user) {
-          // getUser() can fail on a network blip or a navigation racing a token
-          // refresh. The local session (auto-refreshed if needed) is the source of
-          // truth before treating the user as logged out.
-          const { data: sessionData } = await supabase.auth.getSession()
-          if (sessionData.session?.user) {
-            data = { user: sessionData.session.user }
-            error = null
-          }
+        // Read the locally cached session first. This avoids making every
+        // dashboard navigation wait for a network round trip before rendering.
+        const { data: sessionData } = await supabase.auth.getSession()
+        let data = { user: sessionData.session?.user ?? null }
+        let error: { message?: string } | null = null
+        if (!data.user) {
+          const userResult = await supabase.auth.getUser()
+          data = userResult.data
+          error = userResult.error
+        }
         }
         if (error || !data?.user) {
           setUser(null)
@@ -63,8 +63,18 @@ function DashboardLayout({ children }: DashboardLayoutProps) {
 
         authedUser = data.user
         setUser(data.user)
+        // Make the page usable immediately from the authenticated session. The
+        // richer profile and reviewer-link queries update the shell when ready,
+        // but must never block every dashboard route from rendering.
+        setProfile((current: any) => current ?? {
+          id: data.user.id,
+          first_name: data.user.user_metadata?.first_name || "User",
+          last_name: data.user.user_metadata?.last_name || "",
+          role: data.user.user_metadata?.role || "staff",
+        })
+        setLoading(false)
 
-        // Load the shared shell data together so navigation does not wait on a second round trip.
+        // Load the shared shell data in the background so navigation does not wait on a second round trip.
         const [{ data: profileData, error: profileError }, { data: hodLink }] = await Promise.all([
           supabase
             .from("user_profiles")
