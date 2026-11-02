@@ -198,7 +198,7 @@ class EmailService {
         status,
         provider_message_id: messageId || null,
         error_message: errorMessage || null,
-        metadata: { ...(data.metadata || {}), ccRecipients: data.ccRecipients || [], replyTo: template.replyTo || null },
+        metadata: { ...(data.metadata || {}), ccRecipients: data.ccRecipients || [], replyTo: data.replyTo || null },
         sent_by: data.sentBy || null,
       })
     } catch (error) {

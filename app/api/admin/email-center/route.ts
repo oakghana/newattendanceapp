@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
   const logs = data || []
   const resendApiKey = String(process.env.RESEND_API_KEY || "").trim()
   if (resendApiKey) {
-    await Promise.allSettled(logs.filter((log) => log.provider_message_id).map(async (log) => {
+    await Promise.allSettled(logs.filter((log) => log.provider_message_id && log.status === "sent").slice(0, 5).map(async (log) => {
       const response = await fetch(`https://api.resend.com/emails/${encodeURIComponent(log.provider_message_id)}`, { headers: { Authorization: `Bearer ${resendApiKey}` }, cache: "no-store" })
       if (!response.ok) return
       const provider = await response.json() as { last_event?: string }

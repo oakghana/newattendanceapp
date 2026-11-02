@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
 
     let query = admin
       .from("audit_logs")
-      .select("id, user_id, action, created_at, ip_address, new_values", { count: "exact" })
+      .select("id, user_id, action, created_at, ip_address, new_values", { count: "planned" })
       .in("action", FAILURE_ACTIONS)
       .order("created_at", { ascending: false })
 
