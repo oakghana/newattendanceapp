@@ -1313,7 +1313,7 @@ export function AttendanceRecorder({
       if (result?.escalationSent) {
         toast({
           title: "IT Department notified",
-          description: "Your attendance issue has been sent to the location or regional IT administrator. Please reply to the email if you need to provide more details.",
+          description: "Your Regional/Location IT Admin has been contacted and will reach out shortly to help resolve this. Please reply to the support email with any extra details — we are on it.",
         })
       }
     } catch (logErr) {

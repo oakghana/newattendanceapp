@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       data: profile,
     } = await supabase
       .from("user_profiles")
-        .select("employee_id, first_name, last_name, email, role, department_id, assigned_location_id, region_id, departments(name, code)")
+        .select("employee_id, first_name, last_name, email, role, department_id, assigned_location_id, region_id, departments(name, code), regions(name)")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -106,6 +106,12 @@ export async function POST(request: NextRequest) {
           ? await admin.from("geofence_locations").select("name").eq("id", profile.assigned_location_id).maybeSingle()
           : { data: null }
         const locationName = locationQuery.data?.name || "the assigned location"
+        const regionName = (profile as any)?.regions?.name || "the assigned region"
+        const latitude = payload.latitude == null ? "Not available" : `${payload.latitude}`
+        const longitude = payload.longitude == null ? "Not available" : `${payload.longitude}`
+        const gpsCoordinates = payload.latitude == null || payload.longitude == null
+          ? "Not available"
+          : `${latitude}, ${longitude}`
         const itRoles = ["it-admin", "it_admin", "regional_it_admin", "head_office_it_admin"]
         const { data: itAdmins } = await admin
           .from("user_profiles")
@@ -128,13 +134,13 @@ export async function POST(request: NextRequest) {
 
         if (recipients.length && currentUserEmail) {
           const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "A staff member"
-          const subject = `Attendance assistance required: ${name} exceeded failed attempts`
+          const subject = `Ghana Attendance Support: ${name} needs IT assistance`
           const template = {
             subject,
             replyTo: currentUserEmail,
             cc: cc.filter((email) => !recipients.includes(email) && email !== currentUserEmail),
-            html: `<p><strong>${name}</strong> has recorded more than five failed attendance attempts today.</p><p>Please contact the staff member directly to investigate and resolve the issue before the next working day.</p><p><strong>Location:</strong> ${locationName}<br/><strong>Failure reason:</strong> ${failureReason}<br/><strong>Latest message:</strong> ${failureMessage || "Not provided"}</p>`,
-            text: `${name} has recorded more than five failed attendance attempts today. Please contact the staff member directly. Location: ${locationName}. Failure reason: ${failureReason}. Latest message: ${failureMessage || "Not provided"}.`,
+            html: `<div style="font-family:Arial,sans-serif;color:#17324d;line-height:1.6;max-width:680px;margin:0 auto"><div style="background:#0b5d3b;color:#fff;padding:28px 32px;border-radius:12px 12px 0 0"><div style="font-size:14px;letter-spacing:1px;text-transform:uppercase;opacity:.85">QCC Attendance Support • Ghana</div><h1 style="margin:10px 0 0;font-size:24px">We are on it — help is on the way 🤝</h1></div><div style="border:1px solid #d8e2ea;border-top:0;padding:28px 32px;border-radius:0 0 12px 12px"><p>Hello IT Support Team,</p><p><strong>${name}</strong> has experienced more than five failed attendance attempts today. Please kindly assist the staff member and help us resolve the issue before the next working day.</p><div style="background:#f3f8f5;border-left:4px solid #0b5d3b;padding:16px 18px;margin:22px 0"><strong>Incident details</strong><br>📍 <strong>Location:</strong> ${locationName}<br>🌍 <strong>Region:</strong> ${regionName}<br>🛰️ <strong>GPS coordinates:</strong> ${gpsCoordinates}<br>🔁 <strong>Failed attempts:</strong> ${(failureCount || 0) + 1}<br>⚠️ <strong>Failure reason:</strong> ${failureReason}<br>📝 <strong>Latest message:</strong> ${failureMessage || "Not provided"}</div><p>Please contact the staff member at the email address in the <strong>Reply-To</strong> field. The Regional/Location IT Admin is kindly requested to respond directly and guide the user through the fix. The Administrator has been copied for visibility and follow-up.</p><p>Thank you for helping us keep attendance running smoothly across Ghana. 🇬🇭</p><p style="margin-bottom:0">Warm regards,<br><strong>QCC Attendance IT Support</strong></p></div></div>`,
+            text: `QCC Attendance Support • Ghana\n\nWe are on it — help is on the way.\n\n${name} has experienced more than five failed attendance attempts today. Please contact the staff member through the Reply-To address and help resolve the issue before the next working day.\n\nIncident details:\nLocation: ${locationName}\nRegion: ${regionName}\nGPS coordinates: ${gpsCoordinates}\nFailed attempts: ${(failureCount || 0) + 1}\nFailure reason: ${failureReason}\nLatest message: ${failureMessage || "Not provided"}\n\nThe Regional/Location IT Admin is requested to respond directly to the user. The Administrator has been copied for visibility. Thank you for supporting our colleagues across Ghana. 🇬🇭`,
           }
           const results = await Promise.all(recipients.map((recipient) => emailService.sendEmail(recipient, template, {
             emailModule: "attendance",
