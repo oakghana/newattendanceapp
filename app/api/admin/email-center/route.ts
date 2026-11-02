@@ -5,8 +5,8 @@ import { finishEmailBroadcast, isEmailBroadcastCancelled, startEmailBroadcast } 
 
 export const maxDuration = 120
 
-const BROADCAST_CONCURRENCY = 8
-const WORKER_INTERVAL_MS = 1000
+const BROADCAST_CONCURRENCY = 4
+const WORKER_INTERVAL_MS = 1200
 const RATE_LIMIT_RETRY_DELAYS_MS = [1500, 3500]
 const AUDIENCE_ROLES: Record<string, string[]> = {
   staff: ["staff", "nsp", "intern", "contract", "contract_role", "contract_staff", "contract_worker"],
@@ -46,6 +46,33 @@ export async function GET(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const logs = data || []
   return NextResponse.json({ logs })
+}
+
+export async function DELETE() {
+  const auth = await requireAdmin()
+  if (auth.error) return auth.error
+
+  const { error } = await auth.supabase
+    .from("email_delivery_logs")
+    .delete()
+    .not("id", "is", null)
+
+  if (error) {
+    console.error("[EmailCenter] Failed to delete delivery history:", error)
+    return NextResponse.json({ error: "Unable to delete email delivery history." }, { status: 500 })
+  }
+
+  const { data: remainingLogs, error: verifyError } = await auth.supabase
+    .from("email_delivery_logs")
+    .select("id")
+    .limit(1)
+
+  if (verifyError || (remainingLogs?.length ?? 0) > 0) {
+    console.error("[EmailCenter] Delivery history deletion could not be verified:", verifyError)
+    return NextResponse.json({ error: "Email delivery history could not be fully deleted." }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true, deleted: true })
 }
 
 export async function POST(request: NextRequest) {
