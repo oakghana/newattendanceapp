@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       data: profile,
     } = await supabase
       .from("user_profiles")
-        .select("employee_id, first_name, last_name, email, role, department_id, assigned_location_id, region_id, departments(name, code), regions(name)")
+        .select("employee_id, first_name, last_name, email, rank, role, department_id, assigned_location_id, region_id, departments(name, code), regions(name)")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -123,32 +123,37 @@ export async function POST(request: NextRequest) {
           (candidate.region_id && candidate.region_id === profile?.region_id) ||
           candidate.it_admin_scope === "head_office_it_admin",
         )
-        const recipients = [...new Set(matchingAdmins.map((candidate: any) => String(candidate.email || "").trim().toLowerCase()).filter(Boolean))]
+        const itAdminEmails = [...new Set(matchingAdmins.map((candidate: any) => String(candidate.email || "").trim().toLowerCase()).filter(Boolean))]
         const { data: systemAdmins } = await admin
           .from("user_profiles")
           .select("email")
           .in("role", ["admin", "administrator"])
           .eq("is_active", true)
-        const cc = [...new Set((systemAdmins || []).map((candidate: any) => String(candidate.email || "").trim().toLowerCase()).filter(Boolean))]
+        const administratorEmails = [...new Set((systemAdmins || []).map((candidate: any) => String(candidate.email || "").trim().toLowerCase()).filter(Boolean))]
+        const primaryRecipient = itAdminEmails[0]
+        const cc = [...new Set([...itAdminEmails.slice(1), ...administratorEmails])].filter((email) => email !== primaryRecipient)
         const currentUserEmail = String(profile?.email || user.email || "").trim().toLowerCase()
 
-        if (recipients.length && currentUserEmail) {
+        if (primaryRecipient && currentUserEmail) {
           const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "A staff member"
+          const department = (profile as any)?.departments?.name || "Not available"
+          const rank = (profile as any)?.rank || "Not available"
+          const role = profile?.role || "Not available"
           const subject = `Ghana Attendance Support: ${name} needs IT assistance`
           const template = {
             subject,
             replyTo: currentUserEmail,
-            cc: cc.filter((email) => !recipients.includes(email) && email !== currentUserEmail),
-            html: `<div style="font-family:Arial,sans-serif;color:#17324d;line-height:1.6;max-width:680px;margin:0 auto"><div style="background:#0b5d3b;color:#fff;padding:28px 32px;border-radius:12px 12px 0 0"><div style="font-size:14px;letter-spacing:1px;text-transform:uppercase;opacity:.85">QCC Attendance Support • Ghana</div><h1 style="margin:10px 0 0;font-size:24px">We are on it — help is on the way 🤝</h1></div><div style="border:1px solid #d8e2ea;border-top:0;padding:28px 32px;border-radius:0 0 12px 12px"><p>Hello IT Support Team,</p><p><strong>${name}</strong> has experienced more than five failed attendance attempts today. Please kindly assist the staff member and help us resolve the issue before the next working day.</p><div style="background:#f3f8f5;border-left:4px solid #0b5d3b;padding:16px 18px;margin:22px 0"><strong>Incident details</strong><br>📍 <strong>Location:</strong> ${locationName}<br>🌍 <strong>Region:</strong> ${regionName}<br>🛰️ <strong>GPS coordinates:</strong> ${gpsCoordinates}<br>🔁 <strong>Failed attempts:</strong> ${(failureCount || 0) + 1}<br>⚠️ <strong>Failure reason:</strong> ${failureReason}<br>📝 <strong>Latest message:</strong> ${failureMessage || "Not provided"}</div><p>Please contact the staff member at the email address in the <strong>Reply-To</strong> field. The Regional/Location IT Admin is kindly requested to respond directly and guide the user through the fix. The Administrator has been copied for visibility and follow-up.</p><p>Thank you for helping us keep attendance running smoothly across Ghana. 🇬🇭</p><p style="margin-bottom:0">Warm regards,<br><strong>QCC Attendance IT Support</strong></p></div></div>`,
-            text: `QCC Attendance Support • Ghana\n\nWe are on it — help is on the way.\n\n${name} has experienced more than five failed attendance attempts today. Please contact the staff member through the Reply-To address and help resolve the issue before the next working day.\n\nIncident details:\nLocation: ${locationName}\nRegion: ${regionName}\nGPS coordinates: ${gpsCoordinates}\nFailed attempts: ${(failureCount || 0) + 1}\nFailure reason: ${failureReason}\nLatest message: ${failureMessage || "Not provided"}\n\nThe Regional/Location IT Admin is requested to respond directly to the user. The Administrator has been copied for visibility. Thank you for supporting our colleagues across Ghana. 🇬🇭`,
+            cc,
+            html: `<div style="font-family:Arial,sans-serif;color:#17324d;line-height:1.6;max-width:680px;margin:0 auto"><div style="background:#0b5d3b;color:#fff;padding:28px 32px;border-radius:12px 12px 0 0"><div style="font-size:14px;letter-spacing:1px;text-transform:uppercase;opacity:.85">QCC Attendance Support • Ghana</div><h1 style="margin:10px 0 0;font-size:24px">We are on it — help is on the way 🤝</h1></div><div style="border:1px solid #d8e2ea;border-top:0;padding:28px 32px;border-radius:0 0 12px 12px"><p>Hello IT Support Team,</p><p><strong>${name}</strong> has experienced more than five failed attendance attempts today. Please kindly assist the staff member and help us resolve the issue before the next working day.</p><div style="background:#f3f8f5;border-left:4px solid #0b5d3b;padding:16px 18px;margin:22px 0"><strong>Staff and incident details</strong><br>👤 <strong>Staff member:</strong> ${name}<br>🏢 <strong>Department:</strong> ${department}<br>🎖️ <strong>Rank:</strong> ${rank}<br>🛡️ <strong>Role:</strong> ${role}<br>📍 <strong>Location:</strong> ${locationName}<br>🌍 <strong>Region:</strong> ${regionName}<br>🛰️ <strong>GPS coordinates:</strong> ${gpsCoordinates}<br>🔁 <strong>Failed attempts:</strong> ${(failureCount || 0) + 1}</div><p>Please contact the staff member at the email address in the <strong>Reply-To</strong> field. All relevant Regional/Location IT Admins and Administrators have been copied on this single email to coordinate one response and avoid duplicate outreach.</p><p>Thank you for helping us keep attendance running smoothly across Ghana. 🇬🇭</p><p style="margin-bottom:0">Warm regards,<br><strong>QCC Attendance IT Support</strong></p></div></div>`,
+            text: `QCC Attendance Support • Ghana\n\nWe are on it — help is on the way.\n\n${name} has experienced more than five failed attendance attempts today. Please contact the staff member through the Reply-To address and help resolve the issue before the next working day.\n\nStaff and incident details:\nStaff member: ${name}\nDepartment: ${department}\nRank: ${rank}\nRole: ${role}\nLocation: ${locationName}\nRegion: ${regionName}\nGPS coordinates: ${gpsCoordinates}\nFailed attempts: ${(failureCount || 0) + 1}\n\nAll relevant Regional/Location IT Admins and Administrators are copied on this single email to coordinate one response. Thank you for supporting our colleagues across Ghana. 🇬🇭`,
           }
-          const results = await Promise.all(recipients.map((recipient) => emailService.sendEmail(recipient, template, {
+          const results = await Promise.all([emailService.sendEmail(primaryRecipient, template, {
             emailModule: "attendance",
             emailEvent: "failed_attempt_escalation",
             emailHeading: "Attendance assistance required",
             emailSubtitle: "A staff member needs help with repeated attendance failures.",
             idempotencyKey: `attendance-failure/${user.id}/${todayStart.toISOString().slice(0, 10)}`,
-          })))
+          })])
           escalationSent = results.some((result) => result.success)
         }
 
@@ -157,7 +162,7 @@ export async function POST(request: NextRequest) {
             user_id: user.id,
             action: "attendance_failure_escalated",
             table_name: "audit_logs",
-            new_values: { failure_count: (failureCount || 0) + 1, location_name: locationName, recipients },
+            new_values: { failure_count: (failureCount || 0) + 1, location_name: locationName, recipients: [primaryRecipient, ...cc] },
             ip_address: clientIp,
             user_agent: request.headers.get("user-agent"),
           })
