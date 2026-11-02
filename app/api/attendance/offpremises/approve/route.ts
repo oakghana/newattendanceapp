@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     // Verify the approver is a department head, regional manager, or admin
     const { data: approverProfile, error: approverError } = await supabase
       .from("user_profiles")
-      .select("role, department_id, assigned_location_id")
+      .select("role, department_id, assigned_location_id, first_name, last_name")
       .eq("id", user_id)
       .single()
 
@@ -107,6 +107,7 @@ export async function POST(request: NextRequest) {
       .map((hod) => `${hod.first_name || ""} ${hod.last_name || ""}`.trim())
       .filter(Boolean)
       .join(", ") || "Not assigned"
+    const reviewedBy = `${approverProfile.first_name || ""} ${approverProfile.last_name || ""}`.trim() || "Authorized administrator"
     const requestReason = pendingRequest.reason || pendingRequest.purpose || "Not provided"
 
     if (canApproveAsAdmin) {
@@ -435,14 +436,14 @@ export async function POST(request: NextRequest) {
                     <table role="presentation" style="width:100%;border-collapse:collapse;font-size:14px;line-height:1.5;">
                       <tr><td style="padding:9px 0;color:#64748b;width:34%;">Location</td><td style="padding:9px 0;font-weight:600;">${pendingRequest.google_maps_name || pendingRequest.current_location_name || "Approved location"}</td></tr>
                       <tr><td style="padding:9px 0;color:#64748b;">Reason</td><td style="padding:9px 0;">${requestReason}</td></tr>
-                      <tr><td style="padding:9px 0;color:#64748b;">Reviewed by</td><td style="padding:9px 0;">${headOfDepartment}</td></tr>
+                      <tr><td style="padding:9px 0;color:#64748b;">Reviewed by</td><td style="padding:9px 0;">${reviewedBy}</td></tr>
                     </table>
                     <p style="margin:24px 0 0;color:#475569;font-size:14px;line-height:1.6;">You have been checked in on official duty. Keep this email for your records.</p>
                   </div>
                   <div style="border-top:1px solid #e2e8f0;padding:16px 34px;color:#64748b;font-size:12px;">QCC Attendance System · Automated notification</div>
                 </div>
               </div>`,
-            text: `Off-premises approval\n\nHello ${pendingRequest.user_profiles?.first_name || "there"},\nYour request was approved and you were checked in on official duty.\n\nLocation: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "Approved location"}\nReason: ${requestReason}\nReviewed by: ${headOfDepartment}`,
+            text: `Off-premises approval\n\nHello ${pendingRequest.user_profiles?.first_name || "there"},\nYour request was approved and you were checked in on official duty.\n\nLocation: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "Approved location"}\nReason: ${requestReason}\nReviewed by: ${reviewedBy}`,
           }, {
             idempotencyKey: `offpremises-approved/${request_id}`,
             emailModule: "off_premises",
@@ -529,7 +530,7 @@ Status: Approved and checked in on official duty.`,
             emailEvent: "decision",
             firstName: pendingRequest.user_profiles?.first_name || pendingRequest.user_profiles?.full_name || "Staff member",
             requestTitle: "Off-premises check-in decision",
-            details: `Request ID: ${request_id}\nHead of Department: ${headOfDepartment}\nLocation: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "Requested location"}\nReason given by staff: ${requestReason}\nStatus: Rejected.${comments ? `\nReviewer comments: ${comments}` : ""}`,
+            details: `Request ID: ${request_id}\nReviewed by: ${reviewedBy}\nLocation: ${pendingRequest.google_maps_name || pendingRequest.current_location_name || "Requested location"}\nReason given by staff: ${requestReason}\nStatus: Rejected.${comments ? `\nReviewer comments: ${comments}` : ""}`,
           })
         }
       } catch (err) {
