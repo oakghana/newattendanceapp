@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { CalendarDays, CheckCheck, ChevronLeft, ChevronRight, Eye, FileText, Info, Megaphone, Pencil, Quote, RefreshCw, Send, ShieldCheck, Trash2, Upload, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
@@ -56,7 +56,17 @@ export function ECircularsPortal() {
   const [busy, setBusy] = useState(false)
   const [refreshingAnalytics, setRefreshingAnalytics] = useState(false)
   const [selectedCircular, setSelectedCircular] = useState<Circular | null>(null)
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
+
+  const closeCircular = useCallback(() => {
+    setSelectedCircular(null)
+    const nextParams = new URLSearchParams(searchParams.toString())
+    nextParams.delete("circular")
+    const nextUrl = nextParams.toString() ? `${pathname}?${nextParams.toString()}` : pathname
+    router.replace(nextUrl, { scroll: false })
+  }, [pathname, router, searchParams])
 
   useEffect(() => {
     const circularId = searchParams.get("circular")
@@ -288,7 +298,7 @@ export function ECircularsPortal() {
                   <h2 id="circular-reader-title" className="mt-2 text-xl font-semibold leading-tight text-slate-50 sm:text-2xl">{selectedCircular.title}</h2>
                   <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-400"><span className="inline-flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5 text-cyan-300" /> Published {new Date(selectedCircular.published_at).toLocaleDateString()}</span><span>Source: Registry</span></div>
                 </div>
-                <Button type="button" variant="ghost" size="icon" aria-label="Close circular" onClick={() => setSelectedCircular(null)} className="shrink-0 rounded-full text-slate-300 hover:bg-slate-800 hover:text-white"><X className="h-5 w-5" /></Button>
+                <Button type="button" variant="ghost" size="icon" aria-label="Close circular" onClick={closeCircular} className="shrink-0 rounded-full text-slate-300 hover:bg-slate-800 hover:text-white"><X className="h-5 w-5" /></Button>
               </div>
               <div className="min-h-0 flex-1 overflow-auto bg-slate-950 p-3 sm:p-6">
                 <section className="mb-4 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.07] p-4 sm:p-5" aria-label="Circular summary">
