@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       data: profile,
     } = await supabase
       .from("user_profiles")
-        .select("employee_id, first_name, last_name, email, rank, role, department_id, assigned_location_id, region_id, departments(name, code), regions(name)")
+        .select("employee_id, first_name, last_name, email, rank, role, department_id, assigned_location_id, region_id, departments(name, code)")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
           ? await admin.from("geofence_locations").select("name").eq("id", profile.assigned_location_id).maybeSingle()
           : { data: null }
         const locationName = locationQuery.data?.name || "the assigned location"
-        const regionName = (profile as any)?.regions?.name || "the assigned region"
+        const regionName = profile?.region_id || "the assigned region"
         const latitude = payload.latitude == null ? "Not available" : `${payload.latitude}`
         const longitude = payload.longitude == null ? "Not available" : `${payload.longitude}`
         const gpsCoordinates = payload.latitude == null || payload.longitude == null
