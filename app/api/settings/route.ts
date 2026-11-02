@@ -21,15 +21,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Access denied. Admin role required." }, { status: 403 })
     }
 
-    const { data: userSettings } = await supabase.from("user_settings").select("*").eq("user_id", user.id).maybeSingle()
-
-    let systemSettings = null
-
-    // Get system settings if admin
-    if (profile?.role === "admin") {
-      const { data: sysSettings } = await supabase.from("system_settings").select("*").maybeSingle()
-      systemSettings = sysSettings
-    }
+    const [{ data: userSettings }, { data: systemSettings }] = await Promise.all([
+      supabase.from("user_settings").select("*").eq("user_id", user.id).maybeSingle(),
+      profile?.role === "admin"
+        ? supabase.from("system_settings").select("*").maybeSingle()
+        : Promise.resolve({ data: null }),
+    ])
 
     return NextResponse.json(
       {

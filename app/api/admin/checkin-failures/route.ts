@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
 
     let query = admin
       .from("audit_logs")
-      .select("id, user_id, action, created_at, ip_address, new_values", { count: "planned" })
+      .select("id, user_id, action, created_at, ip_address, new_values")
       .in("action", FAILURE_ACTIONS)
       .order("created_at", { ascending: false })
 
@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
 
     const from = (page - 1) * limit
     const to = from + limit - 1
-    const { data: rawRows, error: rowsError, count } = await query.range(from, to)
+    const { data: rawRows, error: rowsError } = await query.range(from, to)
 
     if (rowsError) {
       console.error("[v0] Failed to fetch check-in failure rows:", rowsError)
@@ -263,8 +263,8 @@ export async function GET(request: NextRequest) {
       pagination: {
         page,
         limit,
-        total: count ?? rows.length,
-        totalPages: Math.max(1, Math.ceil((count ?? rows.length) / limit)),
+        total: from + rows.length,
+        totalPages: rows.length === limit ? page + 1 : page,
       },
     })
   } catch (error) {
