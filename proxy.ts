@@ -175,6 +175,17 @@ export default async function proxy(request: NextRequest) {
 
     // Use cookie-aware server client in proxy context.
     const supabase = createServerClient(supabaseUrl, supabaseKey, {
+      global: {
+        fetch: async (url, options) => {
+          const controller = new AbortController()
+          const timeout = setTimeout(() => controller.abort(), 5000)
+          try {
+            return await fetch(url, { ...options, signal: controller.signal })
+          } finally {
+            clearTimeout(timeout)
+          }
+        },
+      },
       cookies: {
         getAll() {
           return request.cookies.getAll();
