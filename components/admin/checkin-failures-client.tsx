@@ -292,7 +292,7 @@ export function CheckinFailuresClient() {
     setAlertRecipients([])
     setSelectedAlertRecipients([])
     setForceDialogOpen(true)
-    if (user.attempts > 5 && user.user_id) {
+    if (user.attempts >= 12 && user.user_id) {
       void fetch(`/api/admin/checkin-failures/recipients?userId=${encodeURIComponent(user.user_id)}`)
         .then((response) => response.json())
         .then((result) => {
@@ -872,7 +872,7 @@ export function CheckinFailuresClient() {
                 <AlertDescription className="text-xs">{forceError}</AlertDescription>
               </Alert>
             )}
-            {forceTarget && forceTarget.attempts > 5 && (
+            {forceTarget && forceTarget.attempts >= 12 && (
               <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
                 <div>
                   <Label className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Email alert recipients</Label>
@@ -910,7 +910,7 @@ export function CheckinFailuresClient() {
             <Button variant="outline" onClick={() => setForceDialogOpen(false)} disabled={forceBusy}>
               Cancel
             </Button>
-            {forceTarget && forceTarget.attempts > 5 && (
+            {forceTarget && forceTarget.attempts >= 12 && (
               <Button variant="outline" onClick={() => void sendForceAlert()} disabled={forceBusy || !selectedAlertRecipients.length}>
                 <Mail className="h-4 w-4 mr-2" /> Send Email Alert
               </Button>
