@@ -146,6 +146,7 @@ export async function POST(request: NextRequest) {
         .update({
           check_out_time: now.toISOString(),
           check_out_method: "admin_override",
+          auto_checkout: true,
           work_hours: workedHours,
           updated_at: now.toISOString(),
           notes: forceNote,
