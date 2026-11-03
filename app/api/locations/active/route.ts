@@ -79,9 +79,7 @@ export async function GET(request: Request) {
       return R * c
     }
 
-    const enriched = [] as any[]
-
-    for (const loc of locations || []) {
+    const enriched = await Promise.all((locations || []).map(async (loc) => {
       try {
         // Today's check-ins for this location
         const { count: checkInCount, error: inCountErr } = await supabase
@@ -138,7 +136,7 @@ export async function GET(request: Request) {
             ? Math.round(haversine(adminLat, adminLng, loc.latitude, loc.longitude))
             : null
 
-        enriched.push({
+        return {
           ...loc,
           distance_meters: distanceMeters,
           today: {
@@ -148,12 +146,12 @@ export async function GET(request: Request) {
             last_check_out_time: lastOutData?.[0]?.check_out_time || null,
             currently_checked_in: currentlyCheckedIn || 0,
           },
-        })
+        }
       } catch (innerErr) {
         console.error("[v0] Error enriching location", loc.id, innerErr)
-        enriched.push({ ...loc, error: "Failed to compute stats" })
+        return { ...loc, error: "Failed to compute stats" }
       }
-    }
+    }))
 
     return NextResponse.json({ success: true, locations: enriched })
   } catch (error) {
