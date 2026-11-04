@@ -26,6 +26,7 @@ interface FDReview {
   loan_type?: string
   request_number?: string
   requested_amount?: number
+  salary_advance_amount?: number
   repayment_duration_months?: number
   monthly_salary?: number
   salary_advance_months?: number
@@ -259,6 +260,7 @@ export function AccountsExecutiveFDDashboard({
   const [verificationMemo, setVerificationMemo] = useState('')
   const [reviewDecision, setReviewDecision] = useState('')
   const [adjustedFdScore, setAdjustedFdScore] = useState('')
+  const [approvedAmount, setApprovedAmount] = useState('')
   const [adjustmentReason, setAdjustmentReason] = useState('')
   const [showInformationForm, setShowInformationForm] = useState(false)
   const [basicSalary, setBasicSalary] = useState('')
@@ -382,6 +384,7 @@ export function AccountsExecutiveFDDashboard({
           fd_verification_memo: verificationMemo,
           review_decision: reviewDecision,
           adjusted_fd_score: Math.round(score),
+          approved_amount: approvedAmount.trim() === '' ? undefined : Number(approvedAmount),
           adjustment_reason: adjustmentReason.trim(),
         }),
       })
@@ -694,6 +697,7 @@ export function AccountsExecutiveFDDashboard({
                     onClick={() => {
                       setSelectedReview(review)
                       setAdjustedFdScore(String(Math.round(Number(review.fd_score) || 0)))
+                      setApprovedAmount(String(review.salary_advance_amount ?? review.requested_amount ?? ''))
                       setAdjustmentReason('')
                     }}
                     className="w-full"
@@ -810,6 +814,13 @@ export function AccountsExecutiveFDDashboard({
                 return (
                   <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4 space-y-3">
                     <p className="font-semibold text-sm text-slate-900">Your Decision</p>
+                    {String(selectedReview.loan_type || '').toLowerCase().includes('salary') && (
+                      <div className="rounded border border-amber-200 bg-amber-50 p-3">
+                        <label className="text-xs font-semibold text-amber-900">Payable salary advance amount</label>
+                        <p className="text-[11px] text-amber-800 mt-1">Accounts Loan Office must provide this amount first. You may correct it before approval.</p>
+                        <Input type="number" min={0.01} step="0.01" value={approvedAmount} onChange={e => setApprovedAmount(e.target.value)} className="mt-2 bg-white" />
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div>

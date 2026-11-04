@@ -517,8 +517,13 @@ export async function POST(request: NextRequest) {
       if (!Number.isFinite(fdScore)) {
         return NextResponse.json({ error: "fd_score is required" }, { status: 400 })
       }
+      const isSalaryAdvance = String(req.loan_type_key || req.loan_type_label || "").toLowerCase().includes("salary")
+      const salaryAdvanceAmount = Number(body.salary_advance_amount)
+      if (isSalaryAdvance && (!Number.isFinite(salaryAdvanceAmount) || salaryAdvanceAmount <= 0)) {
+        return NextResponse.json({ error: "Accounts Loan Office must provide the payable salary advance amount before FD approval." }, { status: 400 })
+      }
 
-      // Accounts Office only submits the calculated FD here. The final approve/reject
+      // Accounts Office submits the calculated FD and, for salary advances, the payable amount here. The final approve/reject
       // decision — and any rejection letter — is issued by Accounts Executive via
       // PATCH /api/loan/fd-review, never by this route.
       update.accounts_reviewer_id = user.id
@@ -526,6 +531,11 @@ export async function POST(request: NextRequest) {
       update.fd_note = note
       update.fd_checked_at = new Date().toISOString()
       update.fd_good = fdScore >= GOOD_FD_THRESHOLD
+      if (isSalaryAdvance) {
+        update.salary_advance_amount = salaryAdvanceAmount
+        update.requested_amount = salaryAdvanceAmount
+        update.fixed_amount = salaryAdvanceAmount
+      }
       // Save the FD proof document URL if provided so staff/HR can view it
       const fdDocumentUrl = String(body.fd_document_url || "").trim() || null
       if (fdDocumentUrl) update.fd_document_url = fdDocumentUrl

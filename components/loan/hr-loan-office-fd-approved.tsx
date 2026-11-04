@@ -43,6 +43,9 @@ function getSalaryAdvanceAmount(loan: Record<string, unknown>) {
   const loanType = String(loan.loan_type_key || loan.loan_type || loan.loan_type_label || '').toLowerCase()
   if (!loanType.includes('salary') || !loanType.includes('advance')) return undefined
 
+  const storedApprovedAmount = Number(loan.salary_advance_amount)
+  if (Number.isFinite(storedApprovedAmount) && storedApprovedAmount > 0) return storedApprovedAmount
+
   const basicSalary = Number(loan.basic_salary)
   const requestedMonths = Number(
     loan.salary_advance_multiplier ?? loan.deduction_period_months ?? loan.repayment_duration_months ?? loan.recovery_months,
