@@ -324,13 +324,14 @@ async function send(
   subject: string,
   html: string,
   context = "workflow notification",
+  cc: string[] = [],
 ): Promise<void> {
   const recipients = (Array.isArray(to) ? to : [to]).filter(Boolean)
   if (!recipients.length) return
   const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
   const results = await Promise.allSettled(
     recipients.map((email) =>
-      emailService.sendEmail(email, { subject, html, text }, {
+      emailService.sendEmail(email, { subject, html, text, ...(cc.length ? { cc } : {}) }, {
         emailModule: context.toLowerCase().includes("leave") ? "leave" : context.toLowerCase().includes("loan") ? "loan" : "system",
         emailEvent: context.toLowerCase().includes("submitted") || context.toLowerCase().includes("pending") ? "assignment" : "notification",
         idempotencyKey: `workflow/${context}/${email}/${subject}`,
@@ -718,7 +719,7 @@ export async function notifyLeaveResumeReminder(
   }
 }
 
-// ═══����═══════════════════════�����══════════════════════════════��═════════════════
+// ═══����═══════════════���═══════�����══════════════════════════════��═════════════════
 // ═══════════════════════════════════════════════���══════════════════════��═��═══
 
 /**
@@ -767,6 +768,7 @@ export async function notifyLoanHodApproved(
   admin: AdminClient,
   opts: {
     loanRequestId: string
+    staffUserId?: string
     staffName: string
     loanType: string
     requestNumber: string
@@ -778,6 +780,7 @@ export async function notifyLoanHodApproved(
     const loanOfficeRoles = ["loan_officer", "loan_office", "hr_loan_office", "leave_loan_officer", "accounts_loan_office", "hr_officer", "hr_office", "manager_hr", "admin"]
     const emails = await emailsForRoles(admin, loanOfficeRoles)
     if (!emails.length) return
+    const applicantEmail = opts.staffUserId ? await emailForUser(admin, opts.staffUserId) : null
 
     const link = `${APP_URL}/dashboard/loans`
     const subject = `[Action Required] Loan Request Approved by HOD — ${opts.staffName}`
@@ -795,7 +798,7 @@ export async function notifyLoanHodApproved(
       )}
       ${btn(link, "Process in Loan Office")}`,
     )
-    await send(admin, emails, subject, html, "loan HOD approved notification")
+    await send(admin, emails, subject, html, "loan HOD approved notification", applicantEmail ? [applicantEmail] : [])
   } catch (e) {
     console.warn("[workflow-emails] notifyLoanHodApproved failed:", e)
   }
@@ -848,6 +851,7 @@ export async function notifyLoanStageAdvanced(
   admin: AdminClient,
   opts: {
     toRoles: string[]               // roles to notify
+    staffUserId?: string
     staffName: string
     loanType: string
     requestNumber: string
@@ -859,6 +863,7 @@ export async function notifyLoanStageAdvanced(
   try {
     const emails = await emailsForRoles(admin, opts.toRoles)
     if (!emails.length) return
+    const applicantEmail = opts.staffUserId ? await emailForUser(admin, opts.staffUserId) : null
 
     const link = "https://updates.qccapps.com/auth/login"
     const subject = `[Action Required] Loan at ${opts.toStage} — ${opts.staffName?.trim() || "Staff Member"}`
@@ -875,7 +880,7 @@ export async function notifyLoanStageAdvanced(
       )}
       ${btn(link, `Review in ${opts.toStage}`)}`,
     )
-    await send(admin, emails, subject, html, "loan stage advanced notification")
+    await send(admin, emails, subject, html, "loan stage advanced notification", applicantEmail ? [applicantEmail] : [])
   } catch (e) {
     console.warn("[workflow-emails] notifyLoanStageAdvanced failed:", e)
   }
