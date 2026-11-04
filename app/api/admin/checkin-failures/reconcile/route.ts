@@ -44,8 +44,8 @@ export async function POST(request: Request) {
     const itEmails = [...new Set(selectedProfiles.map((it: any) => String(it.email || "").trim().toLowerCase()).filter(Boolean))]
     const { data: admins } = await admin.from("user_profiles").select("email, is_active").in("role", ["admin", "administrator"])
     const adminEmails = (admins || []).filter((a: any) => a.is_active !== false).map((a: any) => String(a.email || "").trim().toLowerCase()).filter(Boolean)
-    const primaryRecipient = itEmails[0] || adminEmails[0] || currentEmail
-    const cc = [...new Set([...itEmails.slice(1), ...adminEmails, currentEmail])].filter((email) => email && email !== primaryRecipient)
+    const primaryRecipient = currentEmail || itEmails[0] || adminEmails[0]
+    const cc = [...new Set([...itEmails, ...adminEmails])].filter((email) => email && email !== primaryRecipient)
     if (!primaryRecipient) continue
     const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || `Staff ${profile?.employee_id || userId}`
     const employeeId = profile?.employee_id || "Not available"
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     const results = await emailService.sendEmail(primaryRecipient, { subject: `Ghana Attendance Support: ${name} needs IT assistance`, replyTo: currentEmail, cc, html, text: `${name} has reached 12 failed attendance attempts today. Department: ${department}. Rank: ${profile?.rank || "Not available"}. Role: ${profile?.role || "Not available"}. Location: ${location?.name || "Not available"}. Region: ${region}. Staff ID: ${employeeId}. Failed attempts: ${count}. IT Admin recipients: ${itEmails.join(", ") || "Not available"}. The affected user is included in this alert.` }, { emailModule: "attendance", emailEvent: "failed_attempt_escalation", emailHeading: "Attendance assistance required", emailSubtitle: "Existing repeated failure reconciled", idempotencyKey: `attendance-failure/${userId}/${start.toISOString().slice(0, 10)}` })
     if (results.success) {
       sent++
-      await admin.from("audit_logs").insert({ user_id: userId, action: "attendance_failure_escalated", table_name: "audit_logs", new_values: { failure_count: count, reconciled: true, recipients: [itEmails[0], ...cc] } })
+      await admin.from("audit_logs").insert({ user_id: userId, action: "attendance_failure_escalated", table_name: "audit_logs", record_id: start.toISOString().slice(0, 10), new_values: { failure_count: count, reconciled: true, recipients: [primaryRecipient, ...cc] } })
     }
   }
   return NextResponse.json({ success: true, sent, checked: candidates.length })
