@@ -108,7 +108,26 @@ export async function POST(request: NextRequest) {
         .limit(1)
         .maybeSingle()
 
+      let escalationId: string | null = null
       if (!existingEscalation) {
+        const { data: claim, error: claimError } = await admin
+          .from("audit_logs")
+          .insert({
+            user_id: user.id,
+            action: "attendance_failure_escalated",
+            table_name: "audit_logs",
+            record_id: todayStart.toISOString().slice(0, 10),
+            new_values: { status: "sending", failure_count: (failureCount || 0) + 1 },
+            ip_address: clientIp,
+            user_agent: request.headers.get("user-agent"),
+          })
+          .select("id")
+          .maybeSingle()
+
+        if (!claimError && claim?.id) escalationId = claim.id
+      }
+
+      if (escalationId) {
         const locationQuery = profile?.assigned_location_id
           ? await admin.from("geofence_locations").select("name").eq("id", profile.assigned_location_id).maybeSingle()
           : { data: null }
@@ -141,9 +160,8 @@ export async function POST(request: NextRequest) {
           .in("role", ["admin", "administrator"])
         const administratorEmails = [...new Set((systemAdmins || []).map((candidate: any) => String(candidate.email || "").trim().toLowerCase()).filter(Boolean))]
         const currentUserEmail = String(profile?.email || user.email || "").trim().toLowerCase()
-        const primaryRecipient = itAdminEmails[0] || administratorEmails[0] || currentUserEmail
-        const cc = [...new Set([...itAdminEmails.slice(1), ...administratorEmails])].filter((email) => email && email !== primaryRecipient)
-        const ccWithUser = [...new Set([...cc, currentUserEmail])].filter((email) => email && email !== primaryRecipient)
+        const primaryRecipient = currentUserEmail || itAdminEmails[0] || administratorEmails[0]
+        const ccWithUser = [...new Set([...itAdminEmails, ...administratorEmails])].filter((email) => email && email !== primaryRecipient)
 
         if (primaryRecipient) {
           const metadataName = [user.user_metadata?.first_name, user.user_metadata?.last_name, user.user_metadata?.full_name].filter(Boolean).join(" ").trim()
@@ -172,14 +190,11 @@ export async function POST(request: NextRequest) {
         }
 
         if (escalationSent) {
-          await admin.from("audit_logs").insert({
-            user_id: user.id,
-            action: "attendance_failure_escalated",
-            table_name: "audit_logs",
-            new_values: { failure_count: (failureCount || 0) + 1, location_name: locationName, recipients: [primaryRecipient, ...ccWithUser] },
-            ip_address: clientIp,
-            user_agent: request.headers.get("user-agent"),
-          })
+          await admin.from("audit_logs").update({
+            new_values: { status: "sent", failure_count: (failureCount || 0) + 1, location_name: locationName, recipients: [primaryRecipient, ...ccWithUser] },
+          }).eq("id", escalationId)
+        } else {
+          await admin.from("audit_logs").delete().eq("id", escalationId)
         }
       }
     }
