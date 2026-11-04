@@ -3,6 +3,7 @@ import { calculateSalaryAdvanceFromFdNote, isSalaryAdvanceLoanType } from "@/lib
 import { NextResponse } from "next/server"
 import { canApproveFdScore, canEnterFdScore, canRejectFdByScore, formatFdScoreAdjustmentMemo, GOOD_FD_THRESHOLD, isFdExemptLoanType } from "@/lib/loan-workflow"
 import { createMemoToken } from "@/lib/secure-memo"
+import { emailService } from "@/lib/email-service"
 
 export const runtime = 'nodejs'
 
@@ -52,6 +53,31 @@ async function notifyUsers(admin: any, userIds: string[], title: string, message
   )
 }
 
+async function sendFdDecisionEmail(admin: any, loan: any, score: number, isCarLoan: boolean, staffId: string, reviewerName: string) {
+  const nextRoles = isCarLoan
+    ? ["loan_committee", "committee_member", "admin"]
+    : ["loan_office", "loan_officer", "hr_loan_office", "leave_loan_officer", "hr_officer", "admin"]
+  const [{ data: recipients }, { data: staff }] = await Promise.all([
+    admin.from("user_profiles").select("email").in("role", nextRoles).eq("is_active", true),
+    admin.from("user_profiles").select("email").eq("id", staffId).maybeSingle(),
+  ])
+  const to = Array.from(new Set((recipients || []).map((row: any) => String(row.email || "").trim().toLowerCase()).filter(Boolean)))
+  const applicantEmail = String(staff?.email || loan.corporate_email || "").trim().toLowerCase()
+  if (!to.length) return
+
+  const nextStage = isCarLoan ? "Car Loan Committee" : "HR Loan Office"
+  const subject = `[Action Required] FD Approved by Accounts Executive — ${loan.staff_full_name || "Loan Applicant"}`
+  const text = `${loan.staff_full_name || "Loan Applicant"}'s loan request ${loan.request_number || loan.id} has been approved in the FD Approval tab by Accounts Executive ${reviewerName}. FD score: ${score}%. Next action: ${nextStage}.`
+  const html = `<div style="font-family:Arial,sans-serif;color:#17324d;line-height:1.6;max-width:680px;margin:auto"><div style="background:#163b59;color:#fff;padding:28px 32px"><div style="font-size:13px;letter-spacing:1px;text-transform:uppercase">QCC HR & Loans System</div><h1 style="margin:10px 0 0;font-size:24px">FD Approval Completed</h1></div><div style="border:1px solid #d8e2ea;border-top:0;padding:28px 32px"><p>The Accounts Executive has completed the <strong>FD Approval</strong> action in Loan Administration.</p><p style="background:#e8f5e9;padding:14px 16px;border-left:4px solid #16803c"><strong>Approved by Accounts Executive</strong><br>FD score: ${score}%<br>Next action: ${nextStage}</p><p><strong>Applicant:</strong> ${loan.staff_full_name || "Loan Applicant"}<br><strong>Reference:</strong> ${loan.request_number || loan.id}<br><strong>Loan type:</strong> ${loan.loan_type_label || loan.loan_type_key || "Loan"}<br><strong>Reviewer:</strong> ${reviewerName}</p><p>Please process the request from the ${nextStage} tab.</p></div></div>`
+  await emailService.sendEmail(to[0], { subject, html, text, cc: applicantEmail ? [...to.slice(1), applicantEmail] : to.slice(1) }, {
+    emailModule: "loan",
+    emailEvent: "fd_approved",
+    emailHeading: "FD approval completed",
+    emailSubtitle: `Next action: ${nextStage}`,
+    idempotencyKey: `loan-fd-approved/${loan.id}/${score}/${nextStage}`,
+  })
+}
+
 /**
  * GET /api/loan/fd-review
  * Fetch loan requests that have FD data set by Loan Office, pending Accounts Executive approval.
@@ -73,7 +99,7 @@ export async function GET(request: Request) {
 
     const { data: profile } = await supabase
       .from("user_profiles")
-      .select("role")
+      .select("role, first_name, last_name, departments(name, code)")
       .eq("id", user.id)
       .single()
 
@@ -529,6 +555,15 @@ export async function PATCH(request: Request) {
             { request_id: review_id, fd_score: normalizedFinalScore, memo: staffMemo, memo_path: memoPath },
           )
         }
+
+        await sendFdDecisionEmail(
+          admin,
+          loanForMemo,
+          normalizedFinalScore,
+          isCarLoan,
+          staffId,
+          `${[profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Accounts Executive"}`,
+        )
 
         if (isCarLoan) {
           const { data: committeeUsers } = await admin

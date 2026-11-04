@@ -354,6 +354,7 @@ export async function POST(request: NextRequest) {
         )
         notifyLoanHodApproved(admin, {
           loanRequestId: req.id,
+          staffUserId: req.user_id,
           staffName: staffNameForHod,
           loanType: String(req.loan_type_label || req.loan_type_key || ""),
           requestNumber: String(req.request_number || req.id),
@@ -469,6 +470,7 @@ export async function POST(request: NextRequest) {
           )
           notifyLoanStageAdvanced(admin, {
             toRoles: ["accounts", "admin"],
+            staffUserId: req.user_id,
             staffName: loanStaffName,
             loanType: String(req.loan_type_label || req.loan_type_key || ""),
             requestNumber: String(req.request_number || req.id),
@@ -492,6 +494,7 @@ export async function POST(request: NextRequest) {
           )
           notifyLoanStageAdvanced(admin, {
             toRoles: ["hr_officer", "hr_loan_office", "leave_loan_officer", "loan_office", "director_hr", "manager_hr", "hr_director", "admin"],
+            staffUserId: req.user_id,
             staffName: loanStaffName,
             loanType: String(req.loan_type_label || req.loan_type_key || ""),
             requestNumber: String(req.request_number || req.id),
