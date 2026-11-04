@@ -57,14 +57,32 @@ async function runForceFailedCheckout(request: NextRequest) {
   const maxDistanceM = Math.max(1, Number.parseInt(searchParams.get("max_distance_m") || "100", 10))
 
   const { day, start, end } = toUtcDayRange(dateParam)
-  const autoCheckoutCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  const now = new Date()
+  const autoCheckoutCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+  const officeCutoff = new Date(now)
+  officeCutoff.setHours(23, 0, 0, 0)
+  const dayStart = new Date(now)
+  dayStart.setHours(0, 0, 0, 0)
   let departmentAutoCheckedOut = 0
+  let officeAutoCheckedOut = 0
+  let autoLoggedOut = 0
 
-  const { data: openSessions, error: openSessionsError } = await admin
+  const { data: overdueSessions, error: openSessionsError } = await admin
     .from("attendance_records")
     .select("id, user_id, check_in_time, check_in_location_name")
     .is("check_out_time", null)
     .lt("check_in_time", autoCheckoutCutoff.toISOString())
+
+  const { data: officeSessions } = now >= officeCutoff
+    ? await admin
+        .from("attendance_records")
+        .select("id, user_id, check_in_time, check_in_location_name")
+        .is("check_out_time", null)
+        .gte("check_in_time", dayStart.toISOString())
+        .lte("check_in_time", officeCutoff.toISOString())
+    : { data: [] }
+
+  const openSessions = Array.from(new Map([...(overdueSessions || []), ...(officeSessions || [])].map((session: any) => [session.id, session])).values())
 
   if (openSessionsError) {
     return NextResponse.json({ error: "Failed to query overdue attendance", details: openSessionsError.message }, { status: 500 })
@@ -82,25 +100,55 @@ async function runForceFailedCheckout(request: NextRequest) {
       .map((profile: any) => String(profile.id)),
   )
 
-  for (const session of openSessions || []) {
-    if (!overnightUserIds.has(String(session.user_id))) continue
+  for (const session of openSessions) {
     const checkInTime = new Date(session.check_in_time)
-    const checkoutTime = new Date(checkInTime.getTime() + 24 * 60 * 60 * 1000)
-    const { error: closeError } = await admin
-      .from("attendance_records")
-      .update({
-        check_out_time: checkoutTime.toISOString(),
-        check_out_method: "system_24_hour_auto_checkout",
-        check_out_location_name: session.check_in_location_name || "Automatic checkout",
-        work_hours: 24,
-        auto_checkout: true,
-        notes: "Automatically checked out after the 24-hour maximum overnight department period.",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", session.id)
-      .is("check_out_time", null)
+    const isOvernight = overnightUserIds.has(String(session.user_id))
+    const isTodayOfficeSession = checkInTime >= dayStart && checkInTime <= officeCutoff
+    if (isOvernight && now.getTime() - checkInTime.getTime() >= 24 * 60 * 60 * 1000) {
+      const checkoutTime = new Date(checkInTime.getTime() + 24 * 60 * 60 * 1000)
+      const { error: closeError } = await admin
+        .from("attendance_records")
+        .update({
+          check_out_time: checkoutTime.toISOString(),
+          check_out_method: "system_24_hour_auto_checkout",
+          check_out_location_name: session.check_in_location_name || "Automatic checkout",
+          work_hours: 24,
+          auto_checkout: true,
+          notes: "Automatically checked out after the 24-hour maximum overnight department period.",
+          updated_at: now.toISOString(),
+        })
+        .eq("id", session.id)
+        .is("check_out_time", null)
+      if (!closeError) departmentAutoCheckedOut += 1
+      continue
+    }
 
-    if (!closeError) departmentAutoCheckedOut += 1
+    if (!isOvernight && now >= officeCutoff && isTodayOfficeSession) {
+      const { error: closeError } = await admin
+        .from("attendance_records")
+        .update({
+          check_out_time: officeCutoff.toISOString(),
+          check_out_method: "system_11pm_auto_checkout",
+          check_out_location_name: session.check_in_location_name || "Automatic checkout",
+          work_hours: Math.max(0, Math.min(24, Math.round(((officeCutoff.getTime() - checkInTime.getTime()) / 3600000) * 100) / 100)),
+          auto_checkout: true,
+          notes: "Automatically checked out at 11:00 PM for a non-overnight department.",
+          updated_at: now.toISOString(),
+        })
+        .eq("id", session.id)
+        .is("check_out_time", null)
+
+      if (!closeError) {
+        officeAutoCheckedOut += 1
+        try {
+          await admin.auth.admin.signOut(String(session.user_id), "global")
+          await admin.from("device_sessions").delete().eq("user_id", session.user_id)
+          autoLoggedOut += 1
+        } catch (logoutError) {
+          console.error("[cron/force-failed-checkout] Auto logout failed:", logoutError)
+        }
+      }
+    }
   }
 
   const { data: locations, error: locErr } = await admin.from("geofence_locations").select("name")
@@ -183,6 +231,8 @@ async function runForceFailedCheckout(request: NextRequest) {
       candidates: candidates.length,
       security_exempted: securityExemptCount,
       department_24_hour_auto_checked_out: departmentAutoCheckedOut,
+      office_11pm_auto_checked_out: officeAutoCheckedOut,
+      auto_logged_out: autoLoggedOut,
       updated: 0,
       skipped: 0,
       report: candidates.map((c) => ({ 
