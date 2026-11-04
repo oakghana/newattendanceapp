@@ -1449,6 +1449,7 @@ export default function LoanAppPage() {
   const isAdmin = isAdminRoleValue(normalizedRole)
   const isManagingDirector = normalizedRole === "managing_director"
   const isItAdmin = ["it_admin", "it-admin"].includes(normalizedRole.replace(/\s+/g, "_"))
+  const isHeadOfficeItAdmin = isItAdmin && /head office|headquarters|\bhq\b/i.test(String(data?.profile?.assignedLocationName || ""))
   const canSeeFdReviewerName = isAdmin || p?.directorHr || p?.hrOffice || p?.viewAllTabs
     // Loan Office workspace: loan_office/manager_hr ONLY if in HR dept (not Accounts dept)
   // Accounts-dept loan_office users get Accounts tab, not Loan Office tab
@@ -1459,7 +1460,7 @@ export default function LoanAppPage() {
     isAdmin ||
     (["loan_office", "hr_loan_office", "leave_loan_officer", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) ||
     (normalizedRole === "manager_hr" && !userDeptIsAccounts)
-  const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
+  const canDirectLinkageUpdate = Boolean(isAdmin || isHeadOfficeItAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
   const templateOptions = useMemo(
     () => (registryData?.templates || []).filter((template) => template.workflow_domain === selectedTemplateDomain),
