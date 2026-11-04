@@ -139,7 +139,9 @@ export async function POST(request: NextRequest) {
 
       const checkInTime = new Date(openRecord.check_in_time)
       const workedMs = now.getTime() - checkInTime.getTime()
-      const workedHours = Math.round((workedMs / 3_600_000) * 100) / 100
+      // Attendance work_hours is a single-shift value. Cap stale records so an
+      // old open session cannot overflow the database numeric column.
+      const workedHours = Math.max(0, Math.min(24, Math.round((workedMs / 3_600_000) * 100) / 100))
 
       const { error: updateErr } = await admin
         .from("attendance_records")

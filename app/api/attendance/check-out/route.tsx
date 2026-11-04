@@ -870,7 +870,7 @@ export async function POST(request: NextRequest) {
     const checkoutData: Record<string, any> = {
       check_out_time: checkOutTime.toISOString(),
       check_out_location_id: checkoutLocationData?.id || null,
-      work_hours: Math.round(workHours * 100) / 100,
+      work_hours: Math.max(0, Math.min(24, Math.round(workHours * 100) / 100)),
       updated_at: new Date().toISOString(),
       check_out_method: auto_checkout
         ? "auto_out_of_range_after_4pm"
