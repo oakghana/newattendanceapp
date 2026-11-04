@@ -171,6 +171,7 @@ export async function GET(request: Request) {
   hr_note,
   requires_fd_check,
         requested_amount,
+        salary_advance_amount,
   monthly_deduction,
   basic_salary,
   salary_advance_multiplier,
@@ -241,7 +242,7 @@ export async function GET(request: Request) {
         ? calculateSalaryAdvanceFromFdNote(loan.fd_note, requestedMonths)
         : null
 
-      if (salaryAdvance && Number(loan.requested_amount) !== salaryAdvance.amount) {
+      if (salaryAdvance && !Number.isFinite(Number(loan.salary_advance_amount)) && Number(loan.requested_amount) !== salaryAdvance.amount) {
         amountRepairs.push(
           admin.from("loan_requests").update({
             basic_salary: salaryAdvance.monthlySalary,
@@ -264,7 +265,8 @@ export async function GET(request: Request) {
       accounts_reviewer_name: fullName(reviewer) || null,
       staff_number: loan.staff_number,
       loan_type: loan.loan_type_label || loan.loan_type_key,
-      requested_amount: salaryAdvance?.amount ?? loan.requested_amount,
+      requested_amount: Number.isFinite(Number(loan.salary_advance_amount)) ? Number(loan.salary_advance_amount) : (salaryAdvance?.amount ?? loan.requested_amount),
+      salary_advance_amount: Number.isFinite(Number(loan.salary_advance_amount)) ? Number(loan.salary_advance_amount) : salaryAdvance?.amount,
       monthly_salary: salaryAdvance?.monthlySalary ?? loan.basic_salary,
       salary_advance_months: salaryAdvance?.requestedMonths ?? requestedMonths,
       monthly_deduction: loan.monthly_deduction,
@@ -337,7 +339,7 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json()
-    const { review_id, review_status, fd_verification_memo, review_decision, adjusted_fd_score, adjustment_reason, basic_salary, monthly_allowances, monthly_deductions, repayment_duration_months } = body
+    const { review_id, review_status, fd_verification_memo, review_decision, adjusted_fd_score, adjustment_reason, approved_amount, basic_salary, monthly_allowances, monthly_deductions, repayment_duration_months } = body
 
     if (!review_id || !review_status) {
       return NextResponse.json({ error: "Missing required fields: review_id, review_status" }, { status: 400 })
@@ -360,6 +362,11 @@ export async function PATCH(request: Request) {
 
     if (!["pending_accounts_fd_review", "fd_review_pending", "sent_to_accounts"].includes(String(currentLoan.status || ""))) {
       return NextResponse.json({ error: "This FD is no longer pending Accounts Executive review." }, { status: 400 })
+    }
+    const isSalaryAdvance = String(currentLoan.loan_type_key || currentLoan.loan_type_label || "").toLowerCase().includes("salary")
+    const approvedSalaryAmount = Number(approved_amount)
+    if (isSalaryAdvance && review_status === "approved" && (!Number.isFinite(approvedSalaryAmount) || approvedSalaryAmount <= 0)) {
+      return NextResponse.json({ error: "Enter the payable salary advance amount before approving this FD." }, { status: 400 })
     }
 
     if (review_status === 'information_provided') {
@@ -486,6 +493,11 @@ export async function PATCH(request: Request) {
         fd_good: isCorrectionRequest ? null : finalFdGood,
         status: finalStatus,
         accounts_reviewer_id: user.id,
+        ...(isSalaryAdvance && isApproved ? {
+          salary_advance_amount: approvedSalaryAmount,
+          requested_amount: approvedSalaryAmount,
+          fixed_amount: approvedSalaryAmount,
+        } : {}),
         fd_note: isCorrectionRequest ? null : updatedNote,
         hr_note: isCorrectionRequest ? correctionNote : (currentLoan as any).hr_note,
         fd_checked_at: isCorrectionRequest ? null : new Date().toISOString(),

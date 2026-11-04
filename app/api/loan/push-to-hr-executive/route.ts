@@ -154,7 +154,11 @@ export async function POST(request: NextRequest) {
     const calculatedSalaryAdvance = isSalaryAdvance
       ? calculateSalaryAdvance(annualSalary, multiplier)
       : null
-    if (isSalaryAdvance && !calculatedSalaryAdvance) {
+    const approvedSalaryAmount = Number(loanRequest.salary_advance_amount)
+    const effectiveSalaryAdvance = isSalaryAdvance && Number.isFinite(approvedSalaryAmount) && approvedSalaryAmount > 0 && calculatedSalaryAdvance
+      ? { ...calculatedSalaryAdvance, amount: approvedSalaryAmount }
+      : calculatedSalaryAdvance
+    if (isSalaryAdvance && !effectiveSalaryAdvance) {
       return NextResponse.json({ error: 'Accounts must provide a valid annual salary before this salary advance can be forwarded.' }, { status: 400 })
     }
 
@@ -165,15 +169,15 @@ export async function POST(request: NextRequest) {
       .from('loan_requests')
       .update({
         ...(String(reference_number || '').trim() ? { reference_number: String(reference_number).trim() } : {}),
-        ...(calculatedSalaryAdvance == null ? {} : {
-          basic_salary: calculatedSalaryAdvance.monthlySalary,
-          salary_advance_multiplier: calculatedSalaryAdvance.requestedMonths,
-          deduction_period_months: calculatedSalaryAdvance.requestedMonths,
-          repayment_duration_months: calculatedSalaryAdvance.requestedMonths,
-          recovery_months: calculatedSalaryAdvance.requestedMonths,
-          salary_advance_amount: calculatedSalaryAdvance.amount,
-          requested_amount: calculatedSalaryAdvance.amount,
-          fixed_amount: calculatedSalaryAdvance.amount,
+        ...(effectiveSalaryAdvance == null ? {} : {
+          basic_salary: effectiveSalaryAdvance.monthlySalary,
+          salary_advance_multiplier: effectiveSalaryAdvance.requestedMonths,
+          deduction_period_months: effectiveSalaryAdvance.requestedMonths,
+          repayment_duration_months: effectiveSalaryAdvance.requestedMonths,
+          recovery_months: effectiveSalaryAdvance.requestedMonths,
+          salary_advance_amount: effectiveSalaryAdvance.amount,
+          requested_amount: effectiveSalaryAdvance.amount,
+          fixed_amount: effectiveSalaryAdvance.amount,
         }),
         status: 'awaiting_hr_executives',
         director_hr_id: null,
