@@ -191,7 +191,7 @@ export async function GET(request: NextRequest) {
           admin
             .from("user_profiles")
             .select("id, first_name, last_name, employee_id, position, role, department_id, assigned_location_id, geofence_locations!assigned_location_id(name)")
-.in("role", ["department_head", "manager_hr", "transport_manager", "regional_manager"])
+.in("role", ["department_head", "manager_hr", "transport_manager", "regional_manager", "managing_director", "director_hr", "hr_executive", "hr_executive_officer", "accounts_executive"])
   .eq("is_active", true)
             .order("first_name", { ascending: true })
             .order("id", { ascending: true })
@@ -249,6 +249,14 @@ export async function GET(request: NextRequest) {
         return Boolean(sameDepartment && sameLocation)
       })
       hodRows = hodRows.filter((row: any) => String(row.id || "") === user.id || (assignedLocationId ? String(row.assigned_location_id || "") === assignedLocationId : true))
+    }
+
+    const requesterLocation = Array.isArray((profile as any)?.geofence_locations)
+      ? (profile as any).geofence_locations[0]
+      : (profile as any)?.geofence_locations
+    const isHeadOfficeItAdmin = role === "it_admin" && isNonRegionalLocation(requesterLocation?.name)
+    if (isHeadOfficeItAdmin) {
+      hodRows = hodRows.filter((row: any) => isNonRegionalStaff({ geofence_locations: row.geofence_locations, assigned_location_id: row.assigned_location_id }))
     }
 
     const staffById = new Map((staffRows || []).map((row: any) => [String(row.id), row]))
