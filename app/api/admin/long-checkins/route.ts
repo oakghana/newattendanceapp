@@ -71,17 +71,18 @@ export async function GET(request: NextRequest) {
     }
 
     const candidateIds = [...latestByUser.keys()]
-    const { data: overnightProfiles } = candidateIds.length
+    const { data: departmentRows } = await admin.from("departments").select("id, code, name")
+    const overnightDepartmentIds = (departmentRows || [])
+      .filter((department: any) => isOvernightShiftDept(department))
+      .map((department: any) => department.id)
+    const { data: overnightProfiles } = candidateIds.length && overnightDepartmentIds.length
       ? await admin
           .from("user_profiles")
-          .select("id, department:departments!inner(code, name)")
+          .select("id, department_id")
           .in("id", candidateIds)
+          .in("department_id", overnightDepartmentIds)
       : { data: [] as any[] }
-    const overnightUserIds = new Set(
-      (overnightProfiles || [])
-        .filter((person: any) => isOvernightShiftDept(Array.isArray(person.department) ? person.department[0] : person.department))
-        .map((person: any) => String(person.id)),
-    )
+    const overnightUserIds = new Set((overnightProfiles || []).map((person: any) => String(person.id)))
     for (const userId of candidateIds) {
       if (!overnightUserIds.has(String(userId))) latestByUser.delete(userId)
     }
