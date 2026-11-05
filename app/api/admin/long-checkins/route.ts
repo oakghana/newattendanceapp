@@ -7,7 +7,6 @@ const THRESHOLD_HOURS = 5
 const DEFAULT_PAGE_SIZE = 20
 const MAX_PAGE_SIZE = 100
 const FETCH_CHUNK = 1000
-const USER_CHUNK = 100
 
 type OpenAttendance = {
   id: string
@@ -87,37 +86,10 @@ export async function GET(request: NextRequest) {
       if (!overnightUserIds.has(String(userId))) latestByUser.delete(userId)
     }
 
-    // A user is only still "checked in" if nothing happened after the stale record:
-    // no newer session and no check-out recorded at or after its check-in time.
-    const filteredCandidateIds = [...latestByUser.keys()]
-    const resolvedUserIds = new Set<string>()
-    for (let i = 0; i < filteredCandidateIds.length; i += USER_CHUNK) {
-      const chunkIds = filteredCandidateIds.slice(i, i + USER_CHUNK)
-      const earliest = chunkIds.reduce((min, id) => Math.min(min, Date.parse(latestByUser.get(id).check_in_time)), Infinity)
-      const earliestIso = new Date(earliest).toISOString()
-      for (let from = 0; ; from += FETCH_CHUNK) {
-        const { data, error } = await admin
-          .from("attendance_records")
-          .select("id, user_id, check_in_time, check_out_time")
-          .in("user_id", chunkIds)
-          .or(`check_in_time.gt.${earliestIso},check_out_time.gte.${earliestIso}`)
-          .order("check_in_time", { ascending: true })
-          .range(from, from + FETCH_CHUNK - 1)
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-        for (const other of data || []) {
-          const stale = latestByUser.get(other.user_id)
-          if (!stale || other.id === stale.id) continue
-          const staleIn = Date.parse(stale.check_in_time)
-          const newerSession = Date.parse(other.check_in_time) > staleIn
-          const checkedOutAfter = other.check_out_time && Date.parse(other.check_out_time) >= staleIn
-          if (newerSession || checkedOutAfter) resolvedUserIds.add(other.user_id)
-        }
-        if (!data || data.length < FETCH_CHUNK) break
-      }
-    }
-
+    // The source query already guarantees check_out_time IS NULL and selects
+    // the latest open session per user. Do not compare it with completed rows:
+    // a later completed attendance record must not hide the current open one.
     const rows = [...latestByUser.values()]
-      .filter((row) => !resolvedUserIds.has(row.user_id))
       .sort((a, b) => Date.parse(a.check_in_time) - Date.parse(b.check_in_time))
     const attendanceCount = rows.length
     const pagedRows = rows.slice((page - 1) * limit, page * limit)
