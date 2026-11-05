@@ -91,14 +91,14 @@ async function runForceFailedCheckout(request: NextRequest) {
   // Only Security, Transport, and Operations may keep sessions open overnight.
   // Their hard maximum is 24 hours; standard departments use normal office rules.
   const openUserIds = [...new Set((openSessions || []).map((session: any) => session.user_id).filter(Boolean))]
-  const { data: departmentProfiles } = openUserIds.length
-    ? await admin.from("user_profiles").select("id, department:departments!inner(code, name)").in("id", openUserIds)
+  const { data: departmentRows } = await admin.from("departments").select("id, code, name")
+  const overnightDepartmentIds = (departmentRows || [])
+    .filter((department: any) => isOvernightShiftDept(department))
+    .map((department: any) => department.id)
+  const { data: departmentProfiles } = openUserIds.length && overnightDepartmentIds.length
+    ? await admin.from("user_profiles").select("id, department_id").in("id", openUserIds).in("department_id", overnightDepartmentIds)
     : { data: [] }
-  const overnightUserIds = new Set(
-    (departmentProfiles || [])
-      .filter((profile: any) => isOvernightShiftDept(profile.department))
-      .map((profile: any) => String(profile.id)),
-  )
+  const overnightUserIds = new Set((departmentProfiles || []).map((profile: any) => String(profile.id)))
 
   for (const session of openSessions) {
     const checkInTime = new Date(session.check_in_time)
