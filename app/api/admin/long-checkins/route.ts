@@ -55,12 +55,11 @@ export async function GET(request: NextRequest) {
         .from("attendance_records")
         .select("id, user_id, check_in_time, check_in_location_name, check_in_method, auto_checkout")
         .is("check_out_time", null)
-        .or("auto_checkout.is.null,auto_checkout.eq.false")
         .lte("check_in_time", thresholdIso)
         .order("check_in_time", { ascending: false })
         .range(from, from + FETCH_CHUNK - 1)
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-      openRows.push(...(data || []))
+      openRows.push(...(data || []).filter((row: any) => row.auto_checkout !== true))
       if (!data || data.length < FETCH_CHUNK) break
     }
 
