@@ -123,14 +123,17 @@ async function runForceFailedCheckout(request: NextRequest) {
       continue
     }
 
-    if (!isOvernight && now >= officeCutoff && isTodayOfficeSession) {
+    if (!isOvernight && (checkInTime < dayStart || now >= officeCutoff)) {
+      const sessionDayCutoff = new Date(checkInTime)
+      sessionDayCutoff.setHours(23, 0, 0, 0)
+      const checkoutTime = sessionDayCutoff < now ? sessionDayCutoff : now
       const { error: closeError } = await admin
         .from("attendance_records")
         .update({
-          check_out_time: officeCutoff.toISOString(),
+          check_out_time: checkoutTime.toISOString(),
           check_out_method: "system_11pm_auto_checkout",
           check_out_location_name: session.check_in_location_name || "Automatic checkout",
-          work_hours: Math.max(0, Math.min(24, Math.round(((officeCutoff.getTime() - checkInTime.getTime()) / 3600000) * 100) / 100)),
+          work_hours: Math.max(0, Math.min(24, Math.round(((checkoutTime.getTime() - checkInTime.getTime()) / 3600000) * 100) / 100)),
           auto_checkout: true,
           notes: "Automatically checked out at 11:00 PM for a non-overnight department.",
           updated_at: now.toISOString(),
