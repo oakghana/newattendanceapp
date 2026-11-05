@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { isOvernightShiftDept } from "@/lib/attendance-utils"
 
 const ALLOWED_ROLES = new Set(["admin"])
 const THRESHOLD_HOURS = 5
@@ -53,8 +54,9 @@ export async function GET(request: NextRequest) {
     for (let from = 0; ; from += FETCH_CHUNK) {
       const { data, error } = await admin
         .from("attendance_records")
-        .select("id, user_id, check_in_time, check_in_location_name, check_in_method")
+        .select("id, user_id, check_in_time, check_in_location_name, check_in_method, auto_checkout")
         .is("check_out_time", null)
+        .or("auto_checkout.is.null,auto_checkout.eq.false")
         .lte("check_in_time", thresholdIso)
         .order("check_in_time", { ascending: false })
         .range(from, from + FETCH_CHUNK - 1)
@@ -68,12 +70,28 @@ export async function GET(request: NextRequest) {
       if (row.user_id && !latestByUser.has(row.user_id)) latestByUser.set(row.user_id, row)
     }
 
+    const candidateIds = [...latestByUser.keys()]
+    const { data: overnightProfiles } = candidateIds.length
+      ? await admin
+          .from("user_profiles")
+          .select("id, department:departments!inner(code, name)")
+          .in("id", candidateIds)
+      : { data: [] as any[] }
+    const overnightUserIds = new Set(
+      (overnightProfiles || [])
+        .filter((person: any) => isOvernightShiftDept(person.department))
+        .map((person: any) => String(person.id)),
+    )
+    for (const userId of candidateIds) {
+      if (!overnightUserIds.has(String(userId))) latestByUser.delete(userId)
+    }
+
     // A user is only still "checked in" if nothing happened after the stale record:
     // no newer session and no check-out recorded at or after its check-in time.
-    const candidateIds = [...latestByUser.keys()]
+    const filteredCandidateIds = [...latestByUser.keys()]
     const resolvedUserIds = new Set<string>()
-    for (let i = 0; i < candidateIds.length; i += USER_CHUNK) {
-      const chunkIds = candidateIds.slice(i, i + USER_CHUNK)
+    for (let i = 0; i < filteredCandidateIds.length; i += USER_CHUNK) {
+      const chunkIds = filteredCandidateIds.slice(i, i + USER_CHUNK)
       const earliest = chunkIds.reduce((min, id) => Math.min(min, Date.parse(latestByUser.get(id).check_in_time)), Infinity)
       const earliestIso = new Date(earliest).toISOString()
       for (let from = 0; ; from += FETCH_CHUNK) {
