@@ -144,6 +144,25 @@ export async function GET(request: NextRequest) {
       (requestingRole === "it_admin" && itAdminScope === "regional_it_admin")
     )
 
+    if (urlParams.get("lookup") === "hod_candidates") {
+      if (!["admin", "administrator", "it_admin", "department_head", "manager_hr", "regional_manager"].includes(requestingRole)) {
+        return createJsonResponse({ success: false, error: "Insufficient permissions", data: [] }, 403)
+      }
+      const { data: candidates, error: candidatesError } = await adminDb
+        .from("user_profiles")
+        .select("id, employee_id, first_name, last_name, email, position, role, department_id, assigned_location_id, is_active, departments(id, name, code), geofence_locations!user_profiles_assigned_location_id_fkey(id, name, location_type, parent_location_id, district_id)")
+        .in("role", ["department_head", "manager_hr", "transport_manager", "regional_manager", "managing_director", "director_hr", "hr_executive", "hr_executive_officer", "accounts_executive"])
+        .eq("is_active", true)
+        .order("first_name", { ascending: true })
+        .order("last_name", { ascending: true })
+      if (candidatesError) return createJsonResponse({ success: false, error: candidatesError.message, data: [] }, 500)
+      const compactCandidates = (candidates || []).filter((candidate: any) => {
+        if (requestingRole !== "it_admin" || itAdminScope !== "head_office_it_admin") return true
+        return isNonRegionalLocation(candidate?.geofence_locations?.name)
+      })
+      return createJsonResponse({ success: true, data: compactCandidates, total: compactCandidates.length })
+    }
+
     if (isRegionalStaffAdministrator) {
       let scopeLocationIds: string[] = []
       let requestingRegionId: string | null = null

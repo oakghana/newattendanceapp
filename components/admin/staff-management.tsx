@@ -605,32 +605,24 @@ export function StaffManagement() {
     setHodLinkHodIds(((member as any).hod_links || []).map((hod: any) => String(hod.id)))
     setHodLinkError(null)
     try {
-      // HOD linkage may target Department Heads, Manager HR, Regional
-      // Managers, Directors, Transport Managers, HR Executives, or Accounts Executives.
-      const [resDH, resMHR, resRM, resMD, resDHR, resTM, resHRE, resAE] = await Promise.all([
-        authenticatedFetch("/api/admin/staff?role=department_head&limit=200"),
-        authenticatedFetch("/api/admin/staff?role=manager_hr&limit=200"),
-        authenticatedFetch("/api/admin/staff?role=regional_manager&limit=200"),
-        authenticatedFetch("/api/admin/staff?role=managing_director&limit=200"),
-        authenticatedFetch("/api/admin/staff?role=director_hr&limit=200"),
-        authenticatedFetch("/api/admin/staff?role=transport_manager&limit=200"),
-        authenticatedFetch("/api/admin/staff?role=hr_executive&limit=200"),
-        authenticatedFetch("/api/admin/staff?role=accounts_executive&limit=200"),
-      ])
-      const [dh, mhr, rm, md, dhr, tm, hre, ae]: StaffMember[][] = await Promise.all([
-        resDH.json().then((d: any) => d.data || []),
-        resMHR.json().then((d: any) => d.data || []),
-        resRM.json().then((d: any) => d.data || []),
-        resMD.json().then((d: any) => d.data || []),
-        resDHR.json().then((d: any) => d.data || []),
-        resTM.json().then((d: any) => d.data || []),
-        resHRE.json().then((d: any) => d.data || []),
-        resAE.json().then((d: any) => d.data || []),
-      ])
+      // Load all HOD-capable candidates in one compact request. The old flow
+      // issued eight full staff-directory requests before opening the selector.
+      const response = await authenticatedFetch("/api/admin/staff?lookup=hod_candidates")
+      const result = await response.json()
+      if (!response.ok || !result.success) throw new Error(result.error || "Unable to load HOD candidates")
+      const candidates = (result.data || []) as StaffMember[]
+      const roleKey = (candidate: StaffMember) => normalizeLocationName(candidate.role).replace(/_/g, " ")
+      const dh = candidates.filter((candidate) => roleKey(candidate) === "department head")
+      const mhr = candidates.filter((candidate) => roleKey(candidate) === "manager hr")
+      const rm = candidates.filter((candidate) => roleKey(candidate) === "regional manager")
+      const md = candidates.filter((candidate) => roleKey(candidate) === "managing director")
+      const dhr = candidates.filter((candidate) => roleKey(candidate) === "director hr")
+      const tm = candidates.filter((candidate) => roleKey(candidate) === "transport manager")
+      const hre = candidates.filter((candidate) => ["hr executive", "hr executive officer"].includes(roleKey(candidate)))
+      const ae = candidates.filter((candidate) => roleKey(candidate) === "accounts executive")
       const staffLocationId = String(member.assigned_location_id || "")
       const staffLocationName = normalizeLocationName(member.geofence_locations?.name)
       const isNonRegionalStaff = isNonRegionalLocation(staffLocationName)
-      const roleKey = (candidate: StaffMember) => normalizeLocationName(candidate.role).replace(/_/g, " ")
       const candidateLocationId = (candidate: StaffMember) => String(candidate.assigned_location_id || "")
       const sameLocation = (candidate: StaffMember) => Boolean(staffLocationId && candidateLocationId(candidate) === staffLocationId)
       const isRegionalManager = (candidate: StaffMember) => ["regional manager", "regional manager office", "regionalmanager"].includes(roleKey(candidate))
