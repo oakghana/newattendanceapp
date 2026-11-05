@@ -159,6 +159,7 @@ export async function POST(request: NextRequest) {
     if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 })
 
     const updated: string[] = []
+    const checkoutTimes: Record<string, string> = {}
     const updatedUserIds: string[] = []
     const failures: string[] = []
     const openOnly = (openRecords || []).filter((item: any) => item.check_out_time == null || String(item.check_out_time).trim() === "")
@@ -194,6 +195,7 @@ export async function POST(request: NextRequest) {
       }
       {
         updated.push(record.id)
+        checkoutTimes[record.id] = checkoutAt
         if (record.user_id) {
           updatedUserIds.push(record.user_id)
           // Close any older orphaned open sessions too so the user cannot reappear in this list.
@@ -213,7 +215,7 @@ export async function POST(request: NextRequest) {
         notifiedUserIds.map((userId) => ({
           user_id: userId,
           title: "Check-out completed successfully",
-          message: "An administrator has checked you out successfully. Your next login will start a new check-in record.",
+          message: `An administrator checked you out at ${now.toISOString()}. Your next login will start a new check-in record.`, 
           type: "info",
           is_read: false,
         })),
@@ -224,7 +226,7 @@ export async function POST(request: NextRequest) {
     await admin.from("audit_logs").insert({
       user_id: user.id,
       action: "admin_bulk_long_checkin_checkout",
-      new_values: { record_ids: updated, requested_record_ids: recordIds, note: body.note || null },
+      new_values: { record_ids: updated, requested_record_ids: recordIds, checkout_times: checkoutTimes, note: body.note || null },
     })
 
     if (!updated.length) {
@@ -240,7 +242,9 @@ export async function POST(request: NextRequest) {
       checkedOut: updated.length,
       notified: notifiedUserIds.length,
       failed: failures.length,
-      message: `${updated.length} user(s) checked out and notified.${failedNote}`,
+      checkoutTime: now.toISOString(),
+      checkoutTimes,
+      message: `${updated.length} user(s) checked out and notified at ${now.toISOString()}.${failedNote}`, 
     })
   } catch (error) {
     console.error("[long-checkins POST]", error)
