@@ -96,7 +96,7 @@ async function runForceFailedCheckout(request: NextRequest) {
     : { data: [] }
   const overnightUserIds = new Set(
     (departmentProfiles || [])
-      .filter((profile: any) => isOvernightShiftDept(profile.department))
+      .filter((profile: any) => isOvernightShiftDept(Array.isArray(profile.department) ? profile.department[0] : profile.department))
       .map((profile: any) => String(profile.id)),
   )
 

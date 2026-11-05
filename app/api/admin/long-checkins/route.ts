@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
       : { data: [] as any[] }
     const overnightUserIds = new Set(
       (overnightProfiles || [])
-        .filter((person: any) => isOvernightShiftDept(person.department))
+        .filter((person: any) => isOvernightShiftDept(Array.isArray(person.department) ? person.department[0] : person.department))
         .map((person: any) => String(person.id)),
     )
     for (const userId of candidateIds) {
