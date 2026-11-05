@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
+import { emailService } from "@/lib/email-service"
 import { type NextRequest, NextResponse } from "next/server"
 import { requiresLatenessReason, isExemptFromAttendanceReasons, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept, isOvernightShiftDept, shouldSkipSystemAutoCheckout } from "@/lib/attendance-utils"
 import { trackLeaveResumption, processStaffResumptionCheckIn, checkLeaveOverdueBlock } from "@/lib/leave-resumption-service"
@@ -6,6 +7,40 @@ import { validateAttendanceReason } from "@/lib/meaningful-text"
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+const MANDATORY_ATTENDANCE_CC = ["oheneba.boamah@qccgh.com", "qualitycontrolcompanyltd@gmail.com"]
+
+async function sendMissedCheckoutWarning(admin: any, user: any, profile: any, priorRecord: any, newCheckInTime: Date) {
+  const [{ data: links }, { data: legacyProfile }] = await Promise.all([
+    admin.from("loan_hod_linkages").select("hod_user_id").eq("staff_user_id", user.id).limit(20),
+    admin.from("user_profiles").select("hod_id").eq("id", user.id).maybeSingle(),
+  ])
+  const hodIds = Array.from(new Set([...(links || []).map((row: any) => row.hod_user_id), legacyProfile?.hod_id].filter(Boolean)))
+  const { data: hodProfiles } = hodIds.length
+    ? await admin.from("user_profiles").select("email").in("id", hodIds).eq("is_active", true)
+    : { data: [] as any[] }
+  const staffEmail = String(profile?.email || user.email || "").trim().toLowerCase()
+  if (!staffEmail) return
+  const cc = [...new Set([
+    ...(hodProfiles || []).map((row: any) => String(row.email || "").trim().toLowerCase()),
+    ...MANDATORY_ATTENDANCE_CC,
+  ])].filter((email) => email && email !== staffEmail)
+  const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() || user.user_metadata?.full_name || "Staff member"
+  const departmentRelation = Array.isArray(profile?.departments) ? profile.departments[0] : profile?.departments
+  const department = departmentRelation?.name || "Not available"
+  const missedAt = new Date(priorRecord.check_in_time).toISOString()
+  const incidentReference = `MISSED-CHECKOUT-${priorRecord.id}`
+  const subject = `[${incidentReference}] Missed attendance checkout warning — ${name}`
+  const text = `Formal attendance warning\n\nDear ${name},\n\nOur system detected that you checked in on ${missedAt} but did not complete a checkout before your next check-in on ${newCheckInTime.toISOString()}. The previous session was automatically closed by the system.\n\nPlease ensure you check out of the attendance portal at the end of every work period. If this happens four consecutive times, the matter will be referred to Management for review and appropriate action.\n\nIncident reference: ${incidentReference}\nStaff ID: ${profile?.employee_id || "Not available"}\nDepartment: ${department}\nLocation: ${priorRecord.check_in_location_name || "Not available"}\n\nYour HOD has been copied and is requested to ensure attendance checkout compliance is followed by their staff.\n\nQCC Attendance Administration`
+  const html = `<div style="font-family:Arial,sans-serif;color:#243447;line-height:1.6;max-width:700px;margin:auto"><div style="background:#8b1e1e;color:#fff;padding:28px 32px"><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase">QCC Attendance Administration</div><h1 style="margin:10px 0 0;font-size:24px">Formal Missed Checkout Warning</h1></div><div style="border:1px solid #d7dee8;border-top:0;padding:28px 32px"><p>Dear <strong>${name}</strong>,</p><p>Our attendance system detected that you checked in on <strong>${missedAt}</strong> but did not complete a checkout before your next check-in on <strong>${newCheckInTime.toISOString()}</strong>. The previous attendance session was automatically closed by the system.</p><div style="background:#fff7ed;border-left:4px solid #c2410c;padding:16px 18px;margin:20px 0"><strong>Attendance warning</strong><br>Please check out of the attendance portal at the end of every work period. If this occurs <strong>four consecutive times</strong>, the matter will be referred to Management for review and appropriate action.</div><table style="width:100%;border-collapse:collapse"><tr><td style="padding:7px 0;font-weight:bold">Incident reference</td><td style="padding:7px 0">${incidentReference}</td></tr><tr><td style="padding:7px 0;font-weight:bold">Staff ID</td><td style="padding:7px 0">${profile?.employee_id || "Not available"}</td></tr><tr><td style="padding:7px 0;font-weight:bold">Department</td><td style="padding:7px 0">${department}</td></tr><tr><td style="padding:7px 0;font-weight:bold">Last work location</td><td style="padding:7px 0">${priorRecord.check_in_location_name || "Not available"}</td></tr></table><p>Your HOD has been copied and is requested to ensure that staff under their supervision complete checkout consistently.</p><p>Regards,<br><strong>QCC Attendance Administration</strong></p></div></div>`
+  await emailService.sendEmail(staffEmail, { subject, html, text, cc }, {
+    emailModule: "attendance",
+    emailEvent: "missed_checkout_warning",
+    emailHeading: "Formal missed checkout warning",
+    emailSubtitle: "Attendance checkout compliance",
+    idempotencyKey: `missed-checkout/${user.id}/${priorRecord.id}`,
+  })
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -116,6 +151,8 @@ export async function POST(request: NextRequest) {
       .select(`
         first_name,
         last_name,
+        email,
+        employee_id,
         role,
         assigned_location_id,
         departments(code, name)
@@ -187,6 +224,8 @@ export async function POST(request: NextRequest) {
           })
           .eq("id", openPriorRecord.id)
           .is("check_out_time", null)
+
+        await sendMissedCheckoutWarning(await createAdminClient(), user, userProfile, openPriorRecord, new Date())
       }
     }
 
