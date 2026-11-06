@@ -9,8 +9,10 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const MANDATORY_ATTENDANCE_CC = ["oheneba.boamah@qccgh.com", "qualitycontrolcompanyltd@gmail.com"]
+const WARNING_EXEMPT_ROLES = new Set(["department_head", "regional_hr", "regional_hr_office", "regional_hr_officer", "accounts_executive", "hr_executive", "hr_executive_officer", "managing_director"])
 
 async function sendMissedCheckoutWarning(admin: any, user: any, profile: any, priorRecord: any, newCheckInTime: Date) {
+  if (WARNING_EXEMPT_ROLES.has(String(profile?.role || "").toLowerCase().replace(/[ -]/g, "_"))) return
   const [{ data: links }, { data: legacyProfile }] = await Promise.all([
     admin.from("loan_hod_linkages").select("hod_user_id").eq("staff_user_id", user.id).limit(20),
     admin.from("user_profiles").select("hod_id").eq("id", user.id).maybeSingle(),
