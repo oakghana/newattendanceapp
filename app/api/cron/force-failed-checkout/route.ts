@@ -12,12 +12,15 @@ type FailureGroup = {
   latestPayload: Record<string, any>
 }
 
+const WARNING_EXEMPT_ROLES = new Set(["department_head", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "accounts_executive", "hr_executive", "hr_executive_officer", "managing_director"])
+
 function getPayload(newValues: any): Record<string, any> {
   return newValues && typeof newValues === "object" ? newValues : {}
 }
 
 async function sendTimedCheckoutWarning(admin: any, userId: string, session: any, warningType: "20_hour" | "11pm") {
   const { data: profile } = await admin.from("user_profiles").select("email, employee_id, first_name, last_name, position, role, department_id, assigned_location_id, region_id").eq("id", userId).maybeSingle()
+  if (WARNING_EXEMPT_ROLES.has(String(profile?.role || "").toLowerCase().replace(/[ -]/g, "_"))) return
   const [{ data: department }, { data: location }, { data: links }] = await Promise.all([
     profile?.department_id ? admin.from("departments").select("name, code").eq("id", profile.department_id).maybeSingle() : { data: null },
     profile?.assigned_location_id ? admin.from("geofence_locations").select("name").eq("id", profile.assigned_location_id).maybeSingle() : { data: null },

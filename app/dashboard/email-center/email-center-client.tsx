@@ -51,6 +51,7 @@ export default function EmailCenterClient() {
   const [isSending, setIsSending] = useState(false)
   const [activeBroadcastId, setActiveBroadcastId] = useState<string | null>(null)
   const [isCancelling, setIsCancelling] = useState(false)
+  const [isProcessingCheckoutWarnings, setIsProcessingCheckoutWarnings] = useState(false)
   const [retryingId, setRetryingId] = useState<string | null>(null)
   const [accessDenied, setAccessDenied] = useState(false)
   const [audience, setAudience] = useState(["all"])
@@ -125,6 +126,23 @@ export default function EmailCenterClient() {
     }
   }
 
+  async function processMissedCheckoutWarnings() {
+    if (isProcessingCheckoutWarnings) return
+    setIsProcessingCheckoutWarnings(true)
+    setMessage("")
+    try {
+      const response = await fetch("/api/cron/force-failed-checkout", { method: "POST" })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || data.error) throw new Error(data.error || "Unable to process missed checkout warnings")
+      setMessage(`${data.office_11pm_auto_checked_out || 0} non-overnight user(s) checked out at 11 PM and warning emails processed; ${data.auto_logged_out || 0} session(s) logged out.`)
+      await load()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to process missed checkout warnings")
+    } finally {
+      setIsProcessingCheckoutWarnings(false)
+    }
+  }
+
   async function retryAlert(logId: string) {
     setRetryingId(logId)
     setMessage("")
@@ -186,6 +204,10 @@ export default function EmailCenterClient() {
 
   return <main className="min-h-screen bg-slate-950 p-4 text-slate-100 md:p-8"><div className="mx-auto max-w-7xl space-y-6">
     <header className="flex flex-col gap-6 rounded-3xl bg-gradient-to-br from-teal-900 via-slate-900 to-slate-950 p-7 shadow-2xl md:flex-row md:items-center md:justify-between"><div className="flex items-start gap-4"><div className="rounded-2xl bg-white p-2"><img src={logoUrl} alt="QCC logo" className="h-12 w-12 rounded-xl object-contain" /></div><div><p className="text-xs font-bold uppercase tracking-[0.24em] text-teal-300">Administrator tools</p><h1 className="mt-2 text-3xl font-bold tracking-tight md:text-4xl">Email center</h1><p className="mt-2 max-w-2xl text-slate-300">Send formal staff communications, edit alert designs without writing HTML, and monitor provider acceptance and failures.</p></div></div><div className="flex items-center gap-3 rounded-2xl border border-teal-700/50 bg-teal-950/50 px-5 py-4 text-sm text-teal-100"><ShieldCheck className="h-5 w-5 text-teal-300" /><span><strong className="block">Admin only</strong>Resend delivery is active</span></div></header>
+    <div className="flex flex-col gap-3 rounded-2xl border border-amber-700/50 bg-amber-950/40 p-4 text-amber-100 md:flex-row md:items-center md:justify-between">
+      <div><strong className="block">Missed checkout warnings</strong><span className="text-sm text-amber-200">Process automatic checkouts and send pending staff/HOD warnings immediately.</span></div>
+      <Button type="button" onClick={processMissedCheckoutWarnings} disabled={isProcessingCheckoutWarnings} className="bg-amber-600 text-white hover:bg-amber-500"><RefreshCw className={`mr-2 h-4 w-4 ${isProcessingCheckoutWarnings ? "animate-spin" : ""}`} />{isProcessingCheckoutWarnings ? "Processing..." : "Process checkout warnings"}</Button>
+    </div>
     {message && <div className="rounded-xl border border-teal-700 bg-teal-950/60 px-4 py-3 text-teal-100">{message}</div>}
     <div className="grid gap-4 md:grid-cols-4"><Card className="border-slate-800 bg-slate-900 text-slate-100"><CardContent className="flex items-center gap-4 p-5"><CheckCircle2 className="h-8 w-8 text-emerald-400" /><div><p className="text-sm text-slate-400">Accepted by provider</p><p className="text-2xl font-bold">{sentCount}</p></div></CardContent></Card><Card className="border-slate-800 bg-slate-900 text-slate-100"><CardContent className="flex items-center gap-4 p-5"><CheckCircle2 className="h-8 w-8 text-sky-400" /><div><p className="text-sm text-slate-400">Delivered</p><p className="text-2xl font-bold">{deliveredCount}</p></div></CardContent></Card><Card className="border-slate-800 bg-slate-900 text-slate-100"><CardContent className="flex items-center gap-4 p-5"><AlertCircle className="h-8 w-8 text-red-400" /><div><p className="text-sm text-slate-400">Failed</p><p className="text-2xl font-bold">{failedCount}</p></div></CardContent></Card><Card className="border-slate-800 bg-slate-900 text-slate-100"><CardContent className="flex items-center gap-4 p-5"><Users className="h-8 w-8 text-teal-300" /><div><p className="text-sm text-slate-400">Tracked messages</p><p className="text-2xl font-bold">{logs.length}</p></div></CardContent></Card></div>
     <Tabs value={tab} onValueChange={setTab} className="space-y-6"><TabsList className="h-auto flex-wrap gap-1 bg-slate-900 p-1"><TabsTrigger value="compose" className="text-slate-300 hover:text-white data-[state=active]:bg-teal-600 data-[state=active]:text-white"><Send className="mr-2 h-4 w-4" />Broadcast</TabsTrigger><TabsTrigger value="manual" className="text-slate-300 hover:text-white data-[state=active]:bg-teal-600 data-[state=active]:text-white"><Send className="mr-2 h-4 w-4" />Manual email</TabsTrigger><TabsTrigger value="templates" className="text-slate-300 hover:text-white data-[state=active]:bg-teal-600 data-[state=active]:text-white"><Palette className="mr-2 h-4 w-4" />Alert templates</TabsTrigger><TabsTrigger value="cc-settings" className="text-slate-300 hover:text-white data-[state=active]:bg-teal-600 data-[state=active]:text-white"><Users className="mr-2 h-4 w-4" />Module CC</TabsTrigger><TabsTrigger value="history" className="text-slate-300 hover:text-white data-[state=active]:bg-teal-600 data-[state=active]:text-white"><History className="mr-2 h-4 w-4" />Delivery history</TabsTrigger></TabsList>
