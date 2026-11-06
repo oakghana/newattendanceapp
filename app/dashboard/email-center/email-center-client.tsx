@@ -137,11 +137,15 @@ export default function EmailCenterClient() {
       const candidates = Array.isArray(preview.candidates) ? preview.candidates : []
       const summary = candidates.slice(0, 80).map((candidate: any) => `${candidate.name} (${candidate.employee_id}) — ${candidate.department}, warning at ${candidate.warning_at}`).join("\n")
       const more = candidates.length > 80 ? `\n...and ${candidates.length - 80} more.` : ""
-      if (!window.confirm(`Review missed checkout warnings for ${candidates.length} user(s):\n\n${summary}${more}\n\nThe warning template can be edited under Alert templates. Continue sending?`)) {
+      if (!window.confirm(`Review missed checkout warnings for ${candidates.length} user(s):\n\n${summary}${more}\n\nClick OK to edit the warning subject and message before sending.`)) {
         setMessage("Warning send cancelled after candidate review.")
         return
       }
-      const response = await fetch("/api/cron/force-failed-checkout", { method: "POST" })
+      const subject = window.prompt("Edit warning email subject:", "Formal attendance checkout warning")
+      if (subject === null) { setMessage("Warning send cancelled."); return }
+      const message = window.prompt("Edit warning email message:", "Please ensure you complete checkout at the end of every work period. Continued missed checkouts may be referred to Management for review.")
+      if (message === null) { setMessage("Warning send cancelled."); return }
+      const response = await fetch("/api/cron/force-failed-checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subject, message }) })
       const data = await response.json().catch(() => ({}))
       if (!response.ok || data.error) throw new Error(data.error || "Unable to process missed checkout warnings")
       setMessage(`${data.office_11pm_auto_checked_out || 0} non-overnight user(s) checked out at 11 PM and warning emails processed; ${data.auto_logged_out || 0} session(s) logged out.`)

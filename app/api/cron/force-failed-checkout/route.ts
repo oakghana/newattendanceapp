@@ -18,7 +18,7 @@ function getPayload(newValues: any): Record<string, any> {
   return newValues && typeof newValues === "object" ? newValues : {}
 }
 
-async function sendTimedCheckoutWarning(admin: any, userId: string, session: any, warningType: "20_hour" | "11pm") {
+async function sendTimedCheckoutWarning(admin: any, userId: string, session: any, warningType: "20_hour" | "11pm", customSubject?: string, customMessage?: string) {
   const { data: profile } = await admin.from("user_profiles").select("email, employee_id, first_name, last_name, position, role, department_id, assigned_location_id, region_id").eq("id", userId).maybeSingle()
   if (WARNING_EXEMPT_ROLES.has(String(profile?.role || "").toLowerCase().replace(/[ -]/g, "_"))) return
   const [{ data: department }, { data: location }, { data: links }] = await Promise.all([
@@ -33,9 +33,9 @@ async function sendTimedCheckoutWarning(admin: any, userId: string, session: any
   const cc = [...new Set([...(hodProfiles || []).map((row: any) => String(row.email || "").trim().toLowerCase()), "oheneba.boamah@qccgh.com", "qualitycontrolcompanyltd@gmail.com"])].filter((email) => email && email !== staffEmail)
   const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() || "Staff member"
   const reference = `CHECKOUT-${session.id}`
-  const subject = `[${reference}] Attendance checkout warning — ${name}`
+  const subject = customSubject?.trim() || `[${reference}] Attendance checkout warning — ${name}`
   const threshold = warningType === "20_hour" ? "20 hours" : "11:00 PM"
-  const action = warningType === "20_hour" ? "Your session has remained open for 20 hours. Please complete checkout immediately; overnight sessions are limited to 24 hours." : "The system has automatically checked you out at 11:00 PM because your department is not an overnight department."
+  const action = customMessage?.trim() || (warningType === "20_hour" ? "Your session has remained open for 20 hours. Please complete checkout immediately; overnight sessions are limited to 24 hours." : "The system has automatically checked you out at 11:00 PM because your department is not an overnight department.")
   const text = `Formal attendance warning\n\nDear ${name},\n\n${action}\n\nCheck-in: ${new Date(session.check_in_time).toISOString()}\nDepartment: ${department?.name || "Not available"}\nLocation: ${location?.name || session.check_in_location_name || "Not available"}\nStaff ID: ${profile?.employee_id || "Not available"}\nIncident reference: ${reference}\n\nPlease ensure you check out of the attendance portal at the end of every work period. Continued missed checkouts may be referred to Management for review. Your HOD has been copied for follow-up.\n\nQCC Attendance Administration`
   const html = `<div style="font-family:Arial,sans-serif;color:#243447;line-height:1.6;max-width:700px;margin:auto"><div style="background:#8b1e1e;color:#fff;padding:26px 30px"><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase">QCC Attendance Administration</div><h1 style="margin:10px 0 0;font-size:23px">Formal Checkout Warning</h1></div><div style="border:1px solid #d7dee8;border-top:0;padding:26px 30px"><p>Dear <strong>${name}</strong>,</p><p>${action}</p><div style="background:#fff7ed;border-left:4px solid #c2410c;padding:14px 16px"><strong>Attendance details</strong><br>Check-in: ${new Date(session.check_in_time).toISOString()}<br>Review point: ${threshold}<br>Staff ID: ${profile?.employee_id || "Not available"}<br>Department: ${department?.name || "Not available"}<br>Location: ${location?.name || session.check_in_location_name || "Not available"}<br>Incident reference: ${reference}</div><p>Please ensure checkout is completed at the end of every work period. Continued missed checkouts may be referred to Management for review. Your HOD has been copied for follow-up.</p><p>Regards,<br><strong>QCC Attendance Administration</strong></p></div></div>`
   await emailService.sendEmail(staffEmail, { subject, html, text, cc }, { emailModule: "attendance", emailEvent: "timed_checkout_warning", emailHeading: "Attendance checkout warning", emailSubtitle: warningType === "20_hour" ? "20-hour overnight review" : "11 PM automatic checkout", idempotencyKey: `timed-checkout/${warningType}/${userId}/${session.id}` })
@@ -77,6 +77,9 @@ async function runForceFailedCheckout(request: NextRequest) {
 
   const admin = await createAdminClient()
   const { searchParams } = new URL(request.url)
+  const requestBody = request.method === "POST" ? await request.json().catch(() => ({})) : {}
+  const customSubject = typeof requestBody.subject === "string" ? requestBody.subject : undefined
+  const customMessage = typeof requestBody.message === "string" ? requestBody.message : undefined
 
   const dateParam = searchParams.get("date") || undefined
   const previewOnly = searchParams.get("preview") === "true"
@@ -152,7 +155,7 @@ async function runForceFailedCheckout(request: NextRequest) {
     const isTodayOfficeSession = checkInTime >= dayStart && checkInTime <= officeCutoff
     const sessionAgeHours = (now.getTime() - checkInTime.getTime()) / 3600000
     if (isOvernight && sessionAgeHours >= 20 && sessionAgeHours < 24) {
-      await sendTimedCheckoutWarning(admin, String(session.user_id), session, "20_hour")
+      await sendTimedCheckoutWarning(admin, String(session.user_id), session, "20_hour", customSubject, customMessage)
     }
     if (isOvernight && sessionAgeHours >= 24) {
       const checkoutTime = new Date(checkInTime.getTime() + 24 * 60 * 60 * 1000)
@@ -193,7 +196,7 @@ async function runForceFailedCheckout(request: NextRequest) {
 
       if (!closeError) {
         officeAutoCheckedOut += 1
-        await sendTimedCheckoutWarning(admin, String(session.user_id), session, "11pm")
+        await sendTimedCheckoutWarning(admin, String(session.user_id), session, "11pm", customSubject, customMessage)
         try {
           await admin.auth.admin.signOut(String(session.user_id), "global")
           await admin.from("device_sessions").delete().eq("user_id", session.user_id)
@@ -218,7 +221,7 @@ async function runForceFailedCheckout(request: NextRequest) {
     .gte("check_out_time", yesterdayStart.toISOString())
     .lt("check_out_time", yesterdayEnd.toISOString())
   for (const session of missedCheckoutSessions || []) {
-    await sendTimedCheckoutWarning(admin, String(session.user_id), session, "11pm")
+    await sendTimedCheckoutWarning(admin, String(session.user_id), session, "11pm", customSubject, customMessage)
   }
 
   const { data: locations, error: locErr } = await admin.from("geofence_locations").select("name")
