@@ -19,10 +19,9 @@ export async function POST(request: Request) {
   const { data: failures } = await admin.from("audit_logs").select("user_id, new_values").in("action", FAILURE_ACTIONS).gte("created_at", start.toISOString()).not("user_id", "is", null).limit(10000)
   const counts = new Map<string, number>()
   for (const failure of failures || []) counts.set(failure.user_id, (counts.get(failure.user_id) || 0) + 1)
-  const candidates = [...counts.entries()].filter(([userId, count]) => {
-    const targeted = Boolean(body.forceSend && body.userId && body.userId === userId)
-    return (count >= 12 || targeted) && (!body.userId || body.userId === userId)
-  })
+  const candidates = body.forceSend && body.userId
+    ? [[String(body.userId), counts.get(String(body.userId)) || 0] as [string, number]]
+    : [...counts.entries()].filter(([userId, count]) => count >= 12 && (!body.userId || body.userId === userId))
   let sent = 0
   const errors: string[] = []
 
