@@ -131,6 +131,16 @@ export default function EmailCenterClient() {
     setIsProcessingCheckoutWarnings(true)
     setMessage("")
     try {
+      const previewResponse = await fetch("/api/cron/force-failed-checkout?preview=true", { method: "POST" })
+      const preview = await previewResponse.json().catch(() => ({}))
+      if (!previewResponse.ok || preview.error) throw new Error(preview.error || "Unable to load missed checkout candidates")
+      const candidates = Array.isArray(preview.candidates) ? preview.candidates : []
+      const summary = candidates.slice(0, 80).map((candidate: any) => `${candidate.name} (${candidate.employee_id}) — ${candidate.department}, warning at ${candidate.warning_at}`).join("\n")
+      const more = candidates.length > 80 ? `\n...and ${candidates.length - 80} more.` : ""
+      if (!window.confirm(`Review missed checkout warnings for ${candidates.length} user(s):\n\n${summary}${more}\n\nThe warning template can be edited under Alert templates. Continue sending?`)) {
+        setMessage("Warning send cancelled after candidate review.")
+        return
+      }
       const response = await fetch("/api/cron/force-failed-checkout", { method: "POST" })
       const data = await response.json().catch(() => ({}))
       if (!response.ok || data.error) throw new Error(data.error || "Unable to process missed checkout warnings")

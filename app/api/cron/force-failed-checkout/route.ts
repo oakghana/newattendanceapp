@@ -79,6 +79,7 @@ async function runForceFailedCheckout(request: NextRequest) {
   const { searchParams } = new URL(request.url)
 
   const dateParam = searchParams.get("date") || undefined
+  const previewOnly = searchParams.get("preview") === "true"
   const minAttempts = Math.max(3, Number.parseInt(searchParams.get("min_attempts") || "3", 10))
   const maxDistanceM = Math.max(1, Number.parseInt(searchParams.get("max_distance_m") || "100", 10))
 
@@ -133,6 +134,17 @@ async function runForceFailedCheckout(request: NextRequest) {
     ? await admin.from("user_profiles").select("id, department_id").in("id", openUserIds).in("department_id", overnightDepartmentIds)
     : { data: [] }
   const overnightUserIds = new Set((departmentProfiles || []).map((profile: any) => String(profile.id)))
+
+  if (previewOnly) {
+    const previewUserIds = [...new Set(openSessions.map((session: any) => String(session.user_id)).filter(Boolean))]
+    const { data: previewProfiles } = previewUserIds.length
+      ? await admin.from("user_profiles").select("id, first_name, last_name, employee_id, role, department_id").in("id", previewUserIds)
+      : { data: [] as any[] }
+    const departmentIds = [...new Set((previewProfiles || []).map((profile: any) => profile.department_id).filter(Boolean))]
+    const { data: previewDepartments } = departmentIds.length ? await admin.from("departments").select("id, name").in("id", departmentIds) : { data: [] as any[] }
+    const departmentMap = new Map((previewDepartments || []).map((department: any) => [department.id, department.name]))
+    return NextResponse.json({ preview: true, candidates: openSessions.map((session: any) => { const profile = (previewProfiles || []).find((item: any) => item.id === session.user_id); return { id: session.id, user_id: session.user_id, name: [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Unknown user", employee_id: profile?.employee_id || "N/A", role: profile?.role || "unknown", department: departmentMap.get(profile?.department_id) || "Unassigned", check_in_time: session.check_in_time, warning_at: overnightUserIds.has(String(session.user_id)) ? "20 hours" : "11:00 PM" } }) })
+  }
 
   for (const session of openSessions) {
     const checkInTime = new Date(session.check_in_time)
