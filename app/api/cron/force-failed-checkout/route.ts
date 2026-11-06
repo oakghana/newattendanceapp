@@ -12,7 +12,7 @@ type FailureGroup = {
   latestPayload: Record<string, any>
 }
 
-const WARNING_EXEMPT_ROLES = new Set(["department_head", "regional_hr", "regional_hr_office", "regional_hr_officer", "accounts_executive", "hr_executive", "hr_executive_officer", "managing_director"])
+const WARNING_EXEMPT_ROLES = new Set(["department_head", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "accounts_executive", "hr_executive", "hr_executive_officer", "managing_director"])
 
 function getPayload(newValues: any): Record<string, any> {
   return newValues && typeof newValues === "object" ? newValues : {}
