@@ -21,6 +21,7 @@ export async function POST(request: Request) {
   for (const failure of failures || []) counts.set(failure.user_id, (counts.get(failure.user_id) || 0) + 1)
   const candidates = [...counts.entries()].filter(([userId, count]) => count >= 12 && (!body.userId || body.userId === userId))
   let sent = 0
+  const errors: string[] = []
 
   for (const [userId, count] of candidates) {
     const { data: existing } = await admin.from("audit_logs").select("id").eq("user_id", userId).eq("action", "attendance_failure_escalated").gte("created_at", start.toISOString()).limit(1).maybeSingle()
@@ -58,7 +59,9 @@ export async function POST(request: Request) {
     if (results.success) {
       sent++
       await admin.from("audit_logs").insert({ user_id: userId, action: "attendance_failure_escalated", table_name: "audit_logs", record_id: start.toISOString().slice(0, 10), new_values: { failure_count: count, reconciled: true, recipients: [primaryRecipient, ...cc] } })
+    } else {
+      errors.push(`${userId}: ${results.error || "Email provider rejected the alert"}`)
     }
   }
-  return NextResponse.json({ success: true, sent, checked: candidates.length })
+  return NextResponse.json({ success: true, sent, checked: candidates.length, errors })
 }
