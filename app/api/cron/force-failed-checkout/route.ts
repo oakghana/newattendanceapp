@@ -104,8 +104,16 @@ async function runForceFailedCheckout(request: NextRequest) {
         .gte("check_in_time", dayStart.toISOString())
         .lte("check_in_time", officeCutoff.toISOString())
     : { data: [] }
+  const previousDayStart = new Date(dayStart)
+  previousDayStart.setDate(previousDayStart.getDate() - 1)
+  const { data: previousDaySessions } = await admin
+    .from("attendance_records")
+    .select("id, user_id, check_in_time, check_in_location_name")
+    .is("check_out_time", null)
+    .gte("check_in_time", previousDayStart.toISOString())
+    .lt("check_in_time", dayStart.toISOString())
 
-  const openSessions = Array.from(new Map([...(overdueSessions || []), ...(officeSessions || [])].map((session: any) => [session.id, session])).values())
+  const openSessions = Array.from(new Map([...(overdueSessions || []), ...(officeSessions || []), ...(previousDaySessions || [])].map((session: any) => [session.id, session])).values())
 
   if (openSessionsError) {
     return NextResponse.json({ error: "Failed to query overdue attendance", details: openSessionsError.message }, { status: 500 })
