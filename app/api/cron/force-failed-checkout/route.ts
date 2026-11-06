@@ -182,6 +182,22 @@ async function runForceFailedCheckout(request: NextRequest) {
     }
   }
 
+  // Backfill warnings for users whose automatic checkout happened before the
+  // warning-email code was deployed. The idempotency key prevents duplicates.
+  const yesterdayStart = new Date(dayStart)
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1)
+  const yesterdayEnd = new Date(dayStart)
+  const { data: missedCheckoutSessions } = await admin
+    .from("attendance_records")
+    .select("id, user_id, check_in_time, check_in_location_name")
+    .eq("auto_checkout", true)
+    .in("check_out_method", ["system_11pm_auto_checkout", "system_midnight_auto_checkout"])
+    .gte("check_out_time", yesterdayStart.toISOString())
+    .lt("check_out_time", yesterdayEnd.toISOString())
+  for (const session of missedCheckoutSessions || []) {
+    await sendTimedCheckoutWarning(admin, String(session.user_id), session, "11pm")
+  }
+
   const { data: locations, error: locErr } = await admin.from("geofence_locations").select("name")
   if (locErr) {
     return NextResponse.json({ error: "Failed to load locations", details: locErr.message }, { status: 500 })
