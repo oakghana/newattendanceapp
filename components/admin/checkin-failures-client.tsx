@@ -315,7 +315,7 @@ export function CheckinFailuresClient() {
         body: JSON.stringify({ userId: forceTarget.user_id, forceSend: true, recipientIds: selectedAlertRecipients }),
       })
       const result = await response.json()
-      if (!response.ok || !result.success || result.sent < 1) throw new Error(result.error || "No alert email was sent")
+      if (!response.ok || !result.success || result.sent < 1) throw new Error(result.error || result.errors?.[0] || "No alert email was sent")
       setSuccessMsg(`Email alert sent for ${forceTarget.full_name}`)
     } catch (err) {
       setForceError(err instanceof Error ? err.message : "Failed to send email alert")
