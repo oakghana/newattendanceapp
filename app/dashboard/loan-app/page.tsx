@@ -8615,7 +8615,8 @@ if (!modalDisbursement || !modalRecovery) {
                 {actionModal.actionType !== "hr_terms" && modalSignatureMode === "typed" && modalSignatureText && (
                   <div className="mt-4 font-serif">
                     <div className="w-48 border-b border-slate-400 pb-1 text-base font-bold italic">{modalSignatureText}</div>
-                    <div className="mt-1 text-[12px] font-semibold">{String(data?.profile.position || "HR Executive").toUpperCase()}</div>
+                    <div className="mt-1 text-[12px] font-bold">{`${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim().toUpperCase()}</div>
+                    <div className="text-[12px] font-semibold">{String(data?.profile.position || "HR Executive").toUpperCase()}</div>
                     <div className="text-[12px] font-semibold">FOR: MANAGING DIRECTOR</div>
                   </div>
                 )}
