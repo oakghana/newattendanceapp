@@ -902,7 +902,9 @@ function buildDirectorAutoMemoDraft(
   const recoveryMonth = fmtMemoMonth(row.recovery_start_date)
   const disbursementMonth = fmtMemoMonth(row.disbursement_date)
   const submittedDate = (row.submitted_at || row.created_at || today).toString().slice(0, 10)
-  const months = row.deduction_period_months || row.recovery_months || "—"
+  const months = isSalaryAdvance
+    ? (row.recovery_months || row.salary_advance_multiplier || row.deduction_period_months || "—")
+    : (row.deduction_period_months || row.recovery_months || "—")
   const salaryAdvanceLine = isSalaryAdvance && row.basic_salary && row.salary_advance_multiplier
     ? `Monthly Salary: GHc ${fmtAmount(row.basic_salary)} × ${row.salary_advance_multiplier} month(s) = GHc ${fmtAmount(amount)}`
     : null
@@ -3344,7 +3346,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           const isBlank = trimmed.length === 0
           const isThroRank = /^THRO'?\s+/i.test(trimmed)
           const isThroCompany = /^QUALITY CONTROL COMPANY LIMITED$/i.test(trimmed)
-          const isThroLocation = isThroCompany === false && lineIndex > 0 && /^\s{2,}[A-Z][A-Z\s]+$/i.test(line) && rawLines[lineIndex - 1]?.trim() === "QUALITY CONTROL COMPANY LIMITED"
+          const isThroLocation = isThroCompany === false && lineIndex > 0 && Boolean(trimmed) && rawLines[lineIndex - 1]?.trim() === "QUALITY CONTROL COMPANY LIMITED"
           let renderedLine = line
           let renderedX = marginLeft
           if (isThroRank) {
@@ -8816,7 +8818,7 @@ if (!modalDisbursement || !modalRecovery) {
             )}
           </div>
 
-          {/* ── Footer action bar ───────────────────────────────────────── */}
+          {/* ── Footer action bar ─���─────────────────────────────────────── */}
           <div className="flex items-center justify-between gap-2 border-t border-slate-200 bg-white px-5 py-3 shrink-0">
             <div className="flex items-center gap-2">
               <Button
