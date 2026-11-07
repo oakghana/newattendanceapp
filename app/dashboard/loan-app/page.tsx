@@ -918,15 +918,15 @@ function buildDirectorAutoMemoDraft(
     "P.O Box M14",
     "Accra Ghana",
     "",
-    `Our Ref No: ${memoRef}${" ".repeat(Math.max(4, 40 - memoRef.length))}Date: ${today}`,
+    `Our Ref No: ${memoRef}`, 
     "Your Ref No: ________________________",
     "",
     `${staffName} (S/No.: ${staffNo})`,
     `${staffRank}`,
     "",
-    ...(hodRank ? [`THRO'   ${hodRank}`] : []),
+    ...(hodRank ? [`THRO'   ${String(hodRank).toUpperCase()}`] : []),
     `        QUALITY CONTROL COMPANY LIMITED`,
-    `        ${hodLocation}`,
+    `        ${String(hodLocation).toUpperCase()}`, 
     "",
     `RE: APPLICATION FOR ${loanLabel.toUpperCase()}`,
     "",
@@ -3316,9 +3316,8 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           doc.setFont("times", "italic")
           doc.setTextColor(70, 70, 70)
           doc.text(["P.O Box M14", "Accra Ghana"], pageWidth - 42, 36)
-          doc.setFont("times", "normal")
-          doc.setFontSize(7)
-          doc.text(`Date: ${new Date().toISOString().slice(0, 10)}`, pageWidth - 42, 44)
+          doc.setFont("times", "bold")
+          doc.text(`Date: ${new Date().toISOString().slice(0, 10)}`, pageWidth - 42, 46)
           doc.setFont("times", "normal")
           doc.setTextColor(0, 0, 0)
         }
@@ -3338,21 +3337,54 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
         const signerNameIndex = forManagingDirectorIndex >= 2 ? forManagingDirectorIndex - 2 : -1
         const signatureImageType = /^data:image\/jpe?g/i.test(String(sigImageDataUrl || "")) ? "JPEG" : "PNG"
         let signatureDrawn = false
+        let throContentX = marginLeft
 
         for (const [lineIndex, line] of rawLines.entries()) {
           const trimmed = line.trim()
           const isBlank = trimmed.length === 0
+          const isThroRank = /^THRO'?\s+/i.test(trimmed)
+          const isThroCompany = /^QUALITY CONTROL COMPANY LIMITED$/i.test(trimmed)
+          const isThroLocation = isThroCompany === false && lineIndex > 0 && /^\s{2,}[A-Z][A-Z\s]+$/i.test(line) && rawLines[lineIndex - 1]?.trim() === "QUALITY CONTROL COMPANY LIMITED"
+          let renderedLine = line
+          let renderedX = marginLeft
+          if (isThroRank) {
+            const label = "THRO'"
+            const rank = trimmed.replace(/^THRO'?\s*/i, "").toUpperCase()
+            doc.setFont("times", "bold")
+            doc.setFontSize(8.8)
+            throContentX = marginLeft + doc.getTextWidth(`${label}  `)
+            renderedLine = `${label}  ${rank}`
+          } else if (isThroCompany || isThroLocation) {
+            renderedLine = trimmed.toUpperCase()
+            renderedX = throContentX
+          }
 
           if (lineIndex === signerNameIndex && sigImageDataUrl && !signatureDrawn) {
-            if (y + 20 > pageHeight - 22) {
+            // Centre the signature on the printed name, keeping its own proportions.
+            doc.setFont("times", "bold")
+            doc.setFontSize(8.8)
+            const nameWidth = doc.getTextWidth(line)
+            let naturalSize: { width: number; height: number } = { width: 60, height: 22 }
+            try {
+              naturalSize = doc.getImageProperties(sigImageDataUrl)
+            } catch {
+              // Use the default box if the image dimensions cannot be read.
+            }
+            const scale = Math.min(56 / naturalSize.width, 22 / naturalSize.height)
+            const imageWidth = naturalSize.width * scale
+            const imageHeight = naturalSize.height * scale
+            // The blank lines before the name already leave some room; add only what the image still needs.
+            const extraSpace = Math.max(0, imageHeight - 9)
+            if (y + extraSpace + 6 > pageHeight - 22) {
               doc.addPage()
               renderHeader()
-              y = topMargin + 18
+              y = topMargin + 18 + imageHeight + 3
+            } else {
+              y += extraSpace
             }
             try {
-              doc.addImage(sigImageDataUrl, signatureImageType, marginLeft, y - 2, 46, 16)
+              doc.addImage(sigImageDataUrl, signatureImageType, marginLeft + nameWidth / 2 - imageWidth / 2, y - 2.8 - imageHeight, imageWidth, imageHeight)
               signatureDrawn = true
-              y += 15
             } catch {
               // Fall back to the printed name only if the image cannot be embedded.
             }
@@ -3385,7 +3417,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           doc.setFont("times", fontStyle)
           doc.setFontSize(fontSize)
 
-          const wrapped = doc.splitTextToSize(line, usableWidth)
+          const wrapped = doc.splitTextToSize(renderedLine, usableWidth - (renderedX - marginLeft))
           const projectedHeight = wrapped.length * lineGap
           if (y + projectedHeight > pageHeight - 22) {
             doc.addPage()
@@ -3393,16 +3425,14 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             y = topMargin + 18
           }
 
-          doc.text(wrapped, marginLeft, y)
+          doc.text(wrapped, renderedX, y)
+          if (trimmed.startsWith("RE:")) {
+            const subjectWidth = Math.min(doc.getTextWidth(trimmed), usableWidth)
+            doc.setDrawColor(0, 0, 0)
+            doc.setLineWidth(0.3)
+            doc.line(marginLeft, y + 1.2, marginLeft + subjectWidth, y + 1.2)
+          }
           y += projectedHeight
-        }
-
-        if (sigText && !memoText.includes(sigText)) {
-          y += 4
-          doc.setFont("times", "bold")
-          doc.setFontSize(8.8)
-          doc.text(sigText, marginLeft, y)
-          y += 4.9
         }
 
         applySignatureSideWatermark()
@@ -8658,8 +8688,11 @@ if (!modalDisbursement || !modalRecovery) {
                 )}
                 {actionModal.actionType !== "hr_terms" && modalSignatureMode !== "typed" && modalSignatureDataUrl && (
                   <div className="mt-4 font-serif">
-                    <img src={modalSignatureDataUrl} alt="Signature" className="max-h-16 border-b border-slate-400 pb-1" draggable={false} />
-                    <div className="mt-1 text-[12px] font-semibold">{`${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim().toUpperCase()}</div>
+                    <div className="inline-block">
+                      {/* w-0 + min-w-full lets the printed name set the block width, so the signature centres on the name. */}
+                      <img src={modalSignatureDataUrl} alt="Signature" className="block h-24 w-0 min-w-full object-contain object-center" draggable={false} />
+                      <div className="border-t border-slate-400 pt-1 text-[12px] font-semibold">{`${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim().toUpperCase()}</div>
+                    </div>
                     <div className="text-[12px] font-semibold">{String(data?.profile.position || "HR Executive").toUpperCase()}</div>
                     <div className="text-[12px] font-semibold">FOR: MANAGING DIRECTOR</div>
                   </div>
