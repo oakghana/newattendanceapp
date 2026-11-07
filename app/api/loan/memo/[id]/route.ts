@@ -700,11 +700,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       doc.text("THRO:", marginLeft, y)
       doc.text(hodRank || hodLocation, marginLeft + 14, y)
       y += 5.5
-      if (hodRank) {
-        doc.text("QUALITY CONTROL COMPANY LIMITED", marginLeft + 14, y)
-        y += 5.5
-        doc.text(hodLocation, marginLeft + 14, y)
-      }
+      doc.text("QUALITY CONTROL COMPANY LIMITED", marginLeft + 14, y)
+      y += 5.5
+      doc.text(hodLocation, marginLeft + 14, y)
       y += 10
     }
 
