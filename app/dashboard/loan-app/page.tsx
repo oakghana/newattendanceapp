@@ -3347,9 +3347,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               y = topMargin + 18
             }
             try {
-              doc.addImage(sigImageDataUrl, signatureImageType, marginLeft, y - 2, 46, 16)
+              doc.addImage(sigImageDataUrl, signatureImageType, marginLeft, y - 3, 68, 24)
               signatureDrawn = true
-              y += 15
+              y += 23
             } catch {
               // Fall back to the printed name only if the image cannot be embedded.
             }
@@ -8647,7 +8647,7 @@ if (!modalDisbursement || !modalRecovery) {
                 )}
                 {actionModal.actionType !== "hr_terms" && modalSignatureMode !== "typed" && modalSignatureDataUrl && (
                   <div className="mt-4 font-serif">
-                    <img src={modalSignatureDataUrl} alt="Signature" className="max-h-16 border-b border-slate-400 pb-1" draggable={false} />
+                    <img src={modalSignatureDataUrl} alt="Signature" className="max-h-24 w-64 object-contain object-left border-b border-slate-400 pb-1" draggable={false} />
                     <div className="mt-1 text-[12px] font-semibold">{`${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim().toUpperCase()}</div>
                     <div className="text-[12px] font-semibold">{String(data?.profile.position || "HR Executive").toUpperCase()}</div>
                     <div className="text-[12px] font-semibold">FOR: MANAGING DIRECTOR</div>

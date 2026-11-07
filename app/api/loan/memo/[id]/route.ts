@@ -771,9 +771,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       try {
         const signatureImage = await resolvePdfSignatureImage(candidate, request.nextUrl.origin)
         if (!signatureImage) continue
-        doc.addImage(signatureImage.dataUrl, signatureImage.imageType, marginLeft, y, 50, 18)
+        doc.addImage(signatureImage.dataUrl, signatureImage.imageType, marginLeft, y, 72, 28)
         sigImgY = y
-        y += 20
+        y += 30
         break
       } catch (signatureError) {
         console.log("[v0] Loan memo signature candidate could not be embedded:", signatureError instanceof Error ? signatureError.message : signatureError)
