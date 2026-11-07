@@ -652,7 +652,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const rightBlockX = pageWidth - marginRight - 14
     doc.text("P.O Box M14", rightBlockX, 19)
     doc.text("Accra Ghana", rightBlockX, 24)
-    doc.text(`Date: ${memoDate}`, rightBlockX, 29)
+    doc.setFont("times", "bold")
+    doc.text(`Date: ${memoDate}`, rightBlockX, 46)
 
     // Green separator under header
     doc.setDrawColor(44, 98, 22)

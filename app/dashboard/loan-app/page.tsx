@@ -3315,7 +3315,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           doc.setFontSize(6.8)
           doc.setFont("times", "italic")
           doc.setTextColor(70, 70, 70)
-          doc.text(["P.O Box M14", "Accra Ghana", `Date: ${new Date().toISOString().slice(0, 10)}`], pageWidth - 42, 36)
+          doc.text(["P.O Box M14", "Accra Ghana"], pageWidth - 42, 36)
+          doc.setFont("times", "bold")
+          doc.text(`Date: ${new Date().toISOString().slice(0, 10)}`, pageWidth - 42, 46)
           doc.setFont("times", "normal")
           doc.setTextColor(0, 0, 0)
         }
@@ -3407,6 +3409,12 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           }
 
           doc.text(wrapped, marginLeft, y)
+          if (trimmed.startsWith("RE:")) {
+            const subjectWidth = Math.min(doc.getTextWidth(trimmed), usableWidth)
+            doc.setDrawColor(0, 0, 0)
+            doc.setLineWidth(0.3)
+            doc.line(marginLeft, y + 1.2, marginLeft + subjectWidth, y + 1.2)
+          }
           y += projectedHeight
         }
 
