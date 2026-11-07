@@ -813,7 +813,7 @@ type MemoSigner = { name?: string | null; position?: string | null }
 function stripMemoLetterhead(memoText: string): string {
   const lines = String(memoText || "")
     .split("\n")
-    .filter((line) => !/^(QUALITY CONTROL COMPANY LTD\.?|QUALITY CONTROL COMPANY LIMITED|\(COCOBOD\)|HUMAN RESOURCES DEPARTMENT|P\.O Box M14|Accra Ghana)$/i.test(line.trim()))
+    .filter((line) => !/^(QUALITY CONTROL COMPANY LTD\.?|QUALITY CONTROL COMPANY LIMITED|\(COCOBOD\)|HUMAN RESOURCES DEPARTMENT|P\.O Box M14|Accra Ghana|Date:\s*[^|]+)$/i.test(line.trim()))
   const normalized: string[] = []
   for (const line of lines) {
     normalized.push(line)
