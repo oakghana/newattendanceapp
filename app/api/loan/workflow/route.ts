@@ -1038,6 +1038,11 @@ export async function GET() {
     // currentHodProfile / currentHodProfiles were already resolved earlier from every
     // loan_hod_linkages row for this staff member (supports multi-HOD assignments).
 
+    const executiveQueueRows = Array.from(new Map(
+      [...(directorRes.data || []), ...(allLoansRes.data || []).filter((row: any) => ["awaiting_hr_executives", "pending_hr_executive_review"].includes(String(row.status || "")))]
+        .map((row: any) => [String(row.id), row]),
+    ).values())
+
     return NextResponse.json({
       degraded: false,
       profile: {
@@ -1091,7 +1096,7 @@ export async function GET() {
         accountsSigned: attachAccountsReviewerName(attachName(accountsSignedRes.data || [])),
         committee: attachAccountsReviewerName(attachName(committeeRes.data || [])),
         hrOffice: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(hrRes.data || [])))),
-        directorHr: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(directorRes.data || [])))),
+        directorHr: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(executiveQueueRows)))),
         directorGoodFd: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(directorGoodFdRes.data || [])))),
         allLoans: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(allLoansRes.data || [])))),
       },
