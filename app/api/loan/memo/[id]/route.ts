@@ -301,7 +301,7 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
   // staff-requested terms, otherwise edited amounts and recovery periods are lost.
   const savedExecutiveMemo = String(loan.director_letter || "").trim()
   const savedMemoIsSalaryAdvance = isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label)
-  const finalMemoStatuses = new Set(["approved", "approved_director", "hr_approved", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
+  const finalMemoStatuses = new Set(["awaiting_director_hr", "approved", "approved_director", "hr_approved", "referenced", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
   if (savedExecutiveMemo && finalMemoStatuses.has(String(loan.status || "").toLowerCase())) {
     const paragraphs = extractEditedMemoBody(savedExecutiveMemo)
     if (paragraphs.length) {
