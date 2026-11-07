@@ -548,8 +548,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     loan.staff_number = loan.staff_number || applicantProfile?.employee_id || ""
 
     // ─── Fetch HR Executive signature (for the letter signatory section) ────
-    let signerSignatureUrl = ""
-    if (directorHrId) {
+    let signerSignatureUrl = String((loan as any).director_signature_data_url || (directorProfile as any)?.signature_data_url || "").trim()
+    if (directorHrId && !signerSignatureUrl) {
       try {
         const { data: hrSigRecords } = await admin
           .from("approval_signature_registry")
