@@ -155,7 +155,7 @@ export function FDCalculationSubmission({
 
   const buildFdInput = (): FDCalculationInput => ({
     staffNumber: loanRequest.staff_number,
-    staffName: loanRequest.staff_full_name,
+    staffName: loanRequest.staff_full_name || loanRequest.staff_number || loanRequest.corporate_email || "Staff member",
     salary_per_annum: parseFloat(salaryPerAnnum) || 0,
     consolidated_salary_per_month:
       parseFloat(consolidatedMonthly) > 0 ? parseFloat(consolidatedMonthly) : undefined,
