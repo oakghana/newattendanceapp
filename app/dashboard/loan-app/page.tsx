@@ -810,6 +810,15 @@ function formatReferenceNumber(referenceNumber?: string | null, requestNumber?: 
 
 type MemoSigner = { name?: string | null; position?: string | null }
 
+function stripMemoLetterhead(memoText: string): string {
+  return String(memoText || "")
+    .split("\n")
+    .filter((line) => !/^(QUALITY CONTROL COMPANY LTD\.?|QUALITY CONTROL COMPANY LIMITED|\(COCOBOD\)|HUMAN RESOURCES DEPARTMENT|P\.O Box M14|Accra Ghana)$/i.test(line.trim()))
+    .join("\n")
+    .replace(/^\n+/, "")
+    .trim()
+}
+
 function normalizeMemoSigner(memoText: string, signer?: MemoSigner): string {
   const signerName = String(signer?.name || "").trim().toUpperCase()
   if (!memoText.trim() || !signerName) return memoText
@@ -3222,9 +3231,11 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             name: `${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim(),
             position: data?.profile.position || "HR Executive",
           }
-          const draft = buildDirectorAutoMemoDraft(row, entry, data?.profile.currentHodProfile, currentExecutive)
+          const requesterProfile = (lookupData?.staff || []).find((staff) => staff.id === row.user_id)
+          const memoRow = row.staff_full_name ? row : { ...row, staff_full_name: requesterProfile ? `${requesterProfile.first_name || ""} ${requesterProfile.last_name || ""}`.trim() : row.staff_full_name }
+          const draft = buildDirectorAutoMemoDraft(memoRow, entry, data?.profile.currentHodProfile, currentExecutive)
           const savedMemo = String(row.director_letter || "").trim()
-          setModalMemoText(normalizeMemoSigner(savedMemo || draft, currentExecutive))
+          setModalMemoText(stripMemoLetterhead(normalizeMemoSigner(savedMemo || draft, currentExecutive)))
           setModalSignatureText(signatureText || currentExecutive.name)
           setModalSignatureDataUrl(signatureDataUrl)
           setModalSignatureMode(signatureMode)
@@ -8223,16 +8234,18 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     hod_location: modalHodLocation,
                   }
                   const selectedExecutive = data?.directorApprovers?.find((approver) => approver.id === modalDirectorApproverId)
+                  const requesterProfile = (lookupData?.staff || []).find((staff) => staff.id === previewRow.user_id)
+                  const namedPreviewRow = previewRow.staff_full_name ? previewRow : { ...previewRow, staff_full_name: requesterProfile ? `${requesterProfile.first_name || ""} ${requesterProfile.last_name || ""}`.trim() : previewRow.staff_full_name }
                   const draft = buildDirectorAutoMemoDraft(
-                    previewRow,
+                    namedPreviewRow,
                     { hodName: modalHodName, hodRank: modalHodRank, hodLocation: modalHodLocation, hodTelephone: modalHodTelephone, memoRef: modalMemoRef, memoRecipient: modalMemoRecipient },
                     data?.profile.currentHodProfile,
                     selectedExecutive ? { name: selectedExecutive.full_name, position: selectedExecutive.position } : undefined,
                   )
-                  setModalMemoText(draft)
+                  setModalMemoText(stripMemoLetterhead(draft))
                   setActionModal((s) => ({ ...s, open: false }))
                   window.setTimeout(() => {
-                    setMemoReviewModal({ open: true, row: previewRow })
+                    setMemoReviewModal({ open: true, row: namedPreviewRow })
                   }, 80)
                 }}>Preview Memo</Button>
                 <Button onClick={() => {

@@ -121,7 +121,7 @@ function extractEditedMemoBody(value: string): string[] {
     const key = line.toLowerCase()
     if (seen.has(key)) return false
     seen.add(key)
-    return !/^(quality control company|qccob?d|p\.?o\.? box|accra ghana|our ref|your ref|to:|through:|thro:|re:|human resources department|for: managing director)$/i.test(line)
+    return !/^(quality control company|qccob?d|\(cocobod\)|p\.?o\.? box|accra ghana|our ref|your ref|to:|through:|thro:|re:|human resources department|for: managing director)$/i.test(line)
   })
 }
 
