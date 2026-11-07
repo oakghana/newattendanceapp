@@ -711,7 +711,7 @@ export async function GET() {
         : Promise.resolve({ data: [], error: null } as any),
       hrOfficeQ,
       showDirectorHr
-        ? admin.from("loan_requests").select("*").in("status", ["awaiting_hr_executives", "pending_hr_executive_review"]).is("director_decision_at", null).order("created_at", { ascending: false })
+        ? admin.from("loan_requests").select("*").in("status", ["awaiting_hr_executives", "pending_hr_executive_review"]).order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null } as any),
       showDirectorHr
         ? admin
