@@ -676,7 +676,7 @@ export async function GET() {
   // restricted to users with the committee permission.
   const showCommittee = permissions.committee || viewAllTabs || (role === "hr_loan_office" || role === "leave_loan_officer") || role.includes("hr_loan") || (role === "loan_office" && /hr|human resource/i.test(`${deptName} ${deptCode}`))
     const showHrOffice = permissions.hrOffice || viewAllTabs
-    const showDirectorHr = permissions.directorHr || viewAllTabs
+    const showDirectorHr = permissions.directorHr || viewAllTabs || ["manager_hr", "hr_executive", "hr_executive_officer", "director_hr"].includes(role)
 
     // HR loan office (loan_officer + viewAllTabs) sees all non-terminal loans
     // Includes: awaiting_hr_terms (normal flow) + sent_to_hr_office (FD-exempt loans like Funeral, Insurance, Repair with FD >= 0%)
