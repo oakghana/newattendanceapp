@@ -134,8 +134,10 @@ async function getDirectorSavedSignature(admin: any, userId: string) {
 function buildAutoMemo(req: any) {
   const isFuneralLoan = isFuneralLoanType(req.loan_type_key, req.loan_type_label)
   return [
-    "QUALITY CONTROL COMPANY LIMITED",
-    "HUMAN RESOURCES DEPARTMENT",
+    "QUALITY CONTROL COMPANY LTD.",
+    "(COCOBOD)",
+    "P.O Box M14",
+    "Accra Ghana",
     "",
     `Reference: ${memoReference(req)}`,
     `Date: ${new Date().toISOString().slice(0, 10)}`,

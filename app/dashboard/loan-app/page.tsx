@@ -899,8 +899,8 @@ function buildDirectorAutoMemoDraft(
   const signerPosition = String(signer?.position || "HR EXECUTIVE").trim().toUpperCase()
 
   return [
-    "QUALITY CONTROL COMPANY LTD. (COCOBOD)",
-    "HUMAN RESOURCES DEPARTMENT",
+    "QUALITY CONTROL COMPANY LTD.",
+    "(COCOBOD)",
     "P.O Box M14",
     "Accra Ghana",
     "",
