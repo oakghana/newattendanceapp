@@ -170,13 +170,18 @@ const LEAVE_APPROVED_BY_HOD_OR_RM_STATUSES = [
   async function validateDependentLeaveEligibility(admin: any, userId: string, leaveTypeKey: string, leaveYearPeriod: string) {
   if (["annual", "annual_leave"].includes(leaveTypeKey)) return null
 
+  const processingYear = Number(String(leaveYearPeriod || "").slice(0, 4))
+  const annualRequestWindowOpen = new Date() >= new Date("2027-01-01T00:00:00") && processingYear >= 2027
+  const eligibleAnnualStatuses = annualRequestWindowOpen
+    ? [...LEAVE_APPROVED_BY_HOD_OR_RM_STATUSES, "pending", "pending_hod", "pending_hod_review", "pending_manager_review", "manager_changes_requested", "hod_changes_requested"]
+    : LEAVE_APPROVED_BY_HOD_OR_RM_STATUSES
   const { data: annualRequests, error } = await admin
     .from("leave_plan_requests")
     .select("leave_type_key, status, requested_days, adjusted_days, entitlement_days, leave_year_period")
     .eq("user_id", userId)
     .eq("is_archived", false)
     .eq("leave_year_period", leaveYearPeriod)
-    .in("status", LEAVE_APPROVED_BY_HOD_OR_RM_STATUSES)
+    .in("status", eligibleAnnualStatuses)
 
   if (error) throw error
 
@@ -186,8 +191,10 @@ const LEAVE_APPROVED_BY_HOD_OR_RM_STATUSES = [
 
   if (approvedAnnualRequests.length === 0) {
   return {
-  code: "ANNUAL_LEAVE_APPROVAL_REQUIRED",
-  error: "Annual Leave must be submitted and approved by your HOD or Regional Manager before you can request any other leave type.",
+  code: annualRequestWindowOpen ? "ANNUAL_LEAVE_REQUEST_REQUIRED" : "ANNUAL_LEAVE_APPROVAL_REQUIRED",
+  error: annualRequestWindowOpen
+    ? "Submit your Annual Leave request first. Once it is on file, other leave types can be requested from 1 January 2027."
+    : "Annual Leave must be submitted and approved by your HOD or Regional Manager before you can request any other leave type.",
   }
   }
 
