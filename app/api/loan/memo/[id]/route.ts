@@ -121,7 +121,7 @@ function extractEditedMemoBody(value: string): string[] {
     const key = line.toLowerCase()
     if (seen.has(key)) return false
     seen.add(key)
-    return !/^(quality control company|qccob?d|\(cocobod\)|p\.?o\.? box|accra ghana|date:\s*|our ref|your ref|to:|through:|thro:|human resources department|for: managing director|you can count on our co-operation\.?$/i.test(line)
+    return !/^(quality control company|qccob?d|\(cocobod\)|p\.?o\.? box|accra ghana|date:\s*|our ref|your ref|to:|through:|thro:|human resources department|for: managing director|you can count on our co-operation\.?$)/i.test(line)
   })
   const result: string[] = []
   for (const line of filtered) {
@@ -769,9 +769,14 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       doc.addPage()
       y = 24
     }
-    y += 4
-    doc.text("You can count on our co-operation.", marginLeft, y)
-    y += 14
+    const hasCourtesyLine = paragraphs.some((paragraph) => /you can count on our co-operation\.?/i.test(String(paragraph || "")))
+    if (!hasCourtesyLine) {
+      y += 4
+      doc.text("You can count on our co-operation.", marginLeft, y)
+      y += 14
+    } else {
+      y += 8
+    }
 
     // Measure the printed signer name first so the signature can be centred on it.
     const dirName = fmtName(directorProfile).toUpperCase() || "APPROVING AUTHORITY"
