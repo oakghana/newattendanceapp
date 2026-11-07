@@ -806,17 +806,15 @@ ${accounts_notes ? `\nHR Loan Office Remarks: ${accounts_notes}` : ""}${isManual
         .join("\n")
     }
 
-    const annualSalary = Number(fd_calculation_data?.annual_salary)
     const updatePayload = {
       fd_score,
       fd_good: fd_good !== undefined ? Boolean(fd_good) : Number(fd_score) >= 39,
       ...(fd_calculation_data?.basic_salary > 0 && fd_calculation_data?.salary_advance_multiplier > 0
         ? {
             basic_salary: Number(fd_calculation_data.basic_salary),
-            ...(Number.isFinite(annualSalary) && annualSalary > 0 ? { annual_salary: annualSalary } : {}),
             salary_advance_multiplier: Math.trunc(Number(fd_calculation_data.salary_advance_multiplier)),
-            salary_advance_amount: Number(fd_calculation_data.salary_advance_amount),
             requested_amount: Number(fd_calculation_data.salary_advance_amount),
+            fixed_amount: Number(fd_calculation_data.salary_advance_amount),
           }
         : {}),
       fd_note: finalNotes,
@@ -835,8 +833,12 @@ ${accounts_notes ? `\nHR Loan Office Remarks: ${accounts_notes}` : ""}${isManual
       .select("id, status, request_number, staff_full_name")
       .single()
 
-    if (updateError?.code === "42703" && /annual_salary/i.test(String(updateError.message || ""))) {
-      const { annual_salary: _annualSalary, ...legacyPayload } = updatePayload as typeof updatePayload & { annual_salary?: number }
+    if (updateError?.code === "42703" && /annual_salary|salary_advance_amount/i.test(String(updateError.message || ""))) {
+      const legacyPayload = { ...updatePayload } as Record<string, any>
+      // These columns were added after older loan records were created. Keep the
+      // payable amount in requested_amount/fixed_amount, which exist in every schema.
+      delete legacyPayload.annual_salary
+      delete legacyPayload.salary_advance_amount
       ;({ data: updatedLoan, error: updateError } = await admin
         .from("loan_requests")
         .update(legacyPayload)

@@ -676,7 +676,7 @@ export async function GET() {
   // restricted to users with the committee permission.
   const showCommittee = permissions.committee || viewAllTabs || (role === "hr_loan_office" || role === "leave_loan_officer") || role.includes("hr_loan") || (role === "loan_office" && /hr|human resource/i.test(`${deptName} ${deptCode}`))
     const showHrOffice = permissions.hrOffice || viewAllTabs
-    const showDirectorHr = permissions.directorHr || viewAllTabs
+    const showDirectorHr = permissions.directorHr || viewAllTabs || ["manager_hr", "hr_executive", "hr_executive_officer", "director_hr"].includes(role)
 
     // HR loan office (loan_officer + viewAllTabs) sees all non-terminal loans
     // Includes: awaiting_hr_terms (normal flow) + sent_to_hr_office (FD-exempt loans like Funeral, Insurance, Repair with FD >= 0%)
@@ -711,7 +711,7 @@ export async function GET() {
         : Promise.resolve({ data: [], error: null } as any),
       hrOfficeQ,
       showDirectorHr
-        ? admin.from("loan_requests").select("*").in("status", ["awaiting_hr_executives", "pending_hr_executive_review"]).is("director_decision_at", null).order("created_at", { ascending: false })
+        ? admin.from("loan_requests").select("*").in("status", ["awaiting_hr_executives", "pending_hr_executive_review", "awaiting_director_hr"]).order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null } as any),
       showDirectorHr
         ? admin
@@ -866,10 +866,13 @@ export async function GET() {
     const staffProfileMap: Map<string, any> = new Map()
     const locationMap: Map<string, any> = new Map()
     if (uniqueUserIds.length > 0) {
-      const { data: staffProfiles } = await admin
+      const profileBatches: string[][] = []
+      for (let index = 0; index < uniqueUserIds.length; index += 100) profileBatches.push(uniqueUserIds.slice(index, index + 100))
+      const profileResults = await Promise.all(profileBatches.map((batch) => admin
         .from("user_profiles")
         .select("id, first_name, last_name, employee_id, position, email, assigned_location_id")
-        .in("id", uniqueUserIds)
+        .in("id", batch)))
+      const staffProfiles = profileResults.flatMap((result: any) => result.data || [])
       const assignedLocationIds = Array.from(new Set((staffProfiles || []).map((profile: any) => profile.assigned_location_id).filter(Boolean)))
       if (assignedLocationIds.length > 0) {
         const { data: locations } = await admin
@@ -1035,6 +1038,11 @@ export async function GET() {
     // currentHodProfile / currentHodProfiles were already resolved earlier from every
     // loan_hod_linkages row for this staff member (supports multi-HOD assignments).
 
+    const executiveQueueRows = Array.from(new Map(
+      [...(directorRes.data || []), ...(allLoansRes.data || []).filter((row: any) => ["awaiting_hr_executives", "pending_hr_executive_review", "awaiting_director_hr"].includes(String(row.status || "")))]
+        .map((row: any) => [String(row.id), row]),
+    ).values())
+
     return NextResponse.json({
       degraded: false,
       profile: {
@@ -1088,7 +1096,7 @@ export async function GET() {
         accountsSigned: attachAccountsReviewerName(attachName(accountsSignedRes.data || [])),
         committee: attachAccountsReviewerName(attachName(committeeRes.data || [])),
         hrOffice: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(hrRes.data || [])))),
-        directorHr: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(directorRes.data || [])))),
+        directorHr: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(executiveQueueRows)))),
         directorGoodFd: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(directorGoodFdRes.data || [])))),
         allLoans: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(allLoansRes.data || [])))),
       },
@@ -1152,7 +1160,7 @@ export async function GET() {
             hrOffice: canDoHrOffice(role, deptName, deptCode),
             directorHr: canDoDirectorHr(role, deptName, deptCode),
             viewAllTabs: viewAllTabsFallback,
-            allLoans: isAdminRole(role) || isManagingDirector || ["loan_office", "loan_officer", "hr_loan_office", "leave_loan_officer", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
+            allLoans: isAdminRole(role) || role === "managing_director" || ["loan_office", "loan_officer", "hr_loan_office", "leave_loan_officer", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
           },
         },
         { status: 200 },

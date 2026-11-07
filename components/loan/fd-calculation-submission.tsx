@@ -100,9 +100,8 @@ export function FDCalculationSubmission({
       ? String(loanRequest.annual_salary)
       : readFdNoteValue(loanRequest.fd_note, 'Salary Per Annum'),
   )
-  const salaryAdvanceMultiplier = Number(loanRequest.salary_advance_multiplier || loanRequest.recovery_months || 0)
+  const salaryAdvanceMultiplier = Number(loanRequest.salary_advance_multiplier || loanRequest.recovery_months || loanRequest.repayment_duration_months || 0)
   const salaryAdvance = isSalaryAdvance ? calculateSalaryAdvance(salaryPerAnnum, salaryAdvanceMultiplier) : null
-  const salaryAdvanceAmount = salaryAdvance?.amount ?? 0
   const [consolidatedMonthly, setConsolidatedMonthly] = useState('')
   const [otherAllowances, setOtherAllowances] = useState('')
   const [grossDeduction, setGrossDeduction] = useState(
@@ -140,7 +139,12 @@ export function FDCalculationSubmission({
     parseFloat(salaryPerAnnum) > 0 ? parseFloat(salaryPerAnnum) / 12 : 0
   const effectiveConsolidated =
     parseFloat(consolidatedMonthly) > 0 ? parseFloat(consolidatedMonthly) : derivedConsolidated
-  const recoveryMonthsNum = parseFloat(recoveryPeriodMonths) || 0
+  const recoveryMonthsNum = parseFloat(recoveryPeriodMonths) || salaryAdvanceMultiplier
+  // Salary Advance payable amount is the consolidated monthly amount multiplied
+  // by the months requested by the staff member.
+  const salaryAdvanceAmount = isSalaryAdvance && effectiveConsolidated > 0 && salaryAdvanceMultiplier > 0
+    ? Math.round(effectiveConsolidated * salaryAdvanceMultiplier * 100) / 100
+    : salaryAdvance?.amount ?? 0
   const effectiveRequestedAmount = isSalaryAdvance && salaryAdvanceAmount > 0
     ? salaryAdvanceAmount
     : loanRequest.requested_amount
@@ -151,7 +155,7 @@ export function FDCalculationSubmission({
 
   const buildFdInput = (): FDCalculationInput => ({
     staffNumber: loanRequest.staff_number,
-    staffName: loanRequest.staff_full_name,
+    staffName: loanRequest.staff_full_name || loanRequest.staff_number || loanRequest.corporate_email || "Staff member",
     salary_per_annum: parseFloat(salaryPerAnnum) || 0,
     consolidated_salary_per_month:
       parseFloat(consolidatedMonthly) > 0 ? parseFloat(consolidatedMonthly) : undefined,
