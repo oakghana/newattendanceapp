@@ -137,10 +137,12 @@ function applySignatureSideWatermark(doc: jsPDF, sigY: number, marginLeft: numbe
   if (sigY <= 0) return
   const targetPage = doc.getNumberOfPages()
   doc.setPage(targetPage)
-  doc.setTextColor(200, 200, 200)
+  doc.setTextColor(190, 190, 190)
   doc.setFont("helvetica", "bold")
-  doc.setFontSize(12)
-  doc.text(MEMO_WATERMARK_TEXT, marginLeft + 2, sigY + 8, { angle: -15 })
+  doc.setFontSize(6.5)
+  // Keep the verification mark centered over the signature image only; it must
+  // never cross the signer's printed name, title, or the HR rank.
+  doc.text(MEMO_WATERMARK_TEXT, marginLeft + 32, sigY + 14, { align: "center" })
 }
 
 async function resolvePdfSignatureImage(source?: string | null, origin?: string) {

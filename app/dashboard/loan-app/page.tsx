@@ -3283,13 +3283,15 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
         const usableWidth = pageWidth - marginLeft - marginRight
         const logoDataUrl = await loadImageAsDataUrl(`${window.location.origin}/images/qcc-logo.png`)
 
+        let signatureWatermarkY = -1
         const applySignatureSideWatermark = () => {
+          if (signatureWatermarkY < 0) return
           const targetPage = doc.getNumberOfPages()
           doc.setPage(targetPage)
-          doc.setTextColor(200, 200, 200)
+          doc.setTextColor(190, 190, 190)
           doc.setFont("helvetica", "bold")
-          doc.setFontSize(9)
-          doc.text(watermarkText, marginLeft + 6, pageHeight - 72, { angle: -15 })
+          doc.setFontSize(6.5)
+          doc.text(watermarkText, marginLeft + 30, signatureWatermarkY + 12, { align: "center" })
         }
 
         const addPageFrame = () => {
@@ -3385,7 +3387,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               y += extraSpace
             }
             try {
-              doc.addImage(sigImageDataUrl, signatureImageType, marginLeft + nameWidth / 2 - imageWidth / 2, y - 2.8 - imageHeight, imageWidth, imageHeight)
+              const signatureImageY = y - 2.8 - imageHeight
+              doc.addImage(sigImageDataUrl, signatureImageType, marginLeft + nameWidth / 2 - imageWidth / 2, signatureImageY, imageWidth, imageHeight)
+              signatureWatermarkY = signatureImageY
               signatureDrawn = true
             } catch {
               // Fall back to the printed name only if the image cannot be embedded.
