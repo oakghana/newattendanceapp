@@ -835,8 +835,12 @@ ${accounts_notes ? `\nHR Loan Office Remarks: ${accounts_notes}` : ""}${isManual
       .select("id, status, request_number, staff_full_name")
       .single()
 
-    if (updateError?.code === "42703" && /annual_salary/i.test(String(updateError.message || ""))) {
-      const { annual_salary: _annualSalary, ...legacyPayload } = updatePayload as typeof updatePayload & { annual_salary?: number }
+    if (updateError?.code === "42703" && /annual_salary|salary_advance_amount/i.test(String(updateError.message || ""))) {
+      const legacyPayload = { ...updatePayload } as Record<string, any>
+      // These columns were added after older loan records were created. Keep the
+      // payable amount in requested_amount/fixed_amount, which exist in every schema.
+      delete legacyPayload.annual_salary
+      delete legacyPayload.salary_advance_amount
       ;({ data: updatedLoan, error: updateError } = await admin
         .from("loan_requests")
         .update(legacyPayload)
