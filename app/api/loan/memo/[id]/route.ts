@@ -706,12 +706,16 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     if (hodRank || hodLocation) {
       doc.setFont("times", "normal")
       doc.setFontSize(9.2)
-      doc.text("THRO:", marginLeft, y)
-      doc.text(hodRank || hodLocation, marginLeft + 14, y)
+      const throLabel = "THRO'"
+      const throContentX = marginLeft + doc.getTextWidth(`${throLabel}  `)
+      doc.setFont("times", "bold")
+      doc.text(throLabel, marginLeft, y)
+      doc.text(hodRank || hodLocation, throContentX, y)
       y += 5.5
-      doc.text("QUALITY CONTROL COMPANY LIMITED", marginLeft + 14, y)
+      doc.setFont("times", "normal")
+      doc.text("QUALITY CONTROL COMPANY LIMITED", throContentX, y)
       y += 5.5
-      doc.text(hodLocation, marginLeft + 14, y)
+      doc.text(hodLocation, throContentX, y)
       y += 10
     }
 

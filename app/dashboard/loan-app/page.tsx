@@ -3337,10 +3337,27 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
         const signerNameIndex = forManagingDirectorIndex >= 2 ? forManagingDirectorIndex - 2 : -1
         const signatureImageType = /^data:image\/jpe?g/i.test(String(sigImageDataUrl || "")) ? "JPEG" : "PNG"
         let signatureDrawn = false
+        let throContentX = marginLeft
 
         for (const [lineIndex, line] of rawLines.entries()) {
           const trimmed = line.trim()
           const isBlank = trimmed.length === 0
+          const isThroRank = /^THRO'?\s+/i.test(trimmed)
+          const isThroCompany = /^QUALITY CONTROL COMPANY LIMITED$/i.test(trimmed)
+          const isThroLocation = isThroCompany === false && lineIndex > 0 && /^\s{2,}[A-Z][A-Z\s]+$/i.test(line) && rawLines[lineIndex - 1]?.trim() === "QUALITY CONTROL COMPANY LIMITED"
+          let renderedLine = line
+          let renderedX = marginLeft
+          if (isThroRank) {
+            const label = "THRO'"
+            const rank = trimmed.replace(/^THRO'?\s*/i, "").toUpperCase()
+            doc.setFont("times", "bold")
+            doc.setFontSize(8.8)
+            throContentX = marginLeft + doc.getTextWidth(`${label}  `)
+            renderedLine = `${label}  ${rank}`
+          } else if (isThroCompany || isThroLocation) {
+            renderedLine = trimmed.toUpperCase()
+            renderedX = throContentX
+          }
 
           if (lineIndex === signerNameIndex && sigImageDataUrl && !signatureDrawn) {
             // Centre the signature on the printed name, keeping its own proportions.
@@ -3400,7 +3417,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           doc.setFont("times", fontStyle)
           doc.setFontSize(fontSize)
 
-          const wrapped = doc.splitTextToSize(line, usableWidth)
+          const wrapped = doc.splitTextToSize(renderedLine, usableWidth - (renderedX - marginLeft))
           const projectedHeight = wrapped.length * lineGap
           if (y + projectedHeight > pageHeight - 22) {
             doc.addPage()
@@ -3408,7 +3425,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             y = topMargin + 18
           }
 
-          doc.text(wrapped, marginLeft, y)
+          doc.text(wrapped, renderedX, y)
           if (trimmed.startsWith("RE:")) {
             const subjectWidth = Math.min(doc.getTextWidth(trimmed), usableWidth)
             doc.setDrawColor(0, 0, 0)
