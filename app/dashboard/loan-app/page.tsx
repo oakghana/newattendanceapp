@@ -8198,6 +8198,8 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   <SelectContent>
                     <SelectItem value="Deputy Director, Finance">Deputy Director, Finance (Head of Finance)</SelectItem>
                     <SelectItem value="Accounts Manager">Accounts Manager (Finance Team)</SelectItem>
+                        <SelectItem value="Senior Accounts Manager">Senior Accounts Manager</SelectItem>
+                        <SelectItem value="Deputy Accounts Manager">Deputy Accounts Manager</SelectItem>
                   </SelectContent>
                 </Select>
                 <Label>Any Comments from HR? (optional)</Label>
@@ -8515,6 +8517,8 @@ if (!modalDisbursement || !modalRecovery) {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Accounts Manager">Accounts Manager</SelectItem>
+                    <SelectItem value="Senior Accounts Manager">Senior Accounts Manager</SelectItem>
+                    <SelectItem value="Deputy Accounts Manager">Deputy Accounts Manager</SelectItem>
                         <SelectItem value="Deputy Director Finance">Deputy Director Finance</SelectItem>
                       </SelectContent>
                     </Select>
