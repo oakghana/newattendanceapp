@@ -15,7 +15,7 @@ import {
   normalizeRole,
 } from "@/lib/loan-workflow"
 import { verifyMemoToken } from "@/lib/secure-memo"
-import { getMemoLocationAddress } from "@/lib/location-mappings"
+import { getMemoLocationAddress, isNonRegionalLocation } from "@/lib/location-mappings"
 import { ensureMemoSecurity } from "@/lib/memo-security"
 import { formatDateDDMMYYYY } from "@/lib/date-utils"
 import { isSalaryAdvanceLoanType } from "@/lib/salary-advance"
@@ -314,7 +314,7 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
   const memoCopyRecipient =
     extractMemoCopyRecipient(loan.hr_note) ||
     extractMemoCopyRecipient(loan.loan_office_note) ||
-    "Deputy Director, Finance"
+    (isNonRegionalLocation(String(loan.staff_location_name || "")) ? "Accounts Manager" : "Deputy Accounts Manager")
   const isSalaryAdvance = isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label)
   const salaryAdvanceRecoveryMonths = Number(loan.recovery_months ?? loan.deduction_period_months ?? loan.repayment_duration_months)
   const salaryAdvanceRecoveryLabel = Number.isFinite(salaryAdvanceRecoveryMonths) && salaryAdvanceRecoveryMonths > 0
@@ -420,6 +420,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       role === "hr_records_officer" ||
       role === "hr_records_manager" ||
       role === "hr_records_office" ||
+      role === "manager_hr" ||
       role === "managing_director" ||
       role === "secretary" ||
       role === "it-admin" ||

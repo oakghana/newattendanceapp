@@ -164,7 +164,7 @@ export function TrackedMemoEditor({
               onChange={(event) => onSubjectChange?.(event.target.value)}
               placeholder={subjectPlaceholder}
               readOnly={readOnly}
-              className="h-9 bg-white"
+              className="h-9 bg-white text-slate-900 placeholder:text-slate-400"
             />
           </div>
           <div className="space-y-1">
@@ -175,7 +175,7 @@ export function TrackedMemoEditor({
               placeholder={bodyPlaceholder}
               rows={bodyRows}
               readOnly={readOnly}
-              className="resize-y text-sm bg-white leading-6"
+              className="resize-y bg-white text-sm leading-6 text-slate-900 placeholder:text-slate-400"
             />
           </div>
           {showCc && (
