@@ -2478,10 +2478,16 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
       const directorSignature = (result.signatures || []).find(
         (signature: RegistrySignature) => signature.workflow_domain === "loan" && signature.approval_stage === "director_hr",
       )
-      if (directorSignature) {
+      const profileSignature = typeof result.profileSignature === "string" ? result.profileSignature : null
+      if (directorSignature && (directorSignature.signature_data_url || directorSignature.signature_text)) {
         setSignatureMode(directorSignature.signature_mode)
         setSignatureText(directorSignature.signature_text || "")
-        setSignatureDataUrl(directorSignature.signature_data_url || null)
+        setSignatureDataUrl(directorSignature.signature_data_url || profileSignature)
+        setIsSignatureMissing(false)
+      } else if (profileSignature) {
+        setSignatureMode("draw")
+        setSignatureText("")
+        setSignatureDataUrl(profileSignature)
         setIsSignatureMissing(false)
       } else {
         setIsSignatureMissing(true)
@@ -3263,7 +3269,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     toast({ title: "Linkage loaded", description: "You can now edit this linkage in the Single Staff HOD Linkage form." })
   }
 
-      const generateMemoPdf = async (row: LoanRequest, memoText: string, sigText: string) => {
+      const generateMemoPdf = async (row: LoanRequest, memoText: string, sigText: string, sigImageDataUrl?: string | null) => {
         const { jsPDF } = await import("jspdf")
         const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
         const pageWidth = doc.internal.pageSize.getWidth()
@@ -3323,9 +3329,34 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
         let y = topMargin + 30
         const lineGap = 4.9
 
-        for (const line of rawLines) {
+        // The signer's printed name sits two lines above "FOR: MANAGING DIRECTOR";
+        // the signature image is drawn directly on top of it.
+        let forManagingDirectorIndex = -1
+        rawLines.forEach((line, index) => {
+          if (line.trim().toUpperCase() === "FOR: MANAGING DIRECTOR") forManagingDirectorIndex = index
+        })
+        const signerNameIndex = forManagingDirectorIndex >= 2 ? forManagingDirectorIndex - 2 : -1
+        const signatureImageType = /^data:image\/jpe?g/i.test(String(sigImageDataUrl || "")) ? "JPEG" : "PNG"
+        let signatureDrawn = false
+
+        for (const [lineIndex, line] of rawLines.entries()) {
           const trimmed = line.trim()
           const isBlank = trimmed.length === 0
+
+          if (lineIndex === signerNameIndex && sigImageDataUrl && !signatureDrawn) {
+            if (y + 20 > pageHeight - 22) {
+              doc.addPage()
+              renderHeader()
+              y = topMargin + 18
+            }
+            try {
+              doc.addImage(sigImageDataUrl, signatureImageType, marginLeft, y - 2, 46, 16)
+              signatureDrawn = true
+              y += 15
+            } catch {
+              // Fall back to the printed name only if the image cannot be embedded.
+            }
+          }
 
           if (isBlank) {
             y += 4.2
@@ -8021,7 +8052,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Label className="text-xs">Employee Name</Label>
-                    <div className="flex items-center gap-2 p-1 bg-muted rounded text-xs">{actionModal.row?.staff_full_name || "—"}</div>
+                    <div className="flex items-center gap-2 p-1 bg-muted rounded text-xs">{actionModal.row?.staff_full_name || "��"}</div>
                   </div>
                   <div>
                     <Label className="text-xs">Staff Number</Label>
@@ -8763,7 +8794,7 @@ if (!modalDisbursement || !modalRecovery) {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => { if (memoReviewModal.row) void generateMemoPdf(memoReviewModal.row, modalMemoText, modalSignatureText) }}
+                  onClick={() => { if (memoReviewModal.row) void generateMemoPdf(memoReviewModal.row, modalMemoText, modalSignatureText, modalSignatureMode !== "typed" ? modalSignatureDataUrl : null) }}
                   className="h-8 text-xs gap-1.5"
                 >
                   <Download className="h-3.5 w-3.5" /> Preview PDF

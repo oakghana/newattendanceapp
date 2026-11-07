@@ -31,22 +31,28 @@ export async function GET() {
 
   const transportRows = (transportData || []).filter((row: any) => row.request_type === "regional_transport" || row.workflow_stage !== "transport_manager_assignment").map((row: any) => ({ ...row, user_id: row.requester_id, entity: "transport", request_number: row.memo_reference || `Transport ${row.id.slice(0, 8).toUpperCase()}`, reference_number: row.memo_reference, request_subject: row.memo_subject || row.purpose }))
   const allRows = [...leaveData, ...loanData, ...transportRows]
-  const userIds = Array.from(new Set(allRows.map((row: any) => row.user_id).filter(Boolean)))
-  const { data: profiles, error: profilesError } = userIds.length
-    ? await admin.from("user_profiles").select("id, first_name, last_name, employee_id, role, department_id, assigned_location_id").in("id", userIds)
-    : { data: [], error: null }
+  // A single .in("id", [...]) with every requester puts hundreds of UUIDs in the
+  // request URL; the gateway rejects that with a bare "Bad Request". Look rows up
+  // in small batches instead.
+  const fetchByIds = async (table: string, columns: string, ids: string[]) => {
+    const batches: string[][] = []
+    for (let index = 0; index < ids.length; index += 100) batches.push(ids.slice(index, index + 100))
+    const results = await Promise.all(batches.map((batch) => admin.from(table).select(columns).in("id", batch)))
+    const failed = results.find((result: any) => result.error)
+    if (failed?.error) return { data: [] as any[], error: failed.error }
+    return { data: results.flatMap((result: any) => result.data || []), error: null }
+  }
+
+  const userIds = Array.from(new Set(allRows.map((row: any) => row.user_id).filter(Boolean))) as string[]
+  const { data: profiles, error: profilesError } = await fetchByIds("user_profiles", "id, first_name, last_name, employee_id, role, department_id, assigned_location_id", userIds)
   if (profilesError) return NextResponse.json({ error: profilesError.message }, { status: 500 })
 
-  const locationIds = Array.from(new Set((profiles || []).map((profile: any) => profile.assigned_location_id).filter(Boolean)))
-  const departmentIds = Array.from(new Set((profiles || []).map((profile: any) => profile.department_id).filter(Boolean)))
-  const { data: departments, error: departmentsError } = departmentIds.length
-    ? await admin.from("departments").select("id, name").in("id", departmentIds)
-    : { data: [], error: null }
+  const locationIds = Array.from(new Set((profiles || []).map((profile: any) => profile.assigned_location_id).filter(Boolean))) as string[]
+  const departmentIds = Array.from(new Set((profiles || []).map((profile: any) => profile.department_id).filter(Boolean))) as string[]
+  const { data: departments, error: departmentsError } = await fetchByIds("departments", "id, name", departmentIds)
   if (departmentsError) return NextResponse.json({ error: departmentsError.message }, { status: 500 })
 
-  const { data: locations, error: locationsError } = locationIds.length
-    ? await admin.from("geofence_locations").select("id, name").in("id", locationIds)
-    : { data: [], error: null }
+  const { data: locations, error: locationsError } = await fetchByIds("geofence_locations", "id, name", locationIds)
   if (locationsError) return NextResponse.json({ error: locationsError.message }, { status: 500 })
 
   const profileMap = new Map((profiles || []).map((profile: any) => [profile.id, profile]))

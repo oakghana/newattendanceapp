@@ -143,8 +143,8 @@ function applySignatureSideWatermark(doc: jsPDF, sigY: number, marginLeft: numbe
   doc.text(MEMO_WATERMARK_TEXT, marginLeft + 2, sigY + 8, { angle: -15 })
 }
 
-async function resolvePdfSignatureImage(source?: string | null) {
-  const signatureSource = String(source || "").trim()
+async function resolvePdfSignatureImage(source?: string | null, origin?: string) {
+  let signatureSource = String(source || "").trim()
   if (!signatureSource) return null
 
   const embeddedMatch = signatureSource.match(/^data:image\/(png|jpe?g|webp);base64,/i)
@@ -155,6 +155,7 @@ async function resolvePdfSignatureImage(source?: string | null) {
     }
   }
 
+  if (signatureSource.startsWith("/") && origin) signatureSource = `${origin}${signatureSource}`
   if (!/^https?:\/\//i.test(signatureSource)) return null
   const response = await fetch(signatureSource)
   if (!response.ok) return null
@@ -548,30 +549,27 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     loan.staff_number = loan.staff_number || applicantProfile?.employee_id || ""
 
     // ─── Fetch HR Executive signature (for the letter signatory section) ────
-    let signerSignatureUrl = String((loan as any).director_signature_data_url || (directorProfile as any)?.signature_data_url || "").trim()
-    if (directorHrId && !signerSignatureUrl) {
+    // Every possible source for the signer's signature image, best first. The
+    // renderer tries each until one actually embeds, so one unusable value (an
+    // unsupported format or an unreachable URL) no longer hides the signature.
+    const signatureCandidates: string[] = []
+    const addSignatureCandidate = (value: unknown) => {
+      const candidate = String(value || "").trim()
+      if (candidate.length > 10 && !signatureCandidates.includes(candidate)) signatureCandidates.push(candidate)
+    }
+    addSignatureCandidate((loan as any).director_signature_data_url)
+    addSignatureCandidate((directorProfile as any)?.signature_data_url)
+    if (directorHrId) {
       try {
         const { data: hrSigRecords } = await admin
           .from("approval_signature_registry")
-          .select("id, signature_data_url, signature_mode, signature_text")
+          .select("id, signature_data_url, signature_mode, signature_text, updated_at")
           .eq("user_id", directorHrId)
-        if (hrSigRecords && hrSigRecords.length > 0) {
-          const best = hrSigRecords
-            .map((r: any) => {
-              const mode = String(r?.signature_mode || "").toLowerCase()
-              const hasImage = (mode === "draw" || mode === "drawn" || mode === "upload") && String(r?.signature_data_url || "").trim().length > 0
-              return { ...r, score: hasImage ? 100 : 10 }
-            })
-            .sort((a: any, b: any) => b.score - a.score)[0]
-          if (best?.signature_data_url) signerSignatureUrl = best.signature_data_url
-        }
+        ;(hrSigRecords || [])
+          .filter((record: any) => String(record?.signature_data_url || "").trim().length > 0)
+          .sort((a: any, b: any) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")))
+          .forEach((record: any) => addSignatureCandidate(record.signature_data_url))
       } catch { /* skip */ }
-      if (!signerSignatureUrl) {
-        try {
-          const { data: hrProf } = await admin.from("user_profiles").select("signature_data_url").eq("id", directorHrId).single()
-          if (hrProf?.signature_data_url) signerSignatureUrl = hrProf.signature_data_url
-        } catch { /* skip */ }
-      }
     }
 
     // ─── Fetch actual MD signature (for the approval stamp) ────────────
@@ -769,36 +767,16 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     let sigImgY = -1
 
     // Add signature image if available — RENDER ABOVE NAME (exact leave module approach)
-    if (signerSignatureUrl && signerSignatureUrl.length > 10) {
+    for (const candidate of signatureCandidates) {
       try {
-        if (signerSignatureUrl.startsWith("data:image/")) {
-          // Base64 data URL
-          const b64Match = signerSignatureUrl.match(/^data:image\/([^;]+);base64,(.+)$/)
-          if (b64Match) {
-            const imageType = b64Match[1].toUpperCase() === "JPEG" ? "JPEG" : "PNG"
-            sigImgY = y
-            doc.addImage(signerSignatureUrl, imageType, marginLeft, y, 50, 18)
-            y += 20
-          }
-        } else if (signerSignatureUrl.startsWith("https://")) {
-          // External URL — fetch and embed (exact leave module pattern)
-          try {
-            const sigResponse = await fetch(signerSignatureUrl)
-            if (sigResponse.ok) {
-              const sigBuffer = await sigResponse.arrayBuffer()
-              const sigBase64 = Buffer.from(sigBuffer).toString("base64")
-              const contentType = sigResponse.headers.get("content-type") || "image/png"
-              const imageType = contentType.includes("jpeg") ? "JPEG" : "PNG"
-              sigImgY = y
-              doc.addImage(`data:${contentType};base64,${sigBase64}`, imageType, marginLeft, y, 50, 18)
-              y += 20
-            }
-          } catch (fetchErr) {
-            // Fall through to text fallback
-          }
-        }
-      } catch (err) {
-        // Fall through to text fallback
+        const signatureImage = await resolvePdfSignatureImage(candidate, request.nextUrl.origin)
+        if (!signatureImage) continue
+        doc.addImage(signatureImage.dataUrl, signatureImage.imageType, marginLeft, y, 50, 18)
+        sigImgY = y
+        y += 20
+        break
+      } catch (signatureError) {
+        console.log("[v0] Loan memo signature candidate could not be embedded:", signatureError instanceof Error ? signatureError.message : signatureError)
       }
     }
 
