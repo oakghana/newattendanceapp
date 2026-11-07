@@ -5008,7 +5008,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs font-semibold">{row.fd_score ?? "—"}</TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">{row.accounts_reviewer_name || "���"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.accounts_reviewer_name || "�����"}</TableCell>
                           <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                           <TableCell className="text-xs whitespace-nowrap">
                             {row.supporting_document_url ? (
@@ -8785,6 +8785,20 @@ if (!modalDisbursement || !modalRecovery) {
               >
                 Keep edits &amp; return
               </Button>
+            )}
+
+            {memoReviewModal.row && (isAdmin || isManagingDirector) && ["awaiting_director_hr", "approved_director"].includes(String(memoReviewModal.row.status || "")) && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 border-amber-500 text-xs font-semibold text-amber-700 hover:bg-amber-50"
+                onClick={async () => {
+                  const correctionNote = window.prompt("Explain the correction required from HR Executive:")?.trim()
+                  if (!correctionNote || correctionNote.length < 5) return
+                  await runAction({ action: "return_signed_memo_for_correction", id: memoReviewModal.row!.id, correction_note: correctionNote, note: correctionNote })
+                  setMemoReviewModal((s) => ({ ...s, open: false }))
+                }}
+              >Return to HR for Correction</Button>
             )}
 
             {/* Primary approve / reject CTA */}
