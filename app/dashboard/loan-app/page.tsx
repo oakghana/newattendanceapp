@@ -811,12 +811,17 @@ function formatReferenceNumber(referenceNumber?: string | null, requestNumber?: 
 type MemoSigner = { name?: string | null; position?: string | null }
 
 function stripMemoLetterhead(memoText: string): string {
-  return String(memoText || "")
+  const lines = String(memoText || "")
     .split("\n")
     .filter((line) => !/^(QUALITY CONTROL COMPANY LTD\.?|QUALITY CONTROL COMPANY LIMITED|\(COCOBOD\)|HUMAN RESOURCES DEPARTMENT|P\.O Box M14|Accra Ghana)$/i.test(line.trim()))
-    .join("\n")
-    .replace(/^\n+/, "")
-    .trim()
+  const normalized: string[] = []
+  for (const line of lines) {
+    normalized.push(line)
+    if (/^\s*THRO'?\s+/i.test(line) && !/QUALITY CONTROL COMPANY LIMITED/i.test(lines[lines.indexOf(line) + 1] || "")) {
+      normalized.push("        QUALITY CONTROL COMPANY LIMITED")
+    }
+  }
+  return normalized.join("\n").replace(/^\n+/, "").trim()
 }
 
 function normalizeMemoSigner(memoText: string, signer?: MemoSigner): string {
@@ -5008,7 +5013,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs font-semibold">{row.fd_score ?? "—"}</TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">{row.accounts_reviewer_name || "�����"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.accounts_reviewer_name || "�������"}</TableCell>
                           <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                           <TableCell className="text-xs whitespace-nowrap">
                             {row.supporting_document_url ? (

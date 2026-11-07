@@ -117,12 +117,18 @@ function extractEditedMemoBody(value: string): string[] {
   const closingStart = bodyLines.findIndex((line) => /^(mr\.?\s+kwaku appiah ohemeng|kwaku appiah ohemeng|yours faithfully|yours sincerely|you can count on our co-operation|cc\s*:)/i.test(line))
   const contentLines = closingStart >= 0 ? bodyLines.slice(0, closingStart) : bodyLines
   const seen = new Set<string>()
-  return contentLines.filter((line) => {
+  const filtered = contentLines.filter((line) => {
     const key = line.toLowerCase()
     if (seen.has(key)) return false
     seen.add(key)
-    return !/^(quality control company|qccob?d|\(cocobod\)|p\.?o\.? box|accra ghana|our ref|your ref|to:|through:|thro:|re:|human resources department|for: managing director)$/i.test(line)
+    return !/^(quality control company|qccob?d|\(cocobod\)|p\.?o\.? box|accra ghana|our ref|your ref|to:|through:|thro:|human resources department|for: managing director)$/i.test(line)
   })
+  const result: string[] = []
+  for (const line of filtered) {
+    result.push(line)
+    if (/^thro'?\s+/i.test(line)) result.push("QUALITY CONTROL COMPANY LIMITED")
+  }
+  return result
 }
 
 const MEMO_WATERMARK_TEXT = "QCC-LOANLEAVE-APP"
@@ -622,7 +628,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const marginRight = 20
     const contentWidth = pageWidth - marginLeft - marginRight
 
-    // ─── Header: Logo + Company Name + Address ────────────────────────
+    // ─── Header: Logo + Company Name + Address ─────────────────���──────
     if (logoBase64) {
       try {
         doc.addImage(`data:image/png;base64,${logoBase64}`, "PNG", marginLeft, 13, 22, 22)
