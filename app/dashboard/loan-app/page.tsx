@@ -818,7 +818,7 @@ function stripMemoLetterhead(memoText: string): string {
   for (const line of lines) {
     normalized.push(line)
     if (/^\s*THRO'?\s+/i.test(line) && !/QUALITY CONTROL COMPANY LIMITED/i.test(lines[lines.indexOf(line) + 1] || "")) {
-      normalized.push("        QUALITY CONTROL COMPANY LIMITED")
+      normalized.push("    QUALITY CONTROL COMPANY LIMITED")
     }
   }
   return normalized.join("\n").replace(/^\n+/, "").trim()
@@ -925,8 +925,8 @@ function buildDirectorAutoMemoDraft(
     `${staffRank}`,
     "",
     ...(hodRank ? [`THRO'   ${String(hodRank).toUpperCase()}`] : []),
-    `        QUALITY CONTROL COMPANY LIMITED`,
-    `        ${String(hodLocation).toUpperCase()}`, 
+    `    QUALITY CONTROL COMPANY LIMITED`,
+    `    ${String(hodLocation).toUpperCase()}`, 
     "",
     `RE: APPLICATION FOR ${loanLabel.toUpperCase()}`,
     "",
