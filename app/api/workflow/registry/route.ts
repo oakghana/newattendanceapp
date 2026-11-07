@@ -51,8 +51,18 @@ export async function GET(request: NextRequest) {
     if (signaturesRes.error) throw signaturesRes.error
     if (templatesRes.error) throw templatesRes.error
 
+    // Signatures drawn under Profile Settings live on user_profiles, not in the
+    // workflow registry. Return it so approval screens can use it as a fallback.
+    const { data: profileSignatureRow } = await admin
+      .from("user_profiles")
+      .select("signature_data_url")
+      .eq("id", user.id)
+      .maybeSingle()
+    const profileSignature = String((profileSignatureRow as any)?.signature_data_url || "").trim() || null
+
     return NextResponse.json({
       signatures: signaturesRes.data || [],
+      profileSignature,
   templates: canManageTemplates(role, deptName, deptCode) ? templatesRes.data || [] : [],
   canManageTemplates: canManageTemplates(role, deptName, deptCode),
     })

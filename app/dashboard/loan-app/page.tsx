@@ -810,6 +810,20 @@ function formatReferenceNumber(referenceNumber?: string | null, requestNumber?: 
 
 type MemoSigner = { name?: string | null; position?: string | null }
 
+function stripMemoLetterhead(memoText: string): string {
+  const lines = String(memoText || "")
+    .split("\n")
+    .filter((line) => !/^(QUALITY CONTROL COMPANY LTD\.?|QUALITY CONTROL COMPANY LIMITED|\(COCOBOD\)|HUMAN RESOURCES DEPARTMENT|P\.O Box M14|Accra Ghana|Date:\s*[^|]+)$/i.test(line.trim()))
+  const normalized: string[] = []
+  for (const line of lines) {
+    normalized.push(line)
+    if (/^\s*THRO'?\s+/i.test(line) && !/QUALITY CONTROL COMPANY LIMITED/i.test(lines[lines.indexOf(line) + 1] || "")) {
+      normalized.push("        QUALITY CONTROL COMPANY LIMITED")
+    }
+  }
+  return normalized.join("\n").replace(/^\n+/, "").trim()
+}
+
 function normalizeMemoSigner(memoText: string, signer?: MemoSigner): string {
   const signerName = String(signer?.name || "").trim().toUpperCase()
   if (!memoText.trim() || !signerName) return memoText
@@ -899,8 +913,8 @@ function buildDirectorAutoMemoDraft(
   const signerPosition = String(signer?.position || "HR EXECUTIVE").trim().toUpperCase()
 
   return [
-    "QUALITY CONTROL COMPANY LTD. (COCOBOD)",
-    "HUMAN RESOURCES DEPARTMENT",
+    "QUALITY CONTROL COMPANY LTD.",
+    "(COCOBOD)",
     "P.O Box M14",
     "Accra Ghana",
     "",
@@ -2464,10 +2478,16 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
       const directorSignature = (result.signatures || []).find(
         (signature: RegistrySignature) => signature.workflow_domain === "loan" && signature.approval_stage === "director_hr",
       )
-      if (directorSignature) {
+      const profileSignature = typeof result.profileSignature === "string" ? result.profileSignature : null
+      if (directorSignature && (directorSignature.signature_data_url || directorSignature.signature_text)) {
         setSignatureMode(directorSignature.signature_mode)
         setSignatureText(directorSignature.signature_text || "")
-        setSignatureDataUrl(directorSignature.signature_data_url || null)
+        setSignatureDataUrl(directorSignature.signature_data_url || profileSignature)
+        setIsSignatureMissing(false)
+      } else if (profileSignature) {
+        setSignatureMode("draw")
+        setSignatureText("")
+        setSignatureDataUrl(profileSignature)
         setIsSignatureMissing(false)
       } else {
         setIsSignatureMissing(true)
@@ -3222,9 +3242,11 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             name: `${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim(),
             position: data?.profile.position || "HR Executive",
           }
-          const draft = buildDirectorAutoMemoDraft(row, entry, data?.profile.currentHodProfile, currentExecutive)
+          const requesterProfile = (lookupData?.staff || []).find((staff) => staff.id === row.user_id)
+          const memoRow = row.staff_full_name ? row : { ...row, staff_full_name: requesterProfile ? `${requesterProfile.first_name || ""} ${requesterProfile.last_name || ""}`.trim() : row.staff_full_name }
+          const draft = buildDirectorAutoMemoDraft(memoRow, entry, data?.profile.currentHodProfile, currentExecutive)
           const savedMemo = String(row.director_letter || "").trim()
-          setModalMemoText(normalizeMemoSigner(savedMemo || draft, currentExecutive))
+          setModalMemoText(stripMemoLetterhead(normalizeMemoSigner(savedMemo || draft, currentExecutive)))
           setModalSignatureText(signatureText || currentExecutive.name)
           setModalSignatureDataUrl(signatureDataUrl)
           setModalSignatureMode(signatureMode)
@@ -3247,7 +3269,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     toast({ title: "Linkage loaded", description: "You can now edit this linkage in the Single Staff HOD Linkage form." })
   }
 
-      const generateMemoPdf = async (row: LoanRequest, memoText: string, sigText: string) => {
+      const generateMemoPdf = async (row: LoanRequest, memoText: string, sigText: string, sigImageDataUrl?: string | null) => {
         const { jsPDF } = await import("jspdf")
         const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
         const pageWidth = doc.internal.pageSize.getWidth()
@@ -3307,9 +3329,34 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
         let y = topMargin + 30
         const lineGap = 4.9
 
-        for (const line of rawLines) {
+        // The signer's printed name sits two lines above "FOR: MANAGING DIRECTOR";
+        // the signature image is drawn directly on top of it.
+        let forManagingDirectorIndex = -1
+        rawLines.forEach((line, index) => {
+          if (line.trim().toUpperCase() === "FOR: MANAGING DIRECTOR") forManagingDirectorIndex = index
+        })
+        const signerNameIndex = forManagingDirectorIndex >= 2 ? forManagingDirectorIndex - 2 : -1
+        const signatureImageType = /^data:image\/jpe?g/i.test(String(sigImageDataUrl || "")) ? "JPEG" : "PNG"
+        let signatureDrawn = false
+
+        for (const [lineIndex, line] of rawLines.entries()) {
           const trimmed = line.trim()
           const isBlank = trimmed.length === 0
+
+          if (lineIndex === signerNameIndex && sigImageDataUrl && !signatureDrawn) {
+            if (y + 20 > pageHeight - 22) {
+              doc.addPage()
+              renderHeader()
+              y = topMargin + 18
+            }
+            try {
+              doc.addImage(sigImageDataUrl, signatureImageType, marginLeft, y - 2, 46, 16)
+              signatureDrawn = true
+              y += 15
+            } catch {
+              // Fall back to the printed name only if the image cannot be embedded.
+            }
+          }
 
           if (isBlank) {
             y += 4.2
@@ -4997,7 +5044,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs font-semibold">{row.fd_score ?? "—"}</TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">{row.accounts_reviewer_name || "���"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.accounts_reviewer_name || "�������"}</TableCell>
                           <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                           <TableCell className="text-xs whitespace-nowrap">
                             {row.supporting_document_url ? (
@@ -8005,7 +8052,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Label className="text-xs">Employee Name</Label>
-                    <div className="flex items-center gap-2 p-1 bg-muted rounded text-xs">{actionModal.row?.staff_full_name || "—"}</div>
+                    <div className="flex items-center gap-2 p-1 bg-muted rounded text-xs">{actionModal.row?.staff_full_name || "��"}</div>
                   </div>
                   <div>
                     <Label className="text-xs">Staff Number</Label>
@@ -8223,16 +8270,18 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     hod_location: modalHodLocation,
                   }
                   const selectedExecutive = data?.directorApprovers?.find((approver) => approver.id === modalDirectorApproverId)
+                  const requesterProfile = (lookupData?.staff || []).find((staff) => staff.id === previewRow.user_id)
+                  const namedPreviewRow = previewRow.staff_full_name ? previewRow : { ...previewRow, staff_full_name: requesterProfile ? `${requesterProfile.first_name || ""} ${requesterProfile.last_name || ""}`.trim() : previewRow.staff_full_name }
                   const draft = buildDirectorAutoMemoDraft(
-                    previewRow,
+                    namedPreviewRow,
                     { hodName: modalHodName, hodRank: modalHodRank, hodLocation: modalHodLocation, hodTelephone: modalHodTelephone, memoRef: modalMemoRef, memoRecipient: modalMemoRecipient },
                     data?.profile.currentHodProfile,
                     selectedExecutive ? { name: selectedExecutive.full_name, position: selectedExecutive.position } : undefined,
                   )
-                  setModalMemoText(draft)
+                  setModalMemoText(stripMemoLetterhead(draft))
                   setActionModal((s) => ({ ...s, open: false }))
                   window.setTimeout(() => {
-                    setMemoReviewModal({ open: true, row: previewRow })
+                    setMemoReviewModal({ open: true, row: namedPreviewRow })
                   }, 80)
                 }}>Preview Memo</Button>
                 <Button onClick={() => {
@@ -8602,7 +8651,8 @@ if (!modalDisbursement || !modalRecovery) {
                 {actionModal.actionType !== "hr_terms" && modalSignatureMode === "typed" && modalSignatureText && (
                   <div className="mt-4 font-serif">
                     <div className="w-48 border-b border-slate-400 pb-1 text-base font-bold italic">{modalSignatureText}</div>
-                    <div className="mt-1 text-[12px] font-semibold">{String(data?.profile.position || "HR Executive").toUpperCase()}</div>
+                    <div className="mt-1 text-[12px] font-bold">{`${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim().toUpperCase()}</div>
+                    <div className="text-[12px] font-semibold">{String(data?.profile.position || "HR Executive").toUpperCase()}</div>
                     <div className="text-[12px] font-semibold">FOR: MANAGING DIRECTOR</div>
                   </div>
                 )}
@@ -8744,7 +8794,7 @@ if (!modalDisbursement || !modalRecovery) {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => { if (memoReviewModal.row) void generateMemoPdf(memoReviewModal.row, modalMemoText, modalSignatureText) }}
+                  onClick={() => { if (memoReviewModal.row) void generateMemoPdf(memoReviewModal.row, modalMemoText, modalSignatureText, modalSignatureMode !== "typed" ? modalSignatureDataUrl : null) }}
                   className="h-8 text-xs gap-1.5"
                 >
                   <Download className="h-3.5 w-3.5" /> Preview PDF
@@ -8771,6 +8821,20 @@ if (!modalDisbursement || !modalRecovery) {
               >
                 Keep edits &amp; return
               </Button>
+            )}
+
+            {memoReviewModal.row && (isAdmin || isManagingDirector) && ["awaiting_director_hr", "approved_director"].includes(String(memoReviewModal.row.status || "")) && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 border-amber-500 text-xs font-semibold text-amber-700 hover:bg-amber-50"
+                onClick={async () => {
+                  const correctionNote = window.prompt("Explain the correction required from HR Executive:")?.trim()
+                  if (!correctionNote || correctionNote.length < 5) return
+                  await runAction({ action: "return_signed_memo_for_correction", id: memoReviewModal.row!.id, correction_note: correctionNote, note: correctionNote })
+                  setMemoReviewModal((s) => ({ ...s, open: false }))
+                }}
+              >Return to HR for Correction</Button>
             )}
 
             {/* Primary approve / reject CTA */}

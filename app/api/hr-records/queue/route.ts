@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
-import { ensureImportedLoanReferences } from "@/lib/reference-number"
 import { isHrRecordsRole, normalizeWorkflowRole } from "@/lib/hr-workflow"
 
 export async function GET() {
@@ -14,35 +13,46 @@ export async function GET() {
     return NextResponse.json({ error: "HR Records access required." }, { status: 403 })
   }
 
-  await ensureImportedLoanReferences(admin)
   const [leaveResult, loanResult, transportResult] = await Promise.all([
     admin.from("leave_plan_requests").select("id, user_id, leave_type_key, status, workflow_stage, workflow_route, memo_reference, memo_reference_locked, memo_reference_locked_at, memo_reference_locked_by, submitted_at, updated_at, preferred_start_date, preferred_end_date, hr_approved_at, reason").in("status", ["pending_hr_records_reference", "hod_approved", "hr_office_forwarded", "pending_hr_leave_processing", "regional_manager_approved", "pending_regional_hr_office_review", "pending_regional_hr_review", "regional_hr_office_review", "regional_hr_approved", "hr_approved", "approved"]).order("updated_at", { ascending: false }),
     admin.from("loan_requests").select("id, user_id, request_number, reference_number, status, workflow_stage, memo_reference_locked, memo_reference_locked_at, submitted_at, updated_at, md_approved_at, md_approved_by_name, hod_review_note, is_imported").in("status", ["pending_hr_records_reference", "hod_approved", "awaiting_director_hr", "approved_director", "referenced", "approved", "active", "partially_recovered", "fully_recovered", "disbursed", "completed"]).order("updated_at", { ascending: false }),
     admin.from("transport_requests").select("id, requester_id, request_type, purpose, status, workflow_stage, memo_reference, memo_date, memo_subject, updated_at, created_at").in("workflow_stage", ["hr_records_review", "transport_manager_assignment", "referenced"]).order("updated_at", { ascending: false }),
   ])
 
-  if (leaveResult.error) return NextResponse.json({ error: leaveResult.error.message }, { status: 500 })
-  if (loanResult.error) return NextResponse.json({ error: loanResult.error.message }, { status: 500 })
-  if (transportResult.error) return NextResponse.json({ error: transportResult.error.message }, { status: 500 })
+  const leaveData = leaveResult.error
+    ? (await admin.from("leave_plan_requests").select("id, user_id, leave_type_key, status, workflow_stage, memo_reference, memo_reference_locked, memo_reference_locked_at, submitted_at, updated_at, preferred_start_date, preferred_end_date, reason").order("updated_at", { ascending: false }).limit(500)).data || []
+    : leaveResult.data || []
+  const loanData = loanResult.error
+    ? (await admin.from("loan_requests").select("id, user_id, request_number, reference_number, status, workflow_stage, memo_reference_locked, memo_reference_locked_at, submitted_at, updated_at, md_approved_at, md_approved_by_name, hod_review_note, is_imported").order("updated_at", { ascending: false }).limit(500)).data || []
+    : loanResult.data || []
+  const transportData = transportResult.error
+    ? (await admin.from("transport_requests").select("id, requester_id, request_type, purpose, status, workflow_stage, memo_reference, memo_date, memo_subject, updated_at, created_at").order("updated_at", { ascending: false }).limit(500)).data || []
+    : transportResult.data || []
 
-  const transportRows = (transportResult.data || []).filter((row: any) => row.request_type === "regional_transport" || row.workflow_stage !== "transport_manager_assignment").map((row: any) => ({ ...row, user_id: row.requester_id, entity: "transport", request_number: row.memo_reference || `Transport ${row.id.slice(0, 8).toUpperCase()}`, reference_number: row.memo_reference, request_subject: row.memo_subject || row.purpose }))
-  const allRows = [...(leaveResult.data || []), ...(loanResult.data || []), ...transportRows]
-  const userIds = Array.from(new Set(allRows.map((row: any) => row.user_id).filter(Boolean)))
-  const { data: profiles, error: profilesError } = userIds.length
-    ? await admin.from("user_profiles").select("id, first_name, last_name, employee_id, role, department_id, assigned_location_id").in("id", userIds)
-    : { data: [], error: null }
+  const transportRows = (transportData || []).filter((row: any) => row.request_type === "regional_transport" || row.workflow_stage !== "transport_manager_assignment").map((row: any) => ({ ...row, user_id: row.requester_id, entity: "transport", request_number: row.memo_reference || `Transport ${row.id.slice(0, 8).toUpperCase()}`, reference_number: row.memo_reference, request_subject: row.memo_subject || row.purpose }))
+  const allRows = [...leaveData, ...loanData, ...transportRows]
+  // A single .in("id", [...]) with every requester puts hundreds of UUIDs in the
+  // request URL; the gateway rejects that with a bare "Bad Request". Look rows up
+  // in small batches instead.
+  const fetchByIds = async (table: string, columns: string, ids: string[]) => {
+    const batches: string[][] = []
+    for (let index = 0; index < ids.length; index += 100) batches.push(ids.slice(index, index + 100))
+    const results = await Promise.all(batches.map((batch) => admin.from(table).select(columns).in("id", batch)))
+    const failed = results.find((result: any) => result.error)
+    if (failed?.error) return { data: [] as any[], error: failed.error }
+    return { data: results.flatMap((result: any) => result.data || []), error: null }
+  }
+
+  const userIds = Array.from(new Set(allRows.map((row: any) => row.user_id).filter(Boolean))) as string[]
+  const { data: profiles, error: profilesError } = await fetchByIds("user_profiles", "id, first_name, last_name, employee_id, role, department_id, assigned_location_id", userIds)
   if (profilesError) return NextResponse.json({ error: profilesError.message }, { status: 500 })
 
-  const locationIds = Array.from(new Set((profiles || []).map((profile: any) => profile.assigned_location_id).filter(Boolean)))
-  const departmentIds = Array.from(new Set((profiles || []).map((profile: any) => profile.department_id).filter(Boolean)))
-  const { data: departments, error: departmentsError } = departmentIds.length
-    ? await admin.from("departments").select("id, name").in("id", departmentIds)
-    : { data: [], error: null }
+  const locationIds = Array.from(new Set((profiles || []).map((profile: any) => profile.assigned_location_id).filter(Boolean))) as string[]
+  const departmentIds = Array.from(new Set((profiles || []).map((profile: any) => profile.department_id).filter(Boolean))) as string[]
+  const { data: departments, error: departmentsError } = await fetchByIds("departments", "id, name", departmentIds)
   if (departmentsError) return NextResponse.json({ error: departmentsError.message }, { status: 500 })
 
-  const { data: locations, error: locationsError } = locationIds.length
-    ? await admin.from("geofence_locations").select("id, name").in("id", locationIds)
-    : { data: [], error: null }
+  const { data: locations, error: locationsError } = await fetchByIds("geofence_locations", "id, name", locationIds)
   if (locationsError) return NextResponse.json({ error: locationsError.message }, { status: 500 })
 
   const profileMap = new Map((profiles || []).map((profile: any) => [profile.id, profile]))
@@ -72,5 +82,5 @@ export async function GET() {
       request_subject: requestSubject,
     }
   }
-  return NextResponse.json({ leave: (leaveResult.data || []).map(decorate), loans: (loanResult.data || []).map(decorate), transport: transportRows.map(decorate) })
+  return NextResponse.json({ leave: leaveData.map(decorate), loans: loanData.map(decorate), transport: transportRows.map(decorate) })
 }

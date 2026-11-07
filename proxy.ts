@@ -72,7 +72,7 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   "/dashboard/transport": ["admin", "administrator", "it-admin", "it_admin", "driver", "chief_driver", "regional_chief_driver", "district_officer", "staff", "contract", "audit_staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "transport_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office", "regional_manager", "hr_records", "hr_records_officer", "hr_records_manager", "department_head", "managing_director", "director_hr", "manager_hr", "hr", "hr_officer", "hr_leave_office", "leave_loan_officer", "hr_executive", "hr_executive_officer", "secretary", "committee", "loan_committee"],
 
   // HR Records reference-management queue
-  "/dashboard/hr-records": ["admin", "hr_records", "it-admin", "system_admin"],
+  "/dashboard/hr-records": ["admin", "hr_records", "hr_records_officer", "hr_records_manager", "manager_hr", "director_hr", "hr_executive", "hr_executive_officer", "it-admin", "system_admin"],
 
   // Administrators may view disbursement status; confirmation actions remain Accounts-only.
   "/dashboard/disbursement-confirmation": ["admin", "accounts", "accounts_executive"],

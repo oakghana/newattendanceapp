@@ -32,6 +32,7 @@ type ActionKey =
   | "admin_committee_edit"
   | "admin_change_loan_type"
   | "admin_return_to_loan_office"
+  | "return_signed_memo_for_correction"
   | "hr_set_terms"
   | "director_finalize"
   | "save_memo_draft"
@@ -134,8 +135,10 @@ async function getDirectorSavedSignature(admin: any, userId: string) {
 function buildAutoMemo(req: any) {
   const isFuneralLoan = isFuneralLoanType(req.loan_type_key, req.loan_type_label)
   return [
-    "QUALITY CONTROL COMPANY LIMITED",
-    "HUMAN RESOURCES DEPARTMENT",
+    "QUALITY CONTROL COMPANY LTD.",
+    "(COCOBOD)",
+    "P.O Box M14",
+    "Accra Ghana",
     "",
     `Reference: ${memoReference(req)}`,
     `Date: ${new Date().toISOString().slice(0, 10)}`,
@@ -972,6 +975,40 @@ export async function POST(request: NextRequest) {
           { request_id: req.id, role: "watcher", owner_id: ownerId },
         )
       }
+    }
+
+    if (action === "return_signed_memo_for_correction") {
+      actionHandled = true
+      if (!['admin', 'managing_director'].includes(role)) {
+        return NextResponse.json({ error: "Only Administrators or the Managing Director can return a signed memo for correction." }, { status: 403 })
+      }
+      if (!['awaiting_director_hr', 'approved_director'].includes(String(req.status || ''))) {
+        return NextResponse.json({ error: "This memo is not at a signed HR or MD review stage." }, { status: 400 })
+      }
+      const correctionNote = String(note || body.correction_note || '').trim()
+      if (correctionNote.length < 5) return NextResponse.json({ error: "Provide a correction note for HR Executive." }, { status: 400 })
+      update.status = "awaiting_hr_executives"
+      update.director_hr_id = null
+      update.director_signature_mode = null
+      update.director_signature_text = null
+      update.director_signature_data_url = null
+      update.director_decision_at = null
+      update.md_approved_at = null
+      update.md_approved_by = null
+      update.md_approved_by_name = null
+      update.director_note = correctionNote
+      await timeline(admin, {
+        loan_request_id: req.id,
+        actor_id: user.id,
+        actor_role: role,
+        action_key: "signed_memo_returned_for_correction",
+        from_status: req.status,
+        to_status: "awaiting_hr_executives",
+        note: correctionNote,
+        metadata: { correction_note: correctionNote, returned_by: user.id },
+      })
+      const { data: hrUsers } = await admin.from("user_profiles").select("id").in("role", ["hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "admin"]).eq("is_active", true)
+      await notifyUsers(admin, (hrUsers || []).map((row: any) => row.id), "Signed Loan Memo Returned for Correction", `Loan ${req.request_number} was returned by ${`${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || role} for HR Executive correction. Note: ${correctionNote}`, "loan_memo_correction", { request_id: req.id, correction_note: correctionNote })
     }
 
     if (action === "director_finalize") {
