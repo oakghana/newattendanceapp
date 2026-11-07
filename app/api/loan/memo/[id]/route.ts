@@ -865,7 +865,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       const values = Array.isArray(source) ? source : String(source || "").split(/[\r\n,]+/)
       for (const value of values) {
         const recipient = String(value || "").replace(/\s+/g, " ").trim()
-        const key = recipient.toLowerCase()
+        const key = recipient.toLowerCase().replace(/[^a-z0-9]+/g, "")
         if (recipient && !seenCc.has(key)) {
           seenCc.add(key)
           ccRecipients.push(recipient)
@@ -873,7 +873,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       }
     }
     for (const recipient of defaultCcRecipients) {
-      const key = recipient.toLowerCase()
+      const key = recipient.toLowerCase().replace(/[^a-z0-9]+/g, "")
       if (!seenCc.has(key)) {
         seenCc.add(key)
         ccRecipients.push(recipient)
