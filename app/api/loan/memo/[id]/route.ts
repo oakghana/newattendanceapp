@@ -764,16 +764,34 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     doc.text("You can count on our co-operation.", marginLeft, y)
     y += 14
 
+    // Measure the printed signer name first so the signature can be centred on it.
+    const dirName = fmtName(directorProfile).toUpperCase() || "APPROVING AUTHORITY"
+    const dirTitle = String((directorProfile as any)?.position || (directorProfile as any)?.role || "APPROVING AUTHORITY").replace(/_/g, " ").toUpperCase()
+    doc.setFont("times", "bold")
+    doc.setFontSize(10)
+    const dirNameWidth = doc.getTextWidth(dirName)
+    const signatureCenterX = marginLeft + dirNameWidth / 2
+
     let sigImgY = -1
 
-    // Add signature image if available — RENDER ABOVE NAME (exact leave module approach)
+    // Add signature image if available — RENDER ABOVE NAME, centred on it
     for (const candidate of signatureCandidates) {
       try {
         const signatureImage = await resolvePdfSignatureImage(candidate, request.nextUrl.origin)
         if (!signatureImage) continue
-        doc.addImage(signatureImage.dataUrl, signatureImage.imageType, marginLeft, y, 72, 28)
+        // Keep the signature's own proportions so a wide or tall drawing is not stretched.
+        let naturalSize: { width: number; height: number } = { width: 72, height: 28 }
+        try {
+          naturalSize = doc.getImageProperties(signatureImage.dataUrl)
+        } catch {
+          // Use the default box if the image dimensions cannot be read.
+        }
+        const scale = Math.min(64 / naturalSize.width, 26 / naturalSize.height)
+        const imageWidth = naturalSize.width * scale
+        const imageHeight = naturalSize.height * scale
+        doc.addImage(signatureImage.dataUrl, signatureImage.imageType, signatureCenterX - imageWidth / 2, y, imageWidth, imageHeight)
         sigImgY = y
-        y += 30
+        y += imageHeight + 1
         break
       } catch (signatureError) {
         console.log("[v0] Loan memo signature candidate could not be embedded:", signatureError instanceof Error ? signatureError.message : signatureError)
@@ -787,7 +805,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       doc.setFont("times", "bolditalic")
       doc.setFontSize(13)
       doc.setTextColor(0, 0, 0)
-      doc.text(fallbackSigText, marginLeft, y + 14)
+      doc.text(fallbackSigText, signatureCenterX, y + 14, { align: "center" })
       y += 20
     }
 
@@ -795,15 +813,13 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     doc.setTextColor(0, 0, 0)
     doc.setDrawColor(0, 0, 0)
     doc.setLineWidth(0.4)
-    doc.line(marginLeft, y, marginLeft + 65, y)
+    doc.line(marginLeft, y, marginLeft + Math.max(dirNameWidth, 30), y)
     y += 5.5
 
     // Name (bold)
-    const dirName = fmtName(directorProfile).toUpperCase()
-    const dirTitle = String((directorProfile as any)?.position || (directorProfile as any)?.role || "APPROVING AUTHORITY").replace(/_/g, " ").toUpperCase()
     doc.setFont("times", "bold")
     doc.setFontSize(10)
-    doc.text(dirName || "APPROVING AUTHORITY", marginLeft, y)
+    doc.text(dirName, marginLeft, y)
     y += 5.5
 
     // Title

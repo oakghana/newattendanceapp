@@ -3341,15 +3341,31 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           const isBlank = trimmed.length === 0
 
           if (lineIndex === signerNameIndex && sigImageDataUrl && !signatureDrawn) {
-            if (y + 20 > pageHeight - 22) {
+            // Centre the signature on the printed name, keeping its own proportions.
+            doc.setFont("times", "bold")
+            doc.setFontSize(8.8)
+            const nameWidth = doc.getTextWidth(line)
+            let naturalSize: { width: number; height: number } = { width: 60, height: 22 }
+            try {
+              naturalSize = doc.getImageProperties(sigImageDataUrl)
+            } catch {
+              // Use the default box if the image dimensions cannot be read.
+            }
+            const scale = Math.min(56 / naturalSize.width, 22 / naturalSize.height)
+            const imageWidth = naturalSize.width * scale
+            const imageHeight = naturalSize.height * scale
+            // The blank lines before the name already leave some room; add only what the image still needs.
+            const extraSpace = Math.max(0, imageHeight - 9)
+            if (y + extraSpace + 6 > pageHeight - 22) {
               doc.addPage()
               renderHeader()
-              y = topMargin + 18
+              y = topMargin + 18 + imageHeight + 3
+            } else {
+              y += extraSpace
             }
             try {
-              doc.addImage(sigImageDataUrl, signatureImageType, marginLeft, y - 3, 68, 24)
+              doc.addImage(sigImageDataUrl, signatureImageType, marginLeft + nameWidth / 2 - imageWidth / 2, y - 2.8 - imageHeight, imageWidth, imageHeight)
               signatureDrawn = true
-              y += 23
             } catch {
               // Fall back to the printed name only if the image cannot be embedded.
             }
@@ -8647,8 +8663,11 @@ if (!modalDisbursement || !modalRecovery) {
                 )}
                 {actionModal.actionType !== "hr_terms" && modalSignatureMode !== "typed" && modalSignatureDataUrl && (
                   <div className="mt-4 font-serif">
-                    <img src={modalSignatureDataUrl} alt="Signature" className="max-h-24 w-64 object-contain object-left border-b border-slate-400 pb-1" draggable={false} />
-                    <div className="mt-1 text-[12px] font-semibold">{`${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim().toUpperCase()}</div>
+                    <div className="inline-block">
+                      {/* w-0 + min-w-full lets the printed name set the block width, so the signature centres on the name. */}
+                      <img src={modalSignatureDataUrl} alt="Signature" className="block h-24 w-0 min-w-full object-contain object-center" draggable={false} />
+                      <div className="border-t border-slate-400 pt-1 text-[12px] font-semibold">{`${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim().toUpperCase()}</div>
+                    </div>
                     <div className="text-[12px] font-semibold">{String(data?.profile.position || "HR Executive").toUpperCase()}</div>
                     <div className="text-[12px] font-semibold">FOR: MANAGING DIRECTOR</div>
                   </div>
