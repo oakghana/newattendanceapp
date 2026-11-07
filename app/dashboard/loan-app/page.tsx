@@ -3283,13 +3283,15 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
         const usableWidth = pageWidth - marginLeft - marginRight
         const logoDataUrl = await loadImageAsDataUrl(`${window.location.origin}/images/qcc-logo.png`)
 
+        let signatureWatermarkY = -1
         const applySignatureSideWatermark = () => {
+          if (signatureWatermarkY < 0) return
           const targetPage = doc.getNumberOfPages()
           doc.setPage(targetPage)
-          doc.setTextColor(200, 200, 200)
+          doc.setTextColor(190, 190, 190)
           doc.setFont("helvetica", "bold")
-          doc.setFontSize(9)
-          doc.text(watermarkText, marginLeft + 6, pageHeight - 72, { angle: -15 })
+          doc.setFontSize(6.5)
+          doc.text(watermarkText, marginLeft + 30, signatureWatermarkY + 12, { align: "center" })
         }
 
         const addPageFrame = () => {
@@ -3385,7 +3387,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               y += extraSpace
             }
             try {
-              doc.addImage(sigImageDataUrl, signatureImageType, marginLeft + nameWidth / 2 - imageWidth / 2, y - 2.8 - imageHeight, imageWidth, imageHeight)
+              const signatureImageY = y - 2.8 - imageHeight
+              doc.addImage(sigImageDataUrl, signatureImageType, marginLeft + nameWidth / 2 - imageWidth / 2, signatureImageY, imageWidth, imageHeight)
+              signatureWatermarkY = signatureImageY
               signatureDrawn = true
             } catch {
               // Fall back to the printed name only if the image cannot be embedded.
@@ -8697,7 +8701,7 @@ if (!modalDisbursement || !modalRecovery) {
                     <div className="inline-block">
                       {/* w-0 + min-w-full lets the printed name set the block width, so the signature centres on the name. */}
                       <img src={modalSignatureDataUrl} alt="Signature" className="block h-24 w-0 min-w-full object-contain object-center" draggable={false} />
-                      <div className="border-t border-slate-400 pt-1 text-[12px] font-semibold">{`${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim().toUpperCase()}</div>
+                      <div className="pt-1 text-[12px] font-semibold">{`${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim().toUpperCase()}</div>
                     </div>
                     <div className="text-[12px] font-semibold">{String(data?.profile.position || "HR Executive").toUpperCase()}</div>
                     <div className="text-[12px] font-semibold">FOR: MANAGING DIRECTOR</div>

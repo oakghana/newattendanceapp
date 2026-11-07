@@ -137,10 +137,12 @@ function applySignatureSideWatermark(doc: jsPDF, sigY: number, marginLeft: numbe
   if (sigY <= 0) return
   const targetPage = doc.getNumberOfPages()
   doc.setPage(targetPage)
-  doc.setTextColor(200, 200, 200)
+  doc.setTextColor(190, 190, 190)
   doc.setFont("helvetica", "bold")
-  doc.setFontSize(12)
-  doc.text(MEMO_WATERMARK_TEXT, marginLeft + 2, sigY + 8, { angle: -15 })
+  doc.setFontSize(6.5)
+  // Keep the verification mark centered over the signature image only; it must
+  // never cross the signer's printed name, title, or the HR rank.
+  doc.text(MEMO_WATERMARK_TEXT, marginLeft + 32, sigY + 14, { align: "center" })
 }
 
 async function resolvePdfSignatureImage(source?: string | null, origin?: string) {
@@ -322,16 +324,18 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
   // Use the administrator-maintained Running Loans values first. For older records
   // that predate the override table, use the confirmed disbursement and repayment
   // schedule dates before displaying TBD.
+  const isSalaryAdvance = isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label)
   const maintainedDisbursementDate = loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || loan.md_approved_at
   const maintainedRecoveryStartDate = loan.recovery_start_date || loan.next_payment_due || loan.repayment_start_date
-  const maintainedRecoveryMonths = loan.recovery_months || loan.deduction_period_months || loan.repayment_duration_months || loan.recovery_period_months || loan.recovery_duration_months
+  const maintainedRecoveryMonths = isSalaryAdvance
+    ? (loan.salary_advance_multiplier || loan.recovery_months || loan.deduction_period_months || loan.repayment_duration_months || loan.recovery_period_months || loan.recovery_duration_months)
+    : (loan.recovery_months || loan.deduction_period_months || loan.repayment_duration_months || loan.recovery_period_months || loan.recovery_duration_months)
   const disbMonth = fmtMemoMonth(maintainedDisbursementDate)
   const recovStart = fmtMemoMonth(maintainedRecoveryStartDate)
   const memoCopyRecipient =
     extractMemoCopyRecipient(loan.hr_note) ||
     extractMemoCopyRecipient(loan.loan_office_note) ||
     (isNonRegionalLocation(String(loan.staff_location_name || "")) ? "Accounts Manager" : "Deputy Accounts Manager")
-  const isSalaryAdvance = isSalaryAdvanceLoanType(loan.loan_type_key, loan.loan_type_label)
   const salaryAdvanceRecoveryMonths = Number(loan.recovery_months ?? loan.deduction_period_months ?? loan.repayment_duration_months)
   const salaryAdvanceRecoveryLabel = Number.isFinite(salaryAdvanceRecoveryMonths) && salaryAdvanceRecoveryMonths > 0
     ? String(Math.trunc(salaryAdvanceRecoveryMonths))
@@ -736,14 +740,14 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     doc.setFont("times", "normal")
     doc.setFontSize(9.5)
     for (const para of paragraphs) {
-      if (!para.trim()) { y += 3; continue }
+      if (!para.trim()) { y += 1.5; continue }
       const wrapped = doc.splitTextToSize(para, contentWidth)
       if (y + wrapped.length * 5.5 > pageHeight - 65) {
         doc.addPage()
         y = 24
       }
       doc.text(wrapped, marginLeft, y)
-      y += wrapped.length * 5.5 + 4
+      y += wrapped.length * 5.5 + 2.5
     }
 
     y += 8
@@ -796,7 +800,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
         const imageHeight = naturalSize.height * scale
         doc.addImage(signatureImage.dataUrl, signatureImage.imageType, signatureCenterX - imageWidth / 2, y, imageWidth, imageHeight)
         sigImgY = y
-        y += imageHeight + 1
+        y += imageHeight + 4
         break
       } catch (signatureError) {
         console.log("[v0] Loan memo signature candidate could not be embedded:", signatureError instanceof Error ? signatureError.message : signatureError)
@@ -814,14 +818,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       y += 20
     }
 
-    // Signature line
+    // Name (bold) — the signature image sits above it without a line crossing the signer.
     doc.setTextColor(0, 0, 0)
-    doc.setDrawColor(0, 0, 0)
-    doc.setLineWidth(0.4)
-    doc.line(marginLeft, y, marginLeft + Math.max(dirNameWidth, 30), y)
-    y += 5.5
+    y += 2
 
-    // Name (bold)
     doc.setFont("times", "bold")
     doc.setFontSize(10)
     doc.text(dirName, marginLeft, y)
@@ -855,16 +855,17 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const defaultCcRecipients = ["Deputy Director, Finance"]
     const enteredCcSources = [
       (loan as any).memo_draft_cc,
+      (loan as any).memo_cc,
       (loan as any).cc_recipients,
       (loan as any).cc_list,
     ]
     const ccRecipients: string[] = []
     const seenCc = new Set<string>()
     for (const source of enteredCcSources) {
-      const values = Array.isArray(source) ? source : String(source || "").split(/[\\r\\n,]+/)
+      const values = Array.isArray(source) ? source : String(source || "").split(/[\r\n,]+/)
       for (const value of values) {
-        const recipient = String(value || "").replace(/\\s+/g, " ").trim()
-        const key = recipient.toLowerCase()
+        const recipient = String(value || "").replace(/\s+/g, " ").trim()
+        const key = recipient.toLowerCase().replace(/[^a-z0-9]+/g, "")
         if (recipient && !seenCc.has(key)) {
           seenCc.add(key)
           ccRecipients.push(recipient)
@@ -872,7 +873,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       }
     }
     for (const recipient of defaultCcRecipients) {
-      const key = recipient.toLowerCase()
+      const key = recipient.toLowerCase().replace(/[^a-z0-9]+/g, "")
       if (!seenCc.has(key)) {
         seenCc.add(key)
         ccRecipients.push(recipient)
@@ -984,11 +985,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
         dx += 2.2
       }
 
-      // ── "MANAGING DIRECTOR" footer band — bold, centred
+      // ── Approver rank footer band — matches the actual MD approver profile
+      const approverRank = String((mdProfile as any)?.position || (mdProfile as any)?.role || "MANAGING DIRECTOR").replace(/_/g, " ").toUpperCase()
       doc.setFont("helvetica", "bold")
       doc.setFontSize(8)
       doc.setTextColor(inkR, inkG, inkB)
-      doc.text("MANAGING DIRECTOR", cx, stampTopY + 41, { align: "center" })
+      doc.text(approverRank, cx, stampTopY + 41, { align: "center" })
 
       // Thin solid separator above MD name
       doc.setDrawColor(inkR, inkG, inkB)
