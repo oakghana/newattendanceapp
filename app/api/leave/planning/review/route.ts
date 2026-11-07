@@ -4,6 +4,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { calculateRequestedDays, summarizeManagerReviewStatus, type LeavePlanReviewDecision } from "@/lib/leave-planning"
 import { isAnnualLeave, canNonRegionalPipelineAct, canRegionalPipelineAct, isSelfLeaveWorkflowRoute, resolveStaffAssignments } from "@/lib/hr-workflow"
 import { isRegionalManagerScopeMatch, resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
+import { isAnnualLeaveProcessingOpen, annualLeaveProcessingOpensAt } from "@/lib/annual-leave-processing"
 
 function isSchemaIssue(error: any) {
   const code = error?.code || ""
@@ -141,15 +142,15 @@ export async function POST(request: NextRequest) {
     }
     const isRegionalRequest = action === "forward_to_regional_manager"
       || String(workflowRequest.workflow_route || "").toLowerCase() === "regional"
-    const isJanuary2027AnnualLeave =
+    const isAnnualRegionalHrProcessing =
+      isRegionalRequest &&
+      isRegionalHr &&
       isAnnualLeave(String((workflowRequest as any).leave_type_key || "")) &&
-      String((workflowRequest as any).preferred_start_date || "").startsWith("2027-01")
-    const annualLeaveAdjustmentOpensAt = new Date("2026-12-01T00:00:00")
-    const annualLeaveAdjustmentIsClosed =
-      isRegionalRequest && isRegionalHr && isJanuary2027AnnualLeave && new Date() < annualLeaveAdjustmentOpensAt
-    if (annualLeaveAdjustmentIsClosed && (isRegionalForward || action === "recommend_change")) {
+      (isRegionalForward || action === "recommend_change")
+    if (isAnnualRegionalHrProcessing && !isAnnualLeaveProcessingOpen(String((workflowRequest as any).preferred_start_date || ""))) {
+      const opensAt = annualLeaveProcessingOpensAt(String((workflowRequest as any).preferred_start_date || ""))
       return NextResponse.json(
-        { error: "Annual leave requests starting in January 2027 have been received. Regional HR should notify the requester that adjustment and forwarding will open in December 2026." },
+        { error: `Annual Leave processing opens on ${opensAt?.toLocaleDateString("en-GB") || "the first day of the previous month"}. Regional HR cannot adjust or forward this request before that date.`, code: "ANNUAL_LEAVE_PROCESSING_NOT_OPEN" },
         { status: 423 },
       )
     }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
+import { annualLeaveProcessingReminderAt, annualLeaveProcessingOpensAt } from "@/lib/annual-leave-processing"
 
 function toIsoDate(d: Date) {
   return d.toISOString().split("T")[0]
@@ -8,6 +9,29 @@ function toIsoDate(d: Date) {
 export async function POST() {
   try {
     const supabase = await createClient()
+
+    const admin = await createAdminClient()
+    const today = new Date()
+    const { data: annualRequests } = await admin
+      .from("leave_plan_requests")
+      .select("id, user_id, preferred_start_date, preferred_end_date, workflow_route, status")
+      .in("leave_type_key", ["annual", "annual_leave"])
+      .in("status", ["pending_hod_review", "pending_regional_hr_review", "pending_regional_hr_office_review", "pending_hr_leave_processing", "hr_office_forwarded", "hod_approved"])
+    const promptDate = toIsoDate(today)
+    const dueForPrompt = (annualRequests || []).filter((request: any) => {
+      const reminderAt = annualLeaveProcessingReminderAt(request.preferred_start_date)
+      return Boolean(reminderAt && toIsoDate(reminderAt) === promptDate)
+    })
+    if (dueForPrompt.length) {
+      const { data: reviewers } = await admin.from("user_profiles").select("id, role, region_id").eq("is_active", true).in("role", ["hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"])
+      const notifications: any[] = []
+      for (const request of dueForPrompt) {
+        const regional = String(request.workflow_route || "").toLowerCase() === "regional"
+        const eligible = (reviewers || []).filter((reviewer: any) => regional ? String(reviewer.role || "").toLowerCase().includes("regional") : !String(reviewer.role || "").toLowerCase().includes("regional"))
+        for (const reviewer of eligible) notifications.push({ recipient_id: reviewer.id, type: "annual_leave_processing_prompt", title: "Annual Leave Processing Opens Soon", message: `Annual leave beginning ${request.preferred_start_date} becomes available for ${regional ? "Regional HR" : "HR Leave Office"} processing in two weeks. Please prepare to review and process the request.`, data: { leave_plan_request_id: request.id, start_date: request.preferred_start_date, processing_opens: toIsoDate(annualLeaveProcessingOpensAt(request.preferred_start_date) || new Date("invalid")) }, is_read: false })
+      }
+      if (notifications.length) await admin.from("staff_notifications").insert(notifications)
+    }
 
     const target = new Date()
     target.setDate(target.getDate() + 7)
