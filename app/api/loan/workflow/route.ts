@@ -1160,7 +1160,7 @@ export async function GET() {
             hrOffice: canDoHrOffice(role, deptName, deptCode),
             directorHr: canDoDirectorHr(role, deptName, deptCode),
             viewAllTabs: viewAllTabsFallback,
-            allLoans: isAdminRole(role) || isManagingDirector || ["loan_office", "loan_officer", "hr_loan_office", "leave_loan_officer", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
+            allLoans: isAdminRole(role) || role === "managing_director" || ["loan_office", "loan_officer", "hr_loan_office", "leave_loan_officer", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "hr_executive", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
           },
         },
         { status: 200 },
