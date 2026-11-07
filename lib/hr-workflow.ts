@@ -62,7 +62,7 @@ export function isSelfLeaveWorkflowRoute(workflowRoute: string | null | undefine
 }
 
 export function isHrRecordsRole(role: string | null | undefined) {
-  return ["admin", "hr_records", "hr_records_officer", "hr_records_manager"].includes(normalizeWorkflowRole(role))
+  return ["admin", "hr_records", "hr_records_officer", "hr_records_manager", "manager_hr", "director_hr", "hr_executive", "hr_executive_officer"].includes(normalizeWorkflowRole(role))
 }
 
 export function isRegionalHrLeaveOfficeRole(role: string | null | undefined) {
