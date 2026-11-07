@@ -62,7 +62,9 @@ export default function EmailCenterClient() {
   const [manualRecipients, setManualRecipients] = useState("")
   const [ccRecipients, setCcRecipients] = useState("")
   const [ccSettings, setCcSettings] = useState<Record<string, string>>({ loan: "", leave: "", off_premises: "", transport: "", system: "" })
+  const [emailAlertsEnabled, setEmailAlertsEnabled] = useState(true)
   const [isSavingCc, setIsSavingCc] = useState(false)
+  const [isSavingEmailAlerts, setIsSavingEmailAlerts] = useState(false)
   const [recipientMode, setRecipientMode] = useState<"categories" | "manual">("categories")
   const [historyPage, setHistoryPage] = useState(1)
   const HISTORY_PAGE_SIZE = 25
@@ -83,6 +85,7 @@ export default function EmailCenterClient() {
     const templateData = await templateResponse.json(); const logData = await logResponse.json(); const ccData = await ccResponse.json()
     setTemplates(templateData.templates || []); setLogs(logData.logs || [])
     setCcSettings((current) => ({ ...current, ...ccToText(ccData.ccSettings) }))
+    setEmailAlertsEnabled(ccData.emailAlertsEnabled !== false)
     if (!selected && templateData.templates?.[0]) selectTemplate(templateData.templates[0])
   }
   function selectTemplate(template: any) {
@@ -100,6 +103,21 @@ export default function EmailCenterClient() {
     const response = await fetch("/api/admin/email-center", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: selected.id, subject: templateSubject, html_body: html, text_body: templateMessage, accent_color: templateAccent, is_active: selected.is_active }) })
     setMessage(response.ok ? "Template saved. Future alerts will use this design." : "Unable to save template."); await load()
   }
+  async function toggleEmailAlerts(enabled: boolean) {
+    setIsSavingEmailAlerts(true)
+    try {
+      const response = await fetch("/api/admin/email-center", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emailAlertsEnabled: enabled }) })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok || !result.success) throw new Error(result.error || "Unable to update email alerts")
+      setEmailAlertsEnabled(result.emailAlertsEnabled !== false)
+      setMessage(result.emailAlertsEnabled ? "All application email alerts are enabled." : "All application email alerts are disabled. Email templates and CC settings are preserved.")
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update email alerts")
+    } finally {
+      setIsSavingEmailAlerts(false)
+    }
+  }
+
   async function saveCcSettings() {
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     const invalidEntries: string[] = []
@@ -214,6 +232,10 @@ export default function EmailCenterClient() {
 
   return <main className="min-h-screen bg-slate-950 p-4 text-slate-100 md:p-8"><div className="mx-auto max-w-7xl space-y-6">
     <header className="flex flex-col gap-6 rounded-3xl bg-gradient-to-br from-teal-900 via-slate-900 to-slate-950 p-7 shadow-2xl md:flex-row md:items-center md:justify-between"><div className="flex items-start gap-4"><div className="rounded-2xl bg-white p-2"><img src={logoUrl} alt="QCC logo" className="h-12 w-12 rounded-xl object-contain" /></div><div><p className="text-xs font-bold uppercase tracking-[0.24em] text-teal-300">Administrator tools</p><h1 className="mt-2 text-3xl font-bold tracking-tight md:text-4xl">Email center</h1><p className="mt-2 max-w-2xl text-slate-300">Send formal staff communications, edit alert designs without writing HTML, and monitor provider acceptance and failures.</p></div></div><div className="flex items-center gap-3 rounded-2xl border border-teal-700/50 bg-teal-950/50 px-5 py-4 text-sm text-teal-100"><ShieldCheck className="h-5 w-5 text-teal-300" /><span><strong className="block">Admin only</strong>Resend delivery is active</span></div></header>
+    <section className={`flex flex-col gap-3 rounded-2xl border p-4 md:flex-row md:items-center md:justify-between ${emailAlertsEnabled ? "border-teal-700/50 bg-teal-950/40 text-teal-100" : "border-red-700/60 bg-red-950/60 text-red-100"}`} aria-labelledby="global-email-alerts-heading">
+      <div><strong id="global-email-alerts-heading" className="block">Global application email alerts: {emailAlertsEnabled ? "Enabled" : "Disabled"}</strong><span className="text-sm opacity-80">Controls workflow, request, approval, attendance and broadcast email delivery. CC settings remain saved.</span></div>
+      <Button type="button" onClick={() => void toggleEmailAlerts(!emailAlertsEnabled)} disabled={isSavingEmailAlerts} className={emailAlertsEnabled ? "bg-red-700 text-white hover:bg-red-600" : "bg-teal-600 text-white hover:bg-teal-500"}>{isSavingEmailAlerts ? "Saving..." : emailAlertsEnabled ? "Disable all alerts" : "Enable all alerts"}</Button>
+    </section>
     <div className="flex flex-col gap-3 rounded-2xl border border-amber-700/50 bg-amber-950/40 p-4 text-amber-100 md:flex-row md:items-center md:justify-between">
       <div><strong className="block">Missed checkout warnings</strong><span className="text-sm text-amber-200">See who has not checked out, choose who to process, and edit the warning wording before it is sent.</span></div>
       <Button type="button" onClick={processMissedCheckoutWarnings} disabled={isProcessingCheckoutWarnings} className="bg-amber-600 text-white hover:bg-amber-500"><RefreshCw className={`mr-2 h-4 w-4 ${isProcessingCheckoutWarnings ? "animate-spin" : ""}`} />{isProcessingCheckoutWarnings ? "Loading staff list..." : "Review checkout warnings"}</Button>

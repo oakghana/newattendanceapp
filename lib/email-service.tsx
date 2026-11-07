@@ -222,6 +222,10 @@ class EmailService {
       const adminClient = await createAdminClient()
       const { data: settingsRow } = await adminClient.from("system_settings").select("settings").eq("id", 1).maybeSingle()
       const settings = settingsRow?.settings || {}
+      if (settings.email_alerts_enabled === false) {
+        console.info("[EmailService] Email alerts are disabled by an administrator.")
+        return { success: false, suppressed: true, error: "Email alerts are currently disabled by an administrator." }
+      }
       const ccByModule = typeof settings.emailCcByModule === "string" ? JSON.parse(settings.emailCcByModule) : settings.emailCcByModule || {}
       const moduleKey = module.toLowerCase().replace(/-/g, "_")
       const configuredCopy = ccByModule[module] || ccByModule[moduleKey] || ccByModule[moduleKey.replace(/_/g, "-")] || []

@@ -32,10 +32,13 @@ export async function GET(request: NextRequest) {
   const auth = await requireAdmin()
   if (auth.error) return auth.error
   const view = request.nextUrl.searchParams.get("view") || "logs"
-  if (view === "cc") {
+  if (view === "cc" || view === "settings") {
     const { data, error } = await auth.supabase.from("system_settings").select("settings").eq("id", 1).maybeSingle()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ccSettings: data?.settings?.emailCcByModule || {} })
+    return NextResponse.json({
+      ccSettings: data?.settings?.emailCcByModule || {},
+      emailAlertsEnabled: data?.settings?.email_alerts_enabled !== false,
+    })
   }
   if (view === "templates") {
     const { data, error } = await auth.supabase.from("email_templates").select("*").order("module").order("event_key")
@@ -46,6 +49,20 @@ export async function GET(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const logs = data || []
   return NextResponse.json({ logs })
+}
+
+export async function PATCH(request: NextRequest) {
+  const auth = await requireAdmin()
+  if (auth.error) return auth.error
+  const body = await request.json().catch(() => ({}))
+  const current = await auth.supabase.from("system_settings").select("settings").eq("id", 1).maybeSingle()
+  if (current.error) return NextResponse.json({ error: current.error.message }, { status: 500 })
+  const settings = { ...(current.data?.settings || {}) }
+  if (typeof body.emailAlertsEnabled === "boolean") settings.email_alerts_enabled = body.emailAlertsEnabled
+  if (body.ccSettings && typeof body.ccSettings === "object") settings.emailCcByModule = body.ccSettings
+  const { data, error } = await auth.supabase.from("system_settings").update({ settings, updated_at: new Date().toISOString() }).eq("id", 1).select("settings").maybeSingle()
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true, emailAlertsEnabled: data?.settings?.email_alerts_enabled !== false, ccSettings: data?.settings?.emailCcByModule || {} })
 }
 
 export async function DELETE() {
