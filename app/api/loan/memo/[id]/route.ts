@@ -462,7 +462,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     // Fetch applicant, director HR profile + signature only
     const applicantId = String(loan.user_id || "")
-    let directorHrId = loan.director_hr_id ? String(loan.director_hr_id) : null
+    let directorHrId = loan.director_hr_id
+      ? String(loan.director_hr_id)
+      : ["awaiting_hr_executives", "pending_hr_executive_review"].includes(String(loan.status || "")) && loan.hr_officer_id
+        ? String(loan.hr_officer_id)
+        : null
 
     // Fallback for legacy rows: use the latest workflow actor who handled director finalization/terms.
     if (!directorHrId) {
@@ -660,7 +664,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     let y = 46
 
-    // ─── Our Ref No + Date ─���──────────────────────────────────────────
+    // ─── Our Ref No + Date ─���────────────────────────────────���─────────
     doc.setTextColor(0, 0, 0)
     doc.setFont("times", "normal")
     doc.setFontSize(9)
