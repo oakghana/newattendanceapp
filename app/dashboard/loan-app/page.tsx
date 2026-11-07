@@ -3317,9 +3317,6 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           doc.setTextColor(70, 70, 70)
           doc.text(["P.O Box M14", "Accra Ghana"], pageWidth - 42, 36)
           doc.setFont("times", "normal")
-          doc.setFontSize(7)
-          doc.text(`Date: ${new Date().toISOString().slice(0, 10)}`, pageWidth - 42, 44)
-          doc.setFont("times", "normal")
           doc.setTextColor(0, 0, 0)
         }
 
@@ -3395,14 +3392,6 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
           doc.text(wrapped, marginLeft, y)
           y += projectedHeight
-        }
-
-        if (sigText && !memoText.includes(sigText)) {
-          y += 4
-          doc.setFont("times", "bold")
-          doc.setFontSize(8.8)
-          doc.text(sigText, marginLeft, y)
-          y += 4.9
         }
 
         applySignatureSideWatermark()
