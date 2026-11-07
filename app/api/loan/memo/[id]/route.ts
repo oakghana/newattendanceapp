@@ -159,7 +159,16 @@ async function resolvePdfSignatureImage(source?: string | null) {
 }
 
 async function resolveThroRecipient(admin: any, loan: any, applicantId: string) {
-  let reviewerId = loan.hod_reviewer_id ? String(loan.hod_reviewer_id) : ""
+  let reviewerId = String(loan.regional_manager_user_id || loan.regional_manager_id || "")
+  if (!reviewerId) reviewerId = loan.hod_reviewer_id ? String(loan.hod_reviewer_id) : ""
+
+  if (!reviewerId) {
+    const { data: applicant } = await admin.from("user_profiles").select("assigned_location_id").eq("id", applicantId).maybeSingle()
+    if (applicant?.assigned_location_id) {
+      const { data: regionalManagerLocation } = await admin.from("regional_manager_locations").select("regional_manager_id").eq("location_id", applicant.assigned_location_id).eq("is_active", true).limit(1).maybeSingle()
+      if (regionalManagerLocation?.regional_manager_id) reviewerId = String(regionalManagerLocation.regional_manager_id)
+    }
+  }
 
   if (!reviewerId) {
     const { data: linkage } = await admin
@@ -524,6 +533,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
             .limit(1)
             .maybeSingle() as any,
     ])
+
+    loan.staff_full_name = loan.staff_full_name || fmtName(applicantProfile) || "REQUESTING STAFF"
+    loan.staff_number = loan.staff_number || applicantProfile?.employee_id || ""
 
     // ─── Fetch HR Executive signature (for the letter signatory section) ────
     let signerSignatureUrl = ""
