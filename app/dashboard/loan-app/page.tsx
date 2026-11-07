@@ -881,8 +881,8 @@ function buildDirectorAutoMemoDraft(
   currentHodProfile?: any,
   signer?: MemoSigner,
 ) {
-  const isSalaryAdvance = row.loan_type_key === "salary_advance" || String(row.loan_type_label || "").toLowerCase().includes("salary advance")
-  const calculatedSalaryAdvanceAmount = isSalaryAdvance && row.salary_advance_amount != null
+  const isSalaryAdvanceMemo = row.loan_type_key === "salary_advance" || String(row.loan_type_label || "").toLowerCase().includes("salary advance")
+  const calculatedSalaryAdvanceAmount = isSalaryAdvanceMemo && row.salary_advance_amount != null
     ? Number(row.salary_advance_amount)
     : null
   const amount = calculatedSalaryAdvanceAmount ?? row.fixed_amount ?? row.requested_amount ?? 0
@@ -902,13 +902,13 @@ function buildDirectorAutoMemoDraft(
   const recoveryMonth = fmtMemoMonth(row.recovery_start_date)
   const disbursementMonth = fmtMemoMonth(row.disbursement_date)
   const submittedDate = (row.submitted_at || row.created_at || today).toString().slice(0, 10)
-  const months = isSalaryAdvance
+  const months = isSalaryAdvanceMemo
     ? (row.recovery_months || row.salary_advance_multiplier || row.deduction_period_months || "—")
     : (row.deduction_period_months || row.recovery_months || "—")
-  const salaryAdvanceLine = isSalaryAdvance && row.basic_salary && row.salary_advance_multiplier
+  const salaryAdvanceLine = isSalaryAdvanceMemo && row.basic_salary && row.salary_advance_multiplier
     ? `Monthly Salary: GHc ${fmtAmount(row.basic_salary)} × ${row.salary_advance_multiplier} month(s) = GHc ${fmtAmount(amount)}`
     : null
-  const salaryAdvanceDaysLine = isSalaryAdvance && (row.recovery_months || row.deduction_period_months)
+  const salaryAdvanceDaysLine = isSalaryAdvanceMemo && (row.recovery_months || row.deduction_period_months)
   ? `Number of Months for Recovery: ${row.recovery_months || row.deduction_period_months}`
   : null
   const signerName = String(signer?.name || "HR EXECUTIVE").trim().toUpperCase()
@@ -7053,7 +7053,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     <div className="flex items-center gap-2">
                       <div className="text-xs font-semibold text-slate-700">Archived</div>
                       <div className="px-2 py-1 rounded bg-slate-200 text-slate-700 text-xs font-semibold">
-                        {row.director_hr_name ? "✓ Approved" : "✗ Denied"}
+                        {row.director_hr_name ? "✓ Approved" : "�� Denied"}
                       </div>
                     </div>
                   </div>
