@@ -860,9 +860,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const ccRecipients: string[] = []
     const seenCc = new Set<string>()
     for (const source of enteredCcSources) {
-      const values = Array.isArray(source) ? source : String(source || "").split(/[\\r\\n,]+/)
+      const values = Array.isArray(source) ? source : String(source || "").split(/[\r\n,]+/)
       for (const value of values) {
-        const recipient = String(value || "").replace(/\\s+/g, " ").trim()
+        const recipient = String(value || "").replace(/\s+/g, " ").trim()
         const key = recipient.toLowerCase()
         if (recipient && !seenCc.has(key)) {
           seenCc.add(key)
