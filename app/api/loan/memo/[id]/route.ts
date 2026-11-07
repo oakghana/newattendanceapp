@@ -121,7 +121,7 @@ function extractEditedMemoBody(value: string): string[] {
     const key = line.toLowerCase()
     if (seen.has(key)) return false
     seen.add(key)
-    return !/^(quality control company|qccob?d|\(cocobod\)|p\.?o\.? box|accra ghana|date:\s*|our ref|your ref|to:|through:|thro:|human resources department|for: managing director)$/i.test(line)
+    return !/^(quality control company|qccob?d|\(cocobod\)|p\.?o\.? box|accra ghana|date:\s*|our ref|your ref|to:|through:|thro:|human resources department|for: managing director|you can count on our co-operation\.?$/i.test(line)
   })
   const result: string[] = []
   for (const line of filtered) {
@@ -852,7 +852,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     // Keep the distribution block outside the editable body so regenerating a
     // signed PDF from an edited draft cannot drop either kind of recipient.
-    const defaultCcRecipients = ["Deputy Director, Finance"]
+    const defaultCcRecipients: string[] = []
     const enteredCcSources = [
       (loan as any).memo_draft_cc,
       (loan as any).memo_cc,
