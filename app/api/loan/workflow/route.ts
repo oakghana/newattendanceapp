@@ -866,10 +866,13 @@ export async function GET() {
     const staffProfileMap: Map<string, any> = new Map()
     const locationMap: Map<string, any> = new Map()
     if (uniqueUserIds.length > 0) {
-      const { data: staffProfiles } = await admin
+      const profileBatches: string[][] = []
+      for (let index = 0; index < uniqueUserIds.length; index += 100) profileBatches.push(uniqueUserIds.slice(index, index + 100))
+      const profileResults = await Promise.all(profileBatches.map((batch) => admin
         .from("user_profiles")
         .select("id, first_name, last_name, employee_id, position, email, assigned_location_id")
-        .in("id", uniqueUserIds)
+        .in("id", batch)))
+      const staffProfiles = profileResults.flatMap((result: any) => result.data || [])
       const assignedLocationIds = Array.from(new Set((staffProfiles || []).map((profile: any) => profile.assigned_location_id).filter(Boolean)))
       if (assignedLocationIds.length > 0) {
         const { data: locations } = await admin
