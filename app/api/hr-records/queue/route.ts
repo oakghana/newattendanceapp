@@ -19,12 +19,18 @@ export async function GET() {
     admin.from("transport_requests").select("id, requester_id, request_type, purpose, status, workflow_stage, memo_reference, memo_date, memo_subject, updated_at, created_at").in("workflow_stage", ["hr_records_review", "transport_manager_assignment", "referenced"]).order("updated_at", { ascending: false }),
   ])
 
-  if (leaveResult.error) return NextResponse.json({ error: leaveResult.error.message }, { status: 500 })
-  if (loanResult.error) return NextResponse.json({ error: loanResult.error.message }, { status: 500 })
-  if (transportResult.error) return NextResponse.json({ error: transportResult.error.message }, { status: 500 })
+  const leaveData = leaveResult.error
+    ? (await admin.from("leave_plan_requests").select("id, user_id, leave_type_key, status, workflow_stage, memo_reference, memo_reference_locked, memo_reference_locked_at, submitted_at, updated_at, preferred_start_date, preferred_end_date, reason").order("updated_at", { ascending: false }).limit(500)).data || []
+    : leaveResult.data || []
+  const loanData = loanResult.error
+    ? (await admin.from("loan_requests").select("id, user_id, request_number, reference_number, status, workflow_stage, memo_reference_locked, memo_reference_locked_at, submitted_at, updated_at, md_approved_at, md_approved_by_name, hod_review_note, is_imported").order("updated_at", { ascending: false }).limit(500)).data || []
+    : loanResult.data || []
+  const transportData = transportResult.error
+    ? (await admin.from("transport_requests").select("id, requester_id, request_type, purpose, status, workflow_stage, memo_reference, memo_date, memo_subject, updated_at, created_at").order("updated_at", { ascending: false }).limit(500)).data || []
+    : transportResult.data || []
 
-  const transportRows = (transportResult.data || []).filter((row: any) => row.request_type === "regional_transport" || row.workflow_stage !== "transport_manager_assignment").map((row: any) => ({ ...row, user_id: row.requester_id, entity: "transport", request_number: row.memo_reference || `Transport ${row.id.slice(0, 8).toUpperCase()}`, reference_number: row.memo_reference, request_subject: row.memo_subject || row.purpose }))
-  const allRows = [...(leaveResult.data || []), ...(loanResult.data || []), ...transportRows]
+  const transportRows = (transportData || []).filter((row: any) => row.request_type === "regional_transport" || row.workflow_stage !== "transport_manager_assignment").map((row: any) => ({ ...row, user_id: row.requester_id, entity: "transport", request_number: row.memo_reference || `Transport ${row.id.slice(0, 8).toUpperCase()}`, reference_number: row.memo_reference, request_subject: row.memo_subject || row.purpose }))
+  const allRows = [...leaveData, ...loanData, ...transportRows]
   const userIds = Array.from(new Set(allRows.map((row: any) => row.user_id).filter(Boolean)))
   const { data: profiles, error: profilesError } = userIds.length
     ? await admin.from("user_profiles").select("id, first_name, last_name, employee_id, role, department_id, assigned_location_id").in("id", userIds)
@@ -70,5 +76,5 @@ export async function GET() {
       request_subject: requestSubject,
     }
   }
-  return NextResponse.json({ leave: (leaveResult.data || []).map(decorate), loans: (loanResult.data || []).map(decorate), transport: transportRows.map(decorate) })
+  return NextResponse.json({ leave: leaveData.map(decorate), loans: loanData.map(decorate), transport: transportRows.map(decorate) })
 }
