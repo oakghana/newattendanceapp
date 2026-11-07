@@ -4,6 +4,7 @@ import { isOvernightShiftDept } from "@/lib/attendance-utils"
 import { type NextRequest, NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
+export const maxDuration = 300
 
 type FailureGroup = {
   userId: string
@@ -14,13 +15,29 @@ type FailureGroup = {
 
 const WARNING_EXEMPT_ROLES = new Set(["department_head", "regional_manager", "regional_hr", "regional_hr_office", "regional_hr_officer", "accounts_executive", "hr_executive", "hr_executive_officer", "managing_director"])
 
+const DEFAULT_WARNING_MESSAGES = {
+  "11pm": "Your attendance session was automatically closed at 11:00 PM because no checkout was recorded.",
+  "20_hour": "Your attendance session has remained open for 20 hours without a checkout. Please complete checkout now; overnight sessions close automatically after 24 hours.",
+} as const
+
+// Looks rows up by id in small batches. A single request listing hundreds of ids
+// is rejected by the gateway, which previously left every staff member unresolved.
+async function selectByIds(admin: any, table: string, columns: string, ids: string[]) {
+  const batches: string[][] = []
+  for (let index = 0; index < ids.length; index += 100) batches.push(ids.slice(index, index + 100))
+  const results = await Promise.all(batches.map((batch) => admin.from(table).select(columns).in("id", batch)))
+  const failed = results.find((result: any) => result.error)
+  if (failed?.error) throw new Error(failed.error.message || `Failed to load ${table}`)
+  return results.flatMap((result: any) => result.data || [])
+}
+
 function getPayload(newValues: any): Record<string, any> {
   return newValues && typeof newValues === "object" ? newValues : {}
 }
 
-async function sendTimedCheckoutWarning(admin: any, userId: string, session: any, warningType: "20_hour" | "11pm", customSubject?: string, customMessage?: string) {
+async function sendTimedCheckoutWarning(admin: any, userId: string, session: any, warningType: "20_hour" | "11pm", customSubject?: string, customMessage?: string): Promise<boolean> {
   const { data: profile } = await admin.from("user_profiles").select("email, employee_id, first_name, last_name, position, role, department_id, assigned_location_id, region_id").eq("id", userId).maybeSingle()
-  if (WARNING_EXEMPT_ROLES.has(String(profile?.role || "").toLowerCase().replace(/[ -]/g, "_"))) return
+  if (WARNING_EXEMPT_ROLES.has(String(profile?.role || "").toLowerCase().replace(/[ -]/g, "_"))) return false
   const [{ data: department }, { data: location }, { data: links }] = await Promise.all([
     profile?.department_id ? admin.from("departments").select("name, code").eq("id", profile.department_id).maybeSingle() : { data: null },
     profile?.assigned_location_id ? admin.from("geofence_locations").select("name").eq("id", profile.assigned_location_id).maybeSingle() : { data: null },
@@ -29,20 +46,21 @@ async function sendTimedCheckoutWarning(admin: any, userId: string, session: any
   const hodIds = Array.from(new Set((links || []).map((link: any) => link.hod_user_id).filter(Boolean)))
   const { data: hodProfiles } = hodIds.length ? await admin.from("user_profiles").select("email").in("id", hodIds).eq("is_active", true) : { data: [] as any[] }
   const staffEmail = String(profile?.email || "").trim().toLowerCase()
-  if (!staffEmail) return
+  if (!staffEmail) return false
   const cc = [...new Set([...(hodProfiles || []).map((row: any) => String(row.email || "").trim().toLowerCase()), "oheneba.boamah@qccgh.com", "qualitycontrolcompanyltd@gmail.com"])].filter((email) => email && email !== staffEmail)
   const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() || "Staff member"
   const reference = `CHECKOUT-${session.id}`
   const subject = customSubject?.trim() || `[${reference}] Attendance checkout notice — action required`
   const threshold = warningType === "20_hour" ? "20 hours" : "11:00 PM"
-  const action = customMessage?.trim() || `Your attendance session was automatically closed because checkout was not recorded by ${threshold}. Please complete checkout at the end of every work period.`
+  const action = customMessage?.trim() || DEFAULT_WARNING_MESSAGES[warningType]
   const checkIn = new Date(session.check_in_time).toISOString()
   const departmentName = department?.name || "Not available"
   const locationName = location?.name || session.check_in_location_name || "Not available"
   const staffId = profile?.employee_id || "Not available"
   const text = `Attendance checkout notice\n\nDear ${name},\n\n${action}\n\nAttendance details\nCheck-in: ${checkIn}\nReview point: ${threshold}\nStaff ID: ${staffId}\nDepartment: ${departmentName}\nLocation: ${locationName}\nReference: ${reference}\n\nYour HOD is copied on this notice and will review and handle any question or issue concerning this attendance record. If you believe this notice is incorrect, please contact your HOD directly.\n\nQCC Attendance Administration`
   const html = `<div style="margin:0;background:#f3f6f8;padding:32px 16px;font-family:Arial,Helvetica,sans-serif;color:#243447"><div style="max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #d9e1e7;border-radius:10px;overflow:hidden;box-shadow:0 4px 14px rgba(24,43,58,.08)"><div style="background:#8b1e1e;color:#ffffff;padding:28px 34px"><div style="font-size:12px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;opacity:.9">QCC Attendance Administration</div><h1 style="margin:10px 0 0;font-size:24px;line-height:1.25">Attendance checkout notice</h1></div><div style="padding:30px 34px"><p style="margin:0 0 18px;font-size:16px">Dear <strong>${name}</strong>,</p><p style="margin:0 0 22px;font-size:15px;line-height:1.7">${action}</p><div style="border:1px solid #e2e8ee;border-radius:8px;overflow:hidden;margin:0 0 22px"><div style="background:#f1f5f7;padding:12px 16px;font-weight:700;color:#243447">Attendance details</div><table role="presentation" style="width:100%;border-collapse:collapse;font-size:14px"><tr><td style="padding:9px 16px;color:#687783;width:38%">Check-in</td><td style="padding:9px 16px;font-weight:600">${checkIn}</td></tr><tr style="background:#fafbfc"><td style="padding:9px 16px;color:#687783">Review point</td><td style="padding:9px 16px;font-weight:600">${threshold}</td></tr><tr><td style="padding:9px 16px;color:#687783">Staff ID</td><td style="padding:9px 16px;font-weight:600">${staffId}</td></tr><tr style="background:#fafbfc"><td style="padding:9px 16px;color:#687783">Department</td><td style="padding:9px 16px;font-weight:600">${departmentName}</td></tr><tr><td style="padding:9px 16px;color:#687783">Location</td><td style="padding:9px 16px;font-weight:600">${locationName}</td></tr><tr style="background:#fafbfc"><td style="padding:9px 16px;color:#687783">Reference</td><td style="padding:9px 16px;font-weight:600">${reference}</td></tr></table></div><div style="border-left:4px solid #8b1e1e;background:#fff7ed;padding:14px 16px;margin-bottom:22px;font-size:14px;line-height:1.6"><strong>Your HOD has been copied on this notice.</strong><br>Your HOD will review and handle any question or issue concerning this attendance record. Please contact your HOD directly if you believe the notice is incorrect.</div><p style="margin:0;color:#687783;font-size:13px;line-height:1.6">Please make sure you complete checkout at the end of each work period.</p><p style="margin:24px 0 0;font-size:14px">Regards,<br><strong>QCC Attendance Administration</strong></p></div><div style="background:#f1f5f7;color:#687783;padding:16px 34px;font-size:12px">This is an automated attendance notice. Please do not reply to this email.</div></div></div>`
-  await emailService.sendEmail(staffEmail, { subject, html, text, cc }, { emailModule: "attendance", emailEvent: "timed_checkout_warning", emailHeading: "Attendance checkout warning", emailSubtitle: warningType === "20_hour" ? "20-hour overnight review" : "11 PM automatic checkout", idempotencyKey: `timed-checkout/${warningType}/${userId}/${session.id}` })
+  const sendResult: any = await emailService.sendEmail(staffEmail, { subject, html, text, cc }, { emailModule: "attendance", emailEvent: "timed_checkout_warning", emailHeading: "Attendance checkout warning", emailSubtitle: warningType === "20_hour" ? "20-hour overnight review" : "11 PM automatic checkout", idempotencyKey: `timed-checkout/${warningType}/${userId}/${session.id}` })
+  return Boolean(sendResult?.success)
 }
 
 async function isAuthorized(request: NextRequest) {
@@ -100,6 +118,7 @@ async function runForceFailedCheckout(request: NextRequest) {
   let departmentAutoCheckedOut = 0
   let officeAutoCheckedOut = 0
   let autoLoggedOut = 0
+  let warningsSent = 0
 
   const { data: overdueSessions, error: openSessionsError } = await admin
     .from("attendance_records")
@@ -124,7 +143,12 @@ async function runForceFailedCheckout(request: NextRequest) {
     .gte("check_in_time", previousDayStart.toISOString())
     .lt("check_in_time", dayStart.toISOString())
 
-  const openSessions = Array.from(new Map([...(overdueSessions || []), ...(officeSessions || []), ...(previousDaySessions || [])].map((session: any) => [session.id, session])).values())
+  const allOpenSessions = Array.from(new Map([...(overdueSessions || []), ...(officeSessions || []), ...(previousDaySessions || [])].map((session: any) => [session.id, session])).values())
+  // A manual send from the Email Center names the exact sessions the administrator selected.
+  const selectedSessionIds = !previewOnly && Array.isArray(requestBody.sessionIds)
+    ? new Set<string>(requestBody.sessionIds.map((value: unknown) => String(value)))
+    : null
+  const openSessions = selectedSessionIds ? allOpenSessions.filter((session: any) => selectedSessionIds.has(String(session.id))) : allOpenSessions
 
   if (openSessionsError) {
     return NextResponse.json({ error: "Failed to query overdue attendance", details: openSessionsError.message }, { status: 500 })
@@ -132,25 +156,74 @@ async function runForceFailedCheckout(request: NextRequest) {
 
   // Only Security, Transport, and Operations may keep sessions open overnight.
   // Their hard maximum is 24 hours; standard departments use normal office rules.
-  const openUserIds = [...new Set((openSessions || []).map((session: any) => session.user_id).filter(Boolean))]
+  const openUserIds = [...new Set((openSessions || []).map((session: any) => String(session.user_id)).filter(Boolean))]
   const { data: departmentRows } = await admin.from("departments").select("id, code, name")
-  const overnightDepartmentIds = (departmentRows || [])
-    .filter((department: any) => isOvernightShiftDept(department))
-    .map((department: any) => department.id)
-  const { data: departmentProfiles } = openUserIds.length && overnightDepartmentIds.length
-    ? await admin.from("user_profiles").select("id, department_id").in("id", openUserIds).in("department_id", overnightDepartmentIds)
-    : { data: [] }
-  const overnightUserIds = new Set((departmentProfiles || []).map((profile: any) => String(profile.id)))
+  const overnightDepartmentIds = new Set(
+    (departmentRows || []).filter((department: any) => isOvernightShiftDept(department)).map((department: any) => String(department.id)),
+  )
+  // Stop rather than guess: if profiles cannot be loaded, every user would look like a
+  // standard 11 PM user and Security, Transport and Operations staff would be closed early.
+  let openProfiles: any[]
+  try {
+    openProfiles = await selectByIds(admin, "user_profiles", "id, first_name, last_name, employee_id, email, role, department_id", openUserIds)
+  } catch (profileError) {
+    return NextResponse.json({ error: "Failed to load staff profiles for open sessions", details: profileError instanceof Error ? profileError.message : String(profileError) }, { status: 500 })
+  }
+  const profileById = new Map(openProfiles.map((profile: any) => [String(profile.id), profile]))
+  const overnightUserIds = new Set(
+    openProfiles.filter((profile: any) => overnightDepartmentIds.has(String(profile.department_id))).map((profile: any) => String(profile.id)),
+  )
 
   if (previewOnly) {
-    const previewUserIds = [...new Set(openSessions.map((session: any) => String(session.user_id)).filter(Boolean))]
-    const { data: previewProfiles } = previewUserIds.length
-      ? await admin.from("user_profiles").select("id, first_name, last_name, employee_id, role, department_id").in("id", previewUserIds)
-      : { data: [] as any[] }
-    const departmentIds = [...new Set((previewProfiles || []).map((profile: any) => profile.department_id).filter(Boolean))]
-    const { data: previewDepartments } = departmentIds.length ? await admin.from("departments").select("id, name").in("id", departmentIds) : { data: [] as any[] }
-    const departmentMap = new Map((previewDepartments || []).map((department: any) => [department.id, department.name]))
-    return NextResponse.json({ preview: true, candidates: openSessions.map((session: any) => { const profile = (previewProfiles || []).find((item: any) => item.id === session.user_id); return { id: session.id, user_id: session.user_id, name: [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Unknown user", employee_id: profile?.employee_id || "N/A", role: profile?.role || "unknown", department: departmentMap.get(profile?.department_id) || "Unassigned", check_in_time: session.check_in_time, warning_at: overnightUserIds.has(String(session.user_id)) ? "20 hours" : "11:00 PM" } }) })
+    const departmentMap = new Map((departmentRows || []).map((department: any) => [String(department.id), String(department.name || "")]))
+    const candidates = openSessions.map((session: any) => {
+      const profile: any = profileById.get(String(session.user_id))
+      const checkInTime = new Date(session.check_in_time)
+      const ageHours = (now.getTime() - checkInTime.getTime()) / 3600000
+      const isOvernight = overnightUserIds.has(String(session.user_id))
+      const exempt = WARNING_EXEMPT_ROLES.has(String(profile?.role || "").toLowerCase().replace(/[ -]/g, "_"))
+      const hasEmail = Boolean(String(profile?.email || "").trim())
+      const canEmail = !exempt && hasEmail
+      const emailNote = exempt ? " (role exempt from email)" : !hasEmail ? " (no email on file)" : " + warning email"
+      let outcome = ""
+      let willCheckout = false
+      let willWarn = false
+      if (isOvernight) {
+        if (ageHours >= 24) {
+          outcome = "Auto checkout (24-hour limit)"
+          willCheckout = true
+        } else if (ageHours >= 20) {
+          outcome = canEmail ? "Warning email (20-hour mark)" : `Warning skipped${exempt ? " (role exempt from email)" : " (no email on file)"}`
+          willWarn = canEmail
+        } else {
+          outcome = "No action yet (under 20 hours)"
+        }
+      } else if (checkInTime < dayStart || now >= officeCutoff) {
+        outcome = `Auto checkout at 11:00 PM${emailNote}`
+        willCheckout = true
+        willWarn = canEmail
+      } else {
+        outcome = "No action yet (before 11:00 PM)"
+      }
+      return {
+        id: session.id,
+        user_id: session.user_id,
+        name: [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() || "Profile not found",
+        employee_id: profile?.employee_id || "Not available",
+        email: profile?.email || "",
+        role: profile?.role || "unknown",
+        department: departmentMap.get(String(profile?.department_id)) || "Unassigned",
+        department_type: isOvernight ? "overnight" : "standard",
+        location: session.check_in_location_name || "",
+        check_in_time: session.check_in_time,
+        outcome,
+        will_checkout: willCheckout,
+        will_warn: willWarn,
+        actionable: willCheckout || willWarn,
+      }
+    })
+    candidates.sort((a: any, b: any) => Number(b.actionable) - Number(a.actionable) || a.department.localeCompare(b.department) || a.name.localeCompare(b.name))
+    return NextResponse.json({ preview: true, generated_at: now.toISOString(), candidates, standard_messages: DEFAULT_WARNING_MESSAGES })
   }
 
   for (const session of openSessions) {
@@ -159,7 +232,7 @@ async function runForceFailedCheckout(request: NextRequest) {
     const isTodayOfficeSession = checkInTime >= dayStart && checkInTime <= officeCutoff
     const sessionAgeHours = (now.getTime() - checkInTime.getTime()) / 3600000
     if (isOvernight && sessionAgeHours >= 20 && sessionAgeHours < 24) {
-      await sendTimedCheckoutWarning(admin, String(session.user_id), session, "20_hour", customSubject, customMessage)
+      if (await sendTimedCheckoutWarning(admin, String(session.user_id), session, "20_hour", customSubject, customMessage)) warningsSent += 1
     }
     if (isOvernight && sessionAgeHours >= 24) {
       const checkoutTime = new Date(checkInTime.getTime() + 24 * 60 * 60 * 1000)
@@ -200,7 +273,7 @@ async function runForceFailedCheckout(request: NextRequest) {
 
       if (!closeError) {
         officeAutoCheckedOut += 1
-        await sendTimedCheckoutWarning(admin, String(session.user_id), session, "11pm", customSubject, customMessage)
+        if (await sendTimedCheckoutWarning(admin, String(session.user_id), session, "11pm", customSubject, customMessage)) warningsSent += 1
         try {
           await admin.auth.admin.signOut(String(session.user_id), "global")
           await admin.from("device_sessions").delete().eq("user_id", session.user_id)
@@ -210,6 +283,20 @@ async function runForceFailedCheckout(request: NextRequest) {
         }
       }
     }
+  }
+
+  // A manual send covers only the sessions the administrator selected. Skip the
+  // backfill and the unrelated failure-escalation work so nobody outside the
+  // selection is emailed.
+  if (selectedSessionIds) {
+    return NextResponse.json({
+      success: true,
+      selected: openSessions.length,
+      office_11pm_auto_checked_out: officeAutoCheckedOut,
+      department_24_hour_auto_checked_out: departmentAutoCheckedOut,
+      auto_logged_out: autoLoggedOut,
+      warnings_sent: warningsSent,
+    })
   }
 
   // Backfill warnings for users whose automatic checkout happened before the
