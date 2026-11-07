@@ -918,15 +918,15 @@ function buildDirectorAutoMemoDraft(
     "P.O Box M14",
     "Accra Ghana",
     "",
-    `Our Ref No: ${memoRef}${" ".repeat(Math.max(4, 40 - memoRef.length))}Date: ${today}`,
+    `Our Ref No: ${memoRef}`, 
     "Your Ref No: ________________________",
     "",
     `${staffName} (S/No.: ${staffNo})`,
     `${staffRank}`,
     "",
-    ...(hodRank ? [`THRO'   ${hodRank}`] : []),
+    ...(hodRank ? [`THRO'   ${String(hodRank).toUpperCase()}`] : []),
     `        QUALITY CONTROL COMPANY LIMITED`,
-    `        ${hodLocation}`,
+    `        ${String(hodLocation).toUpperCase()}`, 
     "",
     `RE: APPLICATION FOR ${loanLabel.toUpperCase()}`,
     "",
@@ -3315,7 +3315,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           doc.setFontSize(6.8)
           doc.setFont("times", "italic")
           doc.setTextColor(70, 70, 70)
-          doc.text(["P.O Box M14", "Accra Ghana"], pageWidth - 42, 36)
+          doc.text(["P.O Box M14", "Accra Ghana", `Date: ${new Date().toISOString().slice(0, 10)}`], pageWidth - 42, 36)
           doc.setFont("times", "normal")
           doc.setTextColor(0, 0, 0)
         }
