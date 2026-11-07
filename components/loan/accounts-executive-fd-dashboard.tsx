@@ -69,6 +69,18 @@ function formatFdPercentLocal(score: number | string | null | undefined): string
   return `${Math.round(n)}%`
 }
 
+function getSalaryAdvancePayableAmount(review: FDReview): number {
+  const stored = Number(review.salary_advance_amount)
+  if (Number.isFinite(stored) && stored > 0) return stored
+  const monthly = Number(review.monthly_salary)
+  const months = Number(review.salary_advance_months || review.repayment_months || review.repayment_duration_months)
+  if (Number.isFinite(monthly) && monthly > 0 && Number.isFinite(months) && months > 0) {
+    return Math.round(monthly * months * 100) / 100
+  }
+  const requested = Number(review.requested_amount)
+  return Number.isFinite(requested) && requested > 0 ? requested : 0
+}
+
 function isFdExemptLoanTypeLocal(loanTypeKey: string | null | undefined, loanTypeLabel?: string | null): boolean {
   const key = String(loanTypeKey || '').toLowerCase()
   const label = String(loanTypeLabel || '').toLowerCase()
@@ -697,7 +709,7 @@ export function AccountsExecutiveFDDashboard({
                     onClick={() => {
                       setSelectedReview(review)
                       setAdjustedFdScore(String(Math.round(Number(review.fd_score) || 0)))
-                      setApprovedAmount(String(review.salary_advance_amount ?? review.requested_amount ?? ''))
+                      setApprovedAmount(String(getSalaryAdvancePayableAmount(review) || ''))
                       setAdjustmentReason('')
                     }}
                     className="w-full"
@@ -748,7 +760,7 @@ export function AccountsExecutiveFDDashboard({
                 </div>
                 <div className="bg-slate-50 p-3 rounded">
                   <p className="text-xs font-semibold text-slate-600">Amount</p>
-                  <p className="text-sm font-medium">₵{Number(selectedReview.requested_amount || 0).toLocaleString()}</p>
+                  <p className="text-sm font-medium">₵{Number(String(selectedReview.loan_type || '').toLowerCase().includes('salary') ? getSalaryAdvancePayableAmount(selectedReview) : selectedReview.requested_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                   {selectedReview.monthly_salary && selectedReview.salary_advance_months ? (
                     <p className="mt-1 text-xs text-slate-500">
                       Monthly salary ₵{Number(selectedReview.monthly_salary).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} × {selectedReview.salary_advance_months} month(s)
@@ -817,7 +829,7 @@ export function AccountsExecutiveFDDashboard({
                     {String(selectedReview.loan_type || '').toLowerCase().includes('salary') && (
                       <div className="rounded border border-amber-200 bg-amber-50 p-3">
                         <label className="text-xs font-semibold text-amber-900">Payable salary advance amount</label>
-                        <p className="text-[11px] text-amber-800 mt-1">Accounts Loan Office must provide this amount first. You may correct it before approval.</p>
+                        <p className="text-[11px] text-amber-800 mt-1">Auto-calculated as monthly salary × requested months. You may correct the amount before approval.</p>
                         <Input type="number" min={0.01} step="0.01" value={approvedAmount} onChange={e => setApprovedAmount(e.target.value)} className="mt-2 bg-white" />
                       </div>
                     )}
