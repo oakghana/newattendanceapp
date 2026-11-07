@@ -750,7 +750,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       y += wrapped.length * 5.5 + 2.5
     }
 
-    y += 8
+    y += 3
 
     // ─── Director HR Signature ────────────────────────────────────────
     if (y + 50 > pageHeight - 20) {
@@ -771,11 +771,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     }
     const hasCourtesyLine = paragraphs.some((paragraph) => /you can count on our co-operation\.?/i.test(String(paragraph || "")))
     if (!hasCourtesyLine) {
-      y += 4
+      y += 2
       doc.text("You can count on our co-operation.", marginLeft, y)
-      y += 14
+      y += 7
     } else {
-      y += 8
+      y += 3
     }
 
     // Measure the printed signer name first so the signature can be centred on it.
