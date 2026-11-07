@@ -8697,7 +8697,7 @@ if (!modalDisbursement || !modalRecovery) {
                     <div className="inline-block">
                       {/* w-0 + min-w-full lets the printed name set the block width, so the signature centres on the name. */}
                       <img src={modalSignatureDataUrl} alt="Signature" className="block h-24 w-0 min-w-full object-contain object-center" draggable={false} />
-                      <div className="border-t border-slate-400 pt-1 text-[12px] font-semibold">{`${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim().toUpperCase()}</div>
+                      <div className="pt-1 text-[12px] font-semibold">{`${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim().toUpperCase()}</div>
                     </div>
                     <div className="text-[12px] font-semibold">{String(data?.profile.position || "HR Executive").toUpperCase()}</div>
                     <div className="text-[12px] font-semibold">FOR: MANAGING DIRECTOR</div>

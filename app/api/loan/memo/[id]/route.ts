@@ -326,7 +326,7 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
   const maintainedDisbursementDate = loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || loan.md_approved_at
   const maintainedRecoveryStartDate = loan.recovery_start_date || loan.next_payment_due || loan.repayment_start_date
   const maintainedRecoveryMonths = isSalaryAdvance
-    ? (loan.recovery_months || loan.salary_advance_multiplier || loan.deduction_period_months || loan.repayment_duration_months || loan.recovery_period_months || loan.recovery_duration_months)
+    ? (loan.salary_advance_multiplier || loan.recovery_months || loan.deduction_period_months || loan.repayment_duration_months || loan.recovery_period_months || loan.recovery_duration_months)
     : (loan.recovery_months || loan.deduction_period_months || loan.repayment_duration_months || loan.recovery_period_months || loan.recovery_duration_months)
   const disbMonth = fmtMemoMonth(maintainedDisbursementDate)
   const recovStart = fmtMemoMonth(maintainedRecoveryStartDate)
@@ -816,14 +816,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       y += 20
     }
 
-    // Signature line
+    // Name (bold) — the signature image sits above it without a line crossing the signer.
     doc.setTextColor(0, 0, 0)
-    doc.setDrawColor(0, 0, 0)
-    doc.setLineWidth(0.4)
-    doc.line(marginLeft, y, marginLeft + Math.max(dirNameWidth, 30), y)
-    y += 5.5
+    y += 2
 
-    // Name (bold)
     doc.setFont("times", "bold")
     doc.setFontSize(10)
     doc.text(dirName, marginLeft, y)
@@ -857,6 +853,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const defaultCcRecipients = ["Deputy Director, Finance"]
     const enteredCcSources = [
       (loan as any).memo_draft_cc,
+      (loan as any).memo_cc,
       (loan as any).cc_recipients,
       (loan as any).cc_list,
     ]
