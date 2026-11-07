@@ -4,6 +4,7 @@ import { notifyLeaveHrOfficeForwarded } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrLeaveOfficeRole, isHrApproverRole, HR_OFFICE_PENDING_STATUSES } from "@/lib/leave-planning"
 import { canNonRegionalPipelineAct, canSelfLeavePipelineAct } from "@/lib/hr-workflow"
+import { isAnnualLeaveType, annualLeaveProcessingOpensAt, isAnnualLeaveProcessingOpen } from "@/lib/annual-leave-processing"
 import {
   resolveEntitlementFromProfile,
   buildAnnualLeaveEntitlementSummary,
@@ -206,7 +207,11 @@ export async function POST(request: NextRequest) {
 
     // Reason for adjustment is mandatory for annual leave, optional for all other leave types
     const leaveTypeKey = String((leaveRequest as any).leave_type_key || "").toLowerCase()
-    const requestIsAnnual = leaveTypeKey === "annual" || leaveTypeKey === "annual_leave"
+    const requestIsAnnual = isAnnualLeaveType(leaveTypeKey)
+    if (requestIsAnnual && !isAnnualLeaveProcessingOpen(String((leaveRequest as any).preferred_start_date || ""))) {
+      const opensAt = annualLeaveProcessingOpensAt(String((leaveRequest as any).preferred_start_date || ""))
+      return NextResponse.json({ error: `Annual Leave processing opens on ${opensAt?.toLocaleDateString("en-GB") || "the first day of the previous month"}. HR Leave Office action is not available before that date.`, code: "ANNUAL_LEAVE_PROCESSING_NOT_OPEN" }, { status: 423 })
+    }
     if (requestIsAnnual && (!adjustment_reason || String(adjustment_reason).trim().length < 5)) {
       return NextResponse.json(
         { error: "A detailed adjustment reason is required for annual leave (this will appear in the memo to staff)." },
