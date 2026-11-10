@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useToast } from "@/hooks/use-toast"
 import {
   CheckCircle2,
+  Eye,
   Clock,
   Download,
   FileText,
@@ -57,6 +58,8 @@ interface Loan {
   created_at: string
   md_approved_at: string | null
   md_approved_by_name: string | null
+  director_letter?: string | null
+  memo_cc?: string | null
   reference_number?: string | null
   memo_reference_locked?: boolean | null
   staff_full_name: string | null
@@ -163,9 +166,9 @@ function exportToCSV(loans: Loan[], filename: string) {
 
 // ── Loan Row ─────────────────────────────────────────────────────────────────
 function LoanRow({
-  loan, selected, onToggle, approved,
+  loan, selected, onToggle, approved, onPreview,
 }: {
-  loan: Loan; selected: boolean; onToggle: () => void; approved: boolean
+  loan: Loan; selected: boolean; onToggle: () => void; approved: boolean; onPreview?: () => void
 }) {
   const amount = loan.fixed_amount || loan.requested_amount
   const staffName = loan.staff_full_name || `${loan.user_profiles?.first_name ?? ""} ${loan.user_profiles?.last_name ?? ""}`.trim()
@@ -243,6 +246,16 @@ function LoanRow({
           <div className="text-xs font-medium text-amber-700 mt-0.5">View only — awaiting HR Records reference</div>
         )}
       </div>
+      {onPreview && (
+        <button
+          type="button"
+          onClick={(event) => { event.stopPropagation(); onPreview() }}
+          className="flex-shrink-0 inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          title="Admin-only HR Executive memo preview"
+        >
+          <Eye className="h-3.5 w-3.5" /> Preview
+        </button>
+      )}
       {approved && (
         <div className="absolute right-16 top-1/2 -translate-y-1/2 opacity-20 pointer-events-none select-none rotate-[-15deg]">
           <div className="border-4 border-emerald-600 rounded px-2 py-0.5 text-emerald-600 font-black text-xs tracking-widest uppercase">
@@ -256,10 +269,9 @@ function LoanRow({
 
 // ─��� Period Section ────────────────────────────────────────────────────────────
 function PeriodSection({
-  title, loans, selected, onToggle, onSelectAll, approvedIds, defaultOpen,
+  title, loans, selected, onToggle, onSelectAll, approvedIds, defaultOpen, onPreview,
 }: {
-  title: string; loans: Loan[]; selected: Set<string>; onToggle: (id: string) => void;
-  onSelectAll: (ids: string[]) => void; approvedIds: Set<string>; defaultOpen: boolean
+  title: string; loans: Loan[]; selected: Set<string>; onToggle: (id: string) => void; onSelectAll: (ids: string[]) => void; approvedIds: Set<string>; defaultOpen: boolean; onPreview?: (loan: Loan) => void
 }) {
   const [open, setOpen] = useState(defaultOpen)
   if (loans.length === 0) return null
@@ -306,7 +318,7 @@ function PeriodSection({
   {open && (
   <div className="border-t border-slate-100 divide-y divide-slate-100">
   {loans.filter((loan) => !isExcludedFromApprovalQueue(loan)).map((loan) => (
-  <LoanRow key={loan.id} loan={loan} selected={selected.has(loan.id)} onToggle={() => onToggle(loan.id)} approved={false} />
+  <LoanRow key={loan.id} loan={loan} selected={selected.has(loan.id)} onToggle={() => onToggle(loan.id)} approved={false} onPreview={onPreview ? () => onPreview(loan) : undefined} />
   ))}
         </div>
       )}
@@ -371,7 +383,7 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
     setFilterPosition("")
   }
 
-  // ── Apply filters to base dataset ───────────────────────────────────���────
+  // ── Apply filters to base dataset ─────────────────────────��─────────���────
   const filteredLoans = useMemo(() => {
     return loans.filter((l) => {
       if (filterLocation && l.staff_location_name !== filterLocation) return false
@@ -808,6 +820,13 @@ export function MdApprovalsClient({ profile }: Props) {
   const [loadingApproved, setLoadingApproved] = useState(false)
   const [allStampedMemos, setAllStampedMemos] = useState<Loan[]>([])
   const [loadingStamped, setLoadingStamped] = useState(false)
+  const [adminPreviewLoan, setAdminPreviewLoan] = useState<Loan | null>(null)
+
+  const isAdminViewer = ["admin", "administrator"].includes(String(profile.role || "").toLowerCase())
+  const getAdminPreviewText = (loan: Loan) => String(loan.director_letter || "").split("\n").filter((line) => {
+    const value = line.trim()
+    return value && !/^our ref\s*no|^your ref\s*no|^approved$|^for:\s*managing director$/i.test(value)
+  }).join("\n")
 
   // Filter state (for stamped memos tab — 5 dimensions)
   const [filterLocation, setFilterLocation] = useState("")
@@ -1578,22 +1597,22 @@ export function MdApprovalsClient({ profile }: Props) {
                     <h2 className="text-sm font-bold text-slate-600 uppercase tracking-wider">Received Today</h2>
                   </div>
                 )}
-                <PeriodSection title="Today" loans={grouped.today} selected={selected} onToggle={toggleSelect} onSelectAll={toggleSelectAll} approvedIds={approvedIds} defaultOpen={true} />
+                <PeriodSection title="Today" loans={grouped.today} selected={selected} onToggle={toggleSelect} onSelectAll={toggleSelectAll} approvedIds={approvedIds} defaultOpen={true} onPreview={isAdminViewer ? setAdminPreviewLoan : undefined} />
                 {grouped.week.length > 0 && (
                   <div className="flex items-center gap-3 mb-2 mt-6">
                     <Calendar className="h-4 w-4 text-slate-400" />
                     <h2 className="text-sm font-bold text-slate-600 uppercase tracking-wider">This Week</h2>
                   </div>
                 )}
-                <PeriodSection title="This Week" loans={grouped.week} selected={selected} onToggle={toggleSelect} onSelectAll={toggleSelectAll} approvedIds={approvedIds} defaultOpen={true} />
+                <PeriodSection title="This Week" loans={grouped.week} selected={selected} onToggle={toggleSelect} onSelectAll={toggleSelectAll} approvedIds={approvedIds} defaultOpen={true} onPreview={isAdminViewer ? setAdminPreviewLoan : undefined} />
                 {grouped.month.length > 0 && (
                   <div className="flex items-center gap-3 mb-2 mt-6">
                     <TrendingUp className="h-4 w-4 text-slate-400" />
                     <h2 className="text-sm font-bold text-slate-600 uppercase tracking-wider">Earlier This Month</h2>
                   </div>
                 )}
-                <PeriodSection title="Earlier This Month" loans={grouped.month} selected={selected} onToggle={toggleSelect} onSelectAll={toggleSelectAll} approvedIds={approvedIds} defaultOpen={false} />
-                <PeriodSection title="Older" loans={grouped.older} selected={selected} onToggle={toggleSelect} onSelectAll={toggleSelectAll} approvedIds={approvedIds} defaultOpen={false} />
+                <PeriodSection title="Earlier This Month" loans={grouped.month} selected={selected} onToggle={toggleSelect} onSelectAll={toggleSelectAll} approvedIds={approvedIds} defaultOpen={false} onPreview={isAdminViewer ? setAdminPreviewLoan : undefined} />
+                <PeriodSection title="Older" loans={grouped.older} selected={selected} onToggle={toggleSelect} onSelectAll={toggleSelectAll} approvedIds={approvedIds} defaultOpen={false} onPreview={isAdminViewer ? setAdminPreviewLoan : undefined} />
               </div>
             )}
 
@@ -1618,6 +1637,35 @@ export function MdApprovalsClient({ profile }: Props) {
           </>
         )}
       </div>
+
+      {isAdminViewer && adminPreviewLoan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-labelledby="admin-memo-preview-title">
+          <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-amber-700">Admin-only preview</p>
+                <h2 id="admin-memo-preview-title" className="text-lg font-bold text-slate-900">HR Executive-signed memo</h2>
+                <p className="text-xs text-slate-500">{adminPreviewLoan.request_number} · {adminPreviewLoan.staff_full_name || "Staff memo"}</p>
+              </div>
+              <button type="button" onClick={() => setAdminPreviewLoan(null)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Close preview"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="overflow-y-auto bg-slate-100 p-6">
+              <article className="mx-auto min-h-[620px] max-w-2xl bg-white px-10 py-12 shadow-sm ring-1 ring-slate-200">
+                <div className="mb-8 border-b-2 border-emerald-800 pb-5 text-center">
+                  <h3 className="text-xl font-bold tracking-wide text-emerald-800">QUALITY CONTROL COMPANY LTD.</h3>
+                  <p className="font-semibold text-emerald-800">(COCOBOD)</p>
+                </div>
+                <div className="whitespace-pre-wrap break-words font-serif text-sm leading-7 text-slate-800">{getAdminPreviewText(adminPreviewLoan) || "The HR Executive memo content is not available for preview."}</div>
+                <div className="mt-8 border-t border-slate-100 pt-3 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-400">View-only administrative preview · No memo reference or MD approval stamp</div>
+              </article>
+            </div>
+            <div className="flex items-center justify-between border-t border-slate-200 bg-white px-5 py-3">
+              <p className="text-xs text-slate-500">This preview cannot print, download, approve, or modify the memo.</p>
+              <Button type="button" variant="outline" onClick={() => setAdminPreviewLoan(null)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

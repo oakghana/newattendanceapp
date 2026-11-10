@@ -123,6 +123,8 @@ export async function GET(req: NextRequest) {
     disbursement_date,
     md_approved_at,
     md_approved_by_name,
+    director_letter,
+    memo_cc,
     reference_number,
     memo_reference_locked,
     user_id,
