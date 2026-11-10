@@ -1354,6 +1354,7 @@ export default function LoanAppPage() {
   const [directorSort, setDirectorSort] = useState<"newest" | "oldest">("newest")
   const [directorPage, setDirectorPage] = useState(1)
   const [directorViewMode, setDirectorViewMode] = useState<"table" | "card">("table")
+ const [directorQueueView, setDirectorQueueView] = useState<"pending" | "reviewed">("pending")
   const [directorLocation, setDirectorLocation] = useState("all")
   const [directorDept, setDirectorDept] = useState("all")
 
@@ -1936,9 +1937,24 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     () => filterAndSortRows(data?.inbox?.hrOffice || [], hrSearch, hrStatus, hrSort, hrLocation, hrDept),
     [data?.inbox?.hrOffice, hrSearch, hrStatus, hrSort, hrLocation, hrDept],
   )
+  const reviewedDirectorLoans = useMemo(() => {
+    const currentUserId = String(data?.profile?.id || "")
+    return (data?.inbox?.allLoans || []).filter((row) =>
+      String(row.director_hr_id || "") === currentUserId &&
+      Boolean(row.director_decision_at) &&
+      ["pending_hr_records_reference", "awaiting_director_hr", "approved_director", "director_rejected"].includes(String(row.status || "")),
+    )
+  }, [data?.inbox?.allLoans, data?.profile?.id])
   const filteredDirector = useMemo(
-    () => filterAndSortRows(data?.inbox?.directorHr || [], directorSearch, directorStatus, directorSort, directorLocation, directorDept),
-    [data?.inbox?.directorHr, directorSearch, directorStatus, directorSort, directorLocation, directorDept],
+    () => filterAndSortRows(
+      directorQueueView === "pending" ? (data?.inbox?.directorHr || []) : reviewedDirectorLoans,
+      directorSearch,
+      directorStatus,
+      directorSort,
+      directorLocation,
+      directorDept,
+    ),
+    [data?.inbox?.directorHr, reviewedDirectorLoans, directorQueueView, directorSearch, directorStatus, directorSort, directorLocation, directorDept],
   )
 
   const filteredMyTasks = useMemo(() => {
@@ -6385,12 +6401,14 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
           <Card>
             <CardHeader>
-              <CardTitle>Executive HR Approval Queue</CardTitle>
-              <CardDescription>Use the action button on each request to review, sign, and finalize the memo.</CardDescription>
+              <CardTitle>Executive HR {directorQueueView === "pending" ? "Approval Queue" : "Reviewed & Approved"}</CardTitle>
+              <CardDescription>{directorQueueView === "pending" ? "Use the action button on each request to review, sign, and finalize the memo." : "Track loan requests that you have already reviewed and approved. These are no longer awaiting Executive HR action."}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1">
+                  <Button variant={directorQueueView === "pending" ? "default" : "outline"} size="sm" onClick={() => { setDirectorQueueView("pending"); setDirectorPage(1) }}>Awaiting My Review</Button>
+                  <Button variant={directorQueueView === "reviewed" ? "default" : "outline"} size="sm" onClick={() => { setDirectorQueueView("reviewed"); setDirectorPage(1) }}>Reviewed &amp; Approved ({reviewedDirectorLoans.length})</Button>
                   <Button variant={directorViewMode === "table" ? "default" : "outline"} size="sm" onClick={() => setDirectorViewMode("table")} className="gap-1"><LayoutList className="h-4 w-4" /> Table</Button>
                   <Button variant={directorViewMode === "card" ? "default" : "outline"} size="sm" onClick={() => setDirectorViewMode("card")} className="gap-1"><LayoutGrid className="h-4 w-4" /> Cards</Button>
                 </div>
@@ -6434,7 +6452,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             </CardContent>
           </Card>
 
-          {filteredDirector.length === 0 && <p className="text-sm text-muted-foreground">No requests currently awaiting Executive HR decision.</p>}
+          {filteredDirector.length === 0 && <p className="text-sm text-muted-foreground">{directorQueueView === "pending" ? "No requests currently awaiting Executive HR decision." : "You have not reviewed and approved any loan requests yet."}</p>}
 
           {directorViewMode === "table" && filteredDirector.length > 0 && (
             <Card>
@@ -6471,8 +6489,8 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                         {p?.directorHr && (
                           <TableCell>
                             <div className="flex flex-col gap-1">
-                              <Button size="sm" className="text-xs whitespace-nowrap bg-green-700 hover:bg-green-800 text-white" onClick={() => openActionModal(row, "director")}>Review &amp; Sign Memo</Button>
-                              {["approved_director", "director_rejected"].includes(row.status) && <Button variant="outline" size="sm" className="text-xs whitespace-nowrap" onClick={() => openSecureMemo(row.id)}>Download PDF</Button>}
+                              {directorQueueView === "pending" ? <Button size="sm" className="text-xs whitespace-nowrap bg-green-700 hover:bg-green-800 text-white" onClick={() => openActionModal(row, "director")}>Review &amp; Sign Memo</Button> : <Badge variant="outline" className="text-xs whitespace-nowrap">Reviewed by you</Badge>}
+                              {directorQueueView === "reviewed" && <span className="text-[11px] text-muted-foreground">{statusText(row.status)}</span>}
                             </div>
                           </TableCell>
                         )}
@@ -6486,12 +6504,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
           {directorViewMode === "card" && pagedDirector.map((row) => (
             <StageCard key={row.id} row={row}>
-              {p?.directorHr && (
+              {p?.directorHr && (directorQueueView === "pending" ? (
                 <Button size="sm" className="bg-green-700 hover:bg-green-800 text-white" onClick={() => openActionModal(row, "director")}>Review &amp; Sign Memo</Button>
-              )}
-              {["approved_director", "director_rejected"].includes(row.status) && (
-                <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Download PDF</Button>
-              )}
+              ) : <Badge variant="outline">Reviewed by you</Badge>)}
             </StageCard>
           ))}
 
