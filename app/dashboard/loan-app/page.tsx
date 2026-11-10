@@ -2694,9 +2694,15 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
   }
 
   const convertMonthToDate = (monthStr: string): string | null => {
-    if (!monthStr) return null
-    // Convert "YYYY-MM" to "YYYY-MM-01" (first day of month)
-    return monthStr.includes("-") ? `${monthStr}-01` : null
+    const value = String(monthStr || "").trim()
+    if (!value) return null
+    // The form may store either the API value (YYYY-MM) or the displayed value
+    // (e.g. "October 2026"). Always send the server a real first-of-month date.
+    if (/^\d{4}-\d{2}$/.test(value)) return `${value}-01`
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+    const parsed = new Date(`${value} 1`)
+    if (Number.isNaN(parsed.getTime())) return null
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-01`
   }
 
   const runAction = async (payload: any) => {
