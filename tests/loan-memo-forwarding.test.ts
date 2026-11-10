@@ -4,6 +4,8 @@ import {
   decideForwardedMemo,
   formatMemoCcLines,
   memoTermsSignature,
+  monthToFirstOfMonthDate,
+  toMonthInputValue,
   type MemoTermsInputs,
 } from "../lib/loan-memo-forwarding"
 
@@ -20,6 +22,42 @@ const terms: MemoTermsInputs = {
   memoCc: "Managing Director\nAudit Manager",
   directorApproverId: "approver-1",
 }
+
+describe("month helpers used when forwarding HR terms", () => {
+  it("turns saved dates and timestamps into month-input values", () => {
+    expect(toMonthInputValue("2026-10-01")).toBe("2026-10")
+    expect(toMonthInputValue("2026-11-15T08:30:00+00:00")).toBe("2026-11")
+    expect(toMonthInputValue("2026-12")).toBe("2026-12")
+  })
+
+  it("returns an empty string when there is no usable date, so the field is not faked", () => {
+    expect(toMonthInputValue(null)).toBe("")
+    expect(toMonthInputValue(undefined)).toBe("")
+    expect(toMonthInputValue("")).toBe("")
+    expect(toMonthInputValue("TBD")).toBe("")
+  })
+
+  it("sends the server a first-of-month date for every format the form can hold", () => {
+    expect(monthToFirstOfMonthDate("2026-10")).toBe("2026-10-01")
+    expect(monthToFirstOfMonthDate("2026-10-15")).toBe("2026-10-01")
+    expect(monthToFirstOfMonthDate("October 2026")).toBe("2026-10-01")
+    expect(monthToFirstOfMonthDate("nov 2026")).toBe("2026-11-01")
+  })
+
+  it("rejects values that are not a month instead of sending a bad date", () => {
+    expect(monthToFirstOfMonthDate("")).toBeNull()
+    expect(monthToFirstOfMonthDate(null)).toBeNull()
+    expect(monthToFirstOfMonthDate("TBD")).toBeNull()
+    expect(monthToFirstOfMonthDate("Octember 2026")).toBeNull()
+  })
+
+  it("falls back to the date saved on the loan exactly when the field is blank", () => {
+    const effective = (field: string, saved: string | null) => field || toMonthInputValue(saved)
+    expect(effective("", "2026-10-01")).toBe("2026-10")
+    expect(effective("2026-09", "2026-10-01")).toBe("2026-09")
+    expect(monthToFirstOfMonthDate(effective("", null))).toBeNull()
+  })
+})
 
 describe("formatMemoCcLines", () => {
   it("prints exactly the recipients the HR Loan Office entered, one per aligned line", () => {

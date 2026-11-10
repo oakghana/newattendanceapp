@@ -21,6 +21,38 @@ export function formatMemoCcLines(memoCc?: string | null): string[] {
   return recipients.map((name, index) => (index === 0 ? `cc:  ${name}` : `     ${name}`))
 }
 
+/**
+ * Value for an <input type="month">. Accepts a saved date (YYYY-MM-DD or a full
+ * timestamp) or YYYY-MM and returns YYYY-MM, or "" when there is nothing usable.
+ */
+export function toMonthInputValue(value?: string | null): string {
+  const match = String(value ?? "").trim().match(/^(\d{4})-(\d{2})/)
+  return match ? `${match[1]}-${match[2]}` : ""
+}
+
+const MONTH_NAMES = [
+  "january", "february", "march", "april", "may", "june",
+  "july", "august", "september", "october", "november", "december",
+]
+
+/**
+ * Converts a month value to the first day of that month (YYYY-MM-01) for the API.
+ * Accepts YYYY-MM, YYYY-MM-DD, or a displayed value such as "October 2026" and
+ * returns null when the value cannot be read as a month.
+ */
+export function monthToFirstOfMonthDate(value?: string | null): string | null {
+  const text = String(value ?? "").trim()
+  if (!text) return null
+  if (/^\d{4}-\d{2}$/.test(text)) return `${text}-01`
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return `${text.slice(0, 7)}-01`
+  const named = text.match(/^([A-Za-z]+)\.?\s+(\d{4})$/)
+  if (named) {
+    const index = MONTH_NAMES.findIndex((name) => name === named[1].toLowerCase() || name.slice(0, 3) === named[1].toLowerCase())
+    if (index >= 0) return `${named[2]}-${String(index + 1).padStart(2, "0")}-01`
+  }
+  return null
+}
+
 export type MemoTermsInputs = {
   disbursement: string
   recovery: string

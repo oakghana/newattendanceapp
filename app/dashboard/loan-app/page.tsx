@@ -21,6 +21,8 @@ import {
   decideForwardedMemo,
   formatMemoCcLines,
   memoTermsSignature,
+  monthToFirstOfMonthDate,
+  toMonthInputValue,
   type MemoDraftBase,
 } from "@/lib/loan-memo-forwarding"
 import { TrackedMemoEditor } from "@/components/memo/tracked-memo-editor"
@@ -2693,18 +2695,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     }
   }
 
-  const convertMonthToDate = (monthStr: string): string | null => {
-    const value = String(monthStr || "").trim()
-    if (!value) return null
-    // The form may store either the API value (YYYY-MM) or the displayed value
-    // (e.g. "October 2026"). Always send the server a real first-of-month date.
-    if (/^\d{4}-\d{2}$/.test(value)) return `${value}-01`
-    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
-    const monthYear = value.match(/^([A-Za-z]+)\s+(\d{4})$/)
-    const parsed = monthYear ? new Date(`${monthYear[1]} 1, ${monthYear[2]}`) : new Date(value)
-    if (Number.isNaN(parsed.getTime())) return null
-    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-01`
-  }
+  const convertMonthToDate = (monthStr: string): string | null => monthToFirstOfMonthDate(monthStr)
 
   const runAction = async (payload: any) => {
     const res = await fetch("/api/loan/action", {
@@ -3271,8 +3262,10 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           const fallbackTerms = String(configuredLoanType?.loan_terms || "").trim()
           const parsedHrNote = splitHrNoteAndThroTelephone(entry?.note || row.hr_note || fallbackTerms || "")
           const initialTerms = {
-            disbursement: entry?.disbursement || "",
-            recovery: entry?.recovery || "",
+            // Start from the dates already saved on the loan, the same ones the memo preview
+            // falls back to, so the form never looks empty while the memo shows months.
+            disbursement: entry?.disbursement || toMonthInputValue(row.disbursement_date),
+            recovery: entry?.recovery || toMonthInputValue(row.recovery_start_date),
             months: entry?.months || (row.recovery_months ? String(row.recovery_months) : fallbackMonths),
             basicSalary: row.basic_salary ? String(row.basic_salary) : "",
             // THRO is the requester's own HOD / Regional Manager, never the viewer's.
@@ -3414,17 +3407,71 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
         }
       }
 
-      const forwardFromMemoPreview = () => {
+      // The single submit path for the Set Terms dialog and the memo preview, so both send
+      // exactly the same validated terms. Returns false when nothing was sent.
+      const submitHrTermsForward = (): boolean => {
+        const row = actionModal.row
+        if (!row) return false
+        // The memo preview falls back to the dates saved on the loan, so the submit uses the
+        // same rule; otherwise the memo can show months that are never actually sent.
+        const disbursementMonth = modalDisbursement || toMonthInputValue(row.disbursement_date)
+        const recoveryMonth = modalRecovery || toMonthInputValue(row.recovery_start_date)
+        const disbursementDate = convertMonthToDate(disbursementMonth)
+        const recoveryStartDate = convertMonthToDate(recoveryMonth)
+        const recoveryMonths = Number(modalMonths || 0)
+        const missing: string[] = []
+        if (!disbursementDate) missing.push("Disbursement Date")
+        if (!recoveryStartDate) missing.push("Recovery Start Date")
+        if (!Number.isFinite(recoveryMonths) || recoveryMonths <= 0) missing.push("Recovery Months")
+        if (missing.length) {
+          toast({ title: "Complete HR terms first", description: `Please fill in: ${missing.join(", ")}.`, variant: "destructive" })
+          return false
+        }
         const memoToForward = resolveMemoForForward()
-        if (memoToForward === null) return
-        setModalMemoText(memoToForward)
-        setMemoReviewModal((s) => ({ ...s, open: false }))
-        setActionModal((s) => ({ ...s, open: true }))
-        // Let the Set Terms dialog reopen with the final memo text before submitting
-        // through the same validated handler used by the primary action button.
-        window.setTimeout(() => {
-          document.querySelector<HTMLButtonElement>("[data-hr-forward-submit='true']")?.click()
-        }, 120)
+        if (memoToForward === null) return false
+        const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone, modalHodName, modalHodRank, modalHodLocation, modalMemoRecipient)
+        setHrInputs((s) => ({
+          ...s,
+          [row.id]: {
+            disbursement: disbursementMonth,
+            recovery: recoveryMonth,
+            months: modalMonths,
+            note: noteForSave,
+            hodName: modalHodName,
+            hodRank: modalHodRank,
+            hodLocation: modalHodLocation,
+            hodTelephone: modalHodTelephone,
+            memoRef: modalMemoRef,
+            memoRecipient: modalMemoRecipient,
+          },
+        }))
+        void runAction({
+          action: "hr_set_terms",
+          id: row.id,
+          disbursement_date: disbursementDate,
+          recovery_start_date: recoveryStartDate,
+          recovery_months: recoveryMonths,
+          basic_salary: Number(modalBasicSalary || 0),
+          reference_number: modalMemoRef || null,
+          hod_name: modalHodName || null,
+          hod_rank: modalHodRank || null,
+          hod_location: modalHodLocation || null,
+          director_approver_id: modalDirectorApproverId || null,
+          note: noteForSave || null,
+          memo_cc: modalMemoCC || null,
+          director_letter: memoToForward,
+        })
+        setActionModal((s) => ({ ...s, open: false }))
+        return true
+      }
+
+      const forwardFromMemoPreview = () => {
+        if (submitHrTermsForward()) {
+          setMemoReviewModal((s) => ({ ...s, open: false }))
+        } else {
+          // Something needs fixing: go back to Set Terms with everything still in place.
+          closeMemoReview()
+        }
       }
 
       const generateMemoPdf = async (row: LoanRequest, memoText: string, sigText: string, sigImageDataUrl?: string | null) => {
@@ -8471,50 +8518,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     setMemoReviewModal({ open: true, row: namedPreviewRow })
                   }, 80)
                 }}>Preview Memo</Button>
-                <Button data-hr-forward-submit="true" onClick={() => {
-                  const memoToForward = resolveMemoForForward()
-                  if (memoToForward === null) return
-                  const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone, modalHodName, modalHodRank, modalHodLocation, modalMemoRecipient)
-                  setHrInputs((s) => ({
-                    ...s,
-                    [actionModal.row!.id]: {
-                      disbursement: modalDisbursement,
-                      recovery: modalRecovery,
-                      months: modalMonths,
-                      note: noteForSave,
-                      hodName: modalHodName,
-                      hodRank: modalHodRank,
-                      hodLocation: modalHodLocation,
-                      hodTelephone: modalHodTelephone,
-                      memoRef: modalMemoRef,
-                      memoRecipient: modalMemoRecipient,
-                    },
-                  }))
-                  const disbursementDate = convertMonthToDate(modalDisbursement)
-                  const recoveryStartDate = convertMonthToDate(modalRecovery)
-                  const recoveryMonths = Number(modalMonths || 0)
-                  if (!disbursementDate || !recoveryStartDate || !Number.isFinite(recoveryMonths) || recoveryMonths <= 0) {
-                    toast({ title: "Complete HR terms first", description: "Select a disbursement month, recovery start month, and recovery months before forwarding to Executive HR.", variant: "destructive" })
-                    return
-                  }
-                  runAction({
-                    action: "hr_set_terms",
-                    id: actionModal.row!.id,
-                    disbursement_date: disbursementDate,
-                    recovery_start_date: recoveryStartDate,
-                    recovery_months: recoveryMonths,
-                    basic_salary: Number(modalBasicSalary || 0),
-                    reference_number: modalMemoRef || null,
-                    hod_name: modalHodName || null,
-                    hod_rank: modalHodRank || null,
-                    hod_location: modalHodLocation || null,
-                    director_approver_id: modalDirectorApproverId || null,
-                    note: noteForSave || null,
-                    memo_cc: modalMemoCC || null,
-                    director_letter: memoToForward,
-                  })
-                  setActionModal((s) => ({ ...s, open: false }))
-                }}>Set Terms &amp; Forward to Executive HR</Button>
+                <Button onClick={() => { submitHrTermsForward() }}>Set Terms &amp; Forward to Executive HR</Button>
               </>
             )}
             {actionModal.actionType === "payment_completed" && actionModal.row && (
