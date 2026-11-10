@@ -168,6 +168,8 @@ export async function GET(req: NextRequest) {
         .eq("status", "pending_hr_records_reference")
         .is("md_approved_at", null)
         .not("director_letter", "is", null)
+        .not("director_decision_at", "is", null)
+        .not("director_signature_text", "is", null)
         .order("created_at", { ascending: false })
         .limit(200)
       if (previewError) return NextResponse.json({ error: previewError.message }, { status: 500 })
