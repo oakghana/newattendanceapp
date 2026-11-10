@@ -2700,7 +2700,8 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     // (e.g. "October 2026"). Always send the server a real first-of-month date.
     if (/^\d{4}-\d{2}$/.test(value)) return `${value}-01`
     if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
-    const parsed = new Date(`${value} 1`)
+    const monthYear = value.match(/^([A-Za-z]+)\s+(\d{4})$/)
+    const parsed = monthYear ? new Date(`${monthYear[1]} 1, ${monthYear[2]}`) : new Date(value)
     if (Number.isNaN(parsed.getTime())) return null
     return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-01`
   }
@@ -8489,12 +8490,19 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       memoRecipient: modalMemoRecipient,
                     },
                   }))
+                  const disbursementDate = convertMonthToDate(modalDisbursement)
+                  const recoveryStartDate = convertMonthToDate(modalRecovery)
+                  const recoveryMonths = Number(modalMonths || 0)
+                  if (!disbursementDate || !recoveryStartDate || !Number.isFinite(recoveryMonths) || recoveryMonths <= 0) {
+                    toast({ title: "Complete HR terms first", description: "Select a disbursement month, recovery start month, and recovery months before forwarding to Executive HR.", variant: "destructive" })
+                    return
+                  }
                   runAction({
                     action: "hr_set_terms",
                     id: actionModal.row!.id,
-                    disbursement_date: convertMonthToDate(modalDisbursement),
-                    recovery_start_date: convertMonthToDate(modalRecovery),
-                    recovery_months: Number(modalMonths || 0),
+                    disbursement_date: disbursementDate,
+                    recovery_start_date: recoveryStartDate,
+                    recovery_months: recoveryMonths,
                     basic_salary: Number(modalBasicSalary || 0),
                     reference_number: modalMemoRef || null,
                     hod_name: modalHodName || null,
