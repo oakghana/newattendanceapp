@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
 import { ensureImportedLoanReferences } from "@/lib/reference-number"
+import { EXECUTIVE_HR_STATUSES, isWithExecutiveHr } from "@/lib/loan-approval-stages"
 import {
   canDoAccounts,
   canDoCommittee,
@@ -711,7 +712,7 @@ export async function GET() {
         : Promise.resolve({ data: [], error: null } as any),
       hrOfficeQ,
       showDirectorHr
-        ? admin.from("loan_requests").select("*").in("status", ["awaiting_hr_executives", "pending_hr_executive_review", "awaiting_director_hr"]).order("created_at", { ascending: false })
+        ? admin.from("loan_requests").select("*").in("status", EXECUTIVE_HR_STATUSES).order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null } as any),
       showDirectorHr
         ? admin
@@ -1039,7 +1040,7 @@ export async function GET() {
     // loan_hod_linkages row for this staff member (supports multi-HOD assignments).
 
     const executiveQueueRows = Array.from(new Map(
-      [...(directorRes.data || []), ...(allLoansRes.data || []).filter((row: any) => ["awaiting_hr_executives", "pending_hr_executive_review", "awaiting_director_hr"].includes(String(row.status || "")))]
+      [...(directorRes.data || []), ...(allLoansRes.data || []).filter((row: any) => isWithExecutiveHr(row.status))]
         .map((row: any) => [String(row.id), row]),
     ).values())
 

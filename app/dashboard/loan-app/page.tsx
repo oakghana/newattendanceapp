@@ -350,9 +350,10 @@ const STATUS_COLORS: Record<string, string> = {
   awaiting_committee: "bg-purple-100 text-purple-800",
   committee_rejected: "bg-red-100 text-red-800",
   awaiting_hr_terms: "bg-cyan-100 text-cyan-800",
-  awaiting_director_hr: "bg-indigo-100 text-indigo-800",
+  awaiting_hr_executives: "bg-indigo-100 text-indigo-800",
   pending_hr_executive_review: "bg-indigo-100 text-indigo-800",
   pending_hr_records_reference: "bg-sky-100 text-sky-800",
+  awaiting_director_hr: "bg-violet-100 text-violet-800",
   approved_director: "bg-emerald-100 text-emerald-800",
   partially_recovered: "bg-teal-100 text-teal-800",
   payment_completed: "bg-slate-200 text-slate-700",
@@ -371,9 +372,10 @@ const STATUS_LABELS: Record<string, string> = {
   awaiting_committee: "Awaiting Committee",
   committee_rejected: "Committee Denied",
   awaiting_hr_terms: "Awaiting HR Terms",
-  awaiting_director_hr: "Awaiting Executive HR Review",
+  awaiting_hr_executives: "Awaiting Executive HR Review",
   pending_hr_executive_review: "Awaiting Executive HR Review",
   pending_hr_records_reference: "HR Executive Approved — Awaiting HR Records",
+  awaiting_director_hr: "Awaiting MD Approval",
   archived: "Archived",
   approved_director: "MD Approved", 
   partially_recovered: "Payment In Progress",
@@ -415,6 +417,8 @@ const WORKFLOW_ORDER = [
   "sent_to_accounts",
   "awaiting_committee",
   "awaiting_hr_terms",
+  "awaiting_hr_executives",
+  "pending_hr_records_reference",
   "awaiting_director_hr",
   "approved_director",
 ] as const
@@ -468,7 +472,10 @@ function statusBadgeClass(status: string, emphasis: "soft" | "solid" = "soft") {
       awaiting_committee: "bg-violet-700 text-white",
       committee_rejected: "bg-red-700 text-white",
       awaiting_hr_terms: "bg-cyan-700 text-white",
-      awaiting_director_hr: "bg-indigo-700 text-white",
+      awaiting_hr_executives: "bg-indigo-700 text-white",
+      pending_hr_executive_review: "bg-indigo-700 text-white",
+      pending_hr_records_reference: "bg-sky-700 text-white",
+      awaiting_director_hr: "bg-violet-700 text-white",
       approved_director: "bg-emerald-700 text-white",
       partially_recovered: "bg-teal-700 text-white",
       payment_completed: "bg-slate-700 text-white",
@@ -482,7 +489,9 @@ function statusBadgeClass(status: string, emphasis: "soft" | "solid" = "soft") {
 
   function workflowStepIndex(status: string): number {
     const terminalStatuses = new Set(["approved_director", "partially_recovered", "payment_completed"])
-    return WORKFLOW_ORDER.indexOf((terminalStatuses.has(status) ? "approved_director" : status) as typeof WORKFLOW_ORDER[number])
+    // The legacy value means the same stage as awaiting_hr_executives.
+    const normalized = status === "pending_hr_executive_review" ? "awaiting_hr_executives" : status
+    return WORKFLOW_ORDER.indexOf((terminalStatuses.has(normalized) ? "approved_director" : normalized) as typeof WORKFLOW_ORDER[number])
   }
 
   function stageOwner(status: string) {
@@ -492,7 +501,10 @@ function statusBadgeClass(status: string, emphasis: "soft" | "solid" = "soft") {
     sent_to_accounts: "Accounts",
     awaiting_committee: "Committee",
     awaiting_hr_terms: "HR Office",
-    awaiting_director_hr: "Executive HR",
+    awaiting_hr_executives: "Executive HR",
+    pending_hr_executive_review: "Executive HR",
+    pending_hr_records_reference: "HR Records",
+    awaiting_director_hr: "Managing Director",
     approved_director: "Completed",
     partially_recovered: "Repaying",
     payment_completed: "Cleared",
@@ -1797,7 +1809,7 @@ export default function LoanAppPage() {
       const goodFd = rows.filter((row) => isGoodFd(row)).length
       const poorFd = rows.filter((row) => isPoorFd(row)).length
       const goodFdNotPushed = rows.filter((row) => isGoodFdNotPushed(row)).length
-      const sentForApproval = rows.filter((row) => row.status === "awaiting_director_hr").length
+      const sentForApproval = rows.filter((row) => sentForApprovalStatuses.includes(row.status)).length
       const archivable = rows.filter((row) => isArchivableStatus(row.status)).length
       const totalUnique = new Set(
         rows
@@ -3692,7 +3704,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     const selectedRows = rows.filter((row) => selectedLoanIds.includes(row.id))
     let completed = 0
     for (const row of selectedRows) {
-      const action = row.status === "pending_hod" ? "hod_decision" : row.status === "awaiting_hr_executive" || row.status === "awaiting_director_hr" ? "director_finalize" : null
+      const action = row.status === "pending_hod" ? "hod_decision" : ["awaiting_hr_executives", "pending_hr_executive_review"].includes(String(row.status || "")) ? "director_finalize" : null
       if (!action) continue
       const response = await fetch("/api/loan/action", {
         method: "POST",
@@ -4102,7 +4114,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 sent_to_accounts:    { icon: <Calculator className="h-4 w-4" />, label: "Accounts / FD",    owner: "Accounts Team",      desc: "FD check & financial review in progress" },
                 awaiting_committee:  { icon: <Users className="h-4 w-4" />, label: "Committee",        owner: "Welfare Committee",  desc: "Under committee deliberation" },
                 awaiting_hr_terms:   { icon: <FileSpreadsheet className="h-4 w-4" />, label: "HR Terms",         owner: "HR Office",          desc: "HR is setting loan repayment terms" },
-                awaiting_director_hr:{ icon: <Award className="h-4 w-4" />, label: "Executive HR",     owner: "Director / Executive","desc": "Final executive approval pending" },
+                awaiting_hr_executives:{ icon: <Award className="h-4 w-4" />, label: "Executive HR",    owner: "HR Executive",       desc: "HR Executive is reviewing and signing your memo" },
+                pending_hr_records_reference:{ icon: <FileCheck className="h-4 w-4" />, label: "HR Records", owner: "HR Records",         desc: "HR Records is assigning the official memo reference" },
+                awaiting_director_hr:{ icon: <Award className="h-4 w-4" />, label: "Managing Director", owner: "Managing Director",  desc: "Awaiting final approval by the Managing Director" },
                 approved_director:   { icon: <BadgeCheck className="h-4 w-4" />, label: "Approved!",        owner: "Complete",           desc: "Your loan has been fully approved" },
               }
 
@@ -5443,7 +5457,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       const approvedLoans = allLoans.filter((r) => {
                         const activeStatuses = [
                           "approved_director",
-                          "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered",
+                          "awaiting_hr_terms", "awaiting_hr_executives", "pending_hr_executive_review", "pending_hr_records_reference", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered",
                           "payment_completed",
                         ]
                         return activeStatuses.includes(r.status)
@@ -5665,7 +5679,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 const approvedLoans = allLoans.filter((r) => {
                   const activeStatuses = [
                     "hod_approved", "sent_to_accounts", "approved_director", "awaiting_committee",
-                    "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered",
+                    "awaiting_hr_terms", "awaiting_hr_executives", "pending_hr_executive_review", "pending_hr_records_reference", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered",
                     "payment_completed", "awaiting_committee"
                   ]
                   return activeStatuses.includes(r.status)
@@ -7033,11 +7047,12 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   {/* Approval pipeline progress */}
                   {(() => {
                     const steps = [
-                      { label: "HOD", statuses: ["submitted","hod_review","hod_approved","sent_to_loan_office","loan_office_review","loan_approved","sent_to_accounts","accounts_review","accounts_approved","sent_to_committee","committee_approved","sent_to_hr","hr_office_review","hr_office_approved","awaiting_director_hr","approved_director","director_rejected"] },
-                      { label: "Loan Office", statuses: ["sent_to_loan_office","loan_office_review","loan_approved","sent_to_accounts","accounts_review","accounts_approved","sent_to_committee","committee_approved","sent_to_hr","hr_office_review","hr_office_approved","awaiting_director_hr","approved_director","director_rejected"] },
-                      { label: "FD", statuses: ["sent_to_accounts","accounts_review","accounts_approved","sent_to_committee","committee_approved","sent_to_hr","hr_office_review","hr_office_approved","awaiting_director_hr","approved_director","director_rejected"] },
-                      { label: "HR Office", statuses: ["sent_to_hr","hr_office_review","hr_office_approved","awaiting_director_hr","approved_director"] },
-                      { label: "Director", statuses: ["awaiting_director_hr","approved_director"] },
+                      { label: "HOD", statuses: ["submitted","hod_review","hod_approved","sent_to_loan_office","loan_office_review","loan_approved","sent_to_accounts","accounts_review","accounts_approved","sent_to_committee","committee_approved","sent_to_hr","hr_office_review","hr_office_approved","awaiting_hr_executives","pending_hr_executive_review","pending_hr_records_reference","awaiting_director_hr","approved_director","director_rejected"] },
+                      { label: "Loan Office", statuses: ["sent_to_loan_office","loan_office_review","loan_approved","sent_to_accounts","accounts_review","accounts_approved","sent_to_committee","committee_approved","sent_to_hr","hr_office_review","hr_office_approved","awaiting_hr_executives","pending_hr_executive_review","pending_hr_records_reference","awaiting_director_hr","approved_director","director_rejected"] },
+                      { label: "FD", statuses: ["sent_to_accounts","accounts_review","accounts_approved","sent_to_committee","committee_approved","sent_to_hr","hr_office_review","hr_office_approved","awaiting_hr_executives","pending_hr_executive_review","pending_hr_records_reference","awaiting_director_hr","approved_director","director_rejected"] },
+                      { label: "HR Office", statuses: ["sent_to_hr","hr_office_review","hr_office_approved","awaiting_hr_executives","pending_hr_executive_review","pending_hr_records_reference","awaiting_director_hr","approved_director"] },
+                      { label: "Executive HR", statuses: ["awaiting_hr_executives","pending_hr_executive_review","pending_hr_records_reference","awaiting_director_hr","approved_director"] },
+                      { label: "MD", statuses: ["awaiting_director_hr","approved_director"] },
                     ]
                     const isDenied = ["director_rejected","rejected_fd","hod_rejected","loan_office_rejected","committee_rejected"].includes(row.status)
                     return (
