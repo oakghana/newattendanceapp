@@ -3407,6 +3407,19 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
         }
       }
 
+      const forwardFromMemoPreview = () => {
+        const memoToForward = resolveMemoForForward()
+        if (memoToForward === null) return
+        setModalMemoText(memoToForward)
+        setMemoReviewModal((s) => ({ ...s, open: false }))
+        setActionModal((s) => ({ ...s, open: true }))
+        // Let the Set Terms dialog reopen with the final memo text before submitting
+        // through the same validated handler used by the primary action button.
+        window.setTimeout(() => {
+          document.querySelector<HTMLButtonElement>("[data-hr-forward-submit='true']")?.click()
+        }, 120)
+      }
+
       const generateMemoPdf = async (row: LoanRequest, memoText: string, sigText: string, sigImageDataUrl?: string | null) => {
         const { jsPDF } = await import("jspdf")
         const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
@@ -4938,7 +4951,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             </div>
           )}
 
-          {/* ── Analytics strip ── */}
+          {/* ─�� Analytics strip ── */}
           <div id="loan-office-loanOfficeAnalytics" className="order-3 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
             <button type="button" data-loan-section-toggle className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("loanOfficeAnalytics")}>
               <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.loanOfficeAnalytics ? "-rotate-90" : ""}`} />
@@ -8451,7 +8464,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     setMemoReviewModal({ open: true, row: namedPreviewRow })
                   }, 80)
                 }}>Preview Memo</Button>
-                <Button onClick={() => {
+                <Button data-hr-forward-submit="true" onClick={() => {
                   const memoToForward = resolveMemoForForward()
                   if (memoToForward === null) return
                   const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone, modalHodName, modalHodRank, modalHodLocation, modalMemoRecipient)
@@ -8988,13 +9001,22 @@ if (!modalDisbursement || !modalRecovery) {
               )}
             </div>
             {actionModal.actionType === "hr_terms" && (
-              <Button
-                size="sm"
-                className="h-8 bg-violet-700 text-xs font-semibold text-white hover:bg-violet-800"
-                onClick={closeMemoReview}
-              >
-                Keep edits &amp; return
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  className="h-8 bg-emerald-700 text-xs font-semibold text-white hover:bg-emerald-800"
+                  onClick={forwardFromMemoPreview}
+                >
+                  Set Terms &amp; Forward to Executive HR
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 bg-violet-700 text-xs font-semibold text-white hover:bg-violet-800"
+                  onClick={closeMemoReview}
+                >
+                  Keep edits &amp; return
+                </Button>
+              </div>
             )}
 
             {memoReviewModal.row && (isAdmin || isManagingDirector) && ["awaiting_director_hr", "approved_director"].includes(String(memoReviewModal.row.status || "")) && (
