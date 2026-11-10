@@ -154,12 +154,26 @@ export async function GET(req: NextRequest) {
     const { data: pending, error } = await admin
       .from("loan_requests")
       .select(loanSelect)
-      .in("status", ["awaiting_director_hr", "pending_hr_records_reference"])
+      .eq("status", "awaiting_director_hr")
       .is("md_approved_at", null)
       .order("created_at", { ascending: false })
       .limit(200)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     data = (pending || []) as Record<string, unknown>[]
+    let adminPreviewLoans: Record<string, unknown>[] = []
+    if (["admin", "administrator"].includes(String(profile.role || "").toLowerCase())) {
+      const { data: signedForReference, error: previewError } = await admin
+        .from("loan_requests")
+        .select(loanSelect)
+        .eq("status", "pending_hr_records_reference")
+        .is("md_approved_at", null)
+        .not("director_letter", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(200)
+      if (previewError) return NextResponse.json({ error: previewError.message }, { status: 500 })
+      adminPreviewLoans = (signedForReference || []) as Record<string, unknown>[]
+    }
+    return NextResponse.json({ loans: data, adminPreviewLoans })
   } else {
     // The approved-memo feed must include both loans approved through the
     // current MD workflow and legacy/imported loans already disbursed and

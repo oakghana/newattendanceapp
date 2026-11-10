@@ -810,6 +810,7 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
 export function MdApprovalsClient({ profile }: Props) {
   const { toast } = useToast()
   const [loans, setLoans] = useState<Loan[]>([])
+  const [adminPreviewLoans, setAdminPreviewLoans] = useState<Loan[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [approvedIds, setApprovedIds] = useState<Set<string>>(new Set())
@@ -912,6 +913,7 @@ export function MdApprovalsClient({ profile }: Props) {
       const res = await fetch("/api/loan/md-approve?view=pending")
       const data = await res.json()
       setLoans(data.loans || [])
+      setAdminPreviewLoans(data.adminPreviewLoans || [])
     } catch {
       toast({ title: "Error loading loans", variant: "destructive" })
     } finally {
@@ -1616,6 +1618,19 @@ export function MdApprovalsClient({ profile }: Props) {
                 )}
                 <PeriodSection title="Earlier This Month" loans={grouped.month} selected={selected} onToggle={toggleSelect} onSelectAll={toggleSelectAll} approvedIds={approvedIds} defaultOpen={false} onPreview={isAdminViewer ? setAdminPreviewLoan : undefined} />
                 <PeriodSection title="Older" loans={grouped.older} selected={selected} onToggle={toggleSelect} onSelectAll={toggleSelectAll} approvedIds={approvedIds} defaultOpen={false} onPreview={isAdminViewer ? setAdminPreviewLoan : undefined} />
+              </div>
+            )}
+
+            {isAdminViewer && adminPreviewLoans.length > 0 && (
+              <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-bold uppercase tracking-wider text-sky-900">HR Executive signed — Admin preview only</h2>
+                    <p className="mt-1 text-xs text-sky-700">These records are awaiting HR Records reference and are not pending MD approval.</p>
+                  </div>
+                  <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-700">{adminPreviewLoans.length}</span>
+                </div>
+                <PeriodSection title="HR Executive signed" loans={adminPreviewLoans} selected={selected} onToggle={toggleSelect} onSelectAll={() => undefined} approvedIds={approvedIds} defaultOpen={true} onPreview={setAdminPreviewLoan} />
               </div>
             )}
 
