@@ -8,6 +8,11 @@ import {
 } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import {
+  FORWARDED_TO_EXECUTIVE_HR_STATUS,
+  isWithExecutiveHr,
+  statusAfterExecutiveApproval,
+} from "@/lib/loan-approval-stages"
+import {
   GOOD_FD_THRESHOLD,
   canDoAccounts,
   canEnterFdScore,
@@ -850,7 +855,9 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ error: "disbursement_date, recovery_start_date, and valid recovery_months are required for every loan, including funeral loans" }, { status: 400 })
   }
 
-      toStatus = "awaiting_director_hr"
+      // HR Loan Office hands over to Executive HR for review and signing. The MD stage
+      // ("awaiting_director_hr") is only reached after Executive HR and HR Records.
+      toStatus = FORWARDED_TO_EXECUTIVE_HR_STATUS
       update.status = toStatus
       update.hr_officer_id = user.id
       update.hr_note = note
@@ -901,9 +908,9 @@ export async function POST(request: NextRequest) {
       const hrDirectorLetter = String(body.director_letter || "").trim()
       if (hrDirectorLetter) {
         update.director_letter = hrDirectorLetter
-        if (!String(req.director_letter_original || "").trim()) {
-          update.director_letter_original = hrDirectorLetter
-        }
+        // What the HR Loan Office forwards is the baseline the HR Executive's tracked
+        // changes are measured against, even if an earlier draft was saved.
+        update.director_letter_original = hrDirectorLetter
       }
 
       // Track who is expected to sign/finalize the memo.
@@ -935,17 +942,17 @@ export async function POST(request: NextRequest) {
         if (ordered[0]?.id) update.director_hr_id = ordered[0].id
       }
 
-      // Notify staff that terms are set and awaiting Director HR
+      // Notify staff that terms are set and awaiting Executive HR
       const memoRequest = { ...req, ...update }
       const hrMemo = buildHrTermsMemo(memoRequest, disbursementDate, recoveryStartDate, recoveryMonths, note)
       const hrMemoPath = buildMemoPath(req.id, req.user_id)
       await notifyUsers(
         admin,
         [req.user_id],
-        "Loan Terms Set — Pending Director HR Approval",
+        "Loan Terms Set — Pending Executive HR Review",
         isFuneralLoan
-          ? `Your funeral support request ${req.request_number} has been set for disbursement on ${disbursementDate} with no repayment or monthly salary deduction, and forwarded to Director HR for final approval.`
-          : `Your request ${req.request_number} terms have been set by HR Office (Disbursement: ${disbursementDate}; Recovery Start: ${recoveryStartDate}; ${recoveryMonths} months) and forwarded to Director HR for final approval.`,
+          ? `Your funeral support request ${req.request_number} has been set for disbursement on ${disbursementDate} with no repayment or monthly salary deduction, and forwarded to Executive HR for review and approval.`
+          : `Your request ${req.request_number} terms have been set by HR Office (Disbursement: ${disbursementDate}; Recovery Start: ${recoveryStartDate}; ${recoveryMonths} months) and forwarded to Executive HR for review and approval.`,
         "loan_hr_terms_set",
         { request_id: req.id, memo: hrMemo, memo_path: hrMemoPath },
       )
@@ -957,8 +964,8 @@ export async function POST(request: NextRequest) {
         await notifyUsers(
           admin,
           [ownerId],
-          "Loan Ready for Your Approval",
-          `Request ${req.request_number} from ${req.staff_rank || "staff"} is assigned to you for final approval.`,
+          "Loan Ready for Your Review",
+          `Request ${req.request_number} from ${req.staff_rank || "staff"} has been forwarded by HR Loan Office and is ready for your Executive HR review and approval.`,
           "loan_director_pending_owner",
           { request_id: req.id, role: "owner" },
         )
@@ -1111,10 +1118,15 @@ export async function POST(request: NextRequest) {
       //          → reject closes as "director_rejected"
       // Stage 2: Director HR / MD stamps at "awaiting_director_hr"
       //          → approve = "approved_director"  |  reject = "director_rejected"
-      const isHrExecutiveStage = req.status === "awaiting_hr_executives" || req.status === "pending_hr_executive_review"
+      const isHrExecutiveStage = isWithExecutiveHr(req.status)
 
+      // HR Records only advances a loan whose reference is not yet locked, so a loan that
+      // already carries a locked reference goes straight on to the MD instead of waiting
+      // at a step that could never move it.
+      const afterExecutiveApproval = statusAfterExecutiveApproval(req)
+      const referenceAlreadyLocked = afterExecutiveApproval === "awaiting_director_hr"
       if (isHrExecutiveStage) {
-        toStatus = decision === "approve" ? "pending_hr_records_reference" : "director_rejected"
+        toStatus = decision === "approve" ? afterExecutiveApproval : "director_rejected"
       } else {
         toStatus = decision === "approve" ? "approved_director" : "director_rejected"
       }
@@ -1146,17 +1158,20 @@ export async function POST(request: NextRequest) {
       const dirStaffName = requesterDisplayName
 
       if (isHrExecutiveStage && decision === "approve") {
-        // HR Executive signed — route the memo through HR Records before MD approval.
-        const { data: mdUsers } = await admin
+        // HR Executive signed. Without a locked reference the memo goes to HR Records
+        // first; with one it is already ready for the Managing Director.
+        const { data: nextOfficeUsers } = await admin
           .from("user_profiles")
           .select("id")
-          .in("role", ["hr_records", "hr_records_officer", "hr_records_manager", "admin"])
+          .in("role", referenceAlreadyLocked ? ["managing_director", "admin"] : ["hr_records", "hr_records_officer", "hr_records_manager", "admin"])
           .eq("is_active", true)
         await notifyUsers(
           admin,
-          (mdUsers || []).map((r: any) => r.id),
-          "Loan Memo Awaiting HR Records Reference",
-          `${req.request_number} was approved by HR Executive ${directorName} and is now awaiting its official HR Records reference before MD approval.`,
+          (nextOfficeUsers || []).map((r: any) => r.id),
+          referenceAlreadyLocked ? "Loan Memo Ready for MD Approval" : "Loan Memo Awaiting HR Records Reference",
+          referenceAlreadyLocked
+            ? `${req.request_number} was approved by HR Executive ${directorName}. Its official reference is already assigned, so it is ready for MD approval.`
+            : `${req.request_number} was approved by HR Executive ${directorName} and is now awaiting its official HR Records reference before MD approval.`,
           "loan_awaiting_md",
           { request_id: req.id },
         )
@@ -1165,7 +1180,9 @@ export async function POST(request: NextRequest) {
           admin,
           [req.user_id],
           "Loan Signed by HR Executive",
-          `Your loan request ${req.request_number} was approved by the HR Executive and is now with HR Records for its official memo reference before final MD approval.`,
+          referenceAlreadyLocked
+            ? `Your loan request ${req.request_number} was approved by the HR Executive and is now with the Managing Director for final approval.`
+            : `Your loan request ${req.request_number} was approved by the HR Executive and is now with HR Records for its official memo reference before final MD approval.`,
           "loan_hr_executive_signed",
           { request_id: req.id },
         )
@@ -1297,9 +1314,10 @@ export async function POST(request: NextRequest) {
         update.fixed_amount = salaryAdvance.amount
       }
 
-      // Update status to pending_hr_executive_review
-      update.status = "pending_hr_executive_review"
-      toStatus = "pending_hr_executive_review"
+      // One status for "with Executive HR": awaiting_hr_executives. The legacy
+      // pending_hr_executive_review value is still read, but never written again.
+      update.status = "awaiting_hr_executives"
+      toStatus = "awaiting_hr_executives"
 
       // Store the disbursement and recovery dates (convert YYYY-MM to YYYY-MM-01)
       if (body.disbursement_date) {

@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { createClientAndGetUser, createAdminClient } from "@/lib/supabase/server"
+import { isUsableSignatureImage } from "@/lib/loan-memo-forwarding"
 
 export async function POST(req: NextRequest) {
   const admin = await createAdminClient()
@@ -99,7 +100,53 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
   const url = new URL(req.url)
-  const view = url.searchParams.get("view") || "pending" // "pending" | "approved"
+  const view = url.searchParams.get("view") || "pending" // "pending" | "approved" | "signature"
+
+  // Admin-only: the signature Executive HR applied when signing, for the view-only memo
+  // preview. Read from the loan itself so it is the signature actually used at signing.
+  if (view === "signature") {
+    if (!["admin", "administrator"].includes(String(profile.role || "").toLowerCase())) {
+      return NextResponse.json({ error: "Only administrators can view the HR Executive signature preview." }, { status: 403 })
+    }
+    const loanId = url.searchParams.get("id")
+    if (!loanId) return NextResponse.json({ error: "Loan id is required." }, { status: 400 })
+    const { data: signedLoan, error: signedError } = await admin
+      .from("loan_requests")
+      .select("id, director_hr_id, director_signature_mode, director_signature_text, director_signature_data_url, director_decision_at")
+      .eq("id", loanId)
+      .maybeSingle()
+    if (signedError) return NextResponse.json({ error: signedError.message }, { status: 500 })
+    if (!signedLoan?.director_decision_at) {
+      return NextResponse.json({ error: "This memo has not been signed by Executive HR yet." }, { status: 404 })
+    }
+
+    const mode = signedLoan.director_signature_mode || null
+    let dataUrl = isUsableSignatureImage(signedLoan.director_signature_data_url) ? signedLoan.director_signature_data_url : null
+    let signerName: string | null = null
+    let signerPosition: string | null = null
+    if (signedLoan.director_hr_id) {
+      const { data: signer } = await admin
+        .from("user_profiles")
+        .select("first_name, last_name, position, signature_data_url")
+        .eq("id", signedLoan.director_hr_id)
+        .maybeSingle()
+      signerName = `${signer?.first_name || ""} ${signer?.last_name || ""}`.trim() || null
+      signerPosition = signer?.position || null
+      // Only a signer who chose a drawn/uploaded signature falls back to their saved profile image.
+      if (!dataUrl && mode !== "typed" && isUsableSignatureImage(signer?.signature_data_url)) dataUrl = signer?.signature_data_url || null
+    }
+
+    return NextResponse.json({
+      signature: {
+        mode,
+        text: signedLoan.director_signature_text || null,
+        dataUrl,
+        signerName,
+        signerPosition,
+        signedAt: signedLoan.director_decision_at,
+      },
+    })
+  }
 
   // Fetch loan types for category mapping (no FK join needed — separate query)
   const { data: loanTypesRows } = await admin
@@ -123,6 +170,11 @@ export async function GET(req: NextRequest) {
     disbursement_date,
     md_approved_at,
     md_approved_by_name,
+    director_letter,
+    memo_cc,
+    director_hr_id,
+    director_signature_text,
+    director_decision_at,
     reference_number,
     memo_reference_locked,
     user_id,
@@ -155,6 +207,22 @@ export async function GET(req: NextRequest) {
       .limit(200)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     data = (pending || []) as Record<string, unknown>[]
+    let adminPreviewLoans: Record<string, unknown>[] = []
+    if (["admin", "administrator"].includes(String(profile.role || "").toLowerCase())) {
+      const { data: signedForReference, error: previewError } = await admin
+        .from("loan_requests")
+        .select(loanSelect)
+        .eq("status", "pending_hr_records_reference")
+        .is("md_approved_at", null)
+        .not("director_letter", "is", null)
+        .not("director_decision_at", "is", null)
+        .not("director_signature_text", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(200)
+      if (previewError) return NextResponse.json({ error: previewError.message }, { status: 500 })
+      adminPreviewLoans = (signedForReference || []) as Record<string, unknown>[]
+    }
+    return NextResponse.json({ loans: data, adminPreviewLoans })
   } else {
     // The approved-memo feed must include both loans approved through the
     // current MD workflow and legacy/imported loans already disbursed and

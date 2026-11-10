@@ -16,6 +16,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { SignaturePad } from "@/components/leave/signature-pad"
+import {
+  DEFAULT_MEMO_CC,
+  decideForwardedMemo,
+  formatMemoCcLines,
+  memoTermsSignature,
+  monthToFirstOfMonthDate,
+  toMonthInputValue,
+  type MemoDraftBase,
+} from "@/lib/loan-memo-forwarding"
 import { TrackedMemoEditor } from "@/components/memo/tracked-memo-editor"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
@@ -341,7 +350,10 @@ const STATUS_COLORS: Record<string, string> = {
   awaiting_committee: "bg-purple-100 text-purple-800",
   committee_rejected: "bg-red-100 text-red-800",
   awaiting_hr_terms: "bg-cyan-100 text-cyan-800",
-  awaiting_director_hr: "bg-indigo-100 text-indigo-800",
+  awaiting_hr_executives: "bg-indigo-100 text-indigo-800",
+  pending_hr_executive_review: "bg-indigo-100 text-indigo-800",
+  pending_hr_records_reference: "bg-sky-100 text-sky-800",
+  awaiting_director_hr: "bg-violet-100 text-violet-800",
   approved_director: "bg-emerald-100 text-emerald-800",
   partially_recovered: "bg-teal-100 text-teal-800",
   payment_completed: "bg-slate-200 text-slate-700",
@@ -360,9 +372,12 @@ const STATUS_LABELS: Record<string, string> = {
   awaiting_committee: "Awaiting Committee",
   committee_rejected: "Committee Denied",
   awaiting_hr_terms: "Awaiting HR Terms",
-  awaiting_director_hr: "Awaiting HR Executives",
+  awaiting_hr_executives: "Awaiting Executive HR Review",
+  pending_hr_executive_review: "Awaiting Executive HR Review",
+  pending_hr_records_reference: "HR Executive Approved — Awaiting HR Records",
+  awaiting_director_hr: "Awaiting MD Approval",
   archived: "Archived",
-  approved_director: "Approved by HR Executives",
+  approved_director: "MD Approved", 
   partially_recovered: "Payment In Progress",
   payment_completed: "Payment Completed",
   director_rejected: "HR Executives Denied",
@@ -402,6 +417,8 @@ const WORKFLOW_ORDER = [
   "sent_to_accounts",
   "awaiting_committee",
   "awaiting_hr_terms",
+  "awaiting_hr_executives",
+  "pending_hr_records_reference",
   "awaiting_director_hr",
   "approved_director",
 ] as const
@@ -455,7 +472,10 @@ function statusBadgeClass(status: string, emphasis: "soft" | "solid" = "soft") {
       awaiting_committee: "bg-violet-700 text-white",
       committee_rejected: "bg-red-700 text-white",
       awaiting_hr_terms: "bg-cyan-700 text-white",
-      awaiting_director_hr: "bg-indigo-700 text-white",
+      awaiting_hr_executives: "bg-indigo-700 text-white",
+      pending_hr_executive_review: "bg-indigo-700 text-white",
+      pending_hr_records_reference: "bg-sky-700 text-white",
+      awaiting_director_hr: "bg-violet-700 text-white",
       approved_director: "bg-emerald-700 text-white",
       partially_recovered: "bg-teal-700 text-white",
       payment_completed: "bg-slate-700 text-white",
@@ -469,7 +489,9 @@ function statusBadgeClass(status: string, emphasis: "soft" | "solid" = "soft") {
 
   function workflowStepIndex(status: string): number {
     const terminalStatuses = new Set(["approved_director", "partially_recovered", "payment_completed"])
-    return WORKFLOW_ORDER.indexOf((terminalStatuses.has(status) ? "approved_director" : status) as typeof WORKFLOW_ORDER[number])
+    // The legacy value means the same stage as awaiting_hr_executives.
+    const normalized = status === "pending_hr_executive_review" ? "awaiting_hr_executives" : status
+    return WORKFLOW_ORDER.indexOf((terminalStatuses.has(normalized) ? "approved_director" : normalized) as typeof WORKFLOW_ORDER[number])
   }
 
   function stageOwner(status: string) {
@@ -479,7 +501,10 @@ function statusBadgeClass(status: string, emphasis: "soft" | "solid" = "soft") {
     sent_to_accounts: "Accounts",
     awaiting_committee: "Committee",
     awaiting_hr_terms: "HR Office",
-    awaiting_director_hr: "Executive HR",
+    awaiting_hr_executives: "Executive HR",
+    pending_hr_executive_review: "Executive HR",
+    pending_hr_records_reference: "HR Records",
+    awaiting_director_hr: "Managing Director",
     approved_director: "Completed",
     partially_recovered: "Repaying",
     payment_completed: "Cleared",
@@ -875,9 +900,25 @@ function buildHrNoteWithThroTelephone(note: string, throTelephone: string, throN
   return [tokenStr, trimmedNote].filter(Boolean).join(" ")
 }
 
+// Rebuilds the Set Terms values the HR Loan Office forwarded, from what was saved
+// on the loan itself. The Executive HR review must not depend on anything held in
+// the HR Loan Office officer's browser.
+function deriveForwardedMemoEntry(row: LoanRequest) {
+  const parsed = splitHrNoteAndThroTelephone(row.hr_note || "")
+  return {
+    hodName: parsed.throName || row.hod_name || "",
+    hodRank: parsed.throRank || row.hod_rank || "",
+    hodLocation: parsed.throLocation || row.hod_location || row.staff_location_name || "",
+    hodTelephone: parsed.throTelephone || "",
+    memoRef: formatReferenceNumber(row.reference_number, row.request_number),
+    memoRecipient: parsed.memoRecipient || "Deputy Director Finance",
+    memoCc: row.memo_cc || "",
+  }
+}
+
 function buildDirectorAutoMemoDraft(
   row: LoanRequest,
-  entry?: { hodName?: string; hodRank?: string; hodLocation?: string; hodTelephone?: string; memoRef?: string; memoRecipient?: string },
+  entry?: { hodName?: string; hodRank?: string; hodLocation?: string; hodTelephone?: string; memoRef?: string; memoRecipient?: string; memoCc?: string },
   currentHodProfile?: any,
   signer?: MemoSigner,
 ) {
@@ -894,8 +935,8 @@ function buildDirectorAutoMemoDraft(
   const staffNo = row.staff_number || "—"
   const staffRank = (row.staff_rank || "").toUpperCase()
   // Use current HOD profile if available (dynamic), otherwise fall back to entry or row data
-  const hodRank = entry?.hodRank || currentHodProfile?.rank || (row.hod_rank || "").toUpperCase()
-  const hodLocation = entry?.hodLocation || currentHodProfile?.location || row.hod_location || row.staff_location_name || "—"
+  const hodRank = entry?.hodRank || (row.hod_rank || "").toUpperCase() || currentHodProfile?.rank || ""
+  const hodLocation = entry?.hodLocation || row.hod_location || row.staff_location_name || currentHodProfile?.location || "—"
   const memoRecipient = entry?.memoRecipient || "Deputy Director Finance"
   const memoRef = entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number)
   const today = new Date().toISOString().slice(0, 10)
@@ -911,6 +952,7 @@ function buildDirectorAutoMemoDraft(
   const salaryAdvanceDaysLine = isSalaryAdvance && (row.recovery_months || row.deduction_period_months)
   ? `Number of Months for Recovery: ${row.recovery_months || row.deduction_period_months}`
   : null
+  const memoCcLines = formatMemoCcLines(entry?.memoCc)
   const signerName = String(signer?.name || "HR EXECUTIVE").trim().toUpperCase()
   const signerPosition = String(signer?.position || "HR EXECUTIVE").trim().toUpperCase()
 
@@ -946,14 +988,7 @@ function buildDirectorAutoMemoDraft(
     signerName,
     signerPosition,
     "FOR: MANAGING DIRECTOR",
-    "",
-    "cc:  Managing Director",
-    "     Deputy Managing Director",
-    "     Deputy Director Finance",
-    "     Deputy Director Human Resource",
-    "     Audit Manager",
-    "     Registry Unit",
-    "     Records Unit",
+    ...(memoCcLines.length ? ["", ...memoCcLines] : []),
   ].join("\n")
 }
 
@@ -1209,6 +1244,7 @@ export default function LoanAppPage() {
   const [modalHrSignatory, setModalHrSignatory] = useState("")
   const [modalMemoRecipient, setModalMemoRecipient] = useState("Deputy Director Finance")
   const [modalMemoText, setModalMemoText] = useState("")
+  const [memoDraftBase, setMemoDraftBase] = useState<MemoDraftBase | null>(null)
   const [modalStaffFullName, setModalStaffFullName] = useState("")
   const [modalStaffNumber, setModalStaffNumber] = useState("")
   const [modalStaffRank, setModalStaffRank] = useState("")
@@ -1336,6 +1372,7 @@ export default function LoanAppPage() {
   const [directorSort, setDirectorSort] = useState<"newest" | "oldest">("newest")
   const [directorPage, setDirectorPage] = useState(1)
   const [directorViewMode, setDirectorViewMode] = useState<"table" | "card">("table")
+ const [directorQueueView, setDirectorQueueView] = useState<"pending" | "reviewed">("pending")
   const [directorLocation, setDirectorLocation] = useState("all")
   const [directorDept, setDirectorDept] = useState("all")
 
@@ -1772,7 +1809,7 @@ export default function LoanAppPage() {
       const goodFd = rows.filter((row) => isGoodFd(row)).length
       const poorFd = rows.filter((row) => isPoorFd(row)).length
       const goodFdNotPushed = rows.filter((row) => isGoodFdNotPushed(row)).length
-      const sentForApproval = rows.filter((row) => row.status === "awaiting_director_hr").length
+      const sentForApproval = rows.filter((row) => sentForApprovalStatuses.includes(row.status)).length
       const archivable = rows.filter((row) => isArchivableStatus(row.status)).length
       const totalUnique = new Set(
         rows
@@ -1918,9 +1955,24 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     () => filterAndSortRows(data?.inbox?.hrOffice || [], hrSearch, hrStatus, hrSort, hrLocation, hrDept),
     [data?.inbox?.hrOffice, hrSearch, hrStatus, hrSort, hrLocation, hrDept],
   )
+  const reviewedDirectorLoans = useMemo(() => {
+    const currentUserId = String(data?.profile?.id || "")
+    return (data?.inbox?.allLoans || []).filter((row) =>
+      String(row.director_hr_id || "") === currentUserId &&
+      Boolean(row.director_decision_at) &&
+      ["pending_hr_records_reference", "awaiting_director_hr", "approved_director", "director_rejected"].includes(String(row.status || "")),
+    )
+  }, [data?.inbox?.allLoans, data?.profile?.id])
   const filteredDirector = useMemo(
-    () => filterAndSortRows(data?.inbox?.directorHr || [], directorSearch, directorStatus, directorSort, directorLocation, directorDept),
-    [data?.inbox?.directorHr, directorSearch, directorStatus, directorSort, directorLocation, directorDept],
+    () => filterAndSortRows(
+      directorQueueView === "pending" ? (data?.inbox?.directorHr || []) : reviewedDirectorLoans,
+      directorSearch,
+      directorStatus,
+      directorSort,
+      directorLocation,
+      directorDept,
+    ),
+    [data?.inbox?.directorHr, reviewedDirectorLoans, directorQueueView, directorSearch, directorStatus, directorSort, directorLocation, directorDept],
   )
 
   const filteredMyTasks = useMemo(() => {
@@ -2655,11 +2707,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     }
   }
 
-  const convertMonthToDate = (monthStr: string): string | null => {
-    if (!monthStr) return null
-    // Convert "YYYY-MM" to "YYYY-MM-01" (first day of month)
-    return monthStr.includes("-") ? `${monthStr}-01` : null
-  }
+  const convertMonthToDate = (monthStr: string): string | null => monthToFirstOfMonthDate(monthStr)
 
   const runAction = async (payload: any) => {
     const res = await fetch("/api/loan/action", {
@@ -3185,6 +3233,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
         setModalAccountSignatory("")
         setModalHrSignatory("")
         setModalMemoText("")
+        setMemoDraftBase(null)
         setModalStaffFullName("")
         setModalStaffNumber("")
         setModalStaffRank("")
@@ -3204,9 +3253,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           setModalCorporateEmail(row.corporate_email || "")
           setModalReferenceNumber(formatReferenceNumber(row.reference_number, row.request_number))
           setModalBasicSalary(row.basic_salary ? String(row.basic_salary) : "")
-          setModalHodName(parsedLoanOfficeNote.throName || data?.profile.currentHodProfile?.name || row.hod_name || "")
-          setModalHodRank(parsedLoanOfficeNote.throRank || data?.profile.currentHodProfile?.rank || row.hod_rank || "")
-          setModalHodLocation(parsedLoanOfficeNote.throLocation || data?.profile.currentHodProfile?.location || row.hod_location || row.staff_location_name || "")
+          setModalHodName(parsedLoanOfficeNote.throName || row.hod_name || "")
+          setModalHodRank(parsedLoanOfficeNote.throRank || row.hod_rank || "")
+          setModalHodLocation(parsedLoanOfficeNote.throLocation || row.hod_location || row.staff_location_name || "")
           setModalHodTelephone(parsedLoanOfficeNote.throTelephone || "")
           setModalHodReviewerId(row.hod_reviewer_id || "")
           setModalDirectorApproverId(row.director_hr_id || "")
@@ -3224,29 +3273,53 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           const fallbackMonths = configuredLoanType?.default_recovery_months ? String(configuredLoanType.default_recovery_months) : ""
           const fallbackTerms = String(configuredLoanType?.loan_terms || "").trim()
           const parsedHrNote = splitHrNoteAndThroTelephone(entry?.note || row.hr_note || fallbackTerms || "")
-          setModalDisbursement(entry?.disbursement || "")
-          setModalRecovery(entry?.recovery || "")
-          setModalMonths(entry?.months || (row.recovery_months ? String(row.recovery_months) : fallbackMonths))
-          setModalBasicSalary(row.basic_salary ? String(row.basic_salary) : "")
+          const initialTerms = {
+            // Start from the dates already saved on the loan, the same ones the memo preview
+            // falls back to, so the form never looks empty while the memo shows months.
+            disbursement: entry?.disbursement || toMonthInputValue(row.disbursement_date),
+            recovery: entry?.recovery || toMonthInputValue(row.recovery_start_date),
+            months: entry?.months || (row.recovery_months ? String(row.recovery_months) : fallbackMonths),
+            basicSalary: row.basic_salary ? String(row.basic_salary) : "",
+            // THRO is the requester's own HOD / Regional Manager, never the viewer's.
+            hodName: entry?.hodName || parsedHrNote.throName || row.hod_name || "",
+            hodRank: entry?.hodRank || parsedHrNote.throRank || row.hod_rank || "",
+            hodLocation: entry?.hodLocation || parsedHrNote.throLocation || row.hod_location || row.staff_location_name || "",
+            memoRecipient: entry?.memoRecipient || parsedHrNote.memoRecipient || "Deputy Director Finance",
+            memoRef: entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number),
+            memoCc: row.memo_cc || DEFAULT_MEMO_CC,
+            directorApproverId: row.director_hr_id || "",
+          }
+          setModalDisbursement(initialTerms.disbursement)
+          setModalRecovery(initialTerms.recovery)
+          setModalMonths(initialTerms.months)
+          setModalBasicSalary(initialTerms.basicSalary)
           setModalNote(parsedHrNote.cleanedNote)
-          setModalHodName(entry?.hodName || parsedHrNote.throName || data?.profile.currentHodProfile?.name || row.hod_name || "")
-          setModalHodRank(entry?.hodRank || parsedHrNote.throRank || data?.profile.currentHodProfile?.rank || row.hod_rank || "")
-          setModalHodLocation(entry?.hodLocation || parsedHrNote.throLocation || data?.profile.currentHodProfile?.location || row.hod_location || row.staff_location_name || "")
+          setModalHodName(initialTerms.hodName)
+          setModalHodRank(initialTerms.hodRank)
+          setModalHodLocation(initialTerms.hodLocation)
           setModalHodTelephone(entry?.hodTelephone || parsedHrNote.throTelephone || "")
-          setModalMemoRecipient(entry?.memoRecipient || parsedHrNote.memoRecipient || "Deputy Director Finance")
-          setModalMemoRef(entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number))
-          setModalMemoCC(row.memo_cc || "Managing Director\nDeputy Managing Director\nDeputy Director Finance\nDeputy Director Human Resource\nAudit Manager\nRegistry Unit\nRecords Unit")
-          setModalDirectorApproverId(row.director_hr_id || "")
+          setModalMemoRecipient(initialTerms.memoRecipient)
+          setModalMemoRef(initialTerms.memoRef)
+          setModalMemoCC(initialTerms.memoCc)
+          setModalDirectorApproverId(initialTerms.directorApproverId)
+          // A memo already saved with "Save Draft" is the officer's own version: reopen it
+          // instead of silently replacing it with a freshly generated one.
+          const savedHrLetter = String(row.director_letter || "").trim()
+          if (savedHrLetter) {
+            setModalMemoText(stripMemoLetterhead(savedHrLetter))
+            setMemoDraftBase({ signature: memoTermsSignature(initialTerms), generated: null })
+          }
         }
         if (actionType === "director") {
-          const entry = hrInputs[row.id]
           const currentExecutive = {
             name: `${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim(),
             position: data?.profile.position || "HR Executive",
           }
           const requesterProfile = (lookupData?.staff || []).find((staff) => staff.id === row.user_id)
           const memoRow = row.staff_full_name ? row : { ...row, staff_full_name: requesterProfile ? `${requesterProfile.first_name || ""} ${requesterProfile.last_name || ""}`.trim() : row.staff_full_name }
-          const draft = buildDirectorAutoMemoDraft(memoRow, entry, data?.profile.currentHodProfile, currentExecutive)
+          // The saved memo the HR Loan Office forwarded is authoritative. Only when none exists
+          // is a draft rebuilt, and then from the persisted hand-off, not from this browser.
+          const draft = buildDirectorAutoMemoDraft(memoRow, deriveForwardedMemoEntry(memoRow), undefined, currentExecutive)
           const savedMemo = String(row.director_letter || "").trim()
           setModalMemoText(stripMemoLetterhead(normalizeMemoSigner(savedMemo || draft, currentExecutive)))
           setModalSignatureText(signatureText || currentExecutive.name)
@@ -3270,6 +3343,148 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     setSelectedHodsForLink([hodUserId])
     toast({ title: "Linkage loaded", description: "You can now edit this linkage in the Single Staff HOD Linkage form." })
   }
+
+      const hrTermsMemoInputs = () => ({
+        disbursement: modalDisbursement,
+        recovery: modalRecovery,
+        months: modalMonths,
+        basicSalary: modalBasicSalary,
+        hodName: modalHodName,
+        hodRank: modalHodRank,
+        hodLocation: modalHodLocation,
+        memoRecipient: modalMemoRecipient,
+        memoRef: modalMemoRef,
+        memoCc: modalMemoCC,
+        directorApproverId: modalDirectorApproverId,
+      })
+
+      // Builds the memo from exactly what is typed in Set Terms, so what is previewed and
+      // what is forwarded to the HR Executive always come from the same source.
+      const buildHrTermsMemo = () => {
+        const sourceRow = actionModal.row!
+        const monthsValue = Number(modalMonths) || sourceRow.recovery_months || null
+        const basicSalaryValue = Number(modalBasicSalary) || sourceRow.basic_salary || null
+        // Mirrors the server rule used when the terms are saved, so the memo amount matches.
+        const multiplier = Math.trunc(Number(sourceRow.salary_advance_multiplier || monthsValue || 0))
+        const salaryAdvanceTerms = isSalaryAdvanceLoan(sourceRow) && basicSalaryValue && multiplier > 0
+          ? { salary_advance_multiplier: multiplier, salary_advance_amount: Number(basicSalaryValue) * multiplier }
+          : {}
+        const termsRow = {
+          ...sourceRow,
+          recovery_start_date: modalRecovery || sourceRow.recovery_start_date,
+          disbursement_date: modalDisbursement || sourceRow.disbursement_date,
+          recovery_months: monthsValue,
+          basic_salary: basicSalaryValue,
+          ...salaryAdvanceTerms,
+          hod_name: modalHodName,
+          hod_rank: modalHodRank,
+          hod_location: modalHodLocation,
+        }
+        const selectedExecutive = data?.directorApprovers?.find((approver) => approver.id === modalDirectorApproverId)
+        const requesterProfile = (lookupData?.staff || []).find((staff) => staff.id === termsRow.user_id)
+        const namedRow = termsRow.staff_full_name
+          ? termsRow
+          : { ...termsRow, staff_full_name: requesterProfile ? `${requesterProfile.first_name || ""} ${requesterProfile.last_name || ""}`.trim() : termsRow.staff_full_name }
+        const draft = stripMemoLetterhead(
+          buildDirectorAutoMemoDraft(
+            namedRow,
+            { hodName: modalHodName, hodRank: modalHodRank, hodLocation: modalHodLocation, hodTelephone: modalHodTelephone, memoRef: modalMemoRef, memoRecipient: modalMemoRecipient, memoCc: modalMemoCC },
+            undefined,
+            selectedExecutive ? { name: selectedExecutive.full_name, position: selectedExecutive.position } : undefined,
+          ),
+        )
+        return { draft, row: namedRow }
+      }
+
+      // Chooses the memo text sent to the HR Executive. Returns null, after telling the
+      // officer why, when the terms changed after the memo had been edited.
+      const resolveMemoForForward = (): string | null => {
+        const decision = decideForwardedMemo(modalMemoText, memoDraftBase, memoTermsSignature(hrTermsMemoInputs()))
+        if (decision === "keep") return modalMemoText
+        if (decision === "regenerate") return buildHrTermsMemo().draft
+        toast({
+          title: "Refresh the memo before forwarding",
+          description: "The terms changed after this memo was drafted or edited. Click Preview Memo to rebuild it from the current terms, then forward.",
+          variant: "destructive",
+        })
+        return null
+      }
+
+      // Closing the preview by state alone does not fire the dialog's onOpenChange, so the
+      // Set Terms dialog must be reopened explicitly or the officer's work appears lost.
+      const closeMemoReview = () => {
+        setMemoReviewModal((s) => ({ ...s, open: false }))
+        if (actionModal.actionType === "hr_terms" && actionModal.row) {
+          setActionModal((s) => ({ ...s, open: true }))
+        }
+      }
+
+      // The single submit path for the Set Terms dialog and the memo preview, so both send
+      // exactly the same validated terms. Returns false when nothing was sent.
+      const submitHrTermsForward = (): boolean => {
+        const row = actionModal.row
+        if (!row) return false
+        // The memo preview falls back to the dates saved on the loan, so the submit uses the
+        // same rule; otherwise the memo can show months that are never actually sent.
+        const disbursementMonth = modalDisbursement || toMonthInputValue(row.disbursement_date)
+        const recoveryMonth = modalRecovery || toMonthInputValue(row.recovery_start_date)
+        const disbursementDate = convertMonthToDate(disbursementMonth)
+        const recoveryStartDate = convertMonthToDate(recoveryMonth)
+        const recoveryMonths = Number(modalMonths || 0)
+        const missing: string[] = []
+        if (!disbursementDate) missing.push("Disbursement Date")
+        if (!recoveryStartDate) missing.push("Recovery Start Date")
+        if (!Number.isFinite(recoveryMonths) || recoveryMonths <= 0) missing.push("Recovery Months")
+        if (missing.length) {
+          toast({ title: "Complete HR terms first", description: `Please fill in: ${missing.join(", ")}.`, variant: "destructive" })
+          return false
+        }
+        const memoToForward = resolveMemoForForward()
+        if (memoToForward === null) return false
+        const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone, modalHodName, modalHodRank, modalHodLocation, modalMemoRecipient)
+        setHrInputs((s) => ({
+          ...s,
+          [row.id]: {
+            disbursement: disbursementMonth,
+            recovery: recoveryMonth,
+            months: modalMonths,
+            note: noteForSave,
+            hodName: modalHodName,
+            hodRank: modalHodRank,
+            hodLocation: modalHodLocation,
+            hodTelephone: modalHodTelephone,
+            memoRef: modalMemoRef,
+            memoRecipient: modalMemoRecipient,
+          },
+        }))
+        void runAction({
+          action: "hr_set_terms",
+          id: row.id,
+          disbursement_date: disbursementDate,
+          recovery_start_date: recoveryStartDate,
+          recovery_months: recoveryMonths,
+          basic_salary: Number(modalBasicSalary || 0),
+          reference_number: modalMemoRef || null,
+          hod_name: modalHodName || null,
+          hod_rank: modalHodRank || null,
+          hod_location: modalHodLocation || null,
+          director_approver_id: modalDirectorApproverId || null,
+          note: noteForSave || null,
+          memo_cc: modalMemoCC || null,
+          director_letter: memoToForward,
+        })
+        setActionModal((s) => ({ ...s, open: false }))
+        return true
+      }
+
+      const forwardFromMemoPreview = () => {
+        if (submitHrTermsForward()) {
+          setMemoReviewModal((s) => ({ ...s, open: false }))
+        } else {
+          // Something needs fixing: go back to Set Terms with everything still in place.
+          closeMemoReview()
+        }
+      }
 
       const generateMemoPdf = async (row: LoanRequest, memoText: string, sigText: string, sigImageDataUrl?: string | null) => {
         const { jsPDF } = await import("jspdf")
@@ -3489,7 +3704,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     const selectedRows = rows.filter((row) => selectedLoanIds.includes(row.id))
     let completed = 0
     for (const row of selectedRows) {
-      const action = row.status === "pending_hod" ? "hod_decision" : row.status === "awaiting_hr_executive" || row.status === "awaiting_director_hr" ? "director_finalize" : null
+      const action = row.status === "pending_hod" ? "hod_decision" : ["awaiting_hr_executives", "pending_hr_executive_review"].includes(String(row.status || "")) ? "director_finalize" : null
       if (!action) continue
       const response = await fetch("/api/loan/action", {
         method: "POST",
@@ -3899,7 +4114,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 sent_to_accounts:    { icon: <Calculator className="h-4 w-4" />, label: "Accounts / FD",    owner: "Accounts Team",      desc: "FD check & financial review in progress" },
                 awaiting_committee:  { icon: <Users className="h-4 w-4" />, label: "Committee",        owner: "Welfare Committee",  desc: "Under committee deliberation" },
                 awaiting_hr_terms:   { icon: <FileSpreadsheet className="h-4 w-4" />, label: "HR Terms",         owner: "HR Office",          desc: "HR is setting loan repayment terms" },
-                awaiting_director_hr:{ icon: <Award className="h-4 w-4" />, label: "Executive HR",     owner: "Director / Executive","desc": "Final executive approval pending" },
+                awaiting_hr_executives:{ icon: <Award className="h-4 w-4" />, label: "Executive HR",    owner: "HR Executive",       desc: "HR Executive is reviewing and signing your memo" },
+                pending_hr_records_reference:{ icon: <FileCheck className="h-4 w-4" />, label: "HR Records", owner: "HR Records",         desc: "HR Records is assigning the official memo reference" },
+                awaiting_director_hr:{ icon: <Award className="h-4 w-4" />, label: "Managing Director", owner: "Managing Director",  desc: "Awaiting final approval by the Managing Director" },
                 approved_director:   { icon: <BadgeCheck className="h-4 w-4" />, label: "Approved!",        owner: "Complete",           desc: "Your loan has been fully approved" },
               }
 
@@ -4802,7 +5019,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             </div>
           )}
 
-          {/* ── Analytics strip ── */}
+          {/* ─�� Analytics strip ── */}
           <div id="loan-office-loanOfficeAnalytics" className="order-3 scroll-mt-16 rounded-xl border border-slate-200 bg-white shadow-sm">
             <button type="button" data-loan-section-toggle className="flex w-full items-center gap-2 border-b border-slate-100 px-5 py-3.5 text-left" onClick={() => toggleSection("loanOfficeAnalytics")}>
               <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${collapsedSections.loanOfficeAnalytics ? "-rotate-90" : ""}`} />
@@ -5240,7 +5457,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                       const approvedLoans = allLoans.filter((r) => {
                         const activeStatuses = [
                           "approved_director",
-                          "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered",
+                          "awaiting_hr_terms", "awaiting_hr_executives", "pending_hr_executive_review", "pending_hr_records_reference", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered",
                           "payment_completed",
                         ]
                         return activeStatuses.includes(r.status)
@@ -5462,7 +5679,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                 const approvedLoans = allLoans.filter((r) => {
                   const activeStatuses = [
                     "hod_approved", "sent_to_accounts", "approved_director", "awaiting_committee",
-                    "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered",
+                    "awaiting_hr_terms", "awaiting_hr_executives", "pending_hr_executive_review", "pending_hr_records_reference", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered",
                     "payment_completed", "awaiting_committee"
                   ]
                   return activeStatuses.includes(r.status)
@@ -6269,12 +6486,14 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
           <Card>
             <CardHeader>
-              <CardTitle>Executive HR Approval Queue</CardTitle>
-              <CardDescription>Use the action button on each request to review, sign, and finalize the memo.</CardDescription>
+              <CardTitle>Executive HR {directorQueueView === "pending" ? "Approval Queue" : "Reviewed & Approved"}</CardTitle>
+              <CardDescription>{directorQueueView === "pending" ? "Use the action button on each request to review, sign, and finalize the memo." : "Track loan requests that you have already reviewed and approved. These are no longer awaiting Executive HR action."}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1">
+                  <Button variant={directorQueueView === "pending" ? "default" : "outline"} size="sm" onClick={() => { setDirectorQueueView("pending"); setDirectorPage(1) }}>Awaiting My Review</Button>
+                  <Button variant={directorQueueView === "reviewed" ? "default" : "outline"} size="sm" onClick={() => { setDirectorQueueView("reviewed"); setDirectorPage(1) }}>Reviewed &amp; Approved ({reviewedDirectorLoans.length})</Button>
                   <Button variant={directorViewMode === "table" ? "default" : "outline"} size="sm" onClick={() => setDirectorViewMode("table")} className="gap-1"><LayoutList className="h-4 w-4" /> Table</Button>
                   <Button variant={directorViewMode === "card" ? "default" : "outline"} size="sm" onClick={() => setDirectorViewMode("card")} className="gap-1"><LayoutGrid className="h-4 w-4" /> Cards</Button>
                 </div>
@@ -6318,7 +6537,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             </CardContent>
           </Card>
 
-          {filteredDirector.length === 0 && <p className="text-sm text-muted-foreground">No requests currently awaiting Executive HR decision.</p>}
+          {filteredDirector.length === 0 && <p className="text-sm text-muted-foreground">{directorQueueView === "pending" ? "No requests currently awaiting Executive HR decision." : "You have not reviewed and approved any loan requests yet."}</p>}
 
           {directorViewMode === "table" && filteredDirector.length > 0 && (
             <Card>
@@ -6355,8 +6574,8 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                         {p?.directorHr && (
                           <TableCell>
                             <div className="flex flex-col gap-1">
-                              <Button size="sm" className="text-xs whitespace-nowrap bg-green-700 hover:bg-green-800 text-white" onClick={() => openActionModal(row, "director")}>Review &amp; Sign Memo</Button>
-                              {["approved_director", "director_rejected"].includes(row.status) && <Button variant="outline" size="sm" className="text-xs whitespace-nowrap" onClick={() => openSecureMemo(row.id)}>Download PDF</Button>}
+                              {directorQueueView === "pending" ? <Button size="sm" className="text-xs whitespace-nowrap bg-green-700 hover:bg-green-800 text-white" onClick={() => openActionModal(row, "director")}>Review &amp; Sign Memo</Button> : <Badge variant="outline" className="text-xs whitespace-nowrap">Reviewed by you</Badge>}
+                              {directorQueueView === "reviewed" && <span className="text-[11px] text-muted-foreground">{statusText(row.status)}</span>}
                             </div>
                           </TableCell>
                         )}
@@ -6370,12 +6589,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
           {directorViewMode === "card" && pagedDirector.map((row) => (
             <StageCard key={row.id} row={row}>
-              {p?.directorHr && (
+              {p?.directorHr && (directorQueueView === "pending" ? (
                 <Button size="sm" className="bg-green-700 hover:bg-green-800 text-white" onClick={() => openActionModal(row, "director")}>Review &amp; Sign Memo</Button>
-              )}
-              {["approved_director", "director_rejected"].includes(row.status) && (
-                <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Download PDF</Button>
-              )}
+              ) : <Badge variant="outline">Reviewed by you</Badge>)}
             </StageCard>
           ))}
 
@@ -6831,11 +7047,12 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                   {/* Approval pipeline progress */}
                   {(() => {
                     const steps = [
-                      { label: "HOD", statuses: ["submitted","hod_review","hod_approved","sent_to_loan_office","loan_office_review","loan_approved","sent_to_accounts","accounts_review","accounts_approved","sent_to_committee","committee_approved","sent_to_hr","hr_office_review","hr_office_approved","awaiting_director_hr","approved_director","director_rejected"] },
-                      { label: "Loan Office", statuses: ["sent_to_loan_office","loan_office_review","loan_approved","sent_to_accounts","accounts_review","accounts_approved","sent_to_committee","committee_approved","sent_to_hr","hr_office_review","hr_office_approved","awaiting_director_hr","approved_director","director_rejected"] },
-                      { label: "FD", statuses: ["sent_to_accounts","accounts_review","accounts_approved","sent_to_committee","committee_approved","sent_to_hr","hr_office_review","hr_office_approved","awaiting_director_hr","approved_director","director_rejected"] },
-                      { label: "HR Office", statuses: ["sent_to_hr","hr_office_review","hr_office_approved","awaiting_director_hr","approved_director"] },
-                      { label: "Director", statuses: ["awaiting_director_hr","approved_director"] },
+                      { label: "HOD", statuses: ["submitted","hod_review","hod_approved","sent_to_loan_office","loan_office_review","loan_approved","sent_to_accounts","accounts_review","accounts_approved","sent_to_committee","committee_approved","sent_to_hr","hr_office_review","hr_office_approved","awaiting_hr_executives","pending_hr_executive_review","pending_hr_records_reference","awaiting_director_hr","approved_director","director_rejected"] },
+                      { label: "Loan Office", statuses: ["sent_to_loan_office","loan_office_review","loan_approved","sent_to_accounts","accounts_review","accounts_approved","sent_to_committee","committee_approved","sent_to_hr","hr_office_review","hr_office_approved","awaiting_hr_executives","pending_hr_executive_review","pending_hr_records_reference","awaiting_director_hr","approved_director","director_rejected"] },
+                      { label: "FD", statuses: ["sent_to_accounts","accounts_review","accounts_approved","sent_to_committee","committee_approved","sent_to_hr","hr_office_review","hr_office_approved","awaiting_hr_executives","pending_hr_executive_review","pending_hr_records_reference","awaiting_director_hr","approved_director","director_rejected"] },
+                      { label: "HR Office", statuses: ["sent_to_hr","hr_office_review","hr_office_approved","awaiting_hr_executives","pending_hr_executive_review","pending_hr_records_reference","awaiting_director_hr","approved_director"] },
+                      { label: "Executive HR", statuses: ["awaiting_hr_executives","pending_hr_executive_review","pending_hr_records_reference","awaiting_director_hr","approved_director"] },
+                      { label: "MD", statuses: ["awaiting_director_hr","approved_director"] },
                     ]
                     const isDenied = ["director_rejected","rejected_fd","hod_rejected","loan_office_rejected","committee_rejected"].includes(row.status)
                     return (
@@ -8297,66 +8514,26 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {actionModal.actionType === "hr_terms" && actionModal.row && (
               <>
                 <Button variant="outline" onClick={() => {
-                  const previewRow = {
-                    ...actionModal.row!,
-                    recovery_start_date: modalRecovery || actionModal.row!.recovery_start_date,
-                    disbursement_date: modalDisbursement || actionModal.row!.disbursement_date,
-                    recovery_months: Number(modalMonths) || actionModal.row!.recovery_months || null,
-                    basic_salary: Number(modalBasicSalary) || actionModal.row!.basic_salary || null,
-                    hod_name: modalHodName,
-                    hod_rank: modalHodRank,
-                    hod_location: modalHodLocation,
+                  const { draft, row: namedPreviewRow } = buildHrTermsMemo()
+                  const signature = memoTermsSignature(hrTermsMemoInputs())
+                  const decision = decideForwardedMemo(modalMemoText, memoDraftBase, signature)
+                  // Terms unchanged: reopen the officer's own (possibly edited) memo untouched.
+                  if (decision !== "keep") {
+                    if (decision === "blocked") {
+                      toast({
+                        title: "Memo rebuilt from the updated terms",
+                        description: "The terms changed after this memo was edited, so it was regenerated. Re-apply any manual edits you still need.",
+                      })
+                    }
+                    setModalMemoText(draft)
+                    setMemoDraftBase({ signature, generated: draft })
                   }
-                  const selectedExecutive = data?.directorApprovers?.find((approver) => approver.id === modalDirectorApproverId)
-                  const requesterProfile = (lookupData?.staff || []).find((staff) => staff.id === previewRow.user_id)
-                  const namedPreviewRow = previewRow.staff_full_name ? previewRow : { ...previewRow, staff_full_name: requesterProfile ? `${requesterProfile.first_name || ""} ${requesterProfile.last_name || ""}`.trim() : previewRow.staff_full_name }
-                  const draft = buildDirectorAutoMemoDraft(
-                    namedPreviewRow,
-                    { hodName: modalHodName, hodRank: modalHodRank, hodLocation: modalHodLocation, hodTelephone: modalHodTelephone, memoRef: modalMemoRef, memoRecipient: modalMemoRecipient },
-                    data?.profile.currentHodProfile,
-                    selectedExecutive ? { name: selectedExecutive.full_name, position: selectedExecutive.position } : undefined,
-                  )
-                  setModalMemoText(stripMemoLetterhead(draft))
                   setActionModal((s) => ({ ...s, open: false }))
                   window.setTimeout(() => {
                     setMemoReviewModal({ open: true, row: namedPreviewRow })
                   }, 80)
                 }}>Preview Memo</Button>
-                <Button onClick={() => {
-                  const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone, modalHodName, modalHodRank, modalHodLocation, modalMemoRecipient)
-                  setHrInputs((s) => ({
-                    ...s,
-                    [actionModal.row!.id]: {
-                      disbursement: modalDisbursement,
-                      recovery: modalRecovery,
-                      months: modalMonths,
-                      note: noteForSave,
-                      hodName: modalHodName,
-                      hodRank: modalHodRank,
-                      hodLocation: modalHodLocation,
-                      hodTelephone: modalHodTelephone,
-                      memoRef: modalMemoRef,
-                      memoRecipient: modalMemoRecipient,
-                    },
-                  }))
-                  runAction({
-                    action: "hr_set_terms",
-                    id: actionModal.row!.id,
-                    disbursement_date: convertMonthToDate(modalDisbursement),
-                    recovery_start_date: convertMonthToDate(modalRecovery),
-                    recovery_months: Number(modalMonths || 0),
-                    basic_salary: Number(modalBasicSalary || 0),
-                    reference_number: modalMemoRef || null,
-                    hod_name: modalHodName || null,
-                    hod_rank: modalHodRank || null,
-                    hod_location: modalHodLocation || null,
-                    director_approver_id: modalDirectorApproverId || null,
-                    note: noteForSave || null,
-                    memo_cc: modalMemoCC || null,
-                    director_letter: modalMemoText || null,
-                  })
-                  setActionModal((s) => ({ ...s, open: false }))
-                }}>Set Terms &amp; Forward to Executive HR</Button>
+                <Button onClick={() => { submitHrTermsForward() }}>Set Terms &amp; Forward to Executive HR</Button>
               </>
             )}
             {actionModal.actionType === "payment_completed" && actionModal.row && (
@@ -8828,7 +9005,7 @@ if (!modalDisbursement || !modalRecovery) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setMemoReviewModal((s) => ({ ...s, open: false }))}
+                onClick={closeMemoReview}
                 className="h-8 text-xs"
               >
                 {actionModal.actionType === "hr_terms" ? "Back to Set Terms" : "Cancel"}
@@ -8857,13 +9034,22 @@ if (!modalDisbursement || !modalRecovery) {
               )}
             </div>
             {actionModal.actionType === "hr_terms" && (
-              <Button
-                size="sm"
-                className="h-8 bg-violet-700 text-xs font-semibold text-white hover:bg-violet-800"
-                onClick={() => setMemoReviewModal((s) => ({ ...s, open: false }))}
-              >
-                Keep edits &amp; return
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  className="h-8 bg-emerald-700 text-xs font-semibold text-white hover:bg-emerald-800"
+                  onClick={forwardFromMemoPreview}
+                >
+                  Set Terms &amp; Forward to Executive HR
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 bg-violet-700 text-xs font-semibold text-white hover:bg-violet-800"
+                  onClick={closeMemoReview}
+                >
+                  Keep edits &amp; return
+                </Button>
+              </div>
             )}
 
             {memoReviewModal.row && (isAdmin || isManagingDirector) && ["awaiting_director_hr", "approved_director"].includes(String(memoReviewModal.row.status || "")) && (
