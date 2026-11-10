@@ -60,6 +60,9 @@ interface Loan {
   md_approved_by_name: string | null
   director_letter?: string | null
   memo_cc?: string | null
+  director_hr_id?: string | null
+  director_signature_text?: string | null
+  director_decision_at?: string | null
   reference_number?: string | null
   memo_reference_locked?: boolean | null
   staff_full_name: string | null
@@ -277,7 +280,7 @@ function PeriodSection({
   if (loans.length === 0) return null
   const isPersistedApproved = (loan: Loan) => Boolean(loan.md_approved_at) || ["approved_director", "md_approved", "approved"].includes(String(loan.status || "").toLowerCase())
   const isExcludedFromApprovalQueue = (loan: Loan) => approvedIds.has(loan.id) || isPersistedApproved(loan)
-  const pendingLoans = loans.filter((l) => !isExcludedFromApprovalQueue(l) && Boolean(l.reference_number?.trim()) && l.memo_reference_locked === true)
+  const pendingLoans = loans.filter((l) => !isExcludedFromApprovalQueue(l) && (onPreview ? Boolean(l.director_letter?.trim()) : Boolean(l.reference_number?.trim()) && l.memo_reference_locked === true))
   const blockedLoans = loans.filter((l) => !isExcludedFromApprovalQueue(l) && !pendingLoans.some((pending) => pending.id === l.id))
   const allSelected = pendingLoans.length > 0 && pendingLoans.every((l) => selected.has(l.id))
 
@@ -1646,6 +1649,7 @@ export function MdApprovalsClient({ profile }: Props) {
                 <p className="text-xs font-semibold uppercase tracking-wider text-amber-700">Admin-only preview</p>
                 <h2 id="admin-memo-preview-title" className="text-lg font-bold text-slate-900">HR Executive-signed memo</h2>
                 <p className="text-xs text-slate-500">{adminPreviewLoan.request_number} · {adminPreviewLoan.staff_full_name || "Staff memo"}</p>
+                <p className="mt-1 text-xs font-semibold text-emerald-700">Reviewed & signed by HR Executive: {adminPreviewLoan.director_signature_text || "Recorded HR signer"}</p>
               </div>
               <button type="button" onClick={() => setAdminPreviewLoan(null)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Close preview"><X className="h-5 w-5" /></button>
             </div>

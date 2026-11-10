@@ -125,6 +125,9 @@ export async function GET(req: NextRequest) {
     md_approved_by_name,
     director_letter,
     memo_cc,
+    director_hr_id,
+    director_signature_text,
+    director_decision_at,
     reference_number,
     memo_reference_locked,
     user_id,
@@ -151,7 +154,7 @@ export async function GET(req: NextRequest) {
     const { data: pending, error } = await admin
       .from("loan_requests")
       .select(loanSelect)
-      .eq("status", "awaiting_director_hr")
+      .in("status", ["awaiting_director_hr", "pending_hr_records_reference"])
       .is("md_approved_at", null)
       .order("created_at", { ascending: false })
       .limit(200)
