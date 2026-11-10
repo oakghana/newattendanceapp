@@ -3,8 +3,10 @@ import {
   DEFAULT_MEMO_CC,
   decideForwardedMemo,
   formatMemoCcLines,
+  isUsableSignatureImage,
   memoTermsSignature,
   monthToFirstOfMonthDate,
+  splitMemoAtSigner,
   toMonthInputValue,
   type MemoTermsInputs,
 } from "../lib/loan-memo-forwarding"
@@ -56,6 +58,67 @@ describe("month helpers used when forwarding HR terms", () => {
     expect(effective("", "2026-10-01")).toBe("2026-10")
     expect(effective("2026-09", "2026-10-01")).toBe("2026-09")
     expect(monthToFirstOfMonthDate(effective("", null))).toBeNull()
+  })
+})
+
+describe("isUsableSignatureImage", () => {
+  it("rejects the tiny blank image a signature pad exports when nothing was drawn", () => {
+    expect(isUsableSignatureImage("data:image/png;base64," + "A".repeat(99))).toBe(false)
+  })
+
+  it("accepts a real signature image", () => {
+    expect(isUsableSignatureImage("data:image/png;base64," + "A".repeat(2000))).toBe(true)
+  })
+
+  it("rejects empty values and anything that is not an image", () => {
+    expect(isUsableSignatureImage(null)).toBe(false)
+    expect(isUsableSignatureImage("")).toBe(false)
+    expect(isUsableSignatureImage("https://example.com/" + "a".repeat(400))).toBe(false)
+  })
+})
+
+describe("splitMemoAtSigner", () => {
+  const memo = [
+    "YAW AMPOFO (S/No.: 234567)",
+    "We refer to your request. Mr. Frank Ofusu has reviewed it.",
+    "You can count on our co-operation.",
+    "MR. FRANK OFUSU",
+    "DEPUTY HUMAN RESOURCE MANAGER",
+    "cc:  Managing Director",
+    "     Audit Manager",
+  ].join("\n")
+
+  it("puts the signature slot directly above the signer's name and keeps cc separate", () => {
+    const parts = splitMemoAtSigner(memo, "Mr. Frank Ofusu")
+    expect(parts.before.endsWith("You can count on our co-operation.")).toBe(true)
+    expect(parts.signer).toBe("MR. FRANK OFUSU\nDEPUTY HUMAN RESOURCE MANAGER")
+    expect(parts.cc).toBe("cc:  Managing Director\n     Audit Manager")
+  })
+
+  it("ignores the name when it is only mentioned earlier in the body", () => {
+    expect(splitMemoAtSigner(memo, "Frank Ofusu").signer.startsWith("MR. FRANK OFUSU")).toBe(true)
+  })
+
+  it("matches the name whatever the title or capitalisation", () => {
+    expect(splitMemoAtSigner(memo, "frank ofusu").signer).toContain("DEPUTY HUMAN RESOURCE MANAGER")
+  })
+
+  it("puts the signature just before the cc block when the name is not found", () => {
+    const parts = splitMemoAtSigner(memo, "Someone Else")
+    expect(parts.signer).toBe("")
+    expect(parts.cc.startsWith("cc:")).toBe(true)
+    expect(parts.before).toContain("DEPUTY HUMAN RESOURCE MANAGER")
+  })
+
+  it("works when there is no cc block", () => {
+    const parts = splitMemoAtSigner("Body text\nMR. FRANK OFUSU\nDEPUTY HUMAN RESOURCE MANAGER", "Mr. Frank Ofusu")
+    expect(parts.before).toBe("Body text")
+    expect(parts.cc).toBe("")
+  })
+
+  it("does not guess when no signer name is known", () => {
+    const parts = splitMemoAtSigner(memo, null)
+    expect(parts.signer).toBe("")
   })
 })
 

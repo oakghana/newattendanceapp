@@ -53,6 +53,52 @@ export function monthToFirstOfMonthDate(value?: string | null): string | null {
   return null
 }
 
+/**
+ * A signature pad that was never drawn on still exports a tiny blank PNG. Treat that as "no
+ * signature" instead of showing an empty box.
+ */
+export function isUsableSignatureImage(dataUrl?: string | null): boolean {
+  const value = String(dataUrl ?? "")
+  return value.startsWith("data:image/") && value.length > 200
+}
+
+function normalizePersonName(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\b(mr|mrs|ms|miss|dr|prof|rev|hon)\b\.?/g, " ")
+    .replace(/[^a-z\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+/**
+ * Splits memo text so a signature can be placed directly above the signer's name:
+ * everything before the name, the name/position lines, and the cc block. The last line that
+ * contains the signer's name wins, so a name mentioned earlier in the body is ignored. When the
+ * name is not found, the signature goes just before the cc block.
+ */
+export function splitMemoAtSigner(text: string, signerName?: string | null): { before: string; signer: string; cc: string } {
+  const lines = String(text ?? "").split("\n")
+  const ccIndex = lines.findIndex((line) => /^\s*cc\s*:/i.test(line))
+  const end = ccIndex === -1 ? lines.length : ccIndex
+  const needle = normalizePersonName(String(signerName ?? ""))
+  let signerIndex = -1
+  if (needle.length >= 3) {
+    for (let index = end - 1; index >= 0; index -= 1) {
+      if (lines[index].trim() && normalizePersonName(lines[index]).includes(needle)) {
+        signerIndex = index
+        break
+      }
+    }
+  }
+  const splitAt = signerIndex === -1 ? end : signerIndex
+  return {
+    before: lines.slice(0, splitAt).join("\n").replace(/\s+$/, ""),
+    signer: lines.slice(splitAt, end).join("\n").trim(),
+    cc: lines.slice(end).join("\n").trim(),
+  }
+}
+
 export type MemoTermsInputs = {
   disbursement: string
   recovery: string

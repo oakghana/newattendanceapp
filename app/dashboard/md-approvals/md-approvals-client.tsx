@@ -31,6 +31,8 @@ import {
   ChevronRight,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import useSWR from "swr"
+import { splitMemoAtSigner } from "@/lib/loan-memo-forwarding"
 import {
   BarChart,
   Bar,
@@ -807,6 +809,73 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
+type HrSignature = {
+  mode: string | null
+  text: string | null
+  dataUrl: string | null
+  signerName: string | null
+  signerPosition: string | null
+  signedAt: string | null
+}
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const response = await fetch(url)
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error((body as { error?: string }).error || `Request failed (${response.status})`)
+  return body as T
+}
+
+// Body of the Admin view-only memo preview: the memo with the HR Executive's signature shown
+// directly above their name, exactly where it sits on the letter. The signature is loaded only
+// when the preview is opened and is never offered for download or printing.
+function AdminMemoPreviewBody({ loan, text }: { loan: Loan; text: string }) {
+  const { data, error, isLoading } = useSWR<{ signature: HrSignature }>(
+    `/api/loan/md-approve?view=signature&id=${encodeURIComponent(loan.id)}`,
+    fetchJson,
+    { revalidateOnFocus: false },
+  )
+  const signature = data?.signature
+  const parts = splitMemoAtSigner(text, signature?.signerName)
+
+  if (!text) {
+    return <p className="font-serif text-sm leading-7 text-slate-800">The HR Executive memo content is not available for preview.</p>
+  }
+
+  return (
+    <div className="font-serif text-sm leading-7 text-slate-800">
+      {parts.before && <div className="whitespace-pre-wrap break-words">{parts.before}</div>}
+
+      <div className="mt-6 mb-1 min-h-14" aria-live="polite">
+        {isLoading && <p className="text-xs text-slate-400">Loading signature…</p>}
+        {!isLoading && error && <p className="text-xs text-red-600">The signature could not be loaded.</p>}
+        {!isLoading && !error && signature?.dataUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={signature.dataUrl}
+            alt={`Signature of ${signature.signerName || "the HR Executive"}`}
+            className="pointer-events-none h-14 w-auto max-w-full select-none object-contain"
+            draggable={false}
+          />
+        )}
+        {!isLoading && !error && !signature?.dataUrl && signature?.text && (
+          <p className="font-serif text-2xl italic leading-tight text-slate-900">{signature.text}</p>
+        )}
+        {!isLoading && !error && signature && !signature.dataUrl && !signature.text && (
+          <p className="text-xs text-slate-400">No signature is on record for this memo.</p>
+        )}
+      </div>
+
+      {parts.signer && <div className="whitespace-pre-wrap break-words">{parts.signer}</div>}
+      {signature?.signedAt && !isLoading && (
+        <p className="mt-1 text-[11px] font-sans text-slate-400">
+          {signature.dataUrl ? "Signed" : signature.text ? "Typed signature applied" : "Signed"} {fmtDate(signature.signedAt)}
+        </p>
+      )}
+      {parts.cc && <div className="mt-5 whitespace-pre-wrap break-words">{parts.cc}</div>}
+    </div>
+  )
+}
+
 export function MdApprovalsClient({ profile }: Props) {
   const { toast } = useToast()
   const [loans, setLoans] = useState<Loan[]>([])
@@ -1674,7 +1743,7 @@ export function MdApprovalsClient({ profile }: Props) {
                   <h3 className="text-xl font-bold tracking-wide text-emerald-800">QUALITY CONTROL COMPANY LTD.</h3>
                   <p className="font-semibold text-emerald-800">(COCOBOD)</p>
                 </div>
-                <div className="whitespace-pre-wrap break-words font-serif text-sm leading-7 text-slate-800">{getAdminPreviewText(adminPreviewLoan) || "The HR Executive memo content is not available for preview."}</div>
+                <AdminMemoPreviewBody loan={adminPreviewLoan} text={getAdminPreviewText(adminPreviewLoan)} />
                 <div className="mt-8 border-t border-slate-100 pt-3 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-400">View-only administrative preview · No memo reference or MD approval stamp</div>
               </article>
             </div>
