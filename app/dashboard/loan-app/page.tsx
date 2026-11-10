@@ -16,6 +16,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { SignaturePad } from "@/components/leave/signature-pad"
+import {
+  DEFAULT_MEMO_CC,
+  decideForwardedMemo,
+  formatMemoCcLines,
+  memoTermsSignature,
+  type MemoDraftBase,
+} from "@/lib/loan-memo-forwarding"
 import { TrackedMemoEditor } from "@/components/memo/tracked-memo-editor"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
@@ -875,9 +882,25 @@ function buildHrNoteWithThroTelephone(note: string, throTelephone: string, throN
   return [tokenStr, trimmedNote].filter(Boolean).join(" ")
 }
 
+// Rebuilds the Set Terms values the HR Loan Office forwarded, from what was saved
+// on the loan itself. The Executive HR review must not depend on anything held in
+// the HR Loan Office officer's browser.
+function deriveForwardedMemoEntry(row: LoanRequest) {
+  const parsed = splitHrNoteAndThroTelephone(row.hr_note || "")
+  return {
+    hodName: parsed.throName || row.hod_name || "",
+    hodRank: parsed.throRank || row.hod_rank || "",
+    hodLocation: parsed.throLocation || row.hod_location || row.staff_location_name || "",
+    hodTelephone: parsed.throTelephone || "",
+    memoRef: formatReferenceNumber(row.reference_number, row.request_number),
+    memoRecipient: parsed.memoRecipient || "Deputy Director Finance",
+    memoCc: row.memo_cc || "",
+  }
+}
+
 function buildDirectorAutoMemoDraft(
   row: LoanRequest,
-  entry?: { hodName?: string; hodRank?: string; hodLocation?: string; hodTelephone?: string; memoRef?: string; memoRecipient?: string },
+  entry?: { hodName?: string; hodRank?: string; hodLocation?: string; hodTelephone?: string; memoRef?: string; memoRecipient?: string; memoCc?: string },
   currentHodProfile?: any,
   signer?: MemoSigner,
 ) {
@@ -894,8 +917,8 @@ function buildDirectorAutoMemoDraft(
   const staffNo = row.staff_number || "—"
   const staffRank = (row.staff_rank || "").toUpperCase()
   // Use current HOD profile if available (dynamic), otherwise fall back to entry or row data
-  const hodRank = entry?.hodRank || currentHodProfile?.rank || (row.hod_rank || "").toUpperCase()
-  const hodLocation = entry?.hodLocation || currentHodProfile?.location || row.hod_location || row.staff_location_name || "—"
+  const hodRank = entry?.hodRank || (row.hod_rank || "").toUpperCase() || currentHodProfile?.rank || ""
+  const hodLocation = entry?.hodLocation || row.hod_location || row.staff_location_name || currentHodProfile?.location || "—"
   const memoRecipient = entry?.memoRecipient || "Deputy Director Finance"
   const memoRef = entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number)
   const today = new Date().toISOString().slice(0, 10)
@@ -911,6 +934,7 @@ function buildDirectorAutoMemoDraft(
   const salaryAdvanceDaysLine = isSalaryAdvance && (row.recovery_months || row.deduction_period_months)
   ? `Number of Months for Recovery: ${row.recovery_months || row.deduction_period_months}`
   : null
+  const memoCcLines = formatMemoCcLines(entry?.memoCc)
   const signerName = String(signer?.name || "HR EXECUTIVE").trim().toUpperCase()
   const signerPosition = String(signer?.position || "HR EXECUTIVE").trim().toUpperCase()
 
@@ -946,14 +970,7 @@ function buildDirectorAutoMemoDraft(
     signerName,
     signerPosition,
     "FOR: MANAGING DIRECTOR",
-    "",
-    "cc:  Managing Director",
-    "     Deputy Managing Director",
-    "     Deputy Director Finance",
-    "     Deputy Director Human Resource",
-    "     Audit Manager",
-    "     Registry Unit",
-    "     Records Unit",
+    ...(memoCcLines.length ? ["", ...memoCcLines] : []),
   ].join("\n")
 }
 
@@ -1209,6 +1226,7 @@ export default function LoanAppPage() {
   const [modalHrSignatory, setModalHrSignatory] = useState("")
   const [modalMemoRecipient, setModalMemoRecipient] = useState("Deputy Director Finance")
   const [modalMemoText, setModalMemoText] = useState("")
+  const [memoDraftBase, setMemoDraftBase] = useState<MemoDraftBase | null>(null)
   const [modalStaffFullName, setModalStaffFullName] = useState("")
   const [modalStaffNumber, setModalStaffNumber] = useState("")
   const [modalStaffRank, setModalStaffRank] = useState("")
@@ -3185,6 +3203,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
         setModalAccountSignatory("")
         setModalHrSignatory("")
         setModalMemoText("")
+        setMemoDraftBase(null)
         setModalStaffFullName("")
         setModalStaffNumber("")
         setModalStaffRank("")
@@ -3204,9 +3223,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           setModalCorporateEmail(row.corporate_email || "")
           setModalReferenceNumber(formatReferenceNumber(row.reference_number, row.request_number))
           setModalBasicSalary(row.basic_salary ? String(row.basic_salary) : "")
-          setModalHodName(parsedLoanOfficeNote.throName || data?.profile.currentHodProfile?.name || row.hod_name || "")
-          setModalHodRank(parsedLoanOfficeNote.throRank || data?.profile.currentHodProfile?.rank || row.hod_rank || "")
-          setModalHodLocation(parsedLoanOfficeNote.throLocation || data?.profile.currentHodProfile?.location || row.hod_location || row.staff_location_name || "")
+          setModalHodName(parsedLoanOfficeNote.throName || row.hod_name || "")
+          setModalHodRank(parsedLoanOfficeNote.throRank || row.hod_rank || "")
+          setModalHodLocation(parsedLoanOfficeNote.throLocation || row.hod_location || row.staff_location_name || "")
           setModalHodTelephone(parsedLoanOfficeNote.throTelephone || "")
           setModalHodReviewerId(row.hod_reviewer_id || "")
           setModalDirectorApproverId(row.director_hr_id || "")
@@ -3224,29 +3243,51 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
           const fallbackMonths = configuredLoanType?.default_recovery_months ? String(configuredLoanType.default_recovery_months) : ""
           const fallbackTerms = String(configuredLoanType?.loan_terms || "").trim()
           const parsedHrNote = splitHrNoteAndThroTelephone(entry?.note || row.hr_note || fallbackTerms || "")
-          setModalDisbursement(entry?.disbursement || "")
-          setModalRecovery(entry?.recovery || "")
-          setModalMonths(entry?.months || (row.recovery_months ? String(row.recovery_months) : fallbackMonths))
-          setModalBasicSalary(row.basic_salary ? String(row.basic_salary) : "")
+          const initialTerms = {
+            disbursement: entry?.disbursement || "",
+            recovery: entry?.recovery || "",
+            months: entry?.months || (row.recovery_months ? String(row.recovery_months) : fallbackMonths),
+            basicSalary: row.basic_salary ? String(row.basic_salary) : "",
+            // THRO is the requester's own HOD / Regional Manager, never the viewer's.
+            hodName: entry?.hodName || parsedHrNote.throName || row.hod_name || "",
+            hodRank: entry?.hodRank || parsedHrNote.throRank || row.hod_rank || "",
+            hodLocation: entry?.hodLocation || parsedHrNote.throLocation || row.hod_location || row.staff_location_name || "",
+            memoRecipient: entry?.memoRecipient || parsedHrNote.memoRecipient || "Deputy Director Finance",
+            memoRef: entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number),
+            memoCc: row.memo_cc || DEFAULT_MEMO_CC,
+            directorApproverId: row.director_hr_id || "",
+          }
+          setModalDisbursement(initialTerms.disbursement)
+          setModalRecovery(initialTerms.recovery)
+          setModalMonths(initialTerms.months)
+          setModalBasicSalary(initialTerms.basicSalary)
           setModalNote(parsedHrNote.cleanedNote)
-          setModalHodName(entry?.hodName || parsedHrNote.throName || data?.profile.currentHodProfile?.name || row.hod_name || "")
-          setModalHodRank(entry?.hodRank || parsedHrNote.throRank || data?.profile.currentHodProfile?.rank || row.hod_rank || "")
-          setModalHodLocation(entry?.hodLocation || parsedHrNote.throLocation || data?.profile.currentHodProfile?.location || row.hod_location || row.staff_location_name || "")
+          setModalHodName(initialTerms.hodName)
+          setModalHodRank(initialTerms.hodRank)
+          setModalHodLocation(initialTerms.hodLocation)
           setModalHodTelephone(entry?.hodTelephone || parsedHrNote.throTelephone || "")
-          setModalMemoRecipient(entry?.memoRecipient || parsedHrNote.memoRecipient || "Deputy Director Finance")
-          setModalMemoRef(entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number))
-          setModalMemoCC(row.memo_cc || "Managing Director\nDeputy Managing Director\nDeputy Director Finance\nDeputy Director Human Resource\nAudit Manager\nRegistry Unit\nRecords Unit")
-          setModalDirectorApproverId(row.director_hr_id || "")
+          setModalMemoRecipient(initialTerms.memoRecipient)
+          setModalMemoRef(initialTerms.memoRef)
+          setModalMemoCC(initialTerms.memoCc)
+          setModalDirectorApproverId(initialTerms.directorApproverId)
+          // A memo already saved with "Save Draft" is the officer's own version: reopen it
+          // instead of silently replacing it with a freshly generated one.
+          const savedHrLetter = String(row.director_letter || "").trim()
+          if (savedHrLetter) {
+            setModalMemoText(stripMemoLetterhead(savedHrLetter))
+            setMemoDraftBase({ signature: memoTermsSignature(initialTerms), generated: null })
+          }
         }
         if (actionType === "director") {
-          const entry = hrInputs[row.id]
           const currentExecutive = {
             name: `${data?.profile.firstName || ""} ${data?.profile.lastName || ""}`.trim(),
             position: data?.profile.position || "HR Executive",
           }
           const requesterProfile = (lookupData?.staff || []).find((staff) => staff.id === row.user_id)
           const memoRow = row.staff_full_name ? row : { ...row, staff_full_name: requesterProfile ? `${requesterProfile.first_name || ""} ${requesterProfile.last_name || ""}`.trim() : row.staff_full_name }
-          const draft = buildDirectorAutoMemoDraft(memoRow, entry, data?.profile.currentHodProfile, currentExecutive)
+          // The saved memo the HR Loan Office forwarded is authoritative. Only when none exists
+          // is a draft rebuilt, and then from the persisted hand-off, not from this browser.
+          const draft = buildDirectorAutoMemoDraft(memoRow, deriveForwardedMemoEntry(memoRow), undefined, currentExecutive)
           const savedMemo = String(row.director_letter || "").trim()
           setModalMemoText(stripMemoLetterhead(normalizeMemoSigner(savedMemo || draft, currentExecutive)))
           setModalSignatureText(signatureText || currentExecutive.name)
@@ -3270,6 +3311,81 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     setSelectedHodsForLink([hodUserId])
     toast({ title: "Linkage loaded", description: "You can now edit this linkage in the Single Staff HOD Linkage form." })
   }
+
+      const hrTermsMemoInputs = () => ({
+        disbursement: modalDisbursement,
+        recovery: modalRecovery,
+        months: modalMonths,
+        basicSalary: modalBasicSalary,
+        hodName: modalHodName,
+        hodRank: modalHodRank,
+        hodLocation: modalHodLocation,
+        memoRecipient: modalMemoRecipient,
+        memoRef: modalMemoRef,
+        memoCc: modalMemoCC,
+        directorApproverId: modalDirectorApproverId,
+      })
+
+      // Builds the memo from exactly what is typed in Set Terms, so what is previewed and
+      // what is forwarded to the HR Executive always come from the same source.
+      const buildHrTermsMemo = () => {
+        const sourceRow = actionModal.row!
+        const monthsValue = Number(modalMonths) || sourceRow.recovery_months || null
+        const basicSalaryValue = Number(modalBasicSalary) || sourceRow.basic_salary || null
+        // Mirrors the server rule used when the terms are saved, so the memo amount matches.
+        const multiplier = Math.trunc(Number(sourceRow.salary_advance_multiplier || monthsValue || 0))
+        const salaryAdvanceTerms = isSalaryAdvanceLoan(sourceRow) && basicSalaryValue && multiplier > 0
+          ? { salary_advance_multiplier: multiplier, salary_advance_amount: Number(basicSalaryValue) * multiplier }
+          : {}
+        const termsRow = {
+          ...sourceRow,
+          recovery_start_date: modalRecovery || sourceRow.recovery_start_date,
+          disbursement_date: modalDisbursement || sourceRow.disbursement_date,
+          recovery_months: monthsValue,
+          basic_salary: basicSalaryValue,
+          ...salaryAdvanceTerms,
+          hod_name: modalHodName,
+          hod_rank: modalHodRank,
+          hod_location: modalHodLocation,
+        }
+        const selectedExecutive = data?.directorApprovers?.find((approver) => approver.id === modalDirectorApproverId)
+        const requesterProfile = (lookupData?.staff || []).find((staff) => staff.id === termsRow.user_id)
+        const namedRow = termsRow.staff_full_name
+          ? termsRow
+          : { ...termsRow, staff_full_name: requesterProfile ? `${requesterProfile.first_name || ""} ${requesterProfile.last_name || ""}`.trim() : termsRow.staff_full_name }
+        const draft = stripMemoLetterhead(
+          buildDirectorAutoMemoDraft(
+            namedRow,
+            { hodName: modalHodName, hodRank: modalHodRank, hodLocation: modalHodLocation, hodTelephone: modalHodTelephone, memoRef: modalMemoRef, memoRecipient: modalMemoRecipient, memoCc: modalMemoCC },
+            undefined,
+            selectedExecutive ? { name: selectedExecutive.full_name, position: selectedExecutive.position } : undefined,
+          ),
+        )
+        return { draft, row: namedRow }
+      }
+
+      // Chooses the memo text sent to the HR Executive. Returns null, after telling the
+      // officer why, when the terms changed after the memo had been edited.
+      const resolveMemoForForward = (): string | null => {
+        const decision = decideForwardedMemo(modalMemoText, memoDraftBase, memoTermsSignature(hrTermsMemoInputs()))
+        if (decision === "keep") return modalMemoText
+        if (decision === "regenerate") return buildHrTermsMemo().draft
+        toast({
+          title: "Refresh the memo before forwarding",
+          description: "The terms changed after this memo was drafted or edited. Click Preview Memo to rebuild it from the current terms, then forward.",
+          variant: "destructive",
+        })
+        return null
+      }
+
+      // Closing the preview by state alone does not fire the dialog's onOpenChange, so the
+      // Set Terms dialog must be reopened explicitly or the officer's work appears lost.
+      const closeMemoReview = () => {
+        setMemoReviewModal((s) => ({ ...s, open: false }))
+        if (actionModal.actionType === "hr_terms" && actionModal.row) {
+          setActionModal((s) => ({ ...s, open: true }))
+        }
+      }
 
       const generateMemoPdf = async (row: LoanRequest, memoText: string, sigText: string, sigImageDataUrl?: string | null) => {
         const { jsPDF } = await import("jspdf")
@@ -8297,32 +8413,28 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
             {actionModal.actionType === "hr_terms" && actionModal.row && (
               <>
                 <Button variant="outline" onClick={() => {
-                  const previewRow = {
-                    ...actionModal.row!,
-                    recovery_start_date: modalRecovery || actionModal.row!.recovery_start_date,
-                    disbursement_date: modalDisbursement || actionModal.row!.disbursement_date,
-                    recovery_months: Number(modalMonths) || actionModal.row!.recovery_months || null,
-                    basic_salary: Number(modalBasicSalary) || actionModal.row!.basic_salary || null,
-                    hod_name: modalHodName,
-                    hod_rank: modalHodRank,
-                    hod_location: modalHodLocation,
+                  const { draft, row: namedPreviewRow } = buildHrTermsMemo()
+                  const signature = memoTermsSignature(hrTermsMemoInputs())
+                  const decision = decideForwardedMemo(modalMemoText, memoDraftBase, signature)
+                  // Terms unchanged: reopen the officer's own (possibly edited) memo untouched.
+                  if (decision !== "keep") {
+                    if (decision === "blocked") {
+                      toast({
+                        title: "Memo rebuilt from the updated terms",
+                        description: "The terms changed after this memo was edited, so it was regenerated. Re-apply any manual edits you still need.",
+                      })
+                    }
+                    setModalMemoText(draft)
+                    setMemoDraftBase({ signature, generated: draft })
                   }
-                  const selectedExecutive = data?.directorApprovers?.find((approver) => approver.id === modalDirectorApproverId)
-                  const requesterProfile = (lookupData?.staff || []).find((staff) => staff.id === previewRow.user_id)
-                  const namedPreviewRow = previewRow.staff_full_name ? previewRow : { ...previewRow, staff_full_name: requesterProfile ? `${requesterProfile.first_name || ""} ${requesterProfile.last_name || ""}`.trim() : previewRow.staff_full_name }
-                  const draft = buildDirectorAutoMemoDraft(
-                    namedPreviewRow,
-                    { hodName: modalHodName, hodRank: modalHodRank, hodLocation: modalHodLocation, hodTelephone: modalHodTelephone, memoRef: modalMemoRef, memoRecipient: modalMemoRecipient },
-                    data?.profile.currentHodProfile,
-                    selectedExecutive ? { name: selectedExecutive.full_name, position: selectedExecutive.position } : undefined,
-                  )
-                  setModalMemoText(stripMemoLetterhead(draft))
                   setActionModal((s) => ({ ...s, open: false }))
                   window.setTimeout(() => {
                     setMemoReviewModal({ open: true, row: namedPreviewRow })
                   }, 80)
                 }}>Preview Memo</Button>
                 <Button onClick={() => {
+                  const memoToForward = resolveMemoForForward()
+                  if (memoToForward === null) return
                   const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone, modalHodName, modalHodRank, modalHodLocation, modalMemoRecipient)
                   setHrInputs((s) => ({
                     ...s,
@@ -8353,7 +8465,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                     director_approver_id: modalDirectorApproverId || null,
                     note: noteForSave || null,
                     memo_cc: modalMemoCC || null,
-                    director_letter: modalMemoText || null,
+                    director_letter: memoToForward,
                   })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>Set Terms &amp; Forward to Executive HR</Button>
@@ -8828,7 +8940,7 @@ if (!modalDisbursement || !modalRecovery) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setMemoReviewModal((s) => ({ ...s, open: false }))}
+                onClick={closeMemoReview}
                 className="h-8 text-xs"
               >
                 {actionModal.actionType === "hr_terms" ? "Back to Set Terms" : "Cancel"}
@@ -8860,7 +8972,7 @@ if (!modalDisbursement || !modalRecovery) {
               <Button
                 size="sm"
                 className="h-8 bg-violet-700 text-xs font-semibold text-white hover:bg-violet-800"
-                onClick={() => setMemoReviewModal((s) => ({ ...s, open: false }))}
+                onClick={closeMemoReview}
               >
                 Keep edits &amp; return
               </Button>

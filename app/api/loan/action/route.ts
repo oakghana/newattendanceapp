@@ -901,9 +901,9 @@ export async function POST(request: NextRequest) {
       const hrDirectorLetter = String(body.director_letter || "").trim()
       if (hrDirectorLetter) {
         update.director_letter = hrDirectorLetter
-        if (!String(req.director_letter_original || "").trim()) {
-          update.director_letter_original = hrDirectorLetter
-        }
+        // What the HR Loan Office forwards is the baseline the HR Executive's tracked
+        // changes are measured against, even if an earlier draft was saved.
+        update.director_letter_original = hrDirectorLetter
       }
 
       // Track who is expected to sign/finalize the memo.
