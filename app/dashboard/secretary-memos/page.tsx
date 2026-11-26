@@ -153,16 +153,10 @@ export default async function SecretaryMemosPage() {
         profile_image_url
       )
     `)
-    .in("status", [
-      "approved_director",
-      "pending_hr_records_reference",
-      "referenced",
-      "staff_receiving_funds",
-      "partially_recovered",
-      "fully_recovered",
-    ])
-    .or("md_approved_at.not.is.null,is_imported.eq.true,hod_review_note.ilike.%bulk imported by administrator%")
-    .neq("status", "archived")
+    // The actual MD approval timestamp is the authoritative inclusion rule. Do not
+    // filter by a short status list: loans continue through recovery and archive after
+    // approval, and the old .or(...) filter could silently return no rows on PostgREST.
+    .not("md_approved_at", "is", null)
     .order("md_approved_at", { ascending: false })
     .limit(300)
 
@@ -221,6 +215,7 @@ export default async function SecretaryMemosPage() {
       fixed_amount: loan.fixed_amount,
       md_approved_at: loan.md_approved_at,
       md_approved_by_name: loan.md_approved_by_name,
+      status: loan.status,
       memo_content: loan.director_letter || "",
       original_memo_content: loan.director_letter_original || loan.director_letter || "",
     }

@@ -87,7 +87,9 @@ interface ApprovedMemo {
   end_date?: string
   md_approved_at: string
   md_approved_by_name: string | null
+  status?: string
   memo_content?: string
+  expected_memo_content?: string
   original_memo_content?: string
 }
 
@@ -129,6 +131,7 @@ function leaveDays(start: string, end: string) {
 const LOAN_STATUS_MAP: Record<string, { label: string; color: string }> = {
   awaiting_director_hr: { label: "HR Exec Approved (Pending MD)", color: "bg-blue-100 text-blue-800 border-blue-200" },
   approved_director: { label: "MD Approved", color: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+  archived: { label: "Archived (MD Approved)", color: "bg-slate-100 text-slate-700 border-slate-200" },
   staff_receiving_funds: { label: "Funds Disbursed", color: "bg-violet-100 text-violet-800 border-violet-200" },
   partially_recovered: { label: "Partially Recovered", color: "bg-amber-100 text-amber-800 border-amber-200" },
   fully_recovered: { label: "Fully Recovered", color: "bg-slate-100 text-slate-800 border-slate-200" },
@@ -156,7 +159,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
   const [memoCorrectionReason, setMemoCorrectionReason] = useState("")
   const [memoCorrectionError, setMemoCorrectionError] = useState("")
   const [isSavingCorrection, setIsSavingCorrection] = useState(false)
-  const [savedMemoCorrections, setSavedMemoCorrections] = useState<Record<string, string>>({})
+  const [loadingCorrectionId, setLoadingCorrectionId] = useState<string | null>(null)
 
   const fullName = `${profile.first_name} ${profile.last_name}`.trim().toUpperCase()
   const departmentName = Array.isArray(profile.departments) ? profile.departments[0]?.name : profile.departments?.name
@@ -165,6 +168,28 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
   const downloadMemo = (memo: ApprovedMemo) => openLoanMemo(memo)
 
   const printMemo = (memo: ApprovedMemo) => openLoanMemo(memo, true)
+
+  const openApprovedMemoCorrection = async (memo: ApprovedMemo) => {
+    setLoadingCorrectionId(memo.id)
+    setMemoCorrectionError("")
+    try {
+      const response = await fetch(`/api/loan/admin-correct-memo?loanId=${encodeURIComponent(memo.id)}`)
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || "Could not load this approved memo.")
+      setMemoCorrectionText(String(result.memoContent || ""))
+      setMemoCorrectionReason("")
+      setMemoToCorrect({
+        ...memo,
+        memo_content: String(result.memoContent || ""),
+        expected_memo_content: String(result.expectedContent || ""),
+        original_memo_content: String(result.originalSignedContent || ""),
+      })
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Could not load this approved memo.")
+    } finally {
+      setLoadingCorrectionId(null)
+    }
+  }
 
   const saveApprovedMemoCorrection = async () => {
     if (!memoToCorrect) return
@@ -176,14 +201,13 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           loanId: memoToCorrect.id,
-          expectedContent: memoToCorrect.memo_content || "",
+          expectedContent: memoToCorrect.expected_memo_content || "",
           correctedContent: memoCorrectionText,
           reason: memoCorrectionReason,
         }),
       })
       const result = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(result.error || "Could not save the approved memo correction.")
-      setSavedMemoCorrections((current) => ({ ...current, [memoToCorrect.id]: result.memo.director_letter }))
       setMemoToCorrect(null)
       setMemoCorrectionReason("")
     } catch (error) {
@@ -324,6 +348,26 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
       return sortOrder === "oldest" ? dateDifference : -dateDifference
     })
   }, [loanMemos, search, statusFilter, deptFilter, locationFilter, loanTypeFilter, sortOrder])
+
+  const filteredApprovedMemos = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    return approvedMemos.filter((memo) => {
+      const matchesSearch = !query || [
+        memo.staff_full_name,
+        memo.staff_number,
+        memo.request_number,
+        memo.loan_type_label,
+        memo.status,
+      ].some((value) => String(value || "").toLowerCase().includes(query))
+      const matchesStatus = statusFilter === "all" || memo.status === statusFilter
+      return matchesSearch && matchesStatus
+    }).sort((a, b) => {
+      if (sortOrder === "name_asc") return (a.staff_full_name || "").localeCompare(b.staff_full_name || "")
+      if (sortOrder === "amount_desc") return (b.fixed_amount || 0) - (a.fixed_amount || 0)
+      const dateDifference = new Date(a.md_approved_at).getTime() - new Date(b.md_approved_at).getTime()
+      return sortOrder === "oldest" ? dateDifference : -dateDifference
+    })
+  }, [approvedMemos, search, statusFilter, sortOrder])
 
   const filteredLeaveMemos = useMemo(() => {
     const q = search.toLowerCase()
@@ -503,6 +547,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
               <>
                 <option value="awaiting_director_hr">HR Exec Approved (Pending MD)</option>
                 <option value="approved_director">MD Approved</option>
+                <option value="archived">Archived (MD Approved)</option>
                 <option value="staff_receiving_funds">Funds Disbursed</option>
                 <option value="partially_recovered">Partially Recovered</option>
                 <option value="fully_recovered">Fully Recovered</option>
@@ -693,23 +738,23 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
         {/* MD Approved Memos Tab */}
         {tab === "approved" && (
           <>
-            {approvedMemos.length === 0 ? (
+            {filteredApprovedMemos.length === 0 ? (
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="py-16 text-center text-slate-400">
                   <CheckCircle2 className="h-10 w-10 mx-auto mb-3 text-slate-200" />
-                  <p className="text-sm font-medium">No MD approved memos yet.</p>
+                  <p className="text-sm font-medium">{approvedMemos.length ? "No MD approved memos match your search or filters." : "No MD approved memos yet."}</p>
                 </div>
               </div>
             ) : (
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                 <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
                   <span className="text-sm font-semibold text-slate-700">
-                    {approvedMemos.length} MD approved memo{approvedMemos.length !== 1 ? "s" : ""}
+                    {filteredApprovedMemos.length} of {approvedMemos.length} MD approved memo{approvedMemos.length !== 1 ? "s" : ""}
                   </span>
                   <span className="text-xs text-slate-400">MD signed off</span>
                 </div>
                 <div className="divide-y divide-slate-100">
-                  {approvedMemos.map((memo) => {
+                  {filteredApprovedMemos.map((memo) => {
                     const staffName = (memo.staff_full_name || "Unknown Staff").toUpperCase()
                     const staffId = memo.staff_number || "—"
                     const memoType = memo.type === "loan" ? "Loan" : "Leave"
@@ -757,16 +802,12 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                           {isAdministrator && memo.type === "loan" && (
                             <button
                               type="button"
-                              onClick={() => {
-                                setMemoCorrectionError("")
-                                setMemoCorrectionReason("")
-                                const currentMemo = { ...memo, memo_content: savedMemoCorrections[memo.id] ?? memo.memo_content ?? "" }
-                                setMemoCorrectionText(currentMemo.memo_content || "")
-                                setMemoToCorrect(currentMemo)
-                              }}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-100"
+                              onClick={() => void openApprovedMemoCorrection(memo)}
+                              disabled={loadingCorrectionId === memo.id}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-100 disabled:opacity-50"
                             >
-                              <FileText className="h-4 w-4" /> Correct memo
+                              {loadingCorrectionId === memo.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                              {loadingCorrectionId === memo.id ? "Loading memo…" : "Correct memo"}
                             </button>
                           )}
                           <button
