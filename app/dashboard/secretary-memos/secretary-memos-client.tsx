@@ -376,6 +376,24 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
     })
   }, [approvedMemos, search, statusFilter, sortOrder])
 
+  const approvedMemosByMonth = useMemo(() => {
+    const groups = new Map<string, { label: string; memos: ApprovedMemo[] }>()
+    for (const memo of filteredApprovedMemos) {
+      const date = new Date(memo.md_approved_at)
+      const isValidDate = !Number.isNaN(date.getTime())
+      const key = isValidDate ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}` : "unknown"
+      const label = isValidDate
+        ? new Intl.DateTimeFormat("en-GH", { month: "long", year: "numeric" }).format(date)
+        : "Date unavailable"
+      const group = groups.get(key) || { label, memos: [] }
+      group.memos.push(memo)
+      groups.set(key, group)
+    }
+    return Array.from(groups.entries())
+      .sort(([first], [second]) => second.localeCompare(first))
+      .map(([key, group]) => ({ key, ...group }))
+  }, [filteredApprovedMemos])
+
   const filteredLeaveMemos = useMemo(() => {
     const q = search.toLowerCase()
     return leaveMemos.filter((m) => {
@@ -761,8 +779,17 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                   </span>
                   <span className="text-xs text-slate-400">MD signed off</span>
                 </div>
-                <div className="divide-y divide-slate-100">
-                  {filteredApprovedMemos.map((memo) => {
+                <div className="flex flex-col gap-4 p-4">
+                  {approvedMemosByMonth.map((monthGroup, monthIndex) => (
+                    <details key={monthGroup.key} open={monthIndex === 0} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-slate-50 px-4 py-3 font-semibold text-slate-800 marker:hidden">
+                        <span>{monthGroup.label}</span>
+                        <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold tabular-nums text-emerald-800">
+                          {monthGroup.memos.length} memo{monthGroup.memos.length === 1 ? "" : "s"}
+                        </span>
+                      </summary>
+                      <div className="divide-y divide-slate-100">
+                        {monthGroup.memos.map((memo) => {
                     const staffName = (memo.staff_full_name || "Unknown Staff").toUpperCase()
                     const staffId = memo.staff_number || "—"
                     const memoType = memo.type === "loan" ? "Loan" : "Leave"
@@ -834,7 +861,10 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                         </div>
                       </div>
                     )
-                  })}
+                        })}
+                      </div>
+                    </details>
+                  ))}
                 </div>
               </div>
             )}

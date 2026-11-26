@@ -218,7 +218,7 @@ export function canAccessMemoConsole(role?: string | null): boolean {
   const normalized = normalizeAppRole(role)
   return (
     isHrExecutiveRole(normalized) ||
-    ["admin", "secretary", "hr_records", "hr_records_officer", "hr_records_manager", "regional_hr", "managing_director", "accounts", "accounts_executive"].includes(normalized)
+    ["admin", "secretary", "hr_records", "hr_records_officer", "hr_records_manager", "regional_hr", "managing_director", "accounts", "accounts_executive", "leave_loan_officer"].includes(normalized)
   )
 }
 
