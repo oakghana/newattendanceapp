@@ -134,6 +134,11 @@ export default async function SecretaryMemosPage() {
       request_number,
       loan_type_label,
       fixed_amount,
+      staff_rank,
+      staff_location_name,
+      staff_location_address,
+      department_id,
+      departments!department_id (name, code),
       status,
       created_at,
       md_approved_at,
@@ -149,7 +154,10 @@ export default async function SecretaryMemosPage() {
         first_name,
         last_name,
         employee_id,
-        profile_image_url
+        position,
+        profile_image_url,
+        departments(name, code),
+        geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
       )
     `)
     // The actual MD approval timestamp is the authoritative inclusion rule. Do not
@@ -198,12 +206,21 @@ export default async function SecretaryMemosPage() {
   })
 
   const approvedMemos = visibleApprovedLoanMemos.map((loan: any) => {
-    const profile = loan.user_profiles
+    const profile = Array.isArray(loan.user_profiles) ? loan.user_profiles[0] : loan.user_profiles
+    const loanDepartment = Array.isArray(loan.departments) ? loan.departments[0] : loan.departments
+    const profileDepartment = Array.isArray(profile?.departments) ? profile.departments[0] : profile?.departments
+    const profileLocation = Array.isArray(profile?.geofence_locations) ? profile.geofence_locations[0] : profile?.geofence_locations
     const resolvedName =
       loan.staff_full_name?.trim() ||
       (`${profile?.first_name || ""} ${profile?.last_name || ""}`.trim()) ||
       "Unknown Staff"
     const resolvedStaffNo = loan.staff_number || profile?.employee_id || "—"
+    const departmentName = String(loanDepartment?.name || profileDepartment?.name || "").trim()
+    const departmentCode = String(loanDepartment?.code || profileDepartment?.code || "").trim()
+    const staffDepartment = departmentName
+      ? `${departmentName}${departmentCode && departmentCode.toLowerCase() !== departmentName.toLowerCase() ? ` (${departmentCode})` : ""}`
+      : null
+    const staffLocation = String(loan.staff_location_name || profileLocation?.name || loan.staff_location_address || profileLocation?.address || "").trim() || null
     return {
       id: loan.id,
       request_number: loan.request_number,
@@ -211,6 +228,9 @@ export default async function SecretaryMemosPage() {
       loan_type_label: loan.loan_type_label,
       staff_full_name: resolvedName,
       staff_number: resolvedStaffNo,
+      staff_rank: loan.staff_rank || profile?.position || null,
+      staff_department: staffDepartment,
+      staff_location: staffLocation,
       fixed_amount: loan.fixed_amount,
       md_approved_at: loan.md_approved_at,
       md_approved_by_name: loan.md_approved_by_name,

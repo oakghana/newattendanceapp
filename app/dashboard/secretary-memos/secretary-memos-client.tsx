@@ -82,6 +82,9 @@ interface ApprovedMemo {
   leave_type?: string
   staff_full_name: string | null
   staff_number: string | null
+  staff_rank?: string | null
+  staff_department?: string | null
+  staff_location?: string | null
   fixed_amount?: number | null
   start_date?: string
   end_date?: string
@@ -355,6 +358,9 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
       const matchesSearch = !query || [
         memo.staff_full_name,
         memo.staff_number,
+        memo.staff_rank,
+        memo.staff_department,
+        memo.staff_location,
         memo.request_number,
         memo.loan_type_label,
         memo.status,
@@ -773,27 +779,21 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                             <span className="font-semibold text-sm text-slate-900 truncate">{staffName}</span>
                             <span className="text-xs text-slate-400 font-mono">#{staffId}</span>
                           </div>
-                          <div className="flex items-center gap-2 mt-0.5 flex-wrap text-xs text-slate-500">
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
                             <span className="capitalize font-medium text-slate-700">{typeLabel}</span>
-                            {memo.type === "loan" && memo.fixed_amount && (
-                              <>
-                                <span className="text-slate-300">·</span>
-                                <span className="text-emerald-700 font-semibold">{fmtAmt(memo.fixed_amount)}</span>
-                              </>
-                            )}
+                            {memo.type === "loan" && memo.fixed_amount && <span className="text-emerald-700 font-semibold">{fmtAmt(memo.fixed_amount)}</span>}
                             {memo.type === "leave" && memo.start_date && memo.end_date && (
-                              <>
-                                <span className="text-slate-300">·</span>
-                                <span>{fmtDate(memo.start_date)} &rarr; {fmtDate(memo.end_date)}</span>
-                                <span className="text-slate-300">·</span>
-                                <span className="font-semibold text-slate-700">{leaveDays(memo.start_date, memo.end_date)}</span>
-                              </>
+                              <span>{fmtDate(memo.start_date)} &rarr; {fmtDate(memo.end_date)} · {leaveDays(memo.start_date, memo.end_date)} days</span>
                             )}
-                            <span className="text-slate-300">·</span>
-                            <span>MD: {memo.md_approved_by_name || "MD"}</span>
-                            <span className="text-slate-300">·</span>
-                            <span>{fmtDate(memo.md_approved_at)}</span>
+                            <span>MD: {memo.md_approved_by_name || "MD"} · {fmtDate(memo.md_approved_at)}</span>
                           </div>
+                          {memo.type === "loan" && (
+                            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                              {memo.staff_rank && <span><span className="font-medium text-slate-600">Rank:</span> {memo.staff_rank}</span>}
+                              {memo.staff_department && <span><span className="font-medium text-slate-600">Department:</span> {memo.staff_department}</span>}
+                              {memo.staff_location && <span><span className="font-medium text-slate-600">Location:</span> {memo.staff_location}</span>}
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <Badge className="text-xs border bg-emerald-100 text-emerald-800 border-emerald-200 font-medium">
@@ -846,6 +846,12 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                 <p className="text-xs font-bold uppercase tracking-wider text-amber-700">Administrator correction</p>
                 <h2 id="approved-memo-correction-title" className="mt-1 text-lg font-bold text-slate-900">Correct approved loan memo wording</h2>
                 <p className="mt-1 text-sm text-slate-500">{memoToCorrect.request_number} · {memoToCorrect.staff_full_name || "Staff member"}</p>
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                  {memoToCorrect.staff_number && <span>Staff No: {memoToCorrect.staff_number}</span>}
+                  {memoToCorrect.staff_rank && <span>Rank: {memoToCorrect.staff_rank}</span>}
+                  {memoToCorrect.staff_department && <span>Department: {memoToCorrect.staff_department}</span>}
+                  {memoToCorrect.staff_location && <span>Location: {memoToCorrect.staff_location}</span>}
+                </div>
               </div>
               <div className="space-y-4 overflow-y-auto p-6">
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
