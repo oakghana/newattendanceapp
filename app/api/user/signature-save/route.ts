@@ -29,6 +29,8 @@ export async function POST(request: NextRequest) {
     if (!(await requireSignatureRole(admin, user.id))) {
       return NextResponse.json({ error: "Your role is not authorized to save a signature." }, { status: 403 })
     }
+    const { data: signatureOwner } = await admin.from("user_profiles").select("role").eq("id", user.id).maybeSingle()
+    const isManagingDirector = String(signatureOwner?.role || "").trim().toLowerCase() === "managing_director"
 
     const body = await request.json()
     const { signature_data_url, signature_text } = body
@@ -110,6 +112,7 @@ export async function POST(request: NextRequest) {
       .from("user_profiles")
       .update({
         signature_data_url: signatureUrl,
+        ...(isManagingDirector ? { md_signature_url: signatureUrl } : {}),
         signature_updated_at: new Date().toISOString(),
         signature_mode: "draw",
       })
