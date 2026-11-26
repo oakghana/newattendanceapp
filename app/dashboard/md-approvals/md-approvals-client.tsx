@@ -849,7 +849,6 @@ function AdminMemoPreviewBody({ loan, text }: { loan: Loan; text: string }) {
         {isLoading && <p className="text-xs text-slate-400">Loading signature…</p>}
         {!isLoading && error && <p className="text-xs text-red-600">The signature could not be loaded.</p>}
         {!isLoading && !error && signature?.dataUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={signature.dataUrl}
             alt={`Signature of ${signature.signerName || "the HR Executive"}`}
@@ -894,6 +893,13 @@ export function MdApprovalsClient({ profile }: Props) {
   const [allStampedMemos, setAllStampedMemos] = useState<Loan[]>([])
   const [loadingStamped, setLoadingStamped] = useState(false)
   const [adminPreviewLoan, setAdminPreviewLoan] = useState<Loan | null>(null)
+  const [correctingApprovedLoan, setCorrectingApprovedLoan] = useState<Loan | null>(null)
+  const [memoCorrectionText, setMemoCorrectionText] = useState("")
+  const [memoCorrectionExpected, setMemoCorrectionExpected] = useState("")
+  const [memoCorrectionReason, setMemoCorrectionReason] = useState("")
+  const [memoCorrectionError, setMemoCorrectionError] = useState("")
+  const [loadingCorrectionId, setLoadingCorrectionId] = useState<string | null>(null)
+  const [savingCorrection, setSavingCorrection] = useState(false)
 
   const isAdminViewer = ["admin", "administrator"].includes(String(profile.role || "").toLowerCase())
   const getAdminPreviewText = (loan: Loan) => String(loan.director_letter || "").split("\n").filter((line) => {
@@ -972,6 +978,53 @@ export function MdApprovalsClient({ profile }: Props) {
       setDownloadingMemoId(null)
     }
   }, [toast])
+
+  const openApprovedMemoCorrection = async (loan: Loan) => {
+    setLoadingCorrectionId(loan.id)
+    setMemoCorrectionError("")
+    try {
+      const response = await fetch(`/api/loan/admin-correct-memo?loanId=${encodeURIComponent(loan.id)}`)
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || "Could not load this approved memo.")
+      setMemoCorrectionText(String(result.memoContent || ""))
+      setMemoCorrectionExpected(String(result.expectedContent || ""))
+      setMemoCorrectionReason("")
+      setCorrectingApprovedLoan(loan)
+    } catch (error) {
+      toast({ title: "Could not load memo", description: error instanceof Error ? error.message : "Try again.", variant: "destructive" })
+    } finally {
+      setLoadingCorrectionId(null)
+    }
+  }
+
+  const saveApprovedMemoCorrection = async () => {
+    if (!correctingApprovedLoan) return
+    setSavingCorrection(true)
+    setMemoCorrectionError("")
+    try {
+      const response = await fetch("/api/loan/admin-correct-memo", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          loanId: correctingApprovedLoan.id,
+          expectedContent: memoCorrectionExpected,
+          correctedContent: memoCorrectionText,
+          reason: memoCorrectionReason,
+        }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || "Could not save the memo correction.")
+      const corrected = result.memo.director_letter
+      setAllStampedMemos((current) => current.map((loan) => loan.id === correctingApprovedLoan.id ? { ...loan, director_letter: corrected } : loan))
+      setApprovedLoans((current) => current.map((loan) => loan.id === correctingApprovedLoan.id ? { ...loan, director_letter: corrected } : loan))
+      setCorrectingApprovedLoan(null)
+      toast({ title: "Memo corrected", description: "Future copies and downloads will use the corrected wording. The signed original and approvals are preserved." })
+    } catch (error) {
+      setMemoCorrectionError(error instanceof Error ? error.message : "Could not save the memo correction.")
+    } finally {
+      setSavingCorrection(false)
+    }
+  }
 
   const fullName = `${profile.first_name} ${profile.last_name}`.trim()
   const initials = [profile.first_name[0], profile.last_name[0]].join("").toUpperCase()
@@ -1423,7 +1476,7 @@ export function MdApprovalsClient({ profile }: Props) {
             ) : (
               <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                 {/* Table header */}
-                <div className="grid grid-cols-[1fr_160px_140px_130px_110px] gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50">
+                <div className="grid grid-cols-[1fr_160px_140px_130px_230px] gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50">
                   <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Staff / Loan</span>
                   <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Location</span>
                   <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Department</span>
@@ -1449,7 +1502,7 @@ export function MdApprovalsClient({ profile }: Props) {
                       ? memoStaffName.split(" ").map((p: string) => p[0]).join("").toUpperCase().slice(0, 2)
                       : "?"
                     return (
-                      <div key={memo.id} className="grid grid-cols-[1fr_160px_140px_130px_110px] gap-4 px-5 py-4 items-center hover:bg-slate-50/70 transition-colors group">
+                      <div key={memo.id} className="grid grid-cols-[1fr_160px_140px_130px_230px] gap-4 px-5 py-4 items-center hover:bg-slate-50/70 transition-colors group">
                         {/* Staff + Loan info */}
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="h-9 w-9 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-xs flex-shrink-0 ring-2 ring-white">
@@ -1497,6 +1550,18 @@ export function MdApprovalsClient({ profile }: Props) {
                         </div>
                         {/* Actions */}
                         <div className="flex items-center justify-end gap-1.5 flex-shrink-0">
+                          {isAdminViewer && (
+                            <button
+                              type="button"
+                              onClick={() => void openApprovedMemoCorrection(memo)}
+                              disabled={loadingCorrectionId === memo.id}
+                              title="Correct approved loan memo wording"
+                              className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-50"
+                            >
+                              {loadingCorrectionId === memo.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                              {loadingCorrectionId === memo.id ? "Loading" : "Edit memo"}
+                            </button>
+                          )}
                           <button
                             type="button"
                             title="Download memo PDF"
@@ -1724,6 +1789,56 @@ export function MdApprovalsClient({ profile }: Props) {
           </>
         )}
       </div>
+
+      {isAdminViewer && correctingApprovedLoan && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-labelledby="md-approved-memo-edit-title">
+          <div className="flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="border-b border-slate-200 px-6 py-4">
+              <p className="text-xs font-bold uppercase tracking-wider text-amber-700">Admin correction · MD approval preserved</p>
+              <h2 id="md-approved-memo-edit-title" className="mt-1 text-lg font-bold text-slate-900">Edit approved memo wording</h2>
+              <p className="mt-1 text-sm text-slate-500">{correctingApprovedLoan.request_number} · {correctingApprovedLoan.staff_full_name || "Staff member"}</p>
+            </div>
+            <div className="space-y-4 overflow-y-auto p-6">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                Future memo copies and downloads will use this corrected wording. The original signed content, Executive HR and MD signatures, MD approval stamp, and approval status are preserved. The correction reason and before/after wording are recorded in the audit log.
+              </div>
+              <label className="block space-y-2">
+                <span className="text-sm font-semibold text-slate-800">Corrected memo text</span>
+                <span className="block text-xs text-slate-500">This is exactly what the printed memo shows. You can correct the staff name and rank, the THRO line and location, the RE: subject, the body paragraphs, the signatory name and title, and the cc list. The reference number, date, signatures and MD stamp are controlled by the system.</span>
+                <textarea
+                  value={memoCorrectionText}
+                  onChange={(event) => setMemoCorrectionText(event.target.value)}
+                  rows={18}
+                  className="w-full resize-y rounded-xl border border-slate-300 bg-white p-4 font-serif text-sm leading-6 text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                  aria-label="Corrected MD-approved loan memo text"
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className="text-sm font-semibold text-slate-800">Correction reason (required)</span>
+                <textarea
+                  value={memoCorrectionReason}
+                  onChange={(event) => setMemoCorrectionReason(event.target.value)}
+                  rows={3}
+                  maxLength={1000}
+                  placeholder="Explain the wording error and the correction being made."
+                  className="w-full resize-y rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                  aria-label="Reason for memo wording correction"
+                />
+              </label>
+              {memoCorrectionError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700">{memoCorrectionError}</p>}
+            </div>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-slate-500">Only the memo wording changes. Existing approvals and signatures remain intact.</p>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setCorrectingApprovedLoan(null)} disabled={savingCorrection}>Cancel</Button>
+                <Button type="button" onClick={() => void saveApprovedMemoCorrection()} disabled={savingCorrection || memoCorrectionText.trim().length < 20 || memoCorrectionReason.trim().length < 5} className="bg-emerald-700 text-white hover:bg-emerald-800">
+                  {savingCorrection ? "Saving correction…" : "Save audited correction"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isAdminViewer && adminPreviewLoan && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-labelledby="admin-memo-preview-title">
