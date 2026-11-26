@@ -42,6 +42,22 @@ function amountInWords(value: number) {
   return `${words} Ghana Cedis`
 }
 
+const CORRECTION_COLUMNS = "id, request_number, status, director_letter, md_approved_at, md_approved_by_name, created_at, loan_type_label, loan_type_key, fixed_amount, requested_amount, salary_advance_amount, salary_advance_multiplier, recovery_months, deduction_period_months, repayment_duration_months, disbursement_date, recovery_start_date, hr_note, loan_office_note, staff_location_name"
+const CORRECTION_ACTION = "ADMIN_APPROVED_LOAN_MEMO_CORRECTION"
+
+async function findOriginalSignedContent(admin: Awaited<ReturnType<typeof createAdminClient>>, loanId: string, fallback: string) {
+  const { data } = await admin
+    .from("audit_logs")
+    .select("details")
+    .eq("action", CORRECTION_ACTION)
+    .eq("record_id", loanId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  const original = (data?.details as { original_signed_memo?: unknown } | null)?.original_signed_memo
+  return typeof original === "string" && original.trim() ? original : fallback
+}
+
 function generatedMemoBody(loan: Record<string, unknown>) {
   const loanType = String(loan.loan_type_label || "Loan")
   const typeKey = String(loan.loan_type_key || "").toLowerCase()
@@ -50,9 +66,12 @@ function generatedMemoBody(loan: Record<string, unknown>) {
   const amount = Number(loan.salary_advance_amount || loan.fixed_amount || loan.requested_amount || 0)
   const amountText = `GHc ${amount.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   const created = dateLabel(loan.created_at)
-  const disbursement = monthLabel(loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || loan.md_approved_at)
-  const recoveryStart = monthLabel(loan.recovery_start_date || loan.next_payment_due || loan.repayment_start_date)
-  const months = Number(loan.salary_advance_multiplier || loan.recovery_months || loan.deduction_period_months || loan.repayment_duration_months || 0)
+  const disbursement = monthLabel(loan.disbursement_date || loan.md_approved_at)
+  const recoveryStart = monthLabel(loan.recovery_start_date)
+  const months = isSalaryAdvance
+    ? Number(loan.salary_advance_multiplier || loan.recovery_months || loan.deduction_period_months || loan.repayment_duration_months || 0)
+    : Number(loan.recovery_months || loan.deduction_period_months || loan.repayment_duration_months || 0)
+  const plainAmount = amount.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const getRecipient = (note: unknown) => String(note || "").match(/\[MEMO_COPY:([^\]]+)\]/i)?.[1]?.trim() || null
   const recipient = getRecipient(loan.hr_note)
     || getRecipient(loan.loan_office_note)
@@ -60,7 +79,7 @@ function generatedMemoBody(loan: Record<string, unknown>) {
 
   const body = isSalaryAdvance
     ? [
-        `We refer to your loan application dated ${created} on the above subject and wish to inform you that, Management has given approval for you to be granted a Salary Advance of ${amountInWords(amount)} (${amountText}).`,
+        `We refer to your loan application dated ${created} on the above subject and wish to inform you that, Management has given approval for you to be granted a Salary Advance of ${amountInWords(amount)} (GHc${plainAmount}).`,
         `The loan would be recovered in ${months || "the approved recovery period"} Equal Monthly Instalment from your salary effective, ${recoveryStart}.`,
         `By a copy of this letter, the ${recipient} has been advised to release the said amount to you effective, ${disbursement}.`,
         "You can count on our co-operation.",
@@ -70,7 +89,7 @@ function generatedMemoBody(loan: Record<string, unknown>) {
         ...(isFuneralLoan
           ? ["This funeral support does not require repayment or monthly salary deductions."]
           : [`The loan will be recovered in ${months || "the approved recovery period"} equal monthly instalments from your salary, commencing in ${recoveryStart}.`]),
-        `By a copy of this letter, the ${recipient} has been advised to release the approved amount to you effective, ${disbursement}.`,
+        `By a copy of this letter, the ${recipient} has been advised to release the approved amount to you effective ${disbursement}.`,
         "You can count on our co-operation.",
       ]
   return body.join("\n\n")
@@ -95,9 +114,9 @@ export async function GET(request: NextRequest) {
 
     const { data: loan, error } = await access.admin
       .from("loan_requests")
-      .select("id, request_number, status, director_letter, director_letter_original, md_approved_at, created_at, loan_type_label, loan_type_key, fixed_amount, requested_amount, salary_advance_amount, salary_advance_multiplier, recovery_months, deduction_period_months, repayment_duration_months, disbursement_date, disbursement_confirmed_at, staff_receiving_funds_confirmed_at, recovery_start_date, next_payment_due, repayment_start_date, hr_note, loan_office_note, staff_location_name")
+      .select(CORRECTION_COLUMNS)
       .eq("id", loanId)
-      .maybeSingle()
+      .maybeSingle<Record<string, unknown> & { status: string; md_approved_at: string | null; director_letter: string | null }>()
     if (error) throw error
     if (!loan) return NextResponse.json({ error: "Loan request not found." }, { status: 404 })
     if (!loan.md_approved_at || !CORRECTABLE_STATUSES.includes(String(loan.status || ""))) {
@@ -105,10 +124,11 @@ export async function GET(request: NextRequest) {
     }
 
     const storedContent = String(loan.director_letter || "")
+    const currentContent = storedContent || generatedMemoBody(loan)
     return NextResponse.json({
-      memoContent: storedContent || generatedMemoBody(loan as Record<string, unknown>),
+      memoContent: currentContent,
       expectedContent: storedContent,
-      originalSignedContent: String(loan.director_letter_original || storedContent),
+      originalSignedContent: await findOriginalSignedContent(access.admin, loanId, currentContent),
     })
   } catch (error) {
     console.error("[v0] Could not load approved loan memo for correction:", error)
@@ -142,9 +162,9 @@ export async function PATCH(request: NextRequest) {
 
     const { data: loan, error: loanError } = await admin
       .from("loan_requests")
-      .select("id, request_number, status, director_letter, director_letter_original, md_approved_at, md_approved_by_name, created_at, loan_type_label, loan_type_key, fixed_amount, requested_amount, salary_advance_amount, salary_advance_multiplier, recovery_months, deduction_period_months, repayment_duration_months, disbursement_date, disbursement_confirmed_at, staff_receiving_funds_confirmed_at, recovery_start_date, next_payment_due, repayment_start_date, hr_note, loan_office_note, staff_location_name")
+      .select(CORRECTION_COLUMNS)
       .eq("id", loanId)
-      .maybeSingle()
+      .maybeSingle<Record<string, unknown> & { request_number: string; status: string; md_approved_at: string | null; md_approved_by_name: string | null; director_letter: string | null }>()
     if (loanError) throw loanError
     if (!loan) return NextResponse.json({ error: "Loan request not found." }, { status: 404 })
     if (!loan.md_approved_at || ![...CORRECTABLE_STATUSES].includes(String(loan.status || ""))) {
@@ -152,8 +172,8 @@ export async function PATCH(request: NextRequest) {
     }
 
     const storedContent = String(loan.director_letter || "")
-    const currentMemoContent = storedContent || generatedMemoBody(loan as Record<string, unknown>)
-    const originalSignedContent = String(loan.director_letter_original || currentMemoContent)
+    const currentMemoContent = storedContent || generatedMemoBody(loan)
+    const originalSignedContent = await findOriginalSignedContent(admin, loanId, currentMemoContent)
     if (storedContent !== expectedContent) return NextResponse.json({ error: "This memo was changed by another administrator. Refresh the page and open the editor again." }, { status: 409 })
     if (correctedContent === currentMemoContent) return NextResponse.json({ error: "No memo wording changes were made." }, { status: 400 })
 
@@ -161,7 +181,6 @@ export async function PATCH(request: NextRequest) {
       .from("loan_requests")
       .update({
         director_letter: correctedContent,
-        ...(!String(loan.director_letter_original || "").trim() ? { director_letter_original: originalSignedContent } : {}),
         updated_at: new Date().toISOString(),
       })
       .eq("id", loanId)
@@ -178,7 +197,7 @@ export async function PATCH(request: NextRequest) {
 
     const { error: auditError } = await admin.from("audit_logs").insert({
       user_id: user.id,
-      action: "ADMIN_APPROVED_LOAN_MEMO_CORRECTION",
+      action: CORRECTION_ACTION,
       table_name: "loan_requests",
       record_id: loanId,
       old_values: { director_letter: currentMemoContent },

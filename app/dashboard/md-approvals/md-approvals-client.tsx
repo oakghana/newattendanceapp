@@ -1804,6 +1804,7 @@ export function MdApprovalsClient({ profile }: Props) {
               </div>
               <label className="block space-y-2">
                 <span className="text-sm font-semibold text-slate-800">Corrected memo text</span>
+                <span className="block text-xs text-slate-500">Edit the body paragraphs only. The letterhead, reference, THRO block, closing line, signatures, cc list and MD stamp are added automatically.</span>
                 <textarea
                   value={memoCorrectionText}
                   onChange={(event) => setMemoCorrectionText(event.target.value)}
