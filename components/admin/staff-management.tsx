@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { displayRole } from "@/lib/role-mapping"
 import { isNonRegionalLocation, normalizeLocationName } from "@/lib/location-mappings"
+import { isHodExemptRole } from "@/lib/hr-workflow"
 import {
   isRegionalManagerLocationMatch,
   resolveRegionalOfficeIdFromLocation,
@@ -12,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -82,6 +83,30 @@ interface Department {
   id: string
   name: string
   code: string
+}
+
+interface HODLinkageSummary {
+  id: string
+  name: string
+  employee_id: string | null
+  email: string | null
+  role: string
+  department: string | null
+  location: string | null
+  is_active: boolean
+  linked_staff_count: number
+  staff_preview: Array<{ id: string; employee_id: string | null; name: string }>
+}
+
+interface UnlinkedStaffRow {
+  id: string
+  employee_id: string | null
+  first_name: string
+  last_name: string
+  email: string
+  role: string
+  department: { id: string; name: string; code: string } | null
+  location: { id: string; name: string; address: string } | null
 }
 
 interface Location {
@@ -161,6 +186,20 @@ export function StaffManagement() {
     contact_number: "",
   })
 
+  const [staffView, setStaffView] = useState<"directory" | "unlinked" | "hods" | "missing_department">("directory")
+  const [unlinkedStaff, setUnlinkedStaff] = useState<UnlinkedStaffRow[]>([])
+  const [missingDepartmentStaff, setMissingDepartmentStaff] = useState<UnlinkedStaffRow[]>([])
+  const [departmentAssignmentTarget, setDepartmentAssignmentTarget] = useState<UnlinkedStaffRow | null>(null)
+  const [departmentAssignmentValue, setDepartmentAssignmentValue] = useState("")
+  const [departmentAssignmentLoading, setDepartmentAssignmentLoading] = useState(false)
+  const [hodLinkageSummaries, setHodLinkageSummaries] = useState<HODLinkageSummary[]>([])
+  const [linkageManagementLoading, setLinkageManagementLoading] = useState(false)
+  const [linkageDataLoaded, setLinkageDataLoaded] = useState(false)
+  const [linkageManagementError, setLinkageManagementError] = useState<string | null>(null)
+  const [linkageSearch, setLinkageSearch] = useState("")
+  const [hodPendingRemoval, setHodPendingRemoval] = useState<HODLinkageSummary | null>(null)
+  const [hodRemovalLoading, setHodRemovalLoading] = useState(false)
+
   const [currentUserRole, setCurrentUserRole] = useState<string>("staff")
   const [currentUserLocationId, setCurrentUserLocationId] = useState<string | null>(null)
   const normalizedCurrentUserRole = String(currentUserRole).trim().toLowerCase().replace(/[-\s]+/g, "_")
@@ -239,11 +278,35 @@ export function StaffManagement() {
     }
   }, [debouncedSearchTerm, selectedDepartment, selectedRole, page, limit])
 
+  const fetchHodLinkageManagement = useCallback(async () => {
+    setLinkageManagementLoading(true)
+    setLinkageManagementError(null)
+    try {
+      const response = await authenticatedFetch("/api/admin/staff/hod-linkages")
+      const result = await response.json()
+      if (!response.ok || !result.success) throw new Error(result.error || "Could not load HOD assignments")
+      setUnlinkedStaff(Array.isArray(result.unlinked_staff) ? result.unlinked_staff : [])
+      setMissingDepartmentStaff(Array.isArray(result.missing_department_staff) ? result.missing_department_staff : [])
+      setHodLinkageSummaries(Array.isArray(result.hods) ? result.hods : [])
+      setLinkageDataLoaded(true)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not load HOD assignments"
+      setLinkageManagementError(message)
+      showError(message, "HOD assignments unavailable")
+    } finally {
+      setLinkageManagementLoading(false)
+    }
+  }, [showError])
+
   useEffect(() => {
     fetchDepartments()
     fetchLocations()
     fetchCurrentUserRole()
   }, [])
+
+  useEffect(() => {
+    if (isAdministrator && staffView !== "directory") void fetchHodLinkageManagement()
+  }, [staffView, isAdministrator, fetchHodLinkageManagement])
 
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
@@ -390,7 +453,7 @@ export function StaffManagement() {
         })
         fetchStaff()
         // Administrators and IT Admins can link staff to the correct HOD or Regional Manager.
-        if (canManageStaffLinks && result.data) {
+        if (canManageStaffLinks && result.data && !isHodExemptRole(result.data.role)) {
           openHodLinkDialog(result.data)
         }
       } else {
@@ -583,6 +646,8 @@ export function StaffManagement() {
   const [hodLinkError, setHodLinkError] = useState<string | null>(null)
   const [hodSearchQuery, setHodSearchQuery] = useState<string>("")
   const [autoLinkLoading, setAutoLinkLoading] = useState(false)
+  const [autoLinkHodLoading, setAutoLinkHodLoading] = useState(false)
+  const [isAutoLinkConfirmOpen, setIsAutoLinkConfirmOpen] = useState(false)
 
   const [hodCandidates, setHodCandidates] = useState<StaffMember[]>([])
   const [hodRecommendedIds, setHodRecommendedIds] = useState<string[]>([])
@@ -601,6 +666,10 @@ export function StaffManagement() {
   }
 
   const openHodLinkDialog = async (member: StaffMember) => {
+    if (isHodExemptRole(member.role)) {
+      showWarning("NSP and Intern roles do not require an HOD assignment.", "HOD assignment not required")
+      return
+    }
     setHodLinkStaff(member)
     setHodLinkHodIds(((member as any).hod_links || []).map((hod: any) => String(hod.id)))
     setHodLinkError(null)
@@ -766,6 +835,97 @@ export function StaffManagement() {
     }
   }
 
+  const handleAssignMissingDepartment = async () => {
+    if (!departmentAssignmentTarget || !departmentAssignmentValue) return
+    setDepartmentAssignmentLoading(true)
+    try {
+      const response = await authenticatedFetch(`/api/admin/staff/${departmentAssignmentTarget.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ department_id: departmentAssignmentValue }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.success) throw new Error(result.error || "Unable to assign department")
+
+      const departmentName = departments.find((department) => department.id === departmentAssignmentValue)?.name || "selected department"
+      showSuccess(`${departmentAssignmentTarget.first_name} ${departmentAssignmentTarget.last_name} assigned to ${departmentName}.`, "Department assigned")
+      setDepartmentAssignmentTarget(null)
+      setDepartmentAssignmentValue("")
+      await Promise.all([fetchHodLinkageManagement(), fetchStaff()])
+    } catch (error) {
+      showError(error instanceof Error ? error.message : "Unable to assign department", "Department assignment failed")
+    } finally {
+      setDepartmentAssignmentLoading(false)
+    }
+  }
+
+  const handleAutoLinkEligibleStaff = async () => {
+    setAutoLinkHodLoading(true)
+    try {
+      const response = await authenticatedFetch("/api/admin/staff/hod-linkages", { method: "POST" })
+      const result = await response.json()
+      if (!response.ok || !result.success) throw new Error(result.error || "Unable to auto-link eligible staff")
+      const unresolvedByReason = result.unresolved_by_reason || {}
+      const unresolvedReasons = [
+        Number(unresolvedByReason.missing_location) > 0 ? `${unresolvedByReason.missing_location} without an assigned location` : null,
+        Number(unresolvedByReason.no_department_hod) > 0 ? `${unresolvedByReason.no_department_hod} without a matching department HOD` : null,
+        Number(unresolvedByReason.no_regional_manager) > 0 ? `${unresolvedByReason.no_regional_manager} without a covering Regional Manager` : null,
+      ].filter(Boolean).join("; ")
+      const unresolvedCount = Number(result.unresolved_count || 0)
+      showSuccess(
+        unresolvedCount > 0
+          ? `${result.linked_count || 0} staff member(s) linked. ${unresolvedCount} remain unlinked: ${unresolvedReasons || "no matching role was found"}.`
+          : `${result.linked_count || 0} staff member(s) linked. All eligible staff now have a matching HOD.`,
+        "Automatic HOD assignment complete",
+      )
+      setIsAutoLinkConfirmOpen(false)
+      await Promise.all([fetchHodLinkageManagement(), fetchStaff()])
+    } catch (error) {
+      showError(error instanceof Error ? error.message : "Unable to auto-link eligible staff", "Automatic HOD assignment failed")
+    } finally {
+      setAutoLinkHodLoading(false)
+    }
+  }
+
+  const handleRemoveHodLinks = async () => {
+    if (!hodPendingRemoval) return
+    setHodRemovalLoading(true)
+    try {
+      const response = await authenticatedFetch("/api/admin/staff/hod-linkages", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hod_user_id: hodPendingRemoval.id }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.success) throw new Error(result.error || "Could not remove the HOD assignments")
+      const affectedCount = Number(result.data?.affected_staff_count || 0)
+      showSuccess(`${affectedCount} staff member(s) are now unlinked from ${hodPendingRemoval.name}.`, "HOD assignments removed")
+      setHodPendingRemoval(null)
+      await Promise.all([fetchHodLinkageManagement(), fetchStaff()])
+    } catch (error) {
+      showError(error instanceof Error ? error.message : "Could not remove the HOD assignments", "HOD unlink failed")
+    } finally {
+      setHodRemovalLoading(false)
+    }
+  }
+
+  const normalizedLinkageSearch = linkageSearch.trim().toLowerCase()
+  const visibleUnlinkedStaff = unlinkedStaff.filter((member) =>
+    `${member.first_name} ${member.last_name} ${member.employee_id || ""} ${member.email || ""} ${member.role} ${member.department?.name || ""} ${member.location?.name || ""}`
+      .toLowerCase()
+      .includes(normalizedLinkageSearch),
+  )
+  const visibleMissingDepartmentStaff = missingDepartmentStaff.filter((member) =>
+    `${member.first_name} ${member.last_name} ${member.employee_id || ""} ${member.email || ""} ${member.role} ${member.location?.name || ""}`
+      .toLowerCase()
+      .includes(normalizedLinkageSearch),
+  )
+  const visibleHodSummaries = hodLinkageSummaries.filter((hod) =>
+    `${hod.name} ${hod.employee_id || ""} ${hod.email || ""} ${hod.role} ${hod.department || ""} ${hod.location || ""}`
+      .toLowerCase()
+      .includes(normalizedLinkageSearch),
+  )
+
   return (
     <>
     <div className="space-y-8">
@@ -773,13 +933,38 @@ export function StaffManagement() {
         <CardHeader className="pb-6">
           <CardTitle className="text-xl font-heading font-semibold flex items-center gap-2">
             <Users className="h-5 w-5 text-primary" />
-            Staff Directory
+            {staffView === "directory" ? "Staff Directory" : staffView === "unlinked" ? "Unlinked Staff" : staffView === "hods" ? "HOD Assignments" : "Missing Department"}
           </CardTitle>
           <CardDescription className="text-base">
-            Manage QCC staff members, roles, and location assignments
+            {staffView === "directory"
+              ? "Manage QCC staff members, roles, and location assignments"
+              : staffView === "unlinked"
+                ? "Find active staff members who do not have a linked HOD"
+                : staffView === "hods"
+                  ? "Review linked staff and remove all assignments from a HOD when needed"
+                  : "Find active staff members without a department and assign one manually"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {isAdministrator && (
+            <div role="group" aria-label="Staff and HOD views" className="flex flex-wrap gap-2 border-b border-border pb-4">
+              <Button aria-pressed={staffView === "directory"} variant={staffView === "directory" ? "default" : "outline"} onClick={() => setStaffView("directory")}>
+                Staff Directory
+              </Button>
+              <Button aria-pressed={staffView === "unlinked"} variant={staffView === "unlinked" ? "default" : "outline"} onClick={() => setStaffView("unlinked")}>
+                Unlinked Staff <Badge variant="secondary" className="ml-2">{linkageDataLoaded ? unlinkedStaff.length : "…"}</Badge>
+              </Button>
+              <Button aria-pressed={staffView === "hods"} variant={staffView === "hods" ? "default" : "outline"} onClick={() => setStaffView("hods")}>
+                HOD Assignments <Badge variant="secondary" className="ml-2">{linkageDataLoaded ? hodLinkageSummaries.length : "…"}</Badge>
+              </Button>
+              <Button aria-pressed={staffView === "missing_department"} variant={staffView === "missing_department" ? "default" : "outline"} onClick={() => setStaffView("missing_department")}>
+                Missing Department <Badge variant="secondary" className="ml-2">{linkageDataLoaded ? missingDepartmentStaff.length : "…"}</Badge>
+              </Button>
+            </div>
+          )}
+
+          {staffView === "directory" && (
+            <>
           {error && (
             <Alert variant="destructive" className="border-destructive/20 bg-destructive/5">
               <AlertDescription className="font-medium">{error}</AlertDescription>
@@ -844,9 +1029,9 @@ export function StaffManagement() {
             {/* Action Buttons */}
             <div className="flex gap-3">
               {canManageStaffLinks && (
-                <Button type="button" variant="outline" onClick={handleAutoLinkUnassignedStaff} disabled={autoLinkLoading}>
+                <Button type="button" variant="outline" title="Fallback only: links unassigned staff to an HR Executive. Use the Unlinked Staff tab for department- and location-based HOD assignment." onClick={handleAutoLinkUnassignedStaff} disabled={autoLinkLoading}>
                   <Link2 className="mr-2 h-4 w-4" />
-                  {autoLinkLoading ? "Linking..." : "Link unassigned staff"}
+                  {autoLinkLoading ? "Linking..." : "Fallback: HR Executive"}
                 </Button>
               )}
               <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
@@ -1386,7 +1571,7 @@ export function StaffManagement() {
                   <Button variant="outline" onClick={() => setEditingStaff(null)}>
                     Cancel
                   </Button>
-                  {canManageStaffLinks && (
+                  {canManageStaffLinks && !isHodExemptRole(editingStaff.role) && (
                     <Button
                       variant="outline"
                       onClick={() => {
@@ -1475,7 +1660,9 @@ export function StaffManagement() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {(member as any).hod_links && (member as any).hod_links.length > 0 ? (
+                        {isHodExemptRole(member.role) ? (
+                          <span className="text-xs text-muted-foreground italic">Not required for this role</span>
+                        ) : (member as any).hod_links && (member as any).hod_links.length > 0 ? (
                           <div className="space-y-1">
                             {(member as any).hod_links.map((hod: any, idx: number) => (
                               <div key={`${member.id}-hod-${idx}`} className="text-sm">
@@ -1552,7 +1739,7 @@ export function StaffManagement() {
                             {member.is_active ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
                             <span className="text-xs font-medium">{member.is_active ? "Deactivate" : "Activate"}</span>
                           </Button>
-                          {canManageStaffLinks && (
+                          {canManageStaffLinks && !isHodExemptRole(member.role) && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -1583,9 +1770,193 @@ export function StaffManagement() {
               </Button>
             </div>
           </div>
+            </>
+          )}
+
+          {isAdministrator && staffView === "unlinked" && (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Staff without a linked HOD</h2>
+                  <p className="text-sm text-muted-foreground">Active eligible staff; NSP and Intern roles are exempt. Automatic matching uses the appropriate same-department approver and prefers the same location; regional staff use their covering Regional Manager.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={() => void fetchHodLinkageManagement()} disabled={linkageManagementLoading || autoLinkHodLoading}>
+                    {linkageManagementLoading ? "Refreshing…" : "Refresh list"}
+                  </Button>
+                  <Button type="button" onClick={() => setIsAutoLinkConfirmOpen(true)} disabled={linkageManagementLoading || autoLinkHodLoading || unlinkedStaff.length === 0}>
+                    <Link2 data-icon="inline-start" /> {autoLinkHodLoading ? "Linking staff…" : "Auto-link eligible staff"}
+                  </Button>
+                </div>
+              </div>
+              <div className="relative max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <Input aria-label="Search unlinked staff" className="pl-10" placeholder="Search by name, staff ID, department, or location" value={linkageSearch} onChange={(event) => setLinkageSearch(event.target.value)} />
+              </div>
+              {linkageManagementError && <Alert variant="destructive"><AlertDescription>{linkageManagementError}</AlertDescription></Alert>}
+              <p className="text-sm text-muted-foreground">Showing {visibleUnlinkedStaff.length} of {unlinkedStaff.length} unlinked staff members.</p>
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Employee ID</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Department</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Assigned Location</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {linkageManagementLoading ? (
+                      <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">Loading unlinked staff…</TableCell></TableRow>
+                    ) : visibleUnlinkedStaff.length === 0 ? (
+                      <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">No unlinked staff match this search.</TableCell></TableRow>
+                    ) : visibleUnlinkedStaff.map((member) => (
+                      <TableRow key={member.id}>
+                        <TableCell className="font-medium">{member.first_name} {member.last_name}</TableCell>
+                        <TableCell className="font-mono text-sm">{member.employee_id || "—"}</TableCell>
+                        <TableCell>{member.email || "—"}</TableCell>
+                        <TableCell>{member.department?.name || "—"}</TableCell>
+                        <TableCell><Badge variant="outline">{displayRole(member.role)}</Badge></TableCell>
+                        <TableCell>{member.location?.name || "No location"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+
+          {isAdministrator && staffView === "missing_department" && (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Staff without a department</h2>
+                  <p className="text-sm text-muted-foreground">Assign a department to active staff profiles where the department is missing or invalid.</p>
+                </div>
+                <Button type="button" variant="outline" onClick={() => void fetchHodLinkageManagement()} disabled={linkageManagementLoading || departmentAssignmentLoading}>
+                  {linkageManagementLoading ? "Refreshing…" : "Refresh list"}
+                </Button>
+              </div>
+              <div className="relative max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <Input aria-label="Search staff without a department" className="pl-10" placeholder="Search by name, staff ID, email, role, or location" value={linkageSearch} onChange={(event) => setLinkageSearch(event.target.value)} />
+              </div>
+              {linkageManagementError && <Alert variant="destructive"><AlertDescription>{linkageManagementError}</AlertDescription></Alert>}
+              <p className="text-sm text-muted-foreground">Showing {visibleMissingDepartmentStaff.length} of {missingDepartmentStaff.length} staff without a department.</p>
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Employee ID</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Assigned Location</TableHead>
+                      <TableHead>Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {linkageManagementLoading ? (
+                      <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">Loading staff without departments…</TableCell></TableRow>
+                    ) : visibleMissingDepartmentStaff.length === 0 ? (
+                      <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">No staff without a department match this search.</TableCell></TableRow>
+                    ) : visibleMissingDepartmentStaff.map((member) => (
+                      <TableRow key={member.id}>
+                        <TableCell className="font-medium">{member.first_name} {member.last_name}</TableCell>
+                        <TableCell className="font-mono text-sm">{member.employee_id || "—"}</TableCell>
+                        <TableCell>{member.email || "—"}</TableCell>
+                        <TableCell><Badge variant="outline">{displayRole(member.role)}</Badge></TableCell>
+                        <TableCell>{member.location?.name || "No location"}</TableCell>
+                        <TableCell>
+                          <Button type="button" size="sm" onClick={() => {
+                            setDepartmentAssignmentTarget(member)
+                            setDepartmentAssignmentValue("")
+                          }} disabled={departments.length === 0}>
+                            <Building2 data-icon="inline-start" /> Assign department
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+
+          {isAdministrator && staffView === "hods" && (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Current HOD assignments</h2>
+                  <p className="text-sm text-muted-foreground">Click a HOD or choose Remove links to unlink every staff member currently assigned to them.</p>
+                </div>
+                <Button type="button" variant="outline" onClick={() => void fetchHodLinkageManagement()} disabled={linkageManagementLoading}>
+                  {linkageManagementLoading ? "Refreshing…" : "Refresh list"}
+                </Button>
+              </div>
+              <div className="relative max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <Input aria-label="Search HOD assignments" className="pl-10" placeholder="Search HOD by name, ID, role, or location" value={linkageSearch} onChange={(event) => setLinkageSearch(event.target.value)} />
+              </div>
+              {linkageManagementError && <Alert variant="destructive"><AlertDescription>{linkageManagementError}</AlertDescription></Alert>}
+              <p className="text-sm text-muted-foreground">Showing {visibleHodSummaries.length} of {hodLinkageSummaries.length} HODs with staff assignments.</p>
+              {linkageManagementLoading ? (
+                <div className="rounded-lg border border-border py-10 text-center text-muted-foreground">Loading HOD assignments…</div>
+              ) : visibleHodSummaries.length === 0 ? (
+                <div className="rounded-lg border border-border py-10 text-center text-muted-foreground">No current HOD assignments match this search.</div>
+              ) : (
+                <div className="flex flex-col divide-y rounded-lg border border-border">
+                  {visibleHodSummaries.map((hod) => (
+                    <div key={hod.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <Button type="button" variant="link" className="h-auto p-0 text-left font-semibold" onClick={() => setHodPendingRemoval(hod)}>
+                          {hod.name}
+                        </Button>
+                        <div className="mt-1 flex flex-wrap gap-x-2 text-sm text-muted-foreground">
+                          <span>{displayRole(hod.role)}</span>
+                          {hod.employee_id && <span>· ID {hod.employee_id}</span>}
+                          {hod.department && <span>· {hod.department}</span>}
+                          {hod.location && <span>· {hod.location}</span>}
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {hod.staff_preview.map((staffMember) => staffMember.name).join(", ")}
+                          {hod.linked_staff_count > hod.staff_preview.length ? `, and ${hod.linked_staff_count - hod.staff_preview.length} more` : ""}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <Badge variant="secondary">{hod.linked_staff_count} linked staff</Badge>
+                        <Button type="button" variant="destructive" onClick={() => setHodPendingRemoval(hod)}>
+                          <Link2Off data-icon="inline-start" /> Remove links
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
+
+      <Dialog open={isAutoLinkConfirmOpen} onOpenChange={(open) => { if (!autoLinkHodLoading) setIsAutoLinkConfirmOpen(open) }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Auto-link eligible unlinked staff?</DialogTitle>
+            <DialogDescription>
+              This will process {unlinkedStaff.length} eligible staff members. NSP and Intern roles are excluded. Non-regional staff are matched to the appropriate same-department approver (such as an HR Manager, Accounts Executive, Transport Manager, or Department Head), preferring the same location. Regional and district staff are matched to their covering Regional Manager, with a same-region fallback. Staff with no suitable match will remain unlinked.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsAutoLinkConfirmOpen(false)} disabled={autoLinkHodLoading}>Cancel</Button>
+            <Button type="button" onClick={() => void handleAutoLinkEligibleStaff()} disabled={autoLinkHodLoading || unlinkedStaff.length === 0}>
+              <Link2 data-icon="inline-start" /> {autoLinkHodLoading ? "Linking staff…" : `Auto-link ${unlinkedStaff.length} staff`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* HOD Linkage Dialog */}
       <Dialog open={!!hodLinkStaff} onOpenChange={(open) => {
@@ -1687,6 +2058,72 @@ export function StaffManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!hodPendingRemoval} onOpenChange={(open) => { if (!open && !hodRemovalLoading) setHodPendingRemoval(null) }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Remove all staff links from this HOD?</DialogTitle>
+            <DialogDescription>
+              This immediately unlinks every staff member assigned to {hodPendingRemoval?.name}. It clears current HOD link records and legacy profile and nonregional transport assignments. Staff accounts and their roles are not changed.
+            </DialogDescription>
+          </DialogHeader>
+          {hodPendingRemoval && (
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-semibold">{hodPendingRemoval.name}</div>
+                <Badge variant="secondary">{hodPendingRemoval.linked_staff_count} staff</Badge>
+              </div>
+              {hodPendingRemoval.staff_preview.length > 0 && (
+                <p className="mt-2 text-sm text-muted-foreground">{hodPendingRemoval.staff_preview.map((staffMember) => staffMember.name).join(", ")}{hodPendingRemoval.linked_staff_count > hodPendingRemoval.staff_preview.length ? `, and ${hodPendingRemoval.linked_staff_count - hodPendingRemoval.staff_preview.length} more` : ""}</p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setHodPendingRemoval(null)} disabled={hodRemovalLoading}>Cancel</Button>
+            <Button type="button" variant="destructive" onClick={() => void handleRemoveHodLinks()} disabled={hodRemovalLoading || !hodPendingRemoval}>
+              <Link2Off data-icon="inline-start" /> {hodRemovalLoading ? "Removing links…" : "Remove all links"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!departmentAssignmentTarget} onOpenChange={(open) => {
+        if (!open && !departmentAssignmentLoading) {
+          setDepartmentAssignmentTarget(null)
+          setDepartmentAssignmentValue("")
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign staff department</DialogTitle>
+            <DialogDescription>
+              Choose a department for {departmentAssignmentTarget?.first_name} {departmentAssignmentTarget?.last_name}. This updates the staff profile without changing their role or location.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 py-2">
+            <Label htmlFor="missing-staff-department">Department</Label>
+            <Select value={departmentAssignmentValue} onValueChange={setDepartmentAssignmentValue}>
+              <SelectTrigger id="missing-staff-department">
+                <SelectValue placeholder="Select department" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {departments.map((department) => (
+                    <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDepartmentAssignmentTarget(null)} disabled={departmentAssignmentLoading}>Cancel</Button>
+            <Button type="button" onClick={() => void handleAssignMissingDepartment()} disabled={departmentAssignmentLoading || !departmentAssignmentTarget || !departmentAssignmentValue}>
+              {departmentAssignmentLoading ? "Assigning…" : "Save department"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </>
   )
 }

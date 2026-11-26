@@ -54,12 +54,25 @@ export async function updateSessionWithUser(request: NextRequest): Promise<{ res
       },
     })
 
-    // Refresh the session to update cookies
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    // Verify the user directly with Supabase. If the first lookup races cookie
+    // propagation after sign-in, verify the access token from the cookie-backed
+    // session before deciding that a protected navigation is unauthenticated.
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      if (userData.user) return { response: supabaseResponse, user: userData.user }
+    } catch {
+      // Try the cookie-backed access token below before treating a transient
+      // Auth fetch failure as a signed-out navigation.
+    }
 
-    return { response: supabaseResponse, user: user ?? null }
+    const { data: sessionData } = await supabase.auth.getSession()
+    const accessToken = sessionData.session?.access_token
+    if (accessToken) {
+      const { data: verifiedData } = await supabase.auth.getUser(accessToken)
+      if (verifiedData.user) return { response: supabaseResponse, user: verifiedData.user }
+    }
+
+    return { response: supabaseResponse, user: null }
   } catch (error: any) {
     if (error?.code === "refresh_token_not_found" || error?.message?.includes("Invalid Refresh Token")) {
       request.cookies.getAll().filter(({ name }) => name.startsWith("sb-")).forEach(({ name }) => {

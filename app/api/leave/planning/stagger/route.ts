@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { buildHologramCode, isStaffRole, calculateRequestedDays } from "@/lib/leave-planning"
+import { isHodExemptRole } from "@/lib/hr-workflow"
 
 async function resolveManagerReviewers(supabase: any, userId: string, departmentId: string | null) {
+  const { data: staffProfile } = await supabase.from("user_profiles").select("role").eq("id", userId).maybeSingle()
+  if (isHodExemptRole(staffProfile?.role)) return []
   const linkedReviewerIds: string[] = []
   const { data: linkages } = await supabase
     .from("loan_hod_linkages")
@@ -124,7 +127,7 @@ export async function POST(request: NextRequest) {
         requested_start_date,
         requested_end_date,
         reason,
-        status: "pending_manager_review",
+        status: isHodExemptRole(profile.role) ? "manager_confirmed" : "pending_manager_review",
         user_signature_mode: user_signature_mode || "typed",
         user_signature_text: user_signature_text || null,
         user_signature_image_url: user_signature_image_url || null,

@@ -7,6 +7,8 @@ export interface MemoLayout {
   applicantName: string
   applicantStaffNo: string
   applicantPosition: string
+  applicantDepartment?: string
+  applicantLocation?: string
   throRank: string
   throLocation: string
   subject: string
@@ -22,6 +24,8 @@ export function formatMemoLayoutAsText(layout: MemoLayout): string {
   const lines: string[] = []
   lines.push(layout.applicantStaffNo ? `${layout.applicantName}  (S/No.: ${layout.applicantStaffNo})` : layout.applicantName)
   lines.push(layout.applicantPosition)
+  if (layout.applicantDepartment?.trim()) lines.push(`Department: ${layout.applicantDepartment.trim()}`)
+  if (layout.applicantLocation?.trim()) lines.push(`Location: ${layout.applicantLocation.trim()}`)
   lines.push("")
   if (layout.throRank || layout.throLocation) {
     lines.push(`THRO'   ${layout.throRank || layout.throLocation}`)
@@ -72,8 +76,19 @@ export function parseMemoLayoutFromText(text: string): Partial<MemoLayout> {
     if (rankIndex >= 0 && !/^(thro['’`]?(\s|$)|re\s*:)/i.test(lines[rankIndex])) result.applicantPosition = lines[rankIndex].toUpperCase()
   }
 
-  const throIndex = findFrom(/^thro['’`]?(\s|$)/i)
   const reIndex = findFrom(/^re\s*:/i)
+  const departmentLine = findFrom(/^department\s*:/i)
+  if (departmentLine >= 0 && (reIndex < 0 || departmentLine < reIndex)) {
+    const value = lines[departmentLine].replace(/^department\s*:\s*/i, "").trim()
+    if (value) result.applicantDepartment = value
+  }
+  const locationLine = findFrom(/^location\s*:/i)
+  if (locationLine >= 0 && (reIndex < 0 || locationLine < reIndex)) {
+    const value = lines[locationLine].replace(/^location\s*:\s*/i, "").trim()
+    if (value) result.applicantLocation = value
+  }
+
+  const throIndex = findFrom(/^thro/i)
   if (throIndex >= 0) {
     result.throRank = lines[throIndex].replace(/^thro['’`]?\s*/i, "").trim().toUpperCase()
     const blockEnd = reIndex > throIndex ? reIndex : lines.length

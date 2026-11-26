@@ -4,6 +4,11 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
+function isTransientAuthCheckError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "")
+  return /failed to fetch|network|timeout|timed out|abort|service unavailable|server error/i.test(message)
+}
+
 export default function HomePage() {
   const router = useRouter()
   const [isChecking, setIsChecking] = useState(true)
@@ -15,26 +20,39 @@ export default function HomePage() {
     const checkAuth = async () => {
       try {
         const supabase = createClient()
-        
-        const { data: { user }, error: authError } = await supabase.auth.getUser()
-        
+        let user: { id: string } | null = null
+        let authCheckFailed = false
+
+        try {
+          const { data: authData, error: authError } = await supabase.auth.getUser()
+          user = authData.user
+          authCheckFailed = isTransientAuthCheckError(authError)
+        } catch (authError) {
+          authCheckFailed = isTransientAuthCheckError(authError)
+        }
+
+        if (!user) {
+          try {
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+            user = sessionData.session?.user ?? null
+            authCheckFailed = authCheckFailed || isTransientAuthCheckError(sessionError)
+          } catch (sessionError) {
+            authCheckFailed = authCheckFailed || isTransientAuthCheckError(sessionError)
+          }
+        }
+
         if (!isMounted) return
 
-        if (authError) {
-          // Auth error means not authenticated
-          router.replace('/auth/login')
-        } else if (user) {
-          // User is authenticated, redirect to attendance
-          router.push('/dashboard/attendance')
+        if (user) {
+          router.replace('/dashboard/attendance')
+        } else if (authCheckFailed) {
+          setError('Unable to verify your session. Check your connection and try again.')
         } else {
-          // No user and no error means not authenticated
           router.replace('/auth/login')
         }
       } catch (error) {
         if (!isMounted) return
-        // If there's an error checking auth, redirect to login
         setError(error instanceof Error ? error.message : 'Authentication error')
-        router.push('/auth/login')
       } finally {
         if (isMounted) {
           setIsChecking(false)
@@ -53,7 +71,7 @@ export default function HomePage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
       <div className="text-center space-y-4">
         <div className="animate-spin h-12 w-12 border-4 border-blue-600 border-t-transparent rounded-full mx-auto"></div>
-        <h1 className="text-2xl font-bold text-slate-900">QCC HR APPS👋</h1>
+        <h1 className="text-2xl font-bold text-slate-900">QCC HR Apps</h1>
         <p className="text-slate-600">
           {error ? `Error: ${error}` : isChecking ? 'Checking your account, please wait...' : 'Redirecting you now...'}
         </p>

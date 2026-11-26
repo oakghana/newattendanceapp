@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
+import { isHodExemptRole } from "@/lib/hr-workflow"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 import { canUpdateStaffByITAdmin, canViewStaffByITAdmin, getEffectiveItAdminScope, normalizeItAdminScope, resolveItAdminRegionId } from "@/lib/it-admin-policy"
 
@@ -486,13 +487,35 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     console.log("[v0] Staff updated successfully:", updatedProfile)
 
+    if (isHodExemptRole(updatedProfile?.role)) {
+      const cleanupAt = new Date().toISOString()
+      const [{ data: removedLinks, error: linkageCleanupError }, { error: legacyHodCleanupError }] = await Promise.all([
+        adminSupabase.from("loan_hod_linkages").delete().eq("staff_user_id", id).select("id, hod_user_id"),
+        adminSupabase.from("user_profiles").update({ hod_id: null, updated_at: cleanupAt }).eq("id", id).not("hod_id", "is", null),
+      ])
+      if (linkageCleanupError || legacyHodCleanupError) {
+        console.error("[v0] Failed to clear HOD links for exempt-role staff:", linkageCleanupError || legacyHodCleanupError)
+      } else if ((removedLinks || []).length || targetProfile.hod_id) {
+        const { error: cleanupAuditError } = await adminSupabase.from("audit_logs").insert({
+          user_id: user.id,
+          action: "HOD_LINKS_CLEARED_FOR_EXEMPT_ROLE",
+          table_name: "loan_hod_linkages",
+          record_id: id,
+          old_values: { role: targetProfile.role, hod_id: targetProfile.hod_id || null, links: removedLinks || [] },
+          new_values: { role: updatedProfile.role, hod_id: null, links: [] },
+          details: { reason: "NSP and Intern roles do not require HOD or Leave HOD assignments." },
+        })
+        if (cleanupAuditError) console.error("[v0] HOD exemption cleanup audit failed:", cleanupAuditError)
+      }
+    }
+
     // When assigned location changes (or is set), auto-link district/regional staff
     // to the Regional Manager covering their parent regional office.
     try {
       const previousLocationId = String(targetProfile.assigned_location_id || "")
       const nextLocationId = String(locationId || "")
       const locationChanged = previousLocationId !== nextLocationId
-      if (locationChanged && nextLocationId) {
+      if (locationChanged && nextLocationId && !isHodExemptRole(updatedProfile?.role)) {
         const { isNonRegionalLocation } = await import("@/lib/location-mappings")
         const locationName = String((updatedProfile as any)?.geofence_locations?.name || "")
         if (!isNonRegionalLocation(locationName)) {

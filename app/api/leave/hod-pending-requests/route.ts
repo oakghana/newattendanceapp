@@ -1,4 +1,5 @@
 import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { isHodExemptRole } from '@/lib/hr-workflow'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(_request: NextRequest) {
@@ -82,7 +83,7 @@ export async function GET(_request: NextRequest) {
 
     const profileIds = [...new Set(userIds)]
     const { data: profiles } = profileIds.length
-      ? await admin.from('user_profiles').select('id, assigned_location_id, region_id').in('id', profileIds)
+      ? await admin.from('user_profiles')      .select('id, role, assigned_location_id, region_id').in('id', profileIds)
       : { data: [] as any[] }
     const profileMap = new Map((profiles || []).map((profile: any) => [profile.id, profile]))
     const locationIds = [...new Set((profiles || []).map((profile: any) => profile.assigned_location_id).filter(Boolean))]
@@ -124,6 +125,7 @@ export async function GET(_request: NextRequest) {
 
     // Calculate days pending and enrich with user details
     const now = new Date()
+    const exemptStaffIds = new Set(profileIds.filter((id) => isHodExemptRole(profileMap.get(id)?.role)))
     const currentHodStaffIds = new Set(
       allLinkages.filter((link: any) => String(link.hod_user_id) === String(user.id)).map((link: any) => String(link.staff_user_id)),
     )
@@ -138,7 +140,7 @@ export async function GET(_request: NextRequest) {
       // hod_decision, which flips the status out of the pending list below
       // and removes it from every other linked HOD's queue at once, so no
       // one else can act on an already-decided request.
-      return assignedHodId === String(user.id) || currentHodStaffIds.has(staffId)
+      return !exemptStaffIds.has(staffId) && (assignedHodId === String(user.id) || currentHodStaffIds.has(staffId))
     }).map((req: any) => {
       const createdDate = new Date(req.submitted_at || req.created_at)
       const daysPending = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))

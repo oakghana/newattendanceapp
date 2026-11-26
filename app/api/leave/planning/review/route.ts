@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { notifyLeaveHodApproved, notifyLeaveHodDecision } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { calculateRequestedDays, summarizeManagerReviewStatus, type LeavePlanReviewDecision } from "@/lib/leave-planning"
-import { isAnnualLeave, canNonRegionalPipelineAct, canRegionalPipelineAct, isSelfLeaveWorkflowRoute, resolveStaffAssignments } from "@/lib/hr-workflow"
+import { isAnnualLeave, canNonRegionalPipelineAct, canRegionalPipelineAct, isHodExemptRole, isSelfLeaveWorkflowRoute, resolveStaffAssignments } from "@/lib/hr-workflow"
 import { isRegionalManagerScopeMatch, resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 import { isAnnualLeaveProcessingOpen, annualLeaveProcessingOpensAt } from "@/lib/annual-leave-processing"
 
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
     // not authoritative and older review cards do not include workflow_route.
     const { data: workflowRequest, error: workflowRequestError } = await admin
       .from("leave_plan_requests")
-      .select("workflow_route, leave_type_key, memo_reference, status, preferred_start_date")
+      .select("workflow_route, leave_type_key, memo_reference, status, preferred_start_date, user_profiles:user_id(role)")
       .eq("id", leave_plan_request_id)
       .maybeSingle()
     if (workflowRequestError && isSchemaIssue(workflowRequestError)) return schemaIssueResponse(workflowRequestError)
@@ -142,6 +142,10 @@ export async function POST(request: NextRequest) {
     }
     const isRegionalRequest = action === "forward_to_regional_manager"
       || String(workflowRequest.workflow_route || "").toLowerCase() === "regional"
+    const requestUserProfile = Array.isArray((workflowRequest as any).user_profiles) ? (workflowRequest as any).user_profiles[0] : (workflowRequest as any).user_profiles
+    if (isHodExemptRole(requestUserProfile?.role) && !isAdmin && !isRegionalRequest && ["department_head", "transport_manager"].includes(role)) {
+      return NextResponse.json({ error: "NSP and Intern leave requests do not require HOD review." }, { status: 403 })
+    }
     const isAnnualRegionalHrProcessing =
       isRegionalRequest &&
       isRegionalHr &&

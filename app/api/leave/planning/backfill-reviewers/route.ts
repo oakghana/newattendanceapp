@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { isHodExemptRole } from "@/lib/hr-workflow"
 
 const HOD_ROLES = [
   "regional_manager",
@@ -65,11 +66,20 @@ export async function POST(req: NextRequest) {
     // Get all unique staff user IDs
     const staffIds = [...new Set((pendingRequests as any[]).map((r) => String(r.user_id)))]
 
-    // Fetch all HOD linkages for these staff
+    const { data: staffRoleRows, error: staffRoleError } = await admin
+      .from("user_profiles")
+      .select("id, role")
+      .in("id", staffIds)
+    if (staffRoleError) return NextResponse.json({ error: staffRoleError.message }, { status: 500 })
+    const exemptStaffIds = new Set((staffRoleRows || []).filter((profile: any) => isHodExemptRole(profile.role)).map((profile: any) => String(profile.id)))
+    const eligibleStaffIds = staffIds.filter((id) => !exemptStaffIds.has(id))
+    if (eligibleStaffIds.length === 0) return NextResponse.json({ backfilled: 0, exemptStaffCount: exemptStaffIds.size })
+
+    // Fetch HOD linkages only for staff who require an HOD reviewer.
     const { data: linkages, error: linkErr } = await admin
       .from("loan_hod_linkages")
       .select("staff_user_id, hod_user_id")
-      .in("staff_user_id", staffIds)
+      .in("staff_user_id", eligibleStaffIds)
 
     if (linkErr) {
       console.error("[v0] backfill-reviewers: failed to fetch linkages:", linkErr.message)

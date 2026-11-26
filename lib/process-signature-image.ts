@@ -19,7 +19,7 @@ export function calculateDarkPixelBounds(darkPixels: Array<{ x: number; y: numbe
   }, initial)
 }
 
-export function isolateSignatureInk(source: Uint8ClampedArray, width: number, height: number) {
+export function isolateSignatureInk(source: Uint8ClampedArray, width: number, height: number, contrastThreshold = 9) {
   const luminance = new Uint8Array(width * height)
   const integralWidth = width + 1
   const integral = new Float64Array(integralWidth * (height + 1))
@@ -56,7 +56,7 @@ export function isolateSignatureInk(source: Uint8ClampedArray, width: number, he
         integral[top * integralWidth + left]
       const difference = sum / area - luminance[y * width + x]
 
-      if (difference >= 9) {
+      if (difference >= contrastThreshold) {
         inkStrength[y * width + x] = Math.min(255, Math.round(difference))
       }
     }
@@ -196,7 +196,62 @@ export function isolateSignatureInk(source: Uint8ClampedArray, width: number, he
     }
   }
 
-  return { pixels: output, bounds: inkPixels.length > 0 ? calculateDarkPixelBounds(inkPixels) : null }
+  return {
+    pixels: output,
+    bounds: inkPixels.length > 0 ? calculateDarkPixelBounds(inkPixels) : null,
+    inkPixelCount: inkPixels.length,
+  }
+}
+
+export function detectSignatureInk(source: Uint8ClampedArray, width: number, height: number) {
+  const strongInk = isolateSignatureInk(source, width, height)
+  if (strongInk.bounds) return strongInk
+
+  const faintInk = isolateSignatureInk(source, width, height, 4)
+  const faintBounds = faintInk.bounds
+  if (!faintBounds) return faintInk
+
+  const spanX = faintBounds.maxX - faintBounds.minX + 1
+  const spanY = faintBounds.maxY - faintBounds.minY + 1
+  const minimumInkPixels = Math.max(12, Math.round(width * height * 0.000004))
+  const minimumSpanX = Math.max(8, Math.round(width * 0.01))
+  const minimumSpanY = Math.max(4, Math.round(height * 0.006))
+
+  if (
+    faintInk.inkPixelCount < minimumInkPixels ||
+    spanX < minimumSpanX ||
+    spanY < minimumSpanY
+  ) {
+    return { ...faintInk, bounds: null }
+  }
+
+  return faintInk
+}
+
+export function calculateVisibleImageBounds(source: Uint8ClampedArray, width: number, height: number) {
+  let minX = width
+  let minY = height
+  let maxX = -1
+  let maxY = -1
+  let visiblePixels = 0
+  const pixelCount = width * height
+  const minimumVisiblePixels = Math.max(8, Math.round(pixelCount * 0.000002))
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4
+      const luminance = (source[index] * 299 + source[index + 1] * 587 + source[index + 2] * 114) / 1000
+      if (luminance >= 255) continue
+      visiblePixels += 1
+      minX = Math.min(minX, x)
+      minY = Math.min(minY, y)
+      maxX = Math.max(maxX, x)
+      maxY = Math.max(maxY, y)
+    }
+  }
+
+  if (visiblePixels < minimumVisiblePixels || maxX < minX || maxY < minY) return null
+  return { minX, minY, maxX, maxY }
 }
 
 /**
@@ -210,7 +265,9 @@ export async function processSignatureDataUrl(dataUrl: string): Promise<string> 
   return processSignatureImage(new File([blob], "signature-scan", { type: blob.type || "image/png" }))
 }
 
-export function processSignatureImage(file: File): Promise<string> {
+export type ProcessedSignatureImage = { dataUrl: string; isolated: boolean }
+
+export function processSignatureImageWithDetails(file: File): Promise<ProcessedSignatureImage> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onerror = () => reject(new Error("Unable to read the signature image."))
@@ -233,19 +290,24 @@ export function processSignatureImage(file: File): Promise<string> {
 
         const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
         const { width, height } = canvas
-        const isolated = isolateSignatureInk(imageData.data, width, height)
+        const isolated = detectSignatureInk(imageData.data, width, height)
+        const detectedSignatureBounds = isolated.bounds
+        const sourceBounds = detectedSignatureBounds || calculateVisibleImageBounds(imageData.data, width, height)
 
-        if (!isolated.bounds) {
-          return reject(new Error("No visible signature was detected. Use a darker, clearer scan."))
+        if (!sourceBounds) {
+          return reject(new Error("This image appears blank. Choose an image containing your signature or use Draw."))
         }
-        const { minX, minY, maxX, maxY } = isolated.bounds
-        const padding = Math.max(12, Math.round(Math.max(maxX - minX, maxY - minY) * 0.08))
+
+        const { minX, minY, maxX, maxY } = sourceBounds
+        const padding = Math.max(12, Math.round(Math.max(maxX - minX, maxY - minY) * (detectedSignatureBounds ? 0.08 : 0.02)))
         const cropX = Math.max(0, minX - padding)
         const cropY = Math.max(0, minY - padding)
         const cropRight = Math.min(width, maxX + padding + 1)
         const cropBottom = Math.min(height, maxY + padding + 1)
 
-        context.putImageData(new ImageData(isolated.pixels, width, height), 0, 0)
+        if (detectedSignatureBounds) {
+          context.putImageData(new ImageData(isolated.pixels, width, height), 0, 0)
+        }
 
         const targetCanvas = document.createElement("canvas")
         targetCanvas.width = Math.max(1, cropRight - cropX)
@@ -282,10 +344,15 @@ export function processSignatureImage(file: File): Promise<string> {
         cleanContext.rotate((-14 * Math.PI) / 180)
         cleanContext.fillText(getSignatureHologramText("general"), 0, 0)
         cleanContext.restore()
-        resolve(cleanCanvas.toDataURL("image/png"))
+        resolve({ dataUrl: cleanCanvas.toDataURL("image/png"), isolated: Boolean(detectedSignatureBounds) })
       }
       image.src = String(reader.result)
     }
     reader.readAsDataURL(file)
   })
+}
+
+export async function processSignatureImage(file: File): Promise<string> {
+  const processed = await processSignatureImageWithDetails(file)
+  return processed.dataUrl
 }

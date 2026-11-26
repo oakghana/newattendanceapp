@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { canDoHrOffice, canDoLoanOffice, normalizeRole } from "@/lib/loan-workflow"
+import { isHodExemptRole } from "@/lib/hr-workflow"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
 import {
   findRegionalManagersForLocation,
@@ -469,7 +470,7 @@ export async function POST(request: NextRequest) {
 
       const unassignedRows = (staffRows || []).filter((staff: any) => {
         const normalizedStaffRole = normalizeRole(staff.role)
-        return !linkedStaffIds.has(String(staff.id)) && !["admin", "it_admin", "managing_director", "hr_executive", "hr_executive_officer", "hr_leave_office", "leave_loan_officer", "manager_hr", "director_hr"].includes(normalizedStaffRole)
+        return !isHodExemptRole(normalizedStaffRole) && !linkedStaffIds.has(String(staff.id)) && !["admin", "it_admin", "managing_director", "hr_executive", "hr_executive_officer", "hr_leave_office", "leave_loan_officer", "manager_hr", "director_hr"].includes(normalizedStaffRole)
       })
       const now = new Date().toISOString()
       const rows = unassignedRows.map((staff: any) => ({
@@ -682,6 +683,9 @@ export async function POST(request: NextRequest) {
       if (staffError || !staffProfile) {
         return NextResponse.json({ error: "Staff profile not found" }, { status: 404 })
       }
+      if (isHodExemptRole(staffProfile.role)) {
+        return NextResponse.json({ error: "NSP and Intern roles do not require HOD assignments." }, { status: 409 })
+      }
 
       const { data: hodProfile, error: hodError } = await admin
         .from("user_profiles")
@@ -739,6 +743,9 @@ export async function POST(request: NextRequest) {
 
   if (staffError || !staffProfile) {
   return NextResponse.json({ error: "Staff profile not found" }, { status: 404 })
+  }
+  if (isHodExemptRole(staffProfile.role)) {
+    return NextResponse.json({ error: "NSP and Intern roles do not require HOD assignments." }, { status: 409 })
   }
 
   // Regional IT Admins may not assign Department Heads to regional or district staff.
@@ -907,6 +914,10 @@ export async function POST(request: NextRequest) {
       if (hodError || !hodProfile) {
         return NextResponse.json({ error: "HOD profile not found" }, { status: 404 })
       }
+      const exemptStaffIds = (staffRows || []).filter((staff: any) => isHodExemptRole(staff.role)).map((staff: any) => String(staff.id))
+      if (exemptStaffIds.length > 0) {
+        return NextResponse.json({ error: "NSP and Intern roles do not require HOD assignments.", exempt_staff_ids: exemptStaffIds }, { status: 409 })
+      }
 
       const hierarchyMap = await locationsMapForProfiles(admin, [...(staffRows || []), hodProfile])
       const invalidStaff: string[] = []
@@ -982,6 +993,7 @@ export async function POST(request: NextRequest) {
 
       let updated = 0
       for (const staff of staffRows || []) {
+        if (isHodExemptRole((staff as any).role)) continue
         const locationId = (staff as any).assigned_location_id
         const departmentId = (staff as any).department_id
 
@@ -1132,7 +1144,7 @@ export async function POST(request: NextRequest) {
       }
 
       const [{ data: staffProfile }, { data: hodProfile }, { data: requesterProfile }, { data: adminProfiles }] = await Promise.all([
-        admin.from("user_profiles").select("id, first_name, last_name, employee_id, department_id, assigned_location_id, geofence_locations!assigned_location_id(name, location_type, parent_location_id, district_id)").eq("id", staffUserId).maybeSingle(),
+        admin.from("user_profiles").select("id, first_name, last_name, employee_id, role, department_id, assigned_location_id, geofence_locations!assigned_location_id(name, location_type, parent_location_id, district_id)").eq("id", staffUserId).maybeSingle(),
         admin.from("user_profiles").select("id, first_name, last_name, role, department_id, assigned_location_id, geofence_locations!assigned_location_id(name, location_type, parent_location_id)").eq("id", requestedHodUserId).maybeSingle(),
         admin.from("user_profiles").select("id, first_name, last_name, role").eq("id", user.id).maybeSingle(),
         admin.from("user_profiles").select("id").eq("role", "admin").eq("is_active", true),
@@ -1140,6 +1152,9 @@ export async function POST(request: NextRequest) {
 
       if (!staffProfile || !hodProfile) {
         return NextResponse.json({ error: "Staff or HOD profile not found" }, { status: 404 })
+      }
+      if (isHodExemptRole(staffProfile.role)) {
+        return NextResponse.json({ error: "NSP and Intern roles do not require HOD assignments." }, { status: 409 })
       }
 
       const hierarchyMap = await locationsMapForProfiles(admin, [staffProfile, hodProfile])
@@ -1216,12 +1231,17 @@ export async function POST(request: NextRequest) {
       }
 
       const [{ data: staffProfile }, { data: hodProfile }] = await Promise.all([
-        admin.from("user_profiles").select("id, first_name, last_name, employee_id, department_id, position, assigned_location_id, geofence_locations!assigned_location_id(name, address, location_type, parent_location_id, district_id, districts(name))").eq("id", staffUserId).maybeSingle(),
+        admin.from("user_profiles").select("id, first_name, last_name, employee_id, role, department_id, position, assigned_location_id, geofence_locations!assigned_location_id(name, address, location_type, parent_location_id, district_id, districts(name))").eq("id", staffUserId).maybeSingle(),
         admin.from("user_profiles").select("id, first_name, last_name, role, department_id, assigned_location_id, position, geofence_locations!assigned_location_id(name, location_type, parent_location_id)").eq("id", requestedHodUserId).maybeSingle(),
       ])
 
       if (!staffProfile || !hodProfile) {
         return NextResponse.json({ error: "Staff or requested HOD profile no longer exists" }, { status: 404 })
+      }
+      if (isHodExemptRole(staffProfile.role)) {
+        const resolvedData = { ...payload, request_status: "rejected", resolved_by: user.id, resolved_at: new Date().toISOString(), resolution_note: "NSP and Intern roles do not require an HOD assignment." }
+        await admin.from("staff_notifications").update({ data: resolvedData, is_read: true }).eq("id", requestId)
+        return NextResponse.json({ success: true, requested: false, message: "The HOD link request was closed because NSP and Intern roles do not require an HOD." })
       }
 
       const hierarchyMap = await locationsMapForProfiles(admin, [staffProfile, hodProfile])

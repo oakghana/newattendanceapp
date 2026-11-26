@@ -122,6 +122,10 @@ function isAuthorizedForRoute(userRole: string | null | undefined, pathname: str
       ? "regional_hr"
       : normalized;
 
+  // The universal dashboard surfaces must stay open to every authenticated
+  // profile, including roles added after the legacy static allow-list.
+  if (effectiveRole && ["/dashboard", "/dashboard/attendance"].includes(pathname)) return true
+
   // Sort patterns longest-first so more specific routes take priority over
   // parent patterns (e.g. /dashboard/md-approvals beats /dashboard).
   const sortedEntries = Object.entries(PROTECTED_ROUTES).sort(
@@ -197,14 +201,7 @@ export default async function proxy(request: NextRequest) {
     });
 
     if (!user) {
-      // A refresh can briefly resolve without a user while valid Supabase
-      // cookies are still present. Do not replace the selected module with
-      // the login page during that race; the dashboard layout will retry.
-      const hasAuthCookie = request.cookies.getAll().some(({ name }) =>
-        name.startsWith("sb-") && (name.includes("access-token") || name.includes("refresh-token")),
-      )
-      if (!isProtectedRoute(pathname) || hasAuthCookie) return response
-
+      if (!isProtectedRoute(pathname)) return response
       return NextResponse.redirect(new URL("/auth/login", request.url));
     }
 

@@ -8,17 +8,19 @@ import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { User, Mail, Phone, MapPin, Building, Save, Camera, Lock, Key, Calendar, Eye, EyeOff, Settings2, Shield, Bell, Pen } from "lucide-react"
+import { User, Mail, Phone, MapPin, Building, Save, Camera, Lock, Key, Calendar, Eye, EyeOff, Settings2, Shield, Bell, Pen, Crop } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { clearAllDataAndLogout } from "@/lib/cache-manager"
 import { RequestLeaveButton } from "@/components/leave/request-leave-button"
 import { PersonalAttendanceHistory } from "@/components/attendance/personal-attendance-history"
 import { SecureInput } from "@/components/ui/secure-input"
 import { SignaturePad } from "@/components/leave/signature-pad"
-import { processSignatureDataUrl, processSignatureImage } from "@/lib/process-signature-image"
+import Cropper from "react-easy-crop"
+import { processSignatureImageWithDetails } from "@/lib/process-signature-image"
 import { useToast } from "@/hooks/use-toast"
 import { getPasswordEnforcementMessage, validatePassword } from "@/lib/security"
 import { displayRole } from "@/lib/role-mapping"
@@ -85,6 +87,8 @@ interface ProfileClientProps {
   initialLinkedReviewers?: LinkedReviewer[]
 }
 
+type SignatureCropArea = { x: number; y: number; width: number; height: number }
+
 async function hydrateProfileReferences(supabase: ReturnType<typeof createClient>, profile: any) {
   if (!profile) return profile
 
@@ -121,6 +125,31 @@ async function hydrateProfileReferences(supabase: ReturnType<typeof createClient
   return hydratedProfile
 }
 
+async function cropImageToFile(sourceUrl: string, crop: SignatureCropArea): Promise<File> {
+  const image = new Image()
+  image.crossOrigin = "anonymous"
+  image.src = sourceUrl
+  await image.decode()
+
+  const cropX = Math.max(0, Math.floor(crop.x))
+  const cropY = Math.max(0, Math.floor(crop.y))
+  const cropWidth = Math.min(image.naturalWidth - cropX, Math.ceil(crop.width))
+  const cropHeight = Math.min(image.naturalHeight - cropY, Math.ceil(crop.height))
+  if (cropWidth < 1 || cropHeight < 1) throw new Error("Select a larger area around the signature.")
+
+  const canvas = document.createElement("canvas")
+  canvas.width = cropWidth
+  canvas.height = cropHeight
+  const context = canvas.getContext("2d")
+  if (!context) throw new Error("Your browser cannot crop this image.")
+  context.drawImage(image, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((result) => result ? resolve(result) : reject(new Error("Unable to create the cropped image.")), "image/png")
+  })
+  return new File([blob], "signature-crop.png", { type: "image/png" })
+}
+
 export function ProfileClient({ initialUser, initialProfile, initialLinkedReviewers = [] }: ProfileClientProps) {
   const { toast: appToast } = useToast()
   const [profile, setProfile] = useState<UserProfile | null>(initialProfile)
@@ -145,28 +174,24 @@ export function ProfileClient({ initialUser, initialProfile, initialLinkedReview
   const [showPasswordChange, setShowPasswordChange] = useState(false)
   const [signatureMode, setSignatureMode] = useState<"draw" | "upload" | null>(null)
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
-  const [cleanSignatureDataUrl, setCleanSignatureDataUrl] = useState<string | null>(null)
+  const [signatureSourceFile, setSignatureSourceFile] = useState<File | null>(null)
+  const [signatureSourceUrl, setSignatureSourceUrl] = useState<string | null>(null)
+  const [signatureCrop, setSignatureCrop] = useState({ x: 0, y: 0 })
+  const [signatureZoom, setSignatureZoom] = useState(1)
+  const [croppedSignatureArea, setCroppedSignatureArea] = useState<SignatureCropArea | null>(null)
+  const [isSignatureCropOpen, setIsSignatureCropOpen] = useState(false)
+  const [isCroppingSignature, setIsCroppingSignature] = useState(false)
+  const [isProcessingSignature, setIsProcessingSignature] = useState(false)
+  const [signatureNeedsReview, setSignatureNeedsReview] = useState(false)
+  const [signatureReviewConfirmed, setSignatureReviewConfirmed] = useState(false)
   const [isSavingSignature, setIsSavingSignature] = useState(false)
   const [activeTab, setActiveTab] = useState("profile")
   const searchParams = useSearchParams()
 
   useEffect(() => {
-    let cancelled = false
-    if (!signatureDataUrl) {
-      setCleanSignatureDataUrl(null)
-      return
-    }
-    processSignatureDataUrl(signatureDataUrl)
-      .then((processed) => {
-        if (!cancelled) setCleanSignatureDataUrl(processed)
-      })
-      .catch(() => {
-        if (!cancelled) setCleanSignatureDataUrl(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [signatureDataUrl])
+    if (!signatureSourceUrl) return
+    return () => URL.revokeObjectURL(signatureSourceUrl)
+  }, [signatureSourceUrl])
 
   // if redirected with forceChange flag, open password form automatically
   // or if requesting signature tab, open it
@@ -188,6 +213,69 @@ export function ProfileClient({ initialUser, initialProfile, initialLinkedReview
       // ignore
     }
   }, [initialProfile?.role, searchParams])
+
+  const handleSignatureUpload = async (file: File) => {
+    setIsProcessingSignature(true)
+    setSignatureDataUrl(null)
+    setSignatureNeedsReview(false)
+    setSignatureReviewConfirmed(false)
+    setCroppedSignatureArea(null)
+    setSignatureCrop({ x: 0, y: 0 })
+    setSignatureZoom(1)
+
+    try {
+      setSignatureSourceFile(file)
+      setSignatureSourceUrl(URL.createObjectURL(file))
+      const processed = await processSignatureImageWithDetails(file)
+      setSignatureDataUrl(processed.dataUrl)
+      setSignatureNeedsReview(true)
+      if (!processed.isolated) {
+        setIsSignatureCropOpen(true)
+        toast.info("Select the handwritten signature area to continue.")
+      } else {
+        toast.info("Review the signature preview. Crop or adjust it if any surrounding text was selected.")
+      }
+    } catch (error) {
+      setSignatureSourceFile(null)
+      setSignatureSourceUrl(null)
+      toast.error(error instanceof Error ? error.message : "Unable to process signature image.")
+    } finally {
+      setIsProcessingSignature(false)
+    }
+  }
+
+  const openSignatureCropper = () => {
+    if (!signatureSourceUrl) {
+      toast.error("Choose a signature image first.")
+      return
+    }
+    setSignatureCrop({ x: 0, y: 0 })
+    setSignatureZoom(1)
+    setCroppedSignatureArea(null)
+    setIsSignatureCropOpen(true)
+  }
+
+  const applySignatureCrop = async () => {
+    if (!signatureSourceUrl || !croppedSignatureArea) {
+      toast.error("Drag the crop area over the signature before continuing.")
+      return
+    }
+
+    setIsCroppingSignature(true)
+    try {
+      const croppedFile = await cropImageToFile(signatureSourceUrl, croppedSignatureArea)
+      const processed = await processSignatureImageWithDetails(croppedFile)
+      setSignatureDataUrl(processed.dataUrl)
+      setSignatureNeedsReview(true)
+      setSignatureReviewConfirmed(false)
+      setIsSignatureCropOpen(false)
+      toast.success("Signature crop is ready. Review the preview before saving.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to crop signature image.")
+    } finally {
+      setIsCroppingSignature(false)
+    }
+  }
 
   // Load existing signature when Signature tab is active
   useEffect(() => {
@@ -342,14 +430,14 @@ export function ProfileClient({ initialUser, initialProfile, initialLinkedReview
       if (monthError) throw monthError
 
       const totalDays = allTimeData?.length || 0
-      const totalHours = allTimeData?.reduce((sum, record) => sum + (record.work_hours || 0), 0) || 0
+      const totalHours = (allTimeData || []).reduce((sum: number, record: { work_hours?: number | null }) => sum + Number(record.work_hours || 0), 0)
       const averageHours = totalDays > 0 ? totalHours / totalDays : 0
 
       const thisMonthDays = monthData?.length || 0
-      const thisMonthHours = monthData?.reduce((sum, record) => sum + (record.work_hours || 0), 0) || 0
+      const thisMonthHours = (monthData || []).reduce((sum: number, record: { work_hours?: number | null }) => sum + Number(record.work_hours || 0), 0)
 
-      const presentDays = allTimeData?.filter((record) => record.status === "present").length || 0
-      const lateDays = allTimeData?.filter((record) => record.status === "late").length || 0
+      const presentDays = (allTimeData || []).filter((record: { status?: string | null }) => record.status === "present").length
+      const lateDays = (allTimeData || []).filter((record: { status?: string | null }) => record.status === "late").length
 
       setAttendanceSummary({
         totalDays,
@@ -844,13 +932,26 @@ export function ProfileClient({ initialUser, initialProfile, initialLinkedReview
               {!signatureDataUrl || signatureMode ? (
                 <div className="flex gap-3 rounded-lg bg-white p-3 border border-green-200">
                   <button
-                    onClick={() => setSignatureMode("draw")}
+                    onClick={() => {
+                      setSignatureDataUrl(null)
+                      setSignatureMode("draw")
+                      setSignatureSourceFile(null)
+                      setSignatureSourceUrl(null)
+                      setSignatureNeedsReview(false)
+                      setSignatureReviewConfirmed(false)
+                      setIsSignatureCropOpen(false)
+                    }}
                     className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "draw" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
                   >
                     Draw
                   </button>
                   <button
-                    onClick={() => setSignatureMode("upload")}
+                    onClick={() => {
+                      setSignatureDataUrl(null)
+                      setSignatureMode("upload")
+                      setSignatureNeedsReview(false)
+                      setSignatureReviewConfirmed(false)
+                    }}
                     className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "upload" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
                   >
                     Upload
@@ -864,21 +965,21 @@ export function ProfileClient({ initialUser, initialProfile, initialLinkedReview
                 <div className="space-y-4">
                   <div className="p-4 bg-white border-2 border-green-200 rounded-lg">
                     <p className="text-sm text-gray-600 mb-2">Your saved signature:</p>
-  {cleanSignatureDataUrl ? (
   <img
-  src={cleanSignatureDataUrl}
+  src={signatureDataUrl || ""}
   alt="Your saved signature"
   className="mx-auto max-h-32 max-w-full object-contain"
   />
-  ) : (
-  <p className="text-sm text-gray-600">Preparing isolated signature…</p>
-  )}
                   </div>
                   <div className="flex gap-2">
                     <Button
                       onClick={() => {
                         setSignatureDataUrl(null)
                         setSignatureMode("draw")
+                        setSignatureSourceFile(null)
+                        setSignatureSourceUrl(null)
+                        setSignatureNeedsReview(false)
+                        setSignatureReviewConfirmed(false)
                       }}
                       variant="outline"
                       className="flex-1"
@@ -898,6 +999,11 @@ export function ProfileClient({ initialUser, initialProfile, initialLinkedReview
                               throw new Error(result.error || "Failed to clear signature")
                             }
                             setSignatureDataUrl(null)
+                            setSignatureSourceFile(null)
+                            setSignatureSourceUrl(null)
+                            setSignatureNeedsReview(false)
+                            setSignatureReviewConfirmed(false)
+                            setIsSignatureCropOpen(false)
                             // Reset to draw mode so user can create new signature
                             setSignatureMode("draw")
                             toast.success("Signature cleared successfully. You can now create a new one.")
@@ -929,27 +1035,57 @@ export function ProfileClient({ initialUser, initialProfile, initialLinkedReview
 
                   {/* Upload Signature */}
                   {signatureMode === "upload" && (
-                    <div className="space-y-2">
-                      <Label>Upload signature image</Label>
+                    <div className="space-y-3">
+                      <Label htmlFor="signature-image-upload">Upload signature image</Label>
                       <Input
+                        id="signature-image-upload"
                         type="file"
                         accept="image/*"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0]
-                          if (file) {
-                            try {
-                              setSignatureDataUrl(await processSignatureImage(file))
-                            } catch (error) {
-                              toast.error(error instanceof Error ? error.message : "Unable to process signature image.")
-                            }
-                          }
+                        onChange={async (event) => {
+                          const input = event.currentTarget
+                          const file = input.files?.[0]
+                          if (file) await handleSignatureUpload(file)
+                          input.value = ""
                         }}
                         className="cursor-pointer"
+                        disabled={isProcessingSignature || isCroppingSignature}
                       />
+                      {isProcessingSignature && <p className="text-sm text-muted-foreground">Checking image and preparing signature…</p>}
+                      {signatureSourceFile && !signatureDataUrl && !isProcessingSignature && !isSignatureCropOpen && (
+                        <Alert>
+                          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                            <span>Select the handwritten signature area to continue.</span>
+                            <Button type="button" size="sm" variant="outline" onClick={openSignatureCropper}>
+                              <Crop data-icon="inline-start" /> Crop signature area
+                            </Button>
+                          </AlertDescription>
+                        </Alert>
+                      )}
                       {signatureDataUrl && (
-                        <div className="mt-3 p-3 bg-white border rounded">
-                          <img src={signatureDataUrl} alt="Uploaded signature" className="mx-auto max-h-24 max-w-full object-contain" />
+                        <div className="mt-3 flex flex-col gap-3 rounded border border-border bg-background p-3">
+                          <img src={signatureDataUrl} alt="Signature preview" className="mx-auto max-h-24 max-w-full object-contain" />
+                          {signatureSourceFile && (
+                            <Button type="button" size="sm" variant="outline" onClick={openSignatureCropper} disabled={isCroppingSignature}>
+                              <Crop data-icon="inline-start" /> Crop or adjust signature area
+                            </Button>
+                          )}
                         </div>
+                      )}
+                      {signatureNeedsReview && signatureDataUrl && (
+                        <Alert>
+                          <AlertDescription className="flex flex-col gap-3">
+                            <span>Before saving, confirm this preview shows your handwritten signature—not surrounding text. Use Crop or adjust the image if needed.</span>
+                            <label className="flex items-start gap-2 text-sm text-foreground">
+                              <input
+                                type="checkbox"
+                                className="mt-0.5 size-4 accent-primary"
+                                checked={signatureReviewConfirmed}
+                                onChange={(event) => setSignatureReviewConfirmed(event.target.checked)}
+                              />
+                              <span>I reviewed this preview and it contains my signature.</span>
+                            </label>
+                          </AlertDescription>
+                        </Alert>
                       )}
                     </div>
                   )}
@@ -992,6 +1128,10 @@ export function ProfileClient({ initialUser, initialProfile, initialLinkedReview
 
                       toast.success("Signature saved successfully! You can now use it to sign documents.")
                       setSignatureDataUrl(result.signature?.signature_data_url || signatureDataUrl)
+                      setSignatureSourceFile(null)
+                      setSignatureSourceUrl(null)
+                      setSignatureNeedsReview(false)
+                      setSignatureReviewConfirmed(false)
                       setSignatureMode(null as any)
                     } catch (err) {
                       const errorMsg = err instanceof Error ? err.message : String(err)
@@ -1002,7 +1142,7 @@ export function ProfileClient({ initialUser, initialProfile, initialLinkedReview
                     }
                   }}
                   className="w-full bg-green-600 hover:bg-green-700 text-white"
-                  disabled={!signatureDataUrl || isSavingSignature}
+                  disabled={!signatureDataUrl || isSavingSignature || (signatureNeedsReview && !signatureReviewConfirmed)}
                 >
                   {isSavingSignature ? "Saving..." : "Save Signature"}
                 </Button>
@@ -1399,6 +1539,54 @@ export function ProfileClient({ initialUser, initialProfile, initialLinkedReview
           </div>
         </TabsContent>
       </Tabs>
+      <Dialog open={isSignatureCropOpen} onOpenChange={(open) => { if (!isCroppingSignature) setIsSignatureCropOpen(open) }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Select the handwritten signature</DialogTitle>
+            <DialogDescription>
+              Drag the image so the handwritten signature is inside the crop frame. Use the zoom control or arrow keys for fine positioning; text and page borders outside the frame will not be included.
+            </DialogDescription>
+          </DialogHeader>
+          {signatureSourceUrl ? (
+            <div className="relative h-72 overflow-hidden rounded-md border border-border bg-muted">
+              <Cropper
+                image={signatureSourceUrl}
+                crop={signatureCrop}
+                zoom={signatureZoom}
+                aspect={3}
+                maxZoom={6}
+                onCropChange={setSignatureCrop}
+                onZoomChange={setSignatureZoom}
+                onCropComplete={(_, area) => setCroppedSignatureArea(area)}
+                showGrid
+                classes={{ containerClassName: "signature-cropper" }}
+              />
+            </div>
+          ) : (
+            <div className="flex h-72 items-center justify-center rounded-md border border-border text-sm text-muted-foreground">Loading image…</div>
+          )}
+          <div className="flex items-center gap-3">
+            <Label htmlFor="signature-crop-zoom">Zoom</Label>
+            <input
+              id="signature-crop-zoom"
+              type="range"
+              min="1"
+              max="6"
+              step="0.05"
+              value={signatureZoom}
+              onChange={(event) => setSignatureZoom(Number(event.target.value))}
+              className="w-full accent-primary"
+            />
+            <span className="w-12 text-right text-sm text-muted-foreground">{signatureZoom.toFixed(1)}×</span>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsSignatureCropOpen(false)} disabled={isCroppingSignature}>Cancel</Button>
+            <Button type="button" onClick={() => void applySignatureCrop()} disabled={!signatureSourceUrl || !croppedSignatureArea || isCroppingSignature}>
+              {isCroppingSignature ? "Preparing crop…" : "Use this crop"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
