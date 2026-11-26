@@ -19,6 +19,12 @@ import { getMemoLocationAddress, isNonRegionalLocation } from "@/lib/location-ma
 import { ensureMemoSecurity } from "@/lib/memo-security"
 import { formatDateDDMMYYYY } from "@/lib/date-utils"
 import { isSalaryAdvanceLoanType } from "@/lib/salary-advance"
+import {
+  MEMO_CORRECTION_ACTION,
+  MEMO_CORRECTION_LAYOUT_VERSION,
+  formatMemoLayoutAsText,
+  parseMemoLayoutFromText,
+} from "@/lib/loan-memo-layout"
 
 export const runtime = "nodejs"
 
@@ -621,7 +627,87 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       // logo unavailable, continue without it
     }
 
-    const { subject, paragraphs } = buildMemoBody(loan)
+    const builtBody = buildMemoBody(loan)
+
+    // An Admin correction saved with the full-letter layout is authoritative for every
+    // editable line (applicant, rank, THRO, subject, body, signatory, cc). The reference
+    // number, date, logo, signatures and MD stamp always stay system-controlled.
+    const { data: latestCorrection } = await admin
+      .from("audit_logs")
+      .select("details")
+      .eq("action", MEMO_CORRECTION_ACTION)
+      .eq("record_id", loanId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const correctionLayoutVersion = Number((latestCorrection?.details as { layout_version?: unknown } | null)?.layout_version || 0)
+    const hasLayoutCorrection = correctionLayoutVersion >= MEMO_CORRECTION_LAYOUT_VERSION && Boolean(String((loan as any).director_letter || "").trim())
+    const layoutOverride = hasLayoutCorrection ? parseMemoLayoutFromText(String((loan as any).director_letter)) : {}
+
+    const subject = layoutOverride.subject || builtBody.subject
+    const paragraphs = layoutOverride.paragraphs?.length ? layoutOverride.paragraphs : builtBody.paragraphs
+
+    const applicantFullName = (
+      layoutOverride.applicantName ||
+      fmtName(applicantProfile) ||
+      String((loan as any)?.staff_full_name || "").trim() ||
+      "REQUESTING STAFF"
+    ).toUpperCase()
+    const applicantStaffNo = layoutOverride.applicantStaffNo !== undefined
+      ? layoutOverride.applicantStaffNo
+      : String((applicantProfile as any)?.employee_id || (applicantProfile as any)?.staff_number || loan.staff_number || "")
+    const applicantPosition = (layoutOverride.applicantPosition || String((applicantProfile as any)?.position || loan.staff_rank || "STAFF")).toUpperCase()
+
+    const parsedHrNote = splitThroTelephoneFromNote(loan.hr_note)
+    const parsedLoanOfficeNote = splitThroTelephoneFromNote(loan.loan_office_note)
+    const hodRank = (layoutOverride.throRank || String(parsedHrNote.throRank || parsedLoanOfficeNote.throRank || loan.hod_rank || throRecipient?.position || "")).toUpperCase().trim()
+    const rawHodLocation = String(parsedHrNote.throLocation || parsedLoanOfficeNote.throLocation || loan.hod_location || throRecipient?.location || loan.staff_location_name || "HEAD OFFICE ACCRA")
+    const hodLocation = (layoutOverride.throLocation || getMemoLocationAddress(rawHodLocation, "HEAD OFFICE ACCRA, GHANA")).toUpperCase()
+
+    const dirName = (layoutOverride.signerName || fmtName(directorProfile) || "APPROVING AUTHORITY").toUpperCase()
+    const dirTitle = (layoutOverride.signerTitle || String((directorProfile as any)?.position || (directorProfile as any)?.role || "APPROVING AUTHORITY").replace(/_/g, " ")).toUpperCase()
+
+    // Keep the distribution block outside the editable body so regenerating a
+    // signed PDF from an edited draft cannot drop either kind of recipient.
+    const enteredCcSources = [
+      (loan as any).memo_draft_cc,
+      (loan as any).memo_cc,
+      (loan as any).cc_recipients,
+      (loan as any).cc_list,
+    ]
+    const derivedCcRecipients: string[] = []
+    const seenCc = new Set<string>()
+    for (const source of enteredCcSources) {
+      const values = Array.isArray(source) ? source : String(source || "").split(/[\r\n,]+/)
+      for (const value of values) {
+        const recipient = String(value || "").replace(/\s+/g, " ").trim()
+        const key = recipient.toLowerCase().replace(/[^a-z0-9]+/g, "")
+        if (recipient && !seenCc.has(key)) {
+          seenCc.add(key)
+          derivedCcRecipients.push(recipient)
+        }
+      }
+    }
+    const ccRecipients = layoutOverride.ccRecipients?.length ? layoutOverride.ccRecipients : derivedCcRecipients
+
+    if (request.nextUrl.searchParams.get("format") === "text") {
+      const text = hasLayoutCorrection
+        ? String((loan as any).director_letter)
+        : formatMemoLayoutAsText({
+            applicantName: applicantFullName,
+            applicantStaffNo,
+            applicantPosition,
+            throRank: hodRank,
+            throLocation: hodLocation,
+            subject,
+            paragraphs,
+            signerName: dirName,
+            signerTitle: dirTitle,
+            ccRecipients,
+          })
+      return NextResponse.json({ text, layoutCorrected: hasLayoutCorrection })
+    }
+
     const memoDate = fmtDate(
       loan.director_decision_at || loan.hr_forwarded_at || loan.fd_checked_at || loan.created_at,
     )
@@ -678,15 +764,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     y += 10
 
     // ─── Applicant block ──────────────────────────────────────────────
-    const applicantFullName = (
-      fmtName(applicantProfile) ||
-      String((loan as any)?.staff_full_name || "").trim() ||
-      "REQUESTING STAFF"
-    ).toUpperCase()
-    const applicantStaffNo =
-      String((applicantProfile as any)?.employee_id || (applicantProfile as any)?.staff_number || loan.staff_number || "")
-    const applicantPosition = String((applicantProfile as any)?.position || loan.staff_rank || "STAFF").toUpperCase()
-
     doc.setFont("times", "bold")
     doc.setFontSize(9.5)
     doc.text(
@@ -701,12 +778,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     y += 10
 
     // ─── THRO section ─────────────────────────────────────────────────
-    const parsedHrNote = splitThroTelephoneFromNote(loan.hr_note)
-    const parsedLoanOfficeNote = splitThroTelephoneFromNote(loan.loan_office_note)
-    const hodRank = String(parsedHrNote.throRank || parsedLoanOfficeNote.throRank || loan.hod_rank || throRecipient?.position || "").toUpperCase().trim()
-    const rawHodLocation = String(parsedHrNote.throLocation || parsedLoanOfficeNote.throLocation || loan.hod_location || throRecipient?.location || loan.staff_location_name || "HEAD OFFICE ACCRA")
-    // Apply location mapping to ensure consistency (e.g., SWANZY ARCADE → HEAD OFFICE ACCRA, GHANA)
-    const hodLocation = getMemoLocationAddress(rawHodLocation, "HEAD OFFICE ACCRA, GHANA").toUpperCase()
     if (hodRank || hodLocation) {
       doc.setFont("times", "normal")
       doc.setFontSize(9.2)
@@ -779,8 +850,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     }
 
     // Measure the printed signer name first so the signature can be centred on it.
-    const dirName = fmtName(directorProfile).toUpperCase() || "APPROVING AUTHORITY"
-    const dirTitle = String((directorProfile as any)?.position || (directorProfile as any)?.role || "APPROVING AUTHORITY").replace(/_/g, " ").toUpperCase()
     doc.setFont("times", "bold")
     doc.setFontSize(10)
     const dirNameWidth = doc.getTextWidth(dirName)
@@ -855,35 +924,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     doc.setFontSize(8.5)
     doc.setTextColor(60, 60, 60)
 
-    // Keep the distribution block outside the editable body so regenerating a
-    // signed PDF from an edited draft cannot drop either kind of recipient.
-    const defaultCcRecipients: string[] = []
-    const enteredCcSources = [
-      (loan as any).memo_draft_cc,
-      (loan as any).memo_cc,
-      (loan as any).cc_recipients,
-      (loan as any).cc_list,
-    ]
-    const ccRecipients: string[] = []
-    const seenCc = new Set<string>()
-    for (const source of enteredCcSources) {
-      const values = Array.isArray(source) ? source : String(source || "").split(/[\r\n,]+/)
-      for (const value of values) {
-        const recipient = String(value || "").replace(/\s+/g, " ").trim()
-        const key = recipient.toLowerCase().replace(/[^a-z0-9]+/g, "")
-        if (recipient && !seenCc.has(key)) {
-          seenCc.add(key)
-          ccRecipients.push(recipient)
-        }
-      }
-    }
-    for (const recipient of defaultCcRecipients) {
-      const key = recipient.toLowerCase().replace(/[^a-z0-9]+/g, "")
-      if (!seenCc.has(key)) {
-        seenCc.add(key)
-        ccRecipients.push(recipient)
-      }
-    }
     doc.setFont("times", "bold")
     doc.text("cc:", marginLeft, y)
     doc.setFont("times", "normal")

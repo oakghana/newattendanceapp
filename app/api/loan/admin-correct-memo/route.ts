@@ -3,6 +3,8 @@ import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server
 import { isAdminRole, normalizeRole } from "@/lib/loan-workflow"
 import { formatDateDDMMYYYY } from "@/lib/date-utils"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
+import { MEMO_CORRECTION_ACTION, MEMO_CORRECTION_LAYOUT_VERSION, parseMemoLayoutFromText } from "@/lib/loan-memo-layout"
+import { GET as renderMemoRoute } from "../memo/[id]/route"
 
 const CORRECTABLE_STATUSES = [
   "approved_director",
@@ -43,7 +45,26 @@ function amountInWords(value: number) {
 }
 
 const CORRECTION_COLUMNS = "id, request_number, status, director_letter, md_approved_at, md_approved_by_name, created_at, loan_type_label, loan_type_key, fixed_amount, requested_amount, salary_advance_amount, salary_advance_multiplier, recovery_months, deduction_period_months, repayment_duration_months, disbursement_date, recovery_start_date, hr_note, loan_office_note, staff_location_name"
-const CORRECTION_ACTION = "ADMIN_APPROVED_LOAN_MEMO_CORRECTION"
+const CORRECTION_ACTION = MEMO_CORRECTION_ACTION
+
+async function loadEffectiveMemoText(request: NextRequest, loanId: string, fallback: string) {
+  try {
+    const url = new URL(`/api/loan/memo/${loanId}`, request.url)
+    url.searchParams.set("format", "text")
+    const headers = new Headers()
+    const cookie = request.headers.get("cookie")
+    const authorization = request.headers.get("authorization")
+    if (cookie) headers.set("cookie", cookie)
+    if (authorization) headers.set("authorization", authorization)
+    const response = await renderMemoRoute(new NextRequest(url, { headers }), { params: Promise.resolve({ id: loanId }) })
+    const json = await response.json().catch(() => null)
+    if (response.ok && typeof json?.text === "string" && json.text.trim()) return json.text as string
+    console.error("[v0] Memo text preview unavailable, using stored wording:", response.status, json?.error)
+  } catch (error) {
+    console.error("[v0] Memo text preview failed, using stored wording:", error)
+  }
+  return fallback
+}
 
 async function findOriginalSignedContent(admin: Awaited<ReturnType<typeof createAdminClient>>, loanId: string, fallback: string) {
   const { data } = await admin
@@ -124,7 +145,7 @@ export async function GET(request: NextRequest) {
     }
 
     const storedContent = String(loan.director_letter || "")
-    const currentContent = storedContent || generatedMemoBody(loan)
+    const currentContent = await loadEffectiveMemoText(request, loanId, storedContent || generatedMemoBody(loan))
     return NextResponse.json({
       memoContent: currentContent,
       expectedContent: storedContent,
@@ -159,6 +180,9 @@ export async function PATCH(request: NextRequest) {
     if (!loanId) return NextResponse.json({ error: "Loan id is required." }, { status: 400 })
     if (correctedContent.length < 20) return NextResponse.json({ error: "Enter the corrected memo content (at least 20 characters)." }, { status: 400 })
     if (reason.length < 5) return NextResponse.json({ error: "A correction reason of at least 5 characters is required." }, { status: 400 })
+    if (!parseMemoLayoutFromText(correctedContent).paragraphs?.length) {
+      return NextResponse.json({ error: "The corrected memo must keep its body paragraphs (below the RE: line and above the closing line)." }, { status: 400 })
+    }
 
     const { data: loan, error: loanError } = await admin
       .from("loan_requests")
@@ -172,10 +196,11 @@ export async function PATCH(request: NextRequest) {
     }
 
     const storedContent = String(loan.director_letter || "")
-    const currentMemoContent = storedContent || generatedMemoBody(loan)
+    const currentMemoContent = await loadEffectiveMemoText(request, loanId, storedContent || generatedMemoBody(loan))
     const originalSignedContent = await findOriginalSignedContent(admin, loanId, currentMemoContent)
     if (storedContent !== expectedContent) return NextResponse.json({ error: "This memo was changed by another administrator. Refresh the page and open the editor again." }, { status: 409 })
-    if (correctedContent === currentMemoContent) return NextResponse.json({ error: "No memo wording changes were made." }, { status: 400 })
+    const normalize = (value: string) => value.replace(/\r/g, "").split("\n").map((line) => line.replace(/\s+/g, " ").trim()).join("\n").trim()
+    if (normalize(correctedContent) === normalize(currentMemoContent)) return NextResponse.json({ error: "No memo wording changes were made." }, { status: 400 })
 
     const update = admin
       .from("loan_requests")
@@ -206,6 +231,7 @@ export async function PATCH(request: NextRequest) {
         reason,
         request_number: loan.request_number,
         status: loan.status,
+        layout_version: MEMO_CORRECTION_LAYOUT_VERSION,
         original_signed_memo_preserved: true,
         original_signed_memo: originalSignedContent,
         md_approved_at: loan.md_approved_at,

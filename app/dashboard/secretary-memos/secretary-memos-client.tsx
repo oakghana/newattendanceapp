@@ -853,6 +853,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                 </div>
                 <label className="block space-y-2">
                   <span className="text-sm font-semibold text-slate-800">Corrected memo content</span>
+                  <span className="block text-xs text-slate-500">This is exactly what the printed memo shows. Staff name and rank, THRO line, RE: subject, body, signatory and cc list can be corrected. The reference number, date, signatures and MD stamp are controlled by the system.</span>
                   <textarea
                     value={memoCorrectionText}
                     onChange={(event) => setMemoCorrectionText(event.target.value)}
