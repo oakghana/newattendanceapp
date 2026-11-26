@@ -15,26 +15,39 @@ export default function HomePage() {
     const checkAuth = async () => {
       try {
         const supabase = createClient()
-        
-        const { data: { user }, error: authError } = await supabase.auth.getUser()
-        
+        let user: { id: string } | null = null
+        let authCheckFailed = false
+
+        try {
+          const { data: authData, error: authError } = await supabase.auth.getUser()
+          user = authData.user
+          authCheckFailed = Boolean(authError)
+        } catch {
+          authCheckFailed = true
+        }
+
+        if (!user) {
+          try {
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+            user = sessionData.session?.user ?? null
+            authCheckFailed = authCheckFailed || Boolean(sessionError)
+          } catch {
+            authCheckFailed = true
+          }
+        }
+
         if (!isMounted) return
 
-        if (authError) {
-          // Auth error means not authenticated
-          router.replace('/auth/login')
-        } else if (user) {
-          // User is authenticated, redirect to attendance
-          router.push('/dashboard/attendance')
+        if (user) {
+          router.replace('/dashboard/attendance')
+        } else if (authCheckFailed) {
+          setError('Unable to verify your session. Check your connection and try again.')
         } else {
-          // No user and no error means not authenticated
           router.replace('/auth/login')
         }
       } catch (error) {
         if (!isMounted) return
-        // If there's an error checking auth, redirect to login
         setError(error instanceof Error ? error.message : 'Authentication error')
-        router.push('/auth/login')
       } finally {
         if (isMounted) {
           setIsChecking(false)

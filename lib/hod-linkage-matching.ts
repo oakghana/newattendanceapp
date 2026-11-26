@@ -31,7 +31,7 @@ function departmentKey(profile: DepartmentLinkProfile) {
 
 function departmentFamily(profile: DepartmentLinkProfile) {
   const key = departmentKey(profile)
-  if (key === "hr" || key.includes("human_resource")) return "hr"
+  if (key.split("_").includes("hr") || key.includes("human_resource")) return "hr"
   if (key.includes("account")) return "accounts"
   if (key.includes("transport")) return "transport"
   return "general"

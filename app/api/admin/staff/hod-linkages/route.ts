@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
 import { normalizeRole } from "@/lib/loan-workflow"
+import { AUTO_LINKABLE_HOD_ROLES, selectNonRegionalHodForStaff } from "@/lib/hod-linkage-matching"
 import { isHodExemptRole } from "@/lib/hr-workflow"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
 import { findRegionalManagersForLocation } from "@/lib/regional-manager-scope"
@@ -109,6 +110,22 @@ export async function GET() {
         location: Array.isArray(profile.geofence_locations) ? profile.geofence_locations[0] || null : profile.geofence_locations || null,
       }))
 
+    const missingDepartmentStaff = profiles
+      .filter((profile) => {
+        const department = Array.isArray(profile.departments) ? profile.departments[0] : profile.departments
+        return !String(profile.department_id || "").trim() || !department
+      })
+      .map((profile) => ({
+        id: profile.id,
+        employee_id: profile.employee_id,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        email: profile.email,
+        role: profile.role,
+        department: null,
+        location: Array.isArray(profile.geofence_locations) ? profile.geofence_locations[0] || null : profile.geofence_locations || null,
+      }))
+
     const hods = [...staffByHod.entries()]
       .map(([hodId, linkedStaffIds]) => {
         const profile = profileById.get(hodId)
@@ -142,6 +159,8 @@ export async function GET() {
       success: true,
       unlinked_staff: unlinkedStaff,
       unlinked_count: unlinkedStaff.length,
+      missing_department_staff: missingDepartmentStaff,
+      missing_department_count: missingDepartmentStaff.length,
       hods,
       hod_count: hods.length,
       staff_count: profiles.length,
@@ -162,7 +181,7 @@ export async function POST() {
     for (let from = 0; ; from += PAGE_SIZE) {
       const { data, error } = await admin
         .from("user_profiles")
-        .select("id, employee_id, role, department_id, assigned_location_id, hod_id, position, is_active, departments(id, name, code), geofence_locations!user_profiles_assigned_location_id_fkey(id, name, address, location_type, parent_location_id, district_id, districts(name))")
+        .select("id, employee_id, role, department_id, assigned_location_id, hod_id, position, is_active, region_id, departments(id, name, code), geofence_locations!user_profiles_assigned_location_id_fkey(id, name, address, location_type, parent_location_id, district_id, districts(name))")
         .eq("is_active", true)
         .order("id", { ascending: true })
         .range(from, from + PAGE_SIZE - 1)
@@ -191,41 +210,55 @@ export async function POST() {
       !HOD_CAPABLE_ROLES.has(normalizeRole(staff.role)) &&
       !linkedStaffIds.has(String(staff.id)),
     )
-    const departmentHeads = staffProfiles.filter((candidate) =>
-      ["department_head", "accounts_executive"].includes(normalizeRole(candidate.role)),
-    )
+    const autoLinkableRoleSet = new Set<string>(AUTO_LINKABLE_HOD_ROLES)
+    const nonRegionalHodCandidates = staffProfiles.filter((candidate) => autoLinkableRoleSet.has(normalizeRole(candidate.role)))
     const rows: Record<string, unknown>[] = []
     const assigned = new Set<string>()
-    const unresolved = new Set<string>()
+    const unresolvedNoLocation = new Set<string>()
+    const unresolvedNoDepartmentHod = new Set<string>()
+    const unresolvedNoRegionalManager = new Set<string>()
     const regionalManagerCache = new Map<string, Promise<Array<{ id: string; position?: string | null }>>>()
+
+    const findRegionalManager = async (locationId: string, regionId: string) => {
+      const cacheKey = `${locationId}:${regionId}`
+      if (!regionalManagerCache.has(cacheKey)) {
+        regionalManagerCache.set(cacheKey, (async () => {
+          const locationManagers = await findRegionalManagersForLocation(admin, locationId, { limit: 1 })
+          if (locationManagers.length > 0 || !regionId) return locationManagers
+
+          const { data: regionManagers, error } = await admin
+            .from("user_profiles")
+            .select("id, role, position")
+            .eq("role", "regional_manager")
+            .eq("is_active", true)
+            .eq("region_id", regionId)
+            .order("created_at", { ascending: true })
+            .limit(1)
+          if (error) throw error
+          return regionManagers || []
+        })())
+      }
+      return (await regionalManagerCache.get(cacheKey))?.[0]
+    }
 
     for (const staff of candidates) {
       const location = Array.isArray(staff.geofence_locations) ? staff.geofence_locations[0] : staff.geofence_locations
       const locationId = String(staff.assigned_location_id || "")
       if (!locationId) {
-        unresolved.add(String(staff.id))
+        unresolvedNoLocation.add(String(staff.id))
         continue
       }
 
-      let hod: { id: string; position?: string | null } | undefined
+      let hod: { id: string; position?: string | null } | null | undefined
       if (isNonRegionalLocation(location?.name)) {
-        const staffDepartmentId = String(staff.department_id || "")
-        const sameDepartmentHeads = staffDepartmentId
-          ? departmentHeads.filter((candidate) => String(candidate.department_id || "") === staffDepartmentId)
-          : []
-        const sameLocationHead = sameDepartmentHeads.find((candidate) => String(candidate.assigned_location_id || "") === locationId)
-        const departmentHead = sameDepartmentHeads.find((candidate) => normalizeRole(candidate.role) === "department_head")
-        const accountsExecutive = sameDepartmentHeads.find((candidate) => normalizeRole(candidate.role) === "accounts_executive")
-        hod = sameLocationHead || departmentHead || accountsExecutive
+        hod = selectNonRegionalHodForStaff(staff, nonRegionalHodCandidates)
+        if (!hod?.id) unresolvedNoDepartmentHod.add(String(staff.id))
       } else {
-        if (!regionalManagerCache.has(locationId)) {
-          regionalManagerCache.set(locationId, findRegionalManagersForLocation(admin, locationId, { limit: 1 }))
-        }
-        hod = (await regionalManagerCache.get(locationId))?.[0]
+        hod = await findRegionalManager(locationId, String(staff.region_id || ""))
+        if (!hod?.id) unresolvedNoRegionalManager.add(String(staff.id))
       }
 
       if (!hod?.id || hod.id === staff.id) {
-        unresolved.add(String(staff.id))
         continue
       }
 
@@ -251,18 +284,32 @@ export async function POST() {
       if (error) throw error
     }
 
+    const unresolvedStaffIds = [
+      ...unresolvedNoLocation,
+      ...unresolvedNoDepartmentHod,
+      ...unresolvedNoRegionalManager,
+    ]
+    const unresolvedByReason = {
+      missing_location: unresolvedNoLocation.size,
+      no_department_hod: unresolvedNoDepartmentHod.size,
+      no_regional_manager: unresolvedNoRegionalManager.size,
+    }
+
     const { error: auditError } = await admin.from("audit_logs").insert({
       user_id: user.id,
       action: "ADMIN_AUTO_LINK_UNASSIGNED_STAFF_BY_SCOPE",
       table_name: "loan_hod_linkages",
       old_values: { unlinked_candidate_count: candidates.length },
-      new_values: { linked_count: rows.length, unresolved_count: unresolved.size },
+      new_values: { linked_count: rows.length, unresolved_count: unresolvedStaffIds.length, unresolved_by_reason: unresolvedByReason },
       details: {
         linked_staff_ids: [...assigned],
-        unresolved_staff_ids: [...unresolved],
+        unresolved_staff_ids: unresolvedStaffIds,
+        unresolved_no_location_ids: [...unresolvedNoLocation],
+        unresolved_no_department_hod_ids: [...unresolvedNoDepartmentHod],
+        unresolved_no_regional_manager_ids: [...unresolvedNoRegionalManager],
         nsp_intern_excluded: true,
-        nonregional_method: "same-department department_head, then same-department accounts_executive fallback",
-        regional_method: "covering regional manager from assigned location hierarchy",
+        nonregional_method: "same-department HOD role matched by department; matching HOD at the same location preferred",
+        regional_method: "covering Regional Manager from location hierarchy, then staff region fallback",
       },
     })
     if (auditError) console.error("[v0] Auto-link succeeded, but audit logging failed:", auditError)
@@ -270,7 +317,8 @@ export async function POST() {
     return json({
       success: true,
       linked_count: rows.length,
-      unresolved_count: unresolved.size,
+      unresolved_count: unresolvedStaffIds.length,
+      unresolved_by_reason: unresolvedByReason,
       excluded_roles: ["nsp", "intern"],
     })
   } catch (error) {

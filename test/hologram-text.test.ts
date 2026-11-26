@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { calculateDarkPixelBounds, detectSignatureInk, isolateSignatureInk } from "../lib/process-signature-image"
+import { calculateDarkPixelBounds, calculateVisibleImageBounds, detectSignatureInk, isolateSignatureInk } from "../lib/process-signature-image"
 import { getSignatureHologramText } from "../lib/signature-hologram"
 
 describe("signature hologram text", () => {
@@ -188,5 +188,40 @@ describe("signature hologram text", () => {
     }
 
     expect(detectSignatureInk(source, width, height).bounds).toBeNull()
+  })
+
+  it("provides review bounds for visible image content when automatic ink isolation fails", () => {
+    const width = 80
+    const height = 40
+    const source = new Uint8ClampedArray(width * height * 4)
+    for (let pixel = 0; pixel < width * height; pixel += 1) {
+      source[pixel * 4] = 255
+      source[pixel * 4 + 1] = 255
+      source[pixel * 4 + 2] = 255
+      source[pixel * 4 + 3] = 255
+    }
+    for (let y = 14; y <= 25; y += 1) {
+      for (let x = 18; x <= 56; x += 1) {
+        if ((x + y) % 3 !== 0) continue
+        const index = (y * width + x) * 4
+        source[index] = 245
+        source[index + 1] = 245
+        source[index + 2] = 245
+      }
+    }
+
+    expect(calculateVisibleImageBounds(source, width, height)).toEqual({ minX: 18, minY: 14, maxX: 56, maxY: 25 })
+  })
+
+  it("does not offer a crop for a completely blank image", () => {
+    const source = new Uint8ClampedArray(80 * 40 * 4)
+    for (let pixel = 0; pixel < 80 * 40; pixel += 1) {
+      source[pixel * 4] = 255
+      source[pixel * 4 + 1] = 255
+      source[pixel * 4 + 2] = 255
+      source[pixel * 4 + 3] = 255
+    }
+
+    expect(calculateVisibleImageBounds(source, 80, 40)).toBeNull()
   })
 })
