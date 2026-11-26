@@ -76,19 +76,19 @@ export function parseMemoLayoutFromText(text: string): Partial<MemoLayout> {
     if (rankIndex >= 0 && !/^(thro['’`]?(\s|$)|re\s*:)/i.test(lines[rankIndex])) result.applicantPosition = lines[rankIndex].toUpperCase()
   }
 
+  const reIndex = findFrom(/^re\s*:/i)
   const departmentLine = findFrom(/^department\s*:/i)
-  if (departmentLine >= 0) {
+  if (departmentLine >= 0 && (reIndex < 0 || departmentLine < reIndex)) {
     const value = lines[departmentLine].replace(/^department\s*:\s*/i, "").trim()
     if (value) result.applicantDepartment = value
   }
   const locationLine = findFrom(/^location\s*:/i)
-  if (locationLine >= 0) {
+  if (locationLine >= 0 && (reIndex < 0 || locationLine < reIndex)) {
     const value = lines[locationLine].replace(/^location\s*:\s*/i, "").trim()
     if (value) result.applicantLocation = value
   }
 
-  const throIndex = findFrom(/^thro['’`]?(\s|$)/i)
-  const reIndex = findFrom(/^re\s*:/i)
+  const throIndex = findFrom(/^thro/i)
   if (throIndex >= 0) {
     result.throRank = lines[throIndex].replace(/^thro['’`]?\s*/i, "").trim().toUpperCase()
     const blockEnd = reIndex > throIndex ? reIndex : lines.length

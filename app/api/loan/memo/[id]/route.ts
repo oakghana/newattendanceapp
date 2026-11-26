@@ -804,10 +804,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     doc.text(applicantPosition, marginLeft, y)
     y += 5.5
 
+    doc.setFont("times", "normal")
+    doc.setFontSize(8.5)
     const applicantSummaryLines = [
       `Department: ${applicantDepartment}`,
       `Location: ${applicantLocation}`,
-    ]
+    ].flatMap((summaryLine) => doc.splitTextToSize(summaryLine, contentWidth))
     if (y + applicantSummaryLines.length * 4.5 + 8 > pageHeight - 65) {
       doc.addPage()
       y = 24

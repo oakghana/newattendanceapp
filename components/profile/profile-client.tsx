@@ -430,14 +430,14 @@ export function ProfileClient({ initialUser, initialProfile, initialLinkedReview
       if (monthError) throw monthError
 
       const totalDays = allTimeData?.length || 0
-      const totalHours = allTimeData?.reduce((sum, record) => sum + (record.work_hours || 0), 0) || 0
+      const totalHours = (allTimeData || []).reduce((sum: number, record: { work_hours?: number | null }) => sum + Number(record.work_hours || 0), 0)
       const averageHours = totalDays > 0 ? totalHours / totalDays : 0
 
       const thisMonthDays = monthData?.length || 0
-      const thisMonthHours = monthData?.reduce((sum, record) => sum + (record.work_hours || 0), 0) || 0
+      const thisMonthHours = (monthData || []).reduce((sum: number, record: { work_hours?: number | null }) => sum + Number(record.work_hours || 0), 0)
 
-      const presentDays = allTimeData?.filter((record) => record.status === "present").length || 0
-      const lateDays = allTimeData?.filter((record) => record.status === "late").length || 0
+      const presentDays = (allTimeData || []).filter((record: { status?: string | null }) => record.status === "present").length
+      const lateDays = (allTimeData || []).filter((record: { status?: string | null }) => record.status === "late").length
 
       setAttendanceSummary({
         totalDays,
