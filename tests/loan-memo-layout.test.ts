@@ -1,12 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { formatMemoLayoutAsText, parseMemoLayoutFromText, type MemoLayout } from "../lib/loan-memo-layout"
+import { formatMemoLayoutAsText, parseMemoLayoutFromText, stripStaffSummaryLinesFromMemoText, type MemoLayout } from "../lib/loan-memo-layout"
 
 const layout: MemoLayout = {
   applicantName: "AHULU EMELIA",
   applicantStaffNo: "1152760",
   applicantPosition: "PRIN. HUM. RES. OFFICER",
-  applicantDepartment: "Human Resources (HR)",
-  applicantLocation: "Head Office",
   throRank: "ARCHIVE HEAD",
   throLocation: "HEAD OFFICE",
   subject: "APPLICATION FOR FUNERAL LOAN",
@@ -26,8 +24,7 @@ describe("loan memo layout text", () => {
     expect(parsed.applicantName).toBe("AHULU EMELIA")
     expect(parsed.applicantStaffNo).toBe("1152760")
     expect(parsed.applicantPosition).toBe("PRIN. HUM. RES. OFFICER")
-    expect(parsed.applicantDepartment).toBe("Human Resources (HR)")
-    expect(parsed.applicantLocation).toBe("Head Office")
+    expect(formatMemoLayoutAsText(layout)).not.toMatch(/^\s*(department|location)\s*:/im)
     expect(parsed.throRank).toBe("ARCHIVE HEAD")
     expect(parsed.throLocation).toBe("HEAD OFFICE")
     expect(parsed.subject).toBe("APPLICATION FOR FUNERAL LOAN")
@@ -84,6 +81,27 @@ describe("loan memo layout text", () => {
     expect(parsed.throLocation).toBe("HEAD OFFICE")
     expect(parsed.paragraphs).toEqual(["We refer to your loan application."])
     expect(parsed.ccRecipients).toEqual(["Managing Director", "Records Unit"])
+  })
+
+  it("removes legacy staff-summary lines while preserving the recipient and memo body", () => {
+    const memo = [
+      "AHULU EMELIA (S/No.: 1152760)",
+      "DEPUTY HUMAN RESOURCE MANAGER",
+      "Department: Operations (OPS)",
+      "Location: OFFINSO DISTRICT",
+      "THRO'   REGIONAL MANAGER",
+      "QUALITY CONTROL COMPANY LIMITED",
+      "ASHANTI REGION",
+      "RE: APPLICATION FOR RENT LOAN (SENIOR)",
+      "We refer to your loan application.",
+    ].join("\n")
+
+    const cleaned = stripStaffSummaryLinesFromMemoText(memo)
+    expect(cleaned).not.toContain("Department: Operations")
+    expect(cleaned).not.toContain("Location: OFFINSO DISTRICT")
+    expect(cleaned).toContain("THRO'   REGIONAL MANAGER")
+    expect(cleaned).toContain("RE: APPLICATION FOR RENT LOAN (SENIOR)")
+    expect(cleaned).toContain("We refer to your loan application.")
   })
 
   it("returns no paragraphs when the body was removed", () => {

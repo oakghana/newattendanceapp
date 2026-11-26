@@ -3,7 +3,7 @@ import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server
 import { isAdminRole, normalizeRole } from "@/lib/loan-workflow"
 import { formatDateDDMMYYYY } from "@/lib/date-utils"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
-import { MEMO_CORRECTION_ACTION, MEMO_CORRECTION_LAYOUT_VERSION, parseMemoLayoutFromText } from "@/lib/loan-memo-layout"
+import { MEMO_CORRECTION_ACTION, MEMO_CORRECTION_LAYOUT_VERSION, parseMemoLayoutFromText, stripStaffSummaryLinesFromMemoText } from "@/lib/loan-memo-layout"
 import { GET as renderMemoRoute } from "../memo/[id]/route"
 
 const CORRECTABLE_STATUSES = [
@@ -145,7 +145,9 @@ export async function GET(request: NextRequest) {
     }
 
     const storedContent = String(loan.director_letter || "")
-    const currentContent = await loadEffectiveMemoText(request, loanId, storedContent || generatedMemoBody(loan))
+    const currentContent = stripStaffSummaryLinesFromMemoText(
+      await loadEffectiveMemoText(request, loanId, storedContent || generatedMemoBody(loan)),
+    )
     return NextResponse.json({
       memoContent: currentContent,
       expectedContent: storedContent,
@@ -196,7 +198,9 @@ export async function PATCH(request: NextRequest) {
     }
 
     const storedContent = String(loan.director_letter || "")
-    const currentMemoContent = await loadEffectiveMemoText(request, loanId, storedContent || generatedMemoBody(loan))
+    const currentMemoContent = stripStaffSummaryLinesFromMemoText(
+      await loadEffectiveMemoText(request, loanId, storedContent || generatedMemoBody(loan)),
+    )
     const originalSignedContent = await findOriginalSignedContent(admin, loanId, currentMemoContent)
     if (storedContent !== expectedContent) return NextResponse.json({ error: "This memo was changed by another administrator. Refresh the page and open the editor again." }, { status: 409 })
     const normalize = (value: string) => value.replace(/\r/g, "").split("\n").map((line) => line.replace(/\s+/g, " ").trim()).join("\n").trim()
