@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
 import { isAdminRole, normalizeRole } from "@/lib/loan-workflow"
+import { formatDateDDMMYYYY } from "@/lib/date-utils"
+import { isNonRegionalLocation } from "@/lib/location-mappings"
 
 const CORRECTABLE_STATUSES = [
   "approved_director",
@@ -15,17 +17,33 @@ const CORRECTABLE_STATUSES = [
 function monthLabel(value: unknown, fallback = "TBD") {
   if (!value) return fallback
   const date = new Date(String(value))
-  return Number.isNaN(date.getTime()) ? fallback : date.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
+  return Number.isNaN(date.getTime()) ? fallback : date.toLocaleDateString("en-GB", { month: "long" })
 }
 
 function dateLabel(value: unknown) {
   if (!value) return "the date of your application"
-  const date = new Date(String(value))
-  return Number.isNaN(date.getTime()) ? "the date of your application" : date.toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })
+  const formatted = formatDateDDMMYYYY(String(value))
+  return formatted === "Invalid Date" ? "the date of your application" : formatted
+}
+
+function amountInWords(value: number) {
+  const units = ["zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"]
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
+  const underThousand = (n: number): string => {
+    if (n < 20) return units[n]
+    if (n < 100) return `${tens[Math.floor(n / 10)]}${n % 10 ? ` ${units[n % 10].toLowerCase()}` : ""}`
+    return `${units[Math.floor(n / 100)]} Hundred${n % 100 ? ` ${underThousand(n % 100).toLowerCase()}` : ""}`
+  }
+  const whole = Math.floor(Math.round(value * 100) / 100)
+  if (!Number.isFinite(whole) || whole < 0) return ""
+  const words = whole >= 1000
+    ? `${underThousand(Math.floor(whole / 1000))} Thousand${whole % 1000 ? ` ${underThousand(whole % 1000).toLowerCase()}` : ""}`
+    : underThousand(whole)
+  return `${words} Ghana Cedis`
 }
 
 function generatedMemoBody(loan: Record<string, unknown>) {
-  const loanType = String(loan.loan_type_label || "loan")
+  const loanType = String(loan.loan_type_label || "Loan")
   const typeKey = String(loan.loan_type_key || "").toLowerCase()
   const isFuneralLoan = typeKey.includes("funeral") || loanType.toLowerCase().includes("funeral")
   const isSalaryAdvance = typeKey.includes("salary_advance") || loanType.toLowerCase().includes("salary advance")
@@ -35,14 +53,16 @@ function generatedMemoBody(loan: Record<string, unknown>) {
   const disbursement = monthLabel(loan.disbursement_date || loan.disbursement_confirmed_at || loan.staff_receiving_funds_confirmed_at || loan.md_approved_at)
   const recoveryStart = monthLabel(loan.recovery_start_date || loan.next_payment_due || loan.repayment_start_date)
   const months = Number(loan.salary_advance_multiplier || loan.recovery_months || loan.deduction_period_months || loan.repayment_duration_months || 0)
-  const recipientMatch = String(loan.hr_note || loan.loan_office_note || "").match(/\[MEMO_COPY:([^\]]+)\]/i)
-  const recipient = recipientMatch?.[1]?.trim() || "Accounts Manager"
+  const getRecipient = (note: unknown) => String(note || "").match(/\[MEMO_COPY:([^\]]+)\]/i)?.[1]?.trim() || null
+  const recipient = getRecipient(loan.hr_note)
+    || getRecipient(loan.loan_office_note)
+    || (isNonRegionalLocation(String(loan.staff_location_name || "")) ? "Accounts Manager" : "Deputy Accounts Manager")
 
   const body = isSalaryAdvance
     ? [
-        `We refer to your loan application dated ${created} on the above subject and wish to inform you that Management has approved a Salary Advance of ${amountText}.`,
-        `The loan would be recovered in ${months || "the approved recovery period"} equal monthly instalments from your salary effective ${recoveryStart}.`,
-        `By a copy of this letter, the ${recipient} has been advised to release the said amount to you effective ${disbursement}.`,
+        `We refer to your loan application dated ${created} on the above subject and wish to inform you that, Management has given approval for you to be granted a Salary Advance of ${amountInWords(amount)} (${amountText}).`,
+        `The loan would be recovered in ${months || "the approved recovery period"} Equal Monthly Instalment from your salary effective, ${recoveryStart}.`,
+        `By a copy of this letter, the ${recipient} has been advised to release the said amount to you effective, ${disbursement}.`,
         "You can count on our co-operation.",
       ]
     : [
@@ -50,7 +70,7 @@ function generatedMemoBody(loan: Record<string, unknown>) {
         ...(isFuneralLoan
           ? ["This funeral support does not require repayment or monthly salary deductions."]
           : [`The loan will be recovered in ${months || "the approved recovery period"} equal monthly instalments from your salary, commencing in ${recoveryStart}.`]),
-        `By a copy of this letter, the ${recipient} has been advised to release the approved amount to you effective ${disbursement}.`,
+        `By a copy of this letter, the ${recipient} has been advised to release the approved amount to you effective, ${disbursement}.`,
         "You can count on our co-operation.",
       ]
   return body.join("\n\n")
@@ -75,7 +95,7 @@ export async function GET(request: NextRequest) {
 
     const { data: loan, error } = await access.admin
       .from("loan_requests")
-      .select("id, request_number, status, director_letter, director_letter_original, md_approved_at, created_at, loan_type_label, loan_type_key, fixed_amount, requested_amount, salary_advance_amount, salary_advance_multiplier, recovery_months, deduction_period_months, repayment_duration_months, disbursement_date, disbursement_confirmed_at, staff_receiving_funds_confirmed_at, recovery_start_date, next_payment_due, repayment_start_date, hr_note, loan_office_note")
+      .select("id, request_number, status, director_letter, director_letter_original, md_approved_at, created_at, loan_type_label, loan_type_key, fixed_amount, requested_amount, salary_advance_amount, salary_advance_multiplier, recovery_months, deduction_period_months, repayment_duration_months, disbursement_date, disbursement_confirmed_at, staff_receiving_funds_confirmed_at, recovery_start_date, next_payment_due, repayment_start_date, hr_note, loan_office_note, staff_location_name")
       .eq("id", loanId)
       .maybeSingle()
     if (error) throw error
@@ -122,7 +142,7 @@ export async function PATCH(request: NextRequest) {
 
     const { data: loan, error: loanError } = await admin
       .from("loan_requests")
-      .select("id, request_number, status, director_letter, director_letter_original, md_approved_at, md_approved_by_name, created_at, loan_type_label, loan_type_key, fixed_amount, requested_amount, salary_advance_amount, salary_advance_multiplier, recovery_months, deduction_period_months, repayment_duration_months, disbursement_date, disbursement_confirmed_at, staff_receiving_funds_confirmed_at, recovery_start_date, next_payment_due, repayment_start_date, hr_note, loan_office_note")
+      .select("id, request_number, status, director_letter, director_letter_original, md_approved_at, md_approved_by_name, created_at, loan_type_label, loan_type_key, fixed_amount, requested_amount, salary_advance_amount, salary_advance_multiplier, recovery_months, deduction_period_months, repayment_duration_months, disbursement_date, disbursement_confirmed_at, staff_receiving_funds_confirmed_at, recovery_start_date, next_payment_due, repayment_start_date, hr_note, loan_office_note, staff_location_name")
       .eq("id", loanId)
       .maybeSingle()
     if (loanError) throw loanError

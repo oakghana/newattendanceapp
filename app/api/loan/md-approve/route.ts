@@ -231,7 +231,7 @@ export async function GET(req: NextRequest) {
       admin
         .from("loan_requests")
         .select(loanSelect)
-        .in("status", ["approved_director", "md_approved"])
+        .in("status", ["approved_director", "md_approved", "archived"])
         .not("md_approved_at", "is", null)
         .order("md_approved_at", { ascending: false })
         .limit(500),
