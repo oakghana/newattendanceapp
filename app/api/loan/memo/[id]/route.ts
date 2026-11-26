@@ -582,38 +582,39 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       } catch { /* skip */ }
     }
 
-    // ─── Fetch actual MD signature (for the approval stamp) ────────────
-    // Uses mdApproverId (loan.md_approved_by) — NOT the HR Executive
-    let mdStampSignatureUrl = String((mdProfile as any)?.md_signature_url || (mdProfile as any)?.signature_data_url || "").trim()
+    // ─── Fetch current MD signature for the approval stamp ─────────────
+    // Existing loans keep their approver and approval date, but the stamp uses
+    // that approver's current profile signature whenever a memo is regenerated.
+    // This ensures a signature update also refreshes copies of already-approved loans.
+    const mdProfileId = String((mdProfile as any)?.id || mdApproverId || "")
+    let mdStampSignatureUrl = String((mdProfile as any)?.signature_data_url || (mdProfile as any)?.md_signature_url || "").trim()
     let mdStampSignatureText = ""
-    const mdProfileId = (mdProfile as any)?.id || mdApproverId
-    if (mdProfileId) {
+
+    // Only use a role-specific MD registry record as a fallback; HR/other workflow
+    // signatures for the same user must never replace the current MD profile signature.
+    if (!mdStampSignatureUrl && mdProfileId) {
       try {
         const { data: mdSigRecords } = await admin
           .from("approval_signature_registry")
-          .select("id, signature_data_url, signature_mode, signature_text")
+          .select("signature_data_url, signature_mode, signature_text, updated_at")
           .eq("user_id", mdProfileId)
-        if (mdSigRecords && mdSigRecords.length > 0) {
-          const best = mdSigRecords
-            .map((r: any) => {
-              const mode = String(r?.signature_mode || "").toLowerCase()
-              const hasImage = (mode === "draw" || mode === "drawn" || mode === "upload") && String(r?.signature_data_url || "").trim().length > 0
-              const hasTyped = mode === "typed" && String(r?.signature_text || "").trim().length > 0
-              return { ...r, score: hasImage ? 100 : hasTyped ? 10 : 0 }
-            })
-            .sort((a: any, b: any) => b.score - a.score)[0]
-          if (best?.signature_data_url) mdStampSignatureUrl = best.signature_data_url
-          else if (best?.signature_text) mdStampSignatureText = best.signature_text
+          .eq("workflow_domain", "loan")
+          .in("approval_stage", ["managing_director", "md_approval"])
+          .eq("is_active", true)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+        const currentRegistrySignature = mdSigRecords?.[0]
+        const mode = String(currentRegistrySignature?.signature_mode || "").toLowerCase()
+        if ((mode === "draw" || mode === "drawn" || mode === "upload") && currentRegistrySignature?.signature_data_url) {
+          mdStampSignatureUrl = String(currentRegistrySignature.signature_data_url).trim()
+        } else if (mode === "typed" && currentRegistrySignature?.signature_text) {
+          mdStampSignatureText = String(currentRegistrySignature.signature_text).trim()
         }
-      } catch { /* skip */ }
-      // Fallback: the dedicated MD signature field, then the general profile signature.
-      if (!mdStampSignatureUrl) {
-        try {
-          const { data: mdProf2 } = await admin.from("user_profiles").select("md_signature_url, signature_data_url").eq("id", mdProfileId).single()
-          mdStampSignatureUrl = String((mdProf2 as any)?.md_signature_url || (mdProf2 as any)?.signature_data_url || "").trim()
-        } catch { /* skip */ }
+      } catch {
+        // The current profile signature remains the primary source if registry fallback is unavailable.
       }
     }
+
     if (!mdStampSignatureUrl && !mdStampSignatureText) {
       mdStampSignatureText = fmtName(mdProfile) || String((loan as any).md_approved_by_name || "").trim()
     }
