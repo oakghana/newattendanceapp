@@ -131,6 +131,18 @@ function leaveDays(start: string, end: string) {
   return `${diff} day${diff !== 1 ? "s" : ""}`
 }
 
+function approvalMonthKey(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? "unknown" : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+}
+
+function approvalMonthLabel(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? "Date unavailable"
+    : new Intl.DateTimeFormat("en-GH", { month: "long", year: "numeric" }).format(date)
+}
+
 const LOAN_STATUS_MAP: Record<string, { label: string; color: string }> = {
   awaiting_director_hr: { label: "HR Exec Approved (Pending MD)", color: "bg-blue-100 text-blue-800 border-blue-200" },
   approved_director: { label: "MD Approved", color: "bg-emerald-100 text-emerald-800 border-emerald-200" },
@@ -157,6 +169,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
   const [locationFilter, setLocationFilter] = useState("all")
   const [loanTypeFilter, setLoanTypeFilter] = useState("all")
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "name_asc" | "amount_desc">("newest")
+  const [approvedMonthFilter, setApprovedMonthFilter] = useState("latest")
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [memoToCorrect, setMemoToCorrect] = useState<ApprovedMemo | null>(null)
   const [memoCorrectionText, setMemoCorrectionText] = useState("")
@@ -376,23 +389,33 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
     })
   }, [approvedMemos, search, statusFilter, sortOrder])
 
-  const approvedMemosByMonth = useMemo(() => {
-    const groups = new Map<string, { label: string; memos: ApprovedMemo[] }>()
-    for (const memo of filteredApprovedMemos) {
-      const date = new Date(memo.md_approved_at)
-      const isValidDate = !Number.isNaN(date.getTime())
-      const key = isValidDate ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}` : "unknown"
-      const label = isValidDate
-        ? new Intl.DateTimeFormat("en-GH", { month: "long", year: "numeric" }).format(date)
-        : "Date unavailable"
-      const group = groups.get(key) || { label, memos: [] }
-      group.memos.push(memo)
-      groups.set(key, group)
+  const approvedMonthOptions = useMemo(() => {
+    const months = new Map<string, string>()
+    for (const memo of approvedMemos) {
+      months.set(approvalMonthKey(memo.md_approved_at), approvalMonthLabel(memo.md_approved_at))
     }
-    return Array.from(groups.entries())
+    return Array.from(months.entries())
       .sort(([first], [second]) => second.localeCompare(first))
-      .map(([key, group]) => ({ key, ...group }))
-  }, [filteredApprovedMemos])
+      .map(([key, label]) => ({ key, label }))
+  }, [approvedMemos])
+
+  const activeApprovalMonth = approvedMonthFilter === "latest"
+    ? approvedMonthOptions[0]?.key
+    : approvedMonthFilter
+
+  const monthFilteredApprovedMemos = useMemo(
+    () => filteredApprovedMemos.filter((memo) => approvalMonthKey(memo.md_approved_at) === activeApprovalMonth),
+    [filteredApprovedMemos, activeApprovalMonth],
+  )
+
+  const approvedMemosByMonth = useMemo(() => {
+    if (!activeApprovalMonth || monthFilteredApprovedMemos.length === 0) return []
+    return [{
+      key: activeApprovalMonth,
+      label: approvedMonthOptions.find((month) => month.key === activeApprovalMonth)?.label || "Date unavailable",
+      memos: monthFilteredApprovedMemos,
+    }]
+  }, [activeApprovalMonth, approvedMonthOptions, monthFilteredApprovedMemos])
 
   const filteredLeaveMemos = useMemo(() => {
     const q = search.toLowerCase()
@@ -511,6 +534,23 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
               </button>
             )}
           </div>
+
+          {tab === "approved" && (
+            <div className="flex flex-col gap-1">
+              <label htmlFor="approved-month-filter" className="sr-only">Filter MD-approved memos by month</label>
+              <select
+                id="approved-month-filter"
+                value={activeApprovalMonth || ""}
+                onChange={(event) => setApprovedMonthFilter(event.target.value)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+              >
+                {approvedMonthOptions.map((month, index) => (
+                  <option key={month.key} value={month.key}>{month.label}{index === 0 ? " (Latest)" : ""}</option>
+                ))}
+                {approvedMonthOptions.length === 0 && <option value="">No approved months</option>}
+              </select>
+            </div>
+          )}
 
           <div className="flex-1 relative min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -764,18 +804,18 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
         {/* MD Approved Memos Tab */}
         {tab === "approved" && (
           <>
-            {filteredApprovedMemos.length === 0 ? (
+            {monthFilteredApprovedMemos.length === 0 ? (
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="py-16 text-center text-slate-400">
                   <CheckCircle2 className="h-10 w-10 mx-auto mb-3 text-slate-200" />
-                  <p className="text-sm font-medium">{approvedMemos.length ? "No MD approved memos match your search or filters." : "No MD approved memos yet."}</p>
+                  <p className="text-sm font-medium">{approvedMemos.length ? "No MD approved memos for this month match your search or status filter." : "No MD approved memos yet."}</p>
                 </div>
               </div>
             ) : (
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                 <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
                   <span className="text-sm font-semibold text-slate-700">
-                    {filteredApprovedMemos.length} of {approvedMemos.length} MD approved memo{approvedMemos.length !== 1 ? "s" : ""}
+                    {monthFilteredApprovedMemos.length} of {approvedMemos.length} MD approved memo{approvedMemos.length !== 1 ? "s" : ""} · {approvedMemosByMonth[0]?.label || "selected month"}
                   </span>
                   <span className="text-xs text-slate-400">MD signed off</span>
                 </div>
