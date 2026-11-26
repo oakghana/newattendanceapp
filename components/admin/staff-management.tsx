@@ -1946,7 +1946,7 @@ export function StaffManagement() {
           <DialogHeader>
             <DialogTitle>Auto-link eligible unlinked staff?</DialogTitle>
             <DialogDescription>
-              This will process {unlinkedStaff.length} eligible staff members. NSP and Intern roles are excluded. Non-regional staff are matched by department to a Department Head; regional and district staff are matched to the Regional Manager covering their assigned location. Staff with no suitable match will remain unlinked.
+              This will process {unlinkedStaff.length} eligible staff members. NSP and Intern roles are excluded. Non-regional staff are matched to the appropriate same-department approver (such as an HR Manager, Accounts Executive, Transport Manager, or Department Head), preferring the same location. Regional and district staff are matched to their covering Regional Manager, with a same-region fallback. Staff with no suitable match will remain unlinked.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

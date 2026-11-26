@@ -308,7 +308,7 @@ export async function POST() {
         unresolved_no_department_hod_ids: [...unresolvedNoDepartmentHod],
         unresolved_no_regional_manager_ids: [...unresolvedNoRegionalManager],
         nsp_intern_excluded: true,
-        nonregional_method: "same-department HOD role matched by department; matching HOD at the same location preferred",
+        nonregional_method: "department-specific HOD role match with same-location preference",
         regional_method: "covering Regional Manager from location hierarchy, then staff region fallback",
       },
     })

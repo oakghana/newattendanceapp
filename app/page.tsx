@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 
 function isTransientAuthCheckError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "")
-  return /failed to fetch|network|timeout|timed out|abort|service unavailable|5\\d\\d/i.test(message)
+  return /failed to fetch|network|timeout|timed out|abort|service unavailable|server error/i.test(message)
 }
 
 export default function HomePage() {
