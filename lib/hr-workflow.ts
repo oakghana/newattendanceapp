@@ -34,8 +34,13 @@ export function isDepartmentHeadRole(role: string | null | undefined) {
   return ["department_head", "hod", "hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director", "accounts_executive"].includes(normalizeWorkflowRole(role))
 }
 
+export function isHodExemptRole(role: string | null | undefined) {
+  return ["nsp", "intern"].includes(normalizeWorkflowRole(role))
+}
+
 export function isSelfLeaveRole(role: string | null | undefined, locationName?: string | null) {
   const normalizedRole = normalizeWorkflowRole(role)
+  if (isHodExemptRole(normalizedRole) && isExcludedLocation(locationName)) return true
   if (normalizedRole === "regional_manager") return true
   return normalizedRole === "department_head" || normalizedRole === "hod" ? isExcludedLocation(locationName) : false
 }
@@ -48,6 +53,9 @@ export type SelfLeaveResolution = {
 }
 
 export function resolveSelfLeaveRoute(input: { role?: string | null; locationName?: string | null }): SelfLeaveResolution {
+  if (isHodExemptRole(input.role) && isExcludedLocation(input.locationName)) {
+    return { isSelfLeave: true, route: "self_leave", firstStage: SELF_LEAVE_STAGES.hrLeaveOffice, reason: "NSP and Intern leave requests at non-regional locations go directly to HR Leave Office without HOD endorsement." }
+  }
   if (isRegionalManagerRole(input.role)) {
     return { isSelfLeave: true, route: "self_leave", firstStage: SELF_LEAVE_STAGES.hrLeaveOffice, reason: "Regional Manager self-leave bypasses endorsement and Regional HR." }
   }
@@ -241,7 +249,7 @@ export type StaffAssignmentResolution = {
 export async function resolveStaffAssignments(admin: SupabaseClient, staffId: string): Promise<StaffAssignmentResolution> {
   const { data: profile, error } = await admin
     .from("user_profiles")
-    .select("id, assigned_location_id, region_id, department_id, geofence_locations:assigned_location_id (id, name, district_id)")
+    .select("id, role, assigned_location_id, region_id, department_id, geofence_locations:assigned_location_id (id, name, district_id)")
     .eq("id", staffId)
     .maybeSingle()
   if (error) throw error
@@ -255,46 +263,49 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
     regionId = district?.region_id || null
   }
 
+  const hodExempt = isHodExemptRole(profile.role)
   let hodId: string | null = null
-  const { data: linkages } = await admin
-    .from("loan_hod_linkages")
-    .select("hod_user_id")
-    .eq("staff_user_id", staffId)
-    .limit(20)
-  if (linkages?.length) {
-    const linkedIds = linkages.map((row: any) => row.hod_user_id).filter(Boolean)
-    const { data: linkedProfiles } = await admin
-      .from("user_profiles")
-      .select("id, role, department_id, assigned_location_id")
-      .in("id", linkedIds)
-      .eq("is_active", true)
-    const eligible = (linkedProfiles || []).find((candidate: any) => {
-      const candidateRole = normalizeWorkflowRole(candidate.role)
-      if (isExcludedLocation(assignedLocation?.name)) {
-        return isDepartmentHeadRole(candidateRole)
-      }
-      // District staff may be linked to the RM at the parent regional office.
-      return (
-        Boolean(profile.assigned_location_id) &&
-        isRegionalManagerRole(candidateRole) &&
-        Boolean(candidate.assigned_location_id)
-      )
-    })
-    hodId = eligible?.id || null
-  }
-  if (!hodId && profile.department_id && isExcludedLocation(assignedLocation?.name)) {
-    // Accounts Executive is the department head of Accounts at non-regional
-    // locations, so they qualify for this same-department fallback alongside
-    // the literal "department_head" role.
-    const { data: departmentHod } = await admin
-      .from("user_profiles")
-      .select("id")
-      .eq("department_id", profile.department_id)
-      .in("role", ["department_head", "accounts_executive"])
-      .eq("is_active", true)
-      .limit(1)
-      .maybeSingle()
-    hodId = departmentHod?.id || null
+  if (!hodExempt) {
+    const { data: linkages } = await admin
+      .from("loan_hod_linkages")
+      .select("hod_user_id")
+      .eq("staff_user_id", staffId)
+      .limit(20)
+    if (linkages?.length) {
+      const linkedIds = linkages.map((row: any) => row.hod_user_id).filter(Boolean)
+      const { data: linkedProfiles } = await admin
+        .from("user_profiles")
+        .select("id, role, department_id, assigned_location_id")
+        .in("id", linkedIds)
+        .eq("is_active", true)
+      const eligible = (linkedProfiles || []).find((candidate: any) => {
+        const candidateRole = normalizeWorkflowRole(candidate.role)
+        if (isExcludedLocation(assignedLocation?.name)) {
+          return isDepartmentHeadRole(candidateRole)
+        }
+        // District staff may be linked to the RM at the parent regional office.
+        return (
+          Boolean(profile.assigned_location_id) &&
+          isRegionalManagerRole(candidateRole) &&
+          Boolean(candidate.assigned_location_id)
+        )
+      })
+      hodId = eligible?.id || null
+    }
+    if (!hodId && profile.department_id && isExcludedLocation(assignedLocation?.name)) {
+      // Accounts Executive is the department head of Accounts at non-regional
+      // locations, so they qualify for this same-department fallback alongside
+      // the literal "department_head" role.
+      const { data: departmentHod } = await admin
+        .from("user_profiles")
+        .select("id")
+        .eq("department_id", profile.department_id)
+        .in("role", ["department_head", "accounts_executive"])
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle()
+      hodId = departmentHod?.id || null
+    }
   }
 
   let regionalHrId: string | null = null
@@ -320,8 +331,9 @@ export async function resolveStaffAssignments(admin: SupabaseClient, staffId: st
   } else {
     if (!regionalHrId) regionalHrId = (await resolveRegionalHrOffice(admin, regionId, profile.assigned_location_id))?.user_id || null
     if (!regionalManagerId) regionalManagerId = await resolveRegionalManager(admin, regionId, profile.assigned_location_id)
-    // For regional field staff the Regional Manager is the HOD.
-    if (!hodId && regionalManagerId) hodId = regionalManagerId
+    // For regional field staff the Regional Manager is the HOD, except for
+    // NSP and Intern roles whose Leave and HOD assignment bypass is explicit.
+    if (!hodExempt && !hodId && regionalManagerId) hodId = regionalManagerId
   }
 
   return {

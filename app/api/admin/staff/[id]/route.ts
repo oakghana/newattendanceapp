@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
+import { isHodExemptRole } from "@/lib/hr-workflow"
+import { isHodExemptRole } from "@/lib/hr-workflow"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 import { canUpdateStaffByITAdmin, canViewStaffByITAdmin, getEffectiveItAdminScope, normalizeItAdminScope, resolveItAdminRegionId } from "@/lib/it-admin-policy"
 
@@ -486,13 +488,24 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     console.log("[v0] Staff updated successfully:", updatedProfile)
 
+    if (isHodExemptRole(updatedProfile?.role)) {
+      const cleanupAt = new Date().toISOString()
+      const [{ error: linkageCleanupError }, { error: legacyHodCleanupError }] = await Promise.all([
+        adminSupabase.from("loan_hod_linkages").delete().eq("staff_user_id", id),
+        adminSupabase.from("user_profiles").update({ hod_id: null, updated_at: cleanupAt }).eq("id", id),
+      ])
+      if (linkageCleanupError || legacyHodCleanupError) {
+        console.error("[v0] Failed to clear HOD links for exempt-role staff:", linkageCleanupError || legacyHodCleanupError)
+      }
+    }
+
     // When assigned location changes (or is set), auto-link district/regional staff
     // to the Regional Manager covering their parent regional office.
     try {
       const previousLocationId = String(targetProfile.assigned_location_id || "")
       const nextLocationId = String(locationId || "")
       const locationChanged = previousLocationId !== nextLocationId
-      if (locationChanged && nextLocationId) {
+      if (locationChanged && nextLocationId && !isHodExemptRole(updatedProfile?.role)) {
         const { isNonRegionalLocation } = await import("@/lib/location-mappings")
         const locationName = String((updatedProfile as any)?.geofence_locations?.name || "")
         if (!isNonRegionalLocation(locationName)) {

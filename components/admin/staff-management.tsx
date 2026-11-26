@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { displayRole } from "@/lib/role-mapping"
 import { isNonRegionalLocation, normalizeLocationName } from "@/lib/location-mappings"
+import { isHodExemptRole } from "@/lib/hr-workflow"
 import {
   isRegionalManagerLocationMatch,
   resolveRegionalOfficeIdFromLocation,
@@ -447,7 +448,7 @@ export function StaffManagement() {
         })
         fetchStaff()
         // Administrators and IT Admins can link staff to the correct HOD or Regional Manager.
-        if (canManageStaffLinks && result.data) {
+        if (canManageStaffLinks && result.data && !isHodExemptRole(result.data.role)) {
           openHodLinkDialog(result.data)
         }
       } else {
@@ -640,6 +641,7 @@ export function StaffManagement() {
   const [hodLinkError, setHodLinkError] = useState<string | null>(null)
   const [hodSearchQuery, setHodSearchQuery] = useState<string>("")
   const [autoLinkLoading, setAutoLinkLoading] = useState(false)
+  const [autoLinkHodLoading, setAutoLinkHodLoading] = useState(false)
 
   const [hodCandidates, setHodCandidates] = useState<StaffMember[]>([])
   const [hodRecommendedIds, setHodRecommendedIds] = useState<string[]>([])
@@ -658,6 +660,10 @@ export function StaffManagement() {
   }
 
   const openHodLinkDialog = async (member: StaffMember) => {
+    if (isHodExemptRole(member.role)) {
+      showWarning("NSP and Intern roles do not require an HOD assignment.", "HOD assignment not required")
+      return
+    }
     setHodLinkStaff(member)
     setHodLinkHodIds(((member as any).hod_links || []).map((hod: any) => String(hod.id)))
     setHodLinkError(null)
@@ -820,6 +826,24 @@ export function StaffManagement() {
       showError(error instanceof Error ? error.message : "Unable to link unassigned staff", "Staff linkage failed")
     } finally {
       setAutoLinkLoading(false)
+    }
+  }
+
+  const handleAutoLinkEligibleStaff = async () => {
+    setAutoLinkHodLoading(true)
+    try {
+      const response = await authenticatedFetch("/api/admin/staff/hod-linkages", { method: "POST" })
+      const result = await response.json()
+      if (!response.ok || !result.success) throw new Error(result.error || "Unable to auto-link eligible staff")
+      showSuccess(
+        `${result.linked_count || 0} staff member(s) linked. ${result.unresolved_count || 0} remain unlinked because no matching HOD or location was found.`,
+        "Automatic HOD assignment complete",
+      )
+      await Promise.all([fetchHodLinkageManagement(), fetchStaff()])
+    } catch (error) {
+      showError(error instanceof Error ? error.message : "Unable to auto-link eligible staff", "Automatic HOD assignment failed")
+    } finally {
+      setAutoLinkHodLoading(false)
     }
   }
 
@@ -1497,7 +1521,7 @@ export function StaffManagement() {
                   <Button variant="outline" onClick={() => setEditingStaff(null)}>
                     Cancel
                   </Button>
-                  {canManageStaffLinks && (
+                  {canManageStaffLinks && !isHodExemptRole(editingStaff.role) && (
                     <Button
                       variant="outline"
                       onClick={() => {
@@ -1586,7 +1610,9 @@ export function StaffManagement() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {(member as any).hod_links && (member as any).hod_links.length > 0 ? (
+                        {isHodExemptRole(member.role) ? (
+                          <span className="text-xs text-muted-foreground italic">Not required for this role</span>
+                        ) : (member as any).hod_links && (member as any).hod_links.length > 0 ? (
                           <div className="space-y-1">
                             {(member as any).hod_links.map((hod: any, idx: number) => (
                               <div key={`${member.id}-hod-${idx}`} className="text-sm">
@@ -1663,7 +1689,7 @@ export function StaffManagement() {
                             {member.is_active ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
                             <span className="text-xs font-medium">{member.is_active ? "Deactivate" : "Activate"}</span>
                           </Button>
-                          {canManageStaffLinks && (
+                          {canManageStaffLinks && !isHodExemptRole(member.role) && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -1702,11 +1728,16 @@ export function StaffManagement() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">Staff without a linked HOD</h2>
-                  <p className="text-sm text-muted-foreground">Active staff with no HOD assignment in either current linkage record.</p>
+                  <p className="text-sm text-muted-foreground">Active eligible staff; NSP and Intern roles are exempt. Automatic matching uses department heads at non-regional locations and the location&apos;s Regional Manager elsewhere.</p>
                 </div>
-                <Button type="button" variant="outline" onClick={() => void fetchHodLinkageManagement()} disabled={linkageManagementLoading}>
-                  {linkageManagementLoading ? "Refreshing…" : "Refresh list"}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={() => void fetchHodLinkageManagement()} disabled={linkageManagementLoading || autoLinkHodLoading}>
+                    {linkageManagementLoading ? "Refreshing…" : "Refresh list"}
+                  </Button>
+                  <Button type="button" onClick={() => void handleAutoLinkEligibleStaff()} disabled={linkageManagementLoading || autoLinkHodLoading || unlinkedStaff.length === 0}>
+                    <Link2 data-icon="inline-start" /> {autoLinkHodLoading ? "Linking staff…" : "Auto-link eligible staff"}
+                  </Button>
+                </div>
               </div>
               <div className="relative max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />

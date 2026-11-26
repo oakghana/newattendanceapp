@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { isHodExemptRole } from "@/lib/hr-workflow"
 import { isHrPlanningRole } from "@/lib/leave-planning"
 
 /**
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
     // assignment independently of the request's stale status.
     const { data: staffProfiles } = await admin
       .from("user_profiles")
-      .select("id, assigned_location_id, region_id")
+      .select("id, role, assigned_location_id, region_id")
       .in("id", staffIds)
     const locationIds = [...new Set((staffProfiles || []).map((profile: any) => profile.assigned_location_id).filter(Boolean))]
     const regionIds = [...new Set((staffProfiles || []).map((profile: any) => profile.region_id).filter(Boolean))]
@@ -75,7 +76,8 @@ export async function GET(request: NextRequest) {
     const regionalLocationIds = new Set((regionalOffices || []).map((office: any) => office.assigned_location_id).filter((id: string) => locationIds.includes(id)))
     const regionalRegionIds = new Set((regionalOffices || []).map((office: any) => office.region_id).filter((id: string) => regionIds.includes(id)))
     const regionalStaffIds = new Set((staffProfiles || []).filter((profile: any) => regionalLocationIds.has(profile.assigned_location_id) || regionalRegionIds.has(profile.region_id)).map((profile: any) => profile.id))
-    const hodStaffIds = staffIds.filter((id: string) => !regionalStaffIds.has(id))
+    const exemptStaffIds = new Set((staffProfiles || []).filter((profile: any) => isHodExemptRole(profile.role)).map((profile: any) => String(profile.id)))
+    const hodStaffIds = staffIds.filter((id: string) => !regionalStaffIds.has(id) && !exemptStaffIds.has(id))
 
     // Fetch only genuine legacy HOD requests. Regional requests are handled
     // by Regional HR first, regardless of leave type.

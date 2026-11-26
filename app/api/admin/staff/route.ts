@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
+import { isHodExemptRole } from "@/lib/hr-workflow"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 import { canItAdminCreateRole, canUpdateStaffByITAdmin, getEffectiveItAdminScope, resolveItAdminRegionId } from "@/lib/it-admin-policy"
 
@@ -675,7 +676,7 @@ export async function POST(request: NextRequest) {
       const assignedLocationId = (newProfile as any)?.assigned_location_id || assigned_location_id || null
       const locationName = String((newProfile as any)?.geofence_locations?.name || "")
       
-      if (isItDept && newDeptId) {
+      if (!isHodExemptRole((newProfile as any)?.role) && isItDept && newDeptId) {
         // Find the IT department head
         const { data: itHods } = await adminSupabase
           .from("user_profiles")
@@ -698,7 +699,7 @@ export async function POST(request: NextRequest) {
           )
           console.log("[v0] Staff API - Auto-linked IT staff to verified IT department HOD:", verifiedItHod.id)
         }
-      } else if (assignedLocationId) {
+      } else if (!isHodExemptRole((newProfile as any)?.role) && assignedLocationId) {
         let resolvedLocationName = locationName
         if (!resolvedLocationName) {
           const { data: locRow } = await adminSupabase

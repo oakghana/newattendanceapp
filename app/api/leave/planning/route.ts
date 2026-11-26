@@ -17,7 +17,7 @@ import {
   resolveEntitlementFromProfile,
   buildAnnualLeaveEntitlementSummary,
 } from "@/lib/annual-leave-entitlement"
-import { resolveRegionalHrOffice, resolveSelfLeaveRoute, routeLeave } from "@/lib/hr-workflow"
+import { isHodExemptRole, resolveRegionalHrOffice, resolveSelfLeaveRoute, routeLeave } from "@/lib/hr-workflow"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 import { hasAssignedReviewer, REVIEWER_LINKAGE_REQUIRED_MESSAGE } from "@/lib/reviewer-linkage"
 
@@ -249,9 +249,10 @@ async function resolveManagerReviewers(admin: any, userId: string, departmentId:
   const linkedReviewerIds: string[] = []
   const { data: staffProfile } = await admin
     .from("user_profiles")
-    .select("assigned_location_id")
+    .select("assigned_location_id, role")
     .eq("id", userId)
     .maybeSingle()
+  if (isHodExemptRole(staffProfile?.role)) return []
   const assignedLocationId = String(staffProfile?.assigned_location_id || "")
   if (!assignedLocationId) {
     console.warn("[v0] Refusing legacy reviewer fallback because staff location is unresolved", { userId })

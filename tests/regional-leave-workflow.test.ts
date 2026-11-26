@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { REGIONAL_LEAVE_STAGES, SELF_LEAVE_STAGES, getLeaveWorkflowView, resolveSelfLeaveRoute, routeLeave } from "../lib/hr-workflow"
+import { REGIONAL_LEAVE_STAGES, SELF_LEAVE_STAGES, getLeaveWorkflowView, isHodExemptRole, resolveSelfLeaveRoute, routeLeave } from "../lib/hr-workflow"
 import { HR_OFFICE_PENDING_STATUSES, getStatusLabel, isRegionalHrOfficerRole } from "../lib/leave-planning"
 
 describe("regional self-leave workflow", () => {
@@ -20,6 +20,23 @@ describe("regional self-leave workflow", () => {
       route: null,
       firstStage: null,
     })
+  })
+
+  it("exempts NSP and Intern roles from non-regional HOD leave review", () => {
+    for (const role of ["nsp", "intern", "Intern"]) {
+      expect(isHodExemptRole(role)).toBe(true)
+      const route = resolveSelfLeaveRoute({ role, locationName: "QCC Head Office" })
+      expect(route.isSelfLeave).toBe(true)
+      expect(route.firstStage).toBe(SELF_LEAVE_STAGES.hrLeaveOffice)
+    }
+    expect(isHodExemptRole("staff")).toBe(false)
+  })
+
+  it("keeps Regional HR then Regional Manager routing for NSP and Intern at regional locations", () => {
+    for (const role of ["nsp", "intern"]) {
+      expect(resolveSelfLeaveRoute({ role, locationName: "Kumasi Regional Office" }).isSelfLeave).toBe(false)
+      expect(routeLeave({ leaveType: "annual", locationName: "Kumasi Regional Office", hasRegionalOffice: true }).route).toBe("regional")
+    }
   })
 
   it("does not put Regional HR into the self-leave route", () => {
