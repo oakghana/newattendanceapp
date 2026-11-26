@@ -19,7 +19,7 @@ export function calculateDarkPixelBounds(darkPixels: Array<{ x: number; y: numbe
   }, initial)
 }
 
-export function isolateSignatureInk(source: Uint8ClampedArray, width: number, height: number) {
+export function isolateSignatureInk(source: Uint8ClampedArray, width: number, height: number, contrastThreshold = 9) {
   const luminance = new Uint8Array(width * height)
   const integralWidth = width + 1
   const integral = new Float64Array(integralWidth * (height + 1))
@@ -56,7 +56,7 @@ export function isolateSignatureInk(source: Uint8ClampedArray, width: number, he
         integral[top * integralWidth + left]
       const difference = sum / area - luminance[y * width + x]
 
-      if (difference >= 9) {
+      if (difference >= contrastThreshold) {
         inkStrength[y * width + x] = Math.min(255, Math.round(difference))
       }
     }
@@ -196,7 +196,36 @@ export function isolateSignatureInk(source: Uint8ClampedArray, width: number, he
     }
   }
 
-  return { pixels: output, bounds: inkPixels.length > 0 ? calculateDarkPixelBounds(inkPixels) : null }
+  return {
+    pixels: output,
+    bounds: inkPixels.length > 0 ? calculateDarkPixelBounds(inkPixels) : null,
+    inkPixelCount: inkPixels.length,
+  }
+}
+
+export function detectSignatureInk(source: Uint8ClampedArray, width: number, height: number) {
+  const strongInk = isolateSignatureInk(source, width, height)
+  if (strongInk.bounds) return strongInk
+
+  const faintInk = isolateSignatureInk(source, width, height, 4)
+  const faintBounds = faintInk.bounds
+  if (!faintBounds) return faintInk
+
+  const spanX = faintBounds.maxX - faintBounds.minX + 1
+  const spanY = faintBounds.maxY - faintBounds.minY + 1
+  const minimumInkPixels = Math.max(12, Math.round(width * height * 0.000004))
+  const minimumSpanX = Math.max(8, Math.round(width * 0.01))
+  const minimumSpanY = Math.max(4, Math.round(height * 0.006))
+
+  if (
+    faintInk.inkPixelCount < minimumInkPixels ||
+    spanX < minimumSpanX ||
+    spanY < minimumSpanY
+  ) {
+    return { ...faintInk, bounds: null }
+  }
+
+  return faintInk
 }
 
 /**
@@ -233,10 +262,10 @@ export function processSignatureImage(file: File): Promise<string> {
 
         const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
         const { width, height } = canvas
-        const isolated = isolateSignatureInk(imageData.data, width, height)
+        const isolated = detectSignatureInk(imageData.data, width, height)
 
         if (!isolated.bounds) {
-          return reject(new Error("No visible signature was detected. Use a darker, clearer scan."))
+          return reject(new Error("We couldn’t detect enough signature detail. Upload a higher-contrast crop or use Draw instead."))
         }
         const { minX, minY, maxX, maxY } = isolated.bounds
         const padding = Math.max(12, Math.round(Math.max(maxX - minX, maxY - minY) * 0.08))

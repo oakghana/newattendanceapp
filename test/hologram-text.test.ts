@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { calculateDarkPixelBounds, isolateSignatureInk } from "../lib/process-signature-image"
+import { calculateDarkPixelBounds, detectSignatureInk, isolateSignatureInk } from "../lib/process-signature-image"
 import { getSignatureHologramText } from "../lib/signature-hologram"
 
 describe("signature hologram text", () => {
@@ -140,5 +140,53 @@ describe("signature hologram text", () => {
     expect(result.bounds?.maxX).toBeLessThanOrEqual(66)
     expect(result.bounds?.maxY).toBeLessThan(55)
     expect(result.pixels[strayNoiseIndex]).toBe(255)
+  })
+
+  it("detects faint pen strokes on an off-white scan after the strong pass finds nothing", () => {
+    const width = 120
+    const height = 60
+    const source = new Uint8ClampedArray(width * height * 4)
+
+    for (let pixel = 0; pixel < width * height; pixel += 1) {
+      source[pixel * 4] = 252
+      source[pixel * 4 + 1] = 252
+      source[pixel * 4 + 2] = 252
+      source[pixel * 4 + 3] = 255
+    }
+    for (let x = 24; x <= 95; x += 1) {
+      const y = 30 + Math.round(Math.sin(x / 6) * 8)
+      for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+        const index = ((y + offsetY) * width + x) * 4
+        source[index] = 246
+        source[index + 1] = 246
+        source[index + 2] = 246
+      }
+    }
+
+    expect(isolateSignatureInk(source, width, height).bounds).toBeNull()
+    const result = detectSignatureInk(source, width, height)
+
+    expect(result.bounds?.minX).toBeLessThanOrEqual(24)
+    expect(result.bounds?.maxX).toBeGreaterThanOrEqual(95)
+    expect(result.inkPixelCount).toBeGreaterThanOrEqual(12)
+  })
+
+  it("does not treat subtle paper texture as signature ink", () => {
+    const width = 120
+    const height = 60
+    const source = new Uint8ClampedArray(width * height * 4)
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const shade = 251 + ((x + y) % 2)
+        const index = (y * width + x) * 4
+        source[index] = shade
+        source[index + 1] = shade
+        source[index + 2] = shade
+        source[index + 3] = 255
+      }
+    }
+
+    expect(detectSignatureInk(source, width, height).bounds).toBeNull()
   })
 })

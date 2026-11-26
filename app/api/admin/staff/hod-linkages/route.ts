@@ -162,7 +162,7 @@ export async function POST() {
     for (let from = 0; ; from += PAGE_SIZE) {
       const { data, error } = await admin
         .from("user_profiles")
-        .select("id, employee_id, role, department_id, assigned_location_id, hod_id, position, is_active, departments(id, name, code), geofence_locations!user_profiles_assigned_location_id_fkey(id, name, address, location_type, parent_location_id, district_id)")
+        .select("id, employee_id, role, department_id, assigned_location_id, hod_id, position, is_active, departments(id, name, code), geofence_locations!user_profiles_assigned_location_id_fkey(id, name, address, location_type, parent_location_id, district_id, districts(name))")
         .eq("is_active", true)
         .order("id", { ascending: true })
         .range(from, from + PAGE_SIZE - 1)
