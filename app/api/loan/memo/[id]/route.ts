@@ -528,7 +528,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const [{ data: applicantProfile }, { data: directorProfile }, { data: mdProfile }] = await Promise.all([
       admin
         .from("user_profiles")
-        .select("*")
+        .select("id, employee_id, first_name, last_name, position, department_id, assigned_location_id, departments(name, code), geofence_locations!user_profiles_assigned_location_id_fkey(name, address, district_id, districts(name))")
         .eq("id", applicantId)
         .single() as any,
       directorHrId
@@ -658,6 +658,30 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       ? layoutOverride.applicantStaffNo
       : String((applicantProfile as any)?.employee_id || (applicantProfile as any)?.staff_number || loan.staff_number || "")
     const applicantPosition = (layoutOverride.applicantPosition || String((applicantProfile as any)?.position || loan.staff_rank || "STAFF")).toUpperCase()
+    const applicantDepartmentProfile = Array.isArray((applicantProfile as any)?.departments)
+      ? (applicantProfile as any).departments[0]
+      : (applicantProfile as any)?.departments
+    const requestDepartmentId = String((loan as any).department_id || "")
+    const { data: requestDepartment } = requestDepartmentId
+      ? await admin.from("departments").select("name, code").eq("id", requestDepartmentId).maybeSingle()
+      : { data: null }
+    const departmentName = String(requestDepartment?.name || applicantDepartmentProfile?.name || "").trim()
+    const departmentCode = String(requestDepartment?.code || applicantDepartmentProfile?.code || "").trim()
+    const applicantDepartment = layoutOverride.applicantDepartment || (
+      departmentName
+        ? `${departmentName}${departmentCode && departmentCode.toLowerCase() !== departmentName.toLowerCase() ? ` (${departmentCode})` : ""}`
+        : "Not recorded"
+    )
+    const applicantLocationProfile = Array.isArray((applicantProfile as any)?.geofence_locations)
+      ? (applicantProfile as any).geofence_locations[0]
+      : (applicantProfile as any)?.geofence_locations
+    const rawApplicantLocation = String((loan as any).staff_location_name || applicantLocationProfile?.name || "").trim()
+    const applicantLocationFallback = String((loan as any).staff_location_address || applicantLocationProfile?.address || applicantLocationProfile?.districts?.name || "").trim()
+    const applicantLocation = layoutOverride.applicantLocation || (
+      rawApplicantLocation
+        ? getMemoLocationAddress(rawApplicantLocation, applicantLocationFallback || "HEAD OFFICE")
+        : applicantLocationFallback || "Not recorded"
+    )
 
     const parsedHrNote = splitThroTelephoneFromNote(loan.hr_note)
     const parsedLoanOfficeNote = splitThroTelephoneFromNote(loan.loan_office_note)
@@ -698,6 +722,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
             applicantName: applicantFullName,
             applicantStaffNo,
             applicantPosition,
+            applicantDepartment,
+            applicantLocation,
             throRank: hodRank,
             throLocation: hodLocation,
             subject,
@@ -776,7 +802,23 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     )
     y += 5.5
     doc.text(applicantPosition, marginLeft, y)
-    y += 10
+    y += 5.5
+
+    const applicantSummaryLines = [
+      `Department: ${applicantDepartment}`,
+      `Location: ${applicantLocation}`,
+    ]
+    if (y + applicantSummaryLines.length * 4.5 + 8 > pageHeight - 65) {
+      doc.addPage()
+      y = 24
+    }
+    doc.setFont("times", "normal")
+    doc.setFontSize(8.5)
+    for (const summaryLine of applicantSummaryLines) {
+      doc.text(summaryLine, marginLeft, y)
+      y += 4.5
+    }
+    y += 6
 
     // ─── THRO section ─────────────────────────────────────────────────
     if (hodRank || hodLocation) {
@@ -825,7 +867,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     y += 3
 
     // ─── Director HR Signature ────────────────────────────────────────
-    if (y + 50 > pageHeight - 20) {
+    if (y + 58 > pageHeight - 20) {
       doc.addPage()
       y = 24
     }
@@ -870,10 +912,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
         } catch {
           // Use the default box if the image dimensions cannot be read.
         }
-        const scale = Math.min(64 / naturalSize.width, 26 / naturalSize.height)
+        const scale = Math.min(80 / naturalSize.width, 32 / naturalSize.height)
         const imageWidth = naturalSize.width * scale
         const imageHeight = naturalSize.height * scale
-        doc.addImage(signatureImage.dataUrl, signatureImage.imageType, signatureCenterX - imageWidth / 2, y, imageWidth, imageHeight)
+        const preferredSignatureX = signatureCenterX - imageWidth / 2
+        const signatureX = Math.max(marginLeft, Math.min(pageWidth - marginRight - imageWidth, preferredSignatureX))
+        doc.addImage(signatureImage.dataUrl, signatureImage.imageType, signatureX, y, imageWidth, imageHeight)
         sigImgY = y
         y += imageHeight + 4
         break

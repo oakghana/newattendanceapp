@@ -5,6 +5,8 @@ const layout: MemoLayout = {
   applicantName: "AHULU EMELIA",
   applicantStaffNo: "1152760",
   applicantPosition: "PRIN. HUM. RES. OFFICER",
+  applicantDepartment: "Human Resources (HR)",
+  applicantLocation: "Head Office",
   throRank: "ARCHIVE HEAD",
   throLocation: "HEAD OFFICE",
   subject: "APPLICATION FOR FUNERAL LOAN",
@@ -24,6 +26,8 @@ describe("loan memo layout text", () => {
     expect(parsed.applicantName).toBe("AHULU EMELIA")
     expect(parsed.applicantStaffNo).toBe("1152760")
     expect(parsed.applicantPosition).toBe("PRIN. HUM. RES. OFFICER")
+    expect(parsed.applicantDepartment).toBe("Human Resources (HR)")
+    expect(parsed.applicantLocation).toBe("Head Office")
     expect(parsed.throRank).toBe("ARCHIVE HEAD")
     expect(parsed.throLocation).toBe("HEAD OFFICE")
     expect(parsed.subject).toBe("APPLICATION FOR FUNERAL LOAN")
