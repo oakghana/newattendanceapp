@@ -149,6 +149,7 @@ const LEAVE_STATUS_MAP: Record<string, { label: string; color: string }> = {
 export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedMemos = [], regionalTransportMemos = [], regionalScope = false, viewerRole, isAdministrator = false }: Props) {
   const normalizedViewerRole = String(viewerRole || profile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
   const isHrExecutiveViewer = ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(normalizedViewerRole)
+  const isAccountsViewer = ["accounts", "accounts_executive"].includes(normalizedViewerRole)
   const [tab, setTab] = useState<"loans" | "leave" | "approved" | "transport">("loans")
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -405,13 +406,14 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
               </div>
               <div>
                 <div className="text-xs font-semibold tracking-[0.15em] uppercase text-teal-400 mb-1">
-                  {isHrExecutiveViewer ? "HR Executive" : regionalScope ? "Regional HR Leave Office" : "Secretary"}
+                  {isHrExecutiveViewer ? "HR Executive" : isAccountsViewer ? "Accounts" : regionalScope ? "Regional HR Leave Office" : "Secretary"}
                 </div>
                 <h1 className="text-xl font-bold tracking-tight">{fullName}</h1>
                 <p className="text-slate-400 text-sm mt-0.5">
                   {isHrExecutiveViewer
-                    ? "Approved memos you signed — print or download anytime"
-                    : regionalScope ? "Linked locations and regions" : (departmentName || "QCC Head Office")} &mdash; Memo Review Console
+  ? "Approved memos you signed — print or download anytime"
+  : isAccountsViewer ? "Approved staff memos — print or download anytime"
+  : regionalScope ? "Linked locations and regions" : (departmentName || "QCC Head Office")} &mdash; Memo Review Console
                 </p>
               </div>
             </div>
