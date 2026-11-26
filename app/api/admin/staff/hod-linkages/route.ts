@@ -245,7 +245,9 @@ export async function POST() {
     }
 
     if (rows.length) {
-      const { error } = await admin.from("loan_hod_linkages").insert(rows)
+      const { error } = await admin
+        .from("loan_hod_linkages")
+        .upsert(rows, { onConflict: "staff_user_id,hod_user_id", ignoreDuplicates: true })
       if (error) throw error
     }
 

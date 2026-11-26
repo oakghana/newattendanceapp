@@ -642,6 +642,7 @@ export function StaffManagement() {
   const [hodSearchQuery, setHodSearchQuery] = useState<string>("")
   const [autoLinkLoading, setAutoLinkLoading] = useState(false)
   const [autoLinkHodLoading, setAutoLinkHodLoading] = useState(false)
+  const [isAutoLinkConfirmOpen, setIsAutoLinkConfirmOpen] = useState(false)
 
   const [hodCandidates, setHodCandidates] = useState<StaffMember[]>([])
   const [hodRecommendedIds, setHodRecommendedIds] = useState<string[]>([])
@@ -839,6 +840,7 @@ export function StaffManagement() {
         `${result.linked_count || 0} staff member(s) linked. ${result.unresolved_count || 0} remain unlinked because no matching HOD or location was found.`,
         "Automatic HOD assignment complete",
       )
+      setIsAutoLinkConfirmOpen(false)
       await Promise.all([fetchHodLinkageManagement(), fetchStaff()])
     } catch (error) {
       showError(error instanceof Error ? error.message : "Unable to auto-link eligible staff", "Automatic HOD assignment failed")
@@ -979,9 +981,9 @@ export function StaffManagement() {
             {/* Action Buttons */}
             <div className="flex gap-3">
               {canManageStaffLinks && (
-                <Button type="button" variant="outline" onClick={handleAutoLinkUnassignedStaff} disabled={autoLinkLoading}>
+                <Button type="button" variant="outline" title="Fallback only: links unassigned staff to an HR Executive. Use the Unlinked Staff tab for department- and location-based HOD assignment." onClick={handleAutoLinkUnassignedStaff} disabled={autoLinkLoading}>
                   <Link2 className="mr-2 h-4 w-4" />
-                  {autoLinkLoading ? "Linking..." : "Link unassigned staff"}
+                  {autoLinkLoading ? "Linking..." : "Fallback: HR Executive"}
                 </Button>
               )}
               <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
@@ -1734,7 +1736,7 @@ export function StaffManagement() {
                   <Button type="button" variant="outline" onClick={() => void fetchHodLinkageManagement()} disabled={linkageManagementLoading || autoLinkHodLoading}>
                     {linkageManagementLoading ? "Refreshing…" : "Refresh list"}
                   </Button>
-                  <Button type="button" onClick={() => void handleAutoLinkEligibleStaff()} disabled={linkageManagementLoading || autoLinkHodLoading || unlinkedStaff.length === 0}>
+                  <Button type="button" onClick={() => setIsAutoLinkConfirmOpen(true)} disabled={linkageManagementLoading || autoLinkHodLoading || unlinkedStaff.length === 0}>
                     <Link2 data-icon="inline-start" /> {autoLinkHodLoading ? "Linking staff…" : "Auto-link eligible staff"}
                   </Button>
                 </div>
@@ -1833,6 +1835,23 @@ export function StaffManagement() {
         </CardContent>
       </Card>
     </div>
+
+      <Dialog open={isAutoLinkConfirmOpen} onOpenChange={(open) => { if (!autoLinkHodLoading) setIsAutoLinkConfirmOpen(open) }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Auto-link eligible unlinked staff?</DialogTitle>
+            <DialogDescription>
+              This will process {unlinkedStaff.length} eligible staff members. NSP and Intern roles are excluded. Non-regional staff are matched by department to a Department Head; regional and district staff are matched to the Regional Manager covering their assigned location. Staff with no suitable match will remain unlinked.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsAutoLinkConfirmOpen(false)} disabled={autoLinkHodLoading}>Cancel</Button>
+            <Button type="button" onClick={() => void handleAutoLinkEligibleStaff()} disabled={autoLinkHodLoading || unlinkedStaff.length === 0}>
+              <Link2 data-icon="inline-start" /> {autoLinkHodLoading ? "Linking staff…" : `Auto-link ${unlinkedStaff.length} staff`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* HOD Linkage Dialog */}
       <Dialog open={!!hodLinkStaff} onOpenChange={(open) => {
@@ -1963,33 +1982,6 @@ export function StaffManagement() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!hodPendingRemoval} onOpenChange={(open) => { if (!open && !hodRemovalLoading) setHodPendingRemoval(null) }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Remove all staff links from this HOD?</DialogTitle>
-            <DialogDescription>
-              This immediately unlinks every staff member assigned to {hodPendingRemoval?.name}. It clears current HOD link records and legacy profile and nonregional transport assignments. Staff accounts and their roles are not changed.
-            </DialogDescription>
-          </DialogHeader>
-          {hodPendingRemoval && (
-            <div className="rounded-lg border border-border bg-muted/30 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="font-semibold">{hodPendingRemoval.name}</div>
-                <Badge variant="secondary">{hodPendingRemoval.linked_staff_count} staff</Badge>
-              </div>
-              {hodPendingRemoval.staff_preview.length > 0 && (
-                <p className="mt-2 text-sm text-muted-foreground">{hodPendingRemoval.staff_preview.map((staffMember) => staffMember.name).join(", ")}{hodPendingRemoval.linked_staff_count > hodPendingRemoval.staff_preview.length ? `, and ${hodPendingRemoval.linked_staff_count - hodPendingRemoval.staff_preview.length} more` : ""}</p>
-              )}
-            </div>
-          )}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setHodPendingRemoval(null)} disabled={hodRemovalLoading}>Cancel</Button>
-            <Button type="button" variant="destructive" onClick={() => void handleRemoveHodLinks()} disabled={hodRemovalLoading || !hodPendingRemoval}>
-              <Link2Off data-icon="inline-start" /> {hodRemovalLoading ? "Removing links…" : "Remove all links"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   )
 }

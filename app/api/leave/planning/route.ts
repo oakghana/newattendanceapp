@@ -1298,7 +1298,7 @@ export async function GET(request: NextRequest) {
         }
       } else {
         // Regular HOD/RM - only see their assigned reviews
-        let reviewsQuery = admin
+        const reviewsQuery = admin
           .from("leave_plan_reviews")
           .select(`
             id,
@@ -1571,7 +1571,7 @@ export async function GET(request: NextRequest) {
 
       // Enrich each request with its assigned HOD reviewer names
       const requestIds = (data || []).map((r: any) => r.id).filter(Boolean)
-      let hodReviewerMap: Map<string, string[]> = new Map()
+      const hodReviewerMap: Map<string, string[]> = new Map()
       if (requestIds.length > 0) {
         const reviewChunks = await Promise.all(
           chunkArray(requestIds as string[], 150).map((ids) =>
@@ -2062,7 +2062,7 @@ export async function POST(request: NextRequest) {
     : isSelfLeaveWorkflow
       ? ((await admin.from("user_profiles").select("id").eq("is_active", true).in("role", ["hr_leave_office", "leave_loan_officer", "hr_officer", "hr_office", "manager_hr", "admin"])).data || []).map((profile) => profile.id)
       : undefined
-  notifyLeaveSubmitted(admin, {
+  void Promise.resolve(notifyLeaveSubmitted(admin, {
   leavePlanRequestId: requestRow.id,
   staffName,
   leaveType: leaveTypeKey,
@@ -2070,19 +2070,19 @@ export async function POST(request: NextRequest) {
   endDate: preferred_end_date,
   requestedDays,
   recipientUserIds: submissionRecipientUserIds,
-  }).catch((error) => console.warn("[v0] Leave submission email failed:", error))
+  })).catch((error) => console.warn("[v0] Leave submission email failed:", error))
 
   if (leaveTypeKey === "annual" || leaveTypeKey === "annual_leave") {
   const regionalHrRecipient = regionalHrOffice?.user_id
   if (regionalHrRecipient) {
-  await admin.from("staff_notifications").insert({
+  void Promise.resolve(admin.from("staff_notifications").insert({
   recipient_id: regionalHrRecipient,
   type: "annual_leave_submitted_regional_hr",
   title: "Annual Leave Submitted",
   message: `${staffName} submitted Annual Leave for ${preferred_start_date}. Please receive and notify the requester that annual-leave memo adjustment and forwarding will begin in December 2026 for January 2027 leave.`,
   data: { leave_plan_request_id: requestRow.id, leave_type: leaveTypeKey, start_date: preferred_start_date, effective_date: "2027-01-01" },
   is_read: false,
-  }).then(() => {}).catch(() => {})
+  })).catch(() => {})
   }
   }
 
@@ -2154,7 +2154,7 @@ export async function PUT(request: NextRequest) {
 
     const { data: existing, error: existingError } = await admin
       .from("leave_plan_requests")
-      .select("id, user_id, status")
+      .select("id, user_id, status, workflow_route, regional_hr_office_user_id")
       .eq("id", id)
       .single()
 
@@ -2281,6 +2281,27 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    const exemptHodRole = isHodExemptRole((profile as any)?.role)
+    let exemptWorkflowRoute: "self_leave" | "regional" | null = null
+    let exemptRegionalHrOfficeId: string | null = null
+    if (exemptHodRole) {
+      const assignedLocationId = String((profile as any)?.assigned_location_id || "")
+      const { data: assignedLocation } = assignedLocationId
+        ? await admin.from("geofence_locations").select("name").eq("id", assignedLocationId).maybeSingle()
+        : { data: null }
+      const selfLeaveRoute = resolveSelfLeaveRoute({ role: profile.role, locationName: assignedLocation?.name })
+      if (selfLeaveRoute.isSelfLeave) {
+        exemptWorkflowRoute = "self_leave"
+      } else {
+        exemptWorkflowRoute = "regional"
+        const regionalOffice = await resolveRegionalHrOffice(admin, (profile as any)?.region_id || null, assignedLocationId || null)
+        exemptRegionalHrOfficeId = existing.regional_hr_office_user_id || regionalOffice?.user_id || null
+        if (!exemptRegionalHrOfficeId) {
+          return NextResponse.json({ error: "This regional leave request cannot be resubmitted until a Regional HR Office is assigned." }, { status: 409 })
+        }
+      }
+    }
+
     const updatePayload: Record<string, any> = {
       leave_year_period: selectedLeaveYearPeriod,
       preferred_start_date,
@@ -2289,8 +2310,15 @@ export async function PUT(request: NextRequest) {
       entitlement_days: entitlementDays,
       requested_days: requestedDays,
       reason: reason || null,
-      status: "pending_manager_review",
+      status: exemptHodRole
+        ? exemptWorkflowRoute === "regional" ? "pending_regional_hr_review" : "pending_hr_leave_processing"
+        : "pending_manager_review",
       manager_recommendation: null,
+      ...(exemptHodRole ? {
+        workflow_route: exemptWorkflowRoute,
+        workflow_stage: exemptWorkflowRoute === "regional" ? "regional_hr_review" : "hr_leave_office",
+        regional_hr_office_user_id: exemptRegionalHrOfficeId,
+      } : {}),
       updated_at: new Date().toISOString(),
   // Keep the HR remarks field reserved for HR Leave Office-entered text.
   adjustment_reason: null,
@@ -2315,6 +2343,8 @@ export async function PUT(request: NextRequest) {
     if (updateError || !updated) {
       return NextResponse.json({ error: "Failed to update leave request." }, { status: 500 })
     }
+
+    if (exemptHodRole) return NextResponse.json({ success: true, request: updated })
 
     const reviewers = await resolveManagerReviewers(admin, user.id, (profile as any).department_id || null)
     if (reviewers.length === 0) {
