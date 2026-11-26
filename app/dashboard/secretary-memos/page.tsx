@@ -138,6 +138,8 @@ export default async function SecretaryMemosPage() {
       created_at,
       md_approved_at,
       md_approved_by_name,
+      director_letter,
+      director_letter_original,
       director_hr_id,
       is_imported,
       hod_review_note,
@@ -219,6 +221,8 @@ export default async function SecretaryMemosPage() {
       fixed_amount: loan.fixed_amount,
       md_approved_at: loan.md_approved_at,
       md_approved_by_name: loan.md_approved_by_name,
+      memo_content: loan.director_letter || "",
+      original_memo_content: loan.director_letter_original || loan.director_letter || "",
     }
   })
 
@@ -231,6 +235,7 @@ export default async function SecretaryMemosPage() {
       regionalTransportMemos={visibleRegionalTransportRows}
       regionalScope={visibility.isRegional}
       viewerRole={normalizedRole}
+      isAdministrator={isAdministrator}
     />
   )
 }

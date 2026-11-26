@@ -87,6 +87,8 @@ interface ApprovedMemo {
   end_date?: string
   md_approved_at: string
   md_approved_by_name: string | null
+  memo_content?: string
+  original_memo_content?: string
 }
 
 interface Props {
@@ -104,6 +106,7 @@ interface Props {
   regionalTransportMemos?: RegionalTransportMemo[]
   regionalScope?: boolean
   viewerRole?: string
+  isAdministrator?: boolean
 }
 
 function fmtAmt(n: number | null) {
@@ -137,7 +140,7 @@ const LEAVE_STATUS_MAP: Record<string, { label: string; color: string }> = {
   hod_approved: { label: "HOD Approved", color: "bg-teal-100 text-teal-800 border-teal-200" },
 }
 
-export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedMemos = [], regionalTransportMemos = [], regionalScope = false, viewerRole }: Props) {
+export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedMemos = [], regionalTransportMemos = [], regionalScope = false, viewerRole, isAdministrator = false }: Props) {
   const normalizedViewerRole = String(viewerRole || profile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
   const isHrExecutiveViewer = ["hr", "hr_executive", "hr_executive_officer", "manager_hr", "director_hr", "hr_manager", "hr_director"].includes(normalizedViewerRole)
   const [tab, setTab] = useState<"loans" | "leave" | "approved" | "transport">("loans")
@@ -148,6 +151,12 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
   const [loanTypeFilter, setLoanTypeFilter] = useState("all")
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "name_asc" | "amount_desc">("newest")
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [memoToCorrect, setMemoToCorrect] = useState<ApprovedMemo | null>(null)
+  const [memoCorrectionText, setMemoCorrectionText] = useState("")
+  const [memoCorrectionReason, setMemoCorrectionReason] = useState("")
+  const [memoCorrectionError, setMemoCorrectionError] = useState("")
+  const [isSavingCorrection, setIsSavingCorrection] = useState(false)
+  const [savedMemoCorrections, setSavedMemoCorrections] = useState<Record<string, string>>({})
 
   const fullName = `${profile.first_name} ${profile.last_name}`.trim().toUpperCase()
   const departmentName = Array.isArray(profile.departments) ? profile.departments[0]?.name : profile.departments?.name
@@ -156,6 +165,33 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
   const downloadMemo = (memo: ApprovedMemo) => openLoanMemo(memo)
 
   const printMemo = (memo: ApprovedMemo) => openLoanMemo(memo, true)
+
+  const saveApprovedMemoCorrection = async () => {
+    if (!memoToCorrect) return
+    setIsSavingCorrection(true)
+    setMemoCorrectionError("")
+    try {
+      const response = await fetch("/api/loan/admin-correct-memo", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          loanId: memoToCorrect.id,
+          expectedContent: memoToCorrect.memo_content || "",
+          correctedContent: memoCorrectionText,
+          reason: memoCorrectionReason,
+        }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || "Could not save the approved memo correction.")
+      setSavedMemoCorrections((current) => ({ ...current, [memoToCorrect.id]: result.memo.director_letter }))
+      setMemoToCorrect(null)
+      setMemoCorrectionReason("")
+    } catch (error) {
+      setMemoCorrectionError(error instanceof Error ? error.message : "Could not save the approved memo correction.")
+    } finally {
+      setIsSavingCorrection(false)
+    }
+  }
 
   const exportRegionalTransportMemo = async (memo: RegionalTransportMemo, print = false) => {
     const reference = memo.memo_reference || memo.reference_number
@@ -718,6 +754,21 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                           <Badge className="text-xs border bg-emerald-100 text-emerald-800 border-emerald-200 font-medium">
                             MD Approved
                           </Badge>
+                          {isAdministrator && memo.type === "loan" && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMemoCorrectionError("")
+                                setMemoCorrectionReason("")
+                                const currentMemo = { ...memo, memo_content: savedMemoCorrections[memo.id] ?? memo.memo_content ?? "" }
+                                setMemoCorrectionText(currentMemo.memo_content || "")
+                                setMemoToCorrect(currentMemo)
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-100"
+                            >
+                              <FileText className="h-4 w-4" /> Correct memo
+                            </button>
+                          )}
                           <button
                             onClick={() => downloadMemo(memo)}
                             disabled={downloadingId === memo.id}
@@ -745,6 +796,53 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
               </div>
             )}
           </>
+        )}
+
+        {isAdministrator && memoToCorrect && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="approved-memo-correction-title">
+            <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="border-b border-slate-200 px-6 py-4">
+                <p className="text-xs font-bold uppercase tracking-wider text-amber-700">Administrator correction</p>
+                <h2 id="approved-memo-correction-title" className="mt-1 text-lg font-bold text-slate-900">Correct approved loan memo wording</h2>
+                <p className="mt-1 text-sm text-slate-500">{memoToCorrect.request_number} · {memoToCorrect.staff_full_name || "Staff member"}</p>
+              </div>
+              <div className="space-y-4 overflow-y-auto p-6">
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                  This changes the memo content used for future copies and downloads. The original signed memo, HR signatures, MD approval stamp, and approval record are preserved. The correction reason and before/after text are audited.
+                </div>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-slate-800">Corrected memo content</span>
+                  <textarea
+                    value={memoCorrectionText}
+                    onChange={(event) => setMemoCorrectionText(event.target.value)}
+                    rows={18}
+                    className="w-full resize-y rounded-xl border border-slate-300 bg-white p-4 font-serif text-sm leading-6 text-slate-900 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                    aria-label="Corrected approved memo content"
+                  />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-slate-800">Reason for correction (required)</span>
+                  <textarea
+                    value={memoCorrectionReason}
+                    onChange={(event) => setMemoCorrectionReason(event.target.value)}
+                    rows={3}
+                    maxLength={1000}
+                    placeholder="Describe the wording error being corrected and why."
+                    className="w-full resize-y rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-900 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                    aria-label="Reason for approved memo correction"
+                  />
+                </label>
+                {memoCorrectionError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700">{memoCorrectionError}</p>}
+              </div>
+              <div className="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-slate-500">Only the approved memo wording changes. Approval status and signatures remain unchanged.</p>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setMemoToCorrect(null)} disabled={isSavingCorrection} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50">Cancel</button>
+                  <button type="button" onClick={() => void saveApprovedMemoCorrection()} disabled={isSavingCorrection || memoCorrectionText.trim().length < 20 || memoCorrectionReason.trim().length < 5} className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50">{isSavingCorrection ? "Saving correction…" : "Save audited correction"}</button>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
         {tab === "transport" && (
