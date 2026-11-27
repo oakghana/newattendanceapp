@@ -62,6 +62,7 @@ import {
   Clock,
   Download,
   Edit3,
+  Eye,
   FileCheck,
   FileSpreadsheet,
   FileText,

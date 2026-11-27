@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    await admin.from("staff_notifications").insert({
+    const { error: staffNotificationError } = await admin.from("staff_notifications").insert({
       recipient_id: leaveRequest.user_id,
       sender_id: user.id,
       sender_role: role,
@@ -116,7 +116,8 @@ export async function POST(request: NextRequest) {
       action_url: "/dashboard/secretary-memos",
       data: { leave_plan_request_id: requestId, workflow_stage: "md_approved", approved_at: approvedAt },
       is_read: false,
-    }).catch((error) => console.warn("[leave-md-approval] staff notification failed:", error))
+    })
+    if (staffNotificationError) console.warn("[leave-md-approval] staff notification failed:", staffNotificationError.message)
 
     return NextResponse.json({
       success: true,

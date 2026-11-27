@@ -598,7 +598,7 @@ export async function POST(request: NextRequest) {
     // If fully approved by all HODs → notify HR Leave Office
     if (!isRegionalManagerApprovalComplete && (nextStatus === "hod_approved" || nextStatus === "manager_confirmed")) {
       const hodName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "HOD"
-      notifyLeaveHodApproved(admin, {
+      void Promise.resolve(notifyLeaveHodApproved(admin, {
         leavePlanRequestId: leave_plan_request_id,
         staffName: "Staff Member",
         leaveType: String((leavePlan as any).leave_type_key || "annual"),
@@ -606,19 +606,20 @@ export async function POST(request: NextRequest) {
         endDate: String((leavePlan as any).preferred_end_date || ""),
         requestedDays: Number((leavePlan as any).requested_days || 0),
         hodName,
-      }).catch(() => {})
+      })).catch(() => {})
     }
 
     if (requiresMdApproval) {
       const approvalAt = new Date().toISOString()
-      await admin.from("leave_workflow_audit_events").insert({
+      const { error: regionalMdAuditError } = await admin.from("leave_workflow_audit_events").insert({
         request_id: leave_plan_request_id,
         actor_user_id: user.id,
         event_type: "manager_leave_regional_manager_approved_pending_md",
         from_status: currentStatus,
         to_status: "md_approval_pending",
         metadata: { regional_manager_approved_at: approvalAt },
-      }).catch((auditError) => console.warn("[leave-review] MD handoff audit failed:", auditError))
+      })
+      if (regionalMdAuditError) console.warn("[leave-review] MD handoff audit failed:", regionalMdAuditError.message)
       const [{ data: staff }, { data: managingDirectors }] = await Promise.all([
         admin.from("user_profiles").select("first_name, last_name").eq("id", (leavePlan as any).user_id).maybeSingle(),
         admin.from("user_profiles").select("id").eq("role", "managing_director").eq("is_active", true),
@@ -648,7 +649,8 @@ export async function POST(request: NextRequest) {
           is_read: false,
         })),
       ]
-      await admin.from("staff_notifications").insert(notifications).catch((notificationError) => console.warn("[leave-review] MD notifications failed:", notificationError))
+      const { error: managerNotificationsError } = await admin.from("staff_notifications").insert(notifications)
+      if (managerNotificationsError) console.warn("[leave-review] MD notifications failed:", managerNotificationsError.message)
     }
 
     return NextResponse.json({
