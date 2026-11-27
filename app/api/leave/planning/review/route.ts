@@ -3,6 +3,7 @@ import { notifyLeaveHodApproved, notifyLeaveHodDecision } from "@/lib/workflow-e
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { calculateRequestedDays, summarizeManagerReviewStatus, type LeavePlanReviewDecision } from "@/lib/leave-planning"
 import { isAnnualLeave, canNonRegionalPipelineAct, canRegionalPipelineAct, isHodExemptRole, isSelfLeaveWorkflowRoute, resolveStaffAssignments } from "@/lib/hr-workflow"
+import { isManagerLeaveCategory } from "@/lib/leave-memo-access"
 import { isRegionalManagerScopeMatch, resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 import { isAnnualLeaveProcessingOpen, annualLeaveProcessingOpensAt } from "@/lib/annual-leave-processing"
 
@@ -118,7 +119,7 @@ export async function POST(request: NextRequest) {
     // not authoritative and older review cards do not include workflow_route.
     const { data: workflowRequest, error: workflowRequestError } = await admin
       .from("leave_plan_requests")
-      .select("workflow_route, leave_type_key, memo_reference, status, preferred_start_date, user_profiles:user_id(role)")
+      .select("workflow_route, leave_type_key, memo_reference, status, preferred_start_date, staff_category, user_profiles:user_id(role, staff_category, position)")
       .eq("id", leave_plan_request_id)
       .maybeSingle()
     if (workflowRequestError && isSchemaIssue(workflowRequestError)) return schemaIssueResponse(workflowRequestError)
@@ -400,6 +401,10 @@ export async function POST(request: NextRequest) {
       .join("\n\n")
 
     const isRegionalManagerApprovalComplete = isRegionalWorkflow && isRegionalManagerApproval && decision === "approved" && !isRegionalForward
+    const requiresMdApproval = isRegionalManagerApprovalComplete && isManagerLeaveCategory(
+      String((workflowRequest as any).staff_category || requestUserProfile?.staff_category || ""),
+      String(requestUserProfile?.position || ""),
+    )
     const isDepartmentHeadApproval = decision === "approved" && !isRegionalForward && !isRegionalManagerApproval
     // HR Records only steps in at the end of the non-regional pipeline, after
     // HR Executive approval — HOD approval must never hold a request for an
@@ -420,7 +425,7 @@ export async function POST(request: NextRequest) {
           : isRegionalManagerApprovalComplete
             ? "approved"
             : nextStatus,
-      ...(isRegionalManagerApprovalComplete ? { workflow_stage: "completed", memo_generated: true, memo_generated_at: new Date().toISOString(), hr_approver_id: user.id } : {}),
+      ...(isRegionalManagerApprovalComplete ? { workflow_stage: requiresMdApproval ? "md_approval_pending" : "completed", memo_generated: true, memo_generated_at: new Date().toISOString(), hr_approver_id: user.id } : {}),
       manager_recommendation: mergedRecommendations || null,
       ...(isRegionalForward && isAnnualLeave((leavePlan as any).leave_type_key) ? {
         entitlement_days: effectiveEntitlement,
@@ -602,6 +607,48 @@ export async function POST(request: NextRequest) {
         requestedDays: Number((leavePlan as any).requested_days || 0),
         hodName,
       }).catch(() => {})
+    }
+
+    if (requiresMdApproval) {
+      const approvalAt = new Date().toISOString()
+      await admin.from("leave_workflow_audit_events").insert({
+        request_id: leave_plan_request_id,
+        actor_user_id: user.id,
+        event_type: "manager_leave_regional_manager_approved_pending_md",
+        from_status: currentStatus,
+        to_status: "md_approval_pending",
+        metadata: { regional_manager_approved_at: approvalAt },
+      }).catch((auditError) => console.warn("[leave-review] MD handoff audit failed:", auditError))
+      const [{ data: staff }, { data: managingDirectors }] = await Promise.all([
+        admin.from("user_profiles").select("first_name, last_name").eq("id", (leavePlan as any).user_id).maybeSingle(),
+        admin.from("user_profiles").select("id").eq("role", "managing_director").eq("is_active", true),
+      ])
+      const staffName = `${staff?.first_name || ""} ${staff?.last_name || ""}`.trim() || "Staff member"
+      const notifications = [
+        {
+          recipient_id: (leavePlan as any).user_id,
+          sender_id: user.id,
+          sender_role: role,
+          sender_label: "Regional Manager",
+          notification_type: "manager_leave_pending_md_approval",
+          message: "Your Regional Manager has approved your manager-category leave request. It is now awaiting final Managing Director approval.",
+          action_url: "/dashboard/loan-app",
+          data: { leave_plan_request_id, workflow_stage: "md_approval_pending" },
+          is_read: false,
+        },
+        ...(managingDirectors || []).map((director: any) => ({
+          recipient_id: director.id,
+          sender_id: user.id,
+          sender_role: role,
+          sender_label: "Regional Manager",
+          notification_type: "manager_leave_md_approval_required",
+          message: `${staffName} has a Regional Manager-approved manager-category leave request awaiting your final approval.`,
+          action_url: "/dashboard/md-approvals",
+          data: { leave_plan_request_id, workflow_stage: "md_approval_pending" },
+          is_read: false,
+        })),
+      ]
+      await admin.from("staff_notifications").insert(notifications).catch((notificationError) => console.warn("[leave-review] MD notifications failed:", notificationError))
     }
 
     return NextResponse.json({

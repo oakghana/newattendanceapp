@@ -20,6 +20,7 @@ import {
 import { isHodExemptRole, resolveRegionalHrOffice, resolveSelfLeaveRoute, routeLeave } from "@/lib/hr-workflow"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 import { hasAssignedReviewer, REVIEWER_LINKAGE_REQUIRED_MESSAGE } from "@/lib/reviewer-linkage"
+import { isManagerLeaveCategory } from "@/lib/leave-memo-access"
 
 function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
   return String(referenceDate.getFullYear())
@@ -732,6 +733,8 @@ async function fetchHrOfficeAnalytics(admin: any) {
       .select(`
       id,
       status,
+      workflow_stage,
+      staff_category,
       leave_type_key,
       preferred_start_date,
       preferred_end_date,
@@ -762,7 +765,10 @@ async function fetchHrOfficeAnalytics(admin: any) {
 
   const rows = Array.isArray(data) ? data : []
   const outstanding = rows.filter((row: any) => (HR_OFFICE_PENDING_STATUSES as string[]).includes(String(row?.status || "")))
-  const approved = rows.filter((row: any) => String(row?.status || "") === "hr_approved")
+  const approved = rows.filter((row: any) => {
+    if (String(row?.status || "") !== "hr_approved" && String(row?.status || "") !== "approved") return false
+    return !isManagerLeaveCategory(row?.staff_category, row?.user?.position) || String(row?.workflow_stage || "") === "md_approved"
+  })
 
   const onLeaveNow = approved.filter((row: any) => {
     const start = new Date(String(row?.adjusted_start_date || row?.preferred_start_date || ""))

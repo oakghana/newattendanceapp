@@ -9,6 +9,7 @@ import { resolveEntitlementFromProfile } from "@/lib/annual-leave-entitlement"
 import { isHrRecordsRole } from "@/lib/hr-workflow"
 import { calculateAnnualLeaveMemoBreakdown, calculateAnnualLeaveMemoDates, extractAlreadyEnjoyedDays, getNextWorkingDay } from "@/lib/annual-leave-calculator"
 import { ensureMemoSecurity, type MemoType } from "@/lib/memo-security"
+import { getLeaveMemoAccess } from "@/lib/leave-memo-access"
 import { formatDateDDMMYYYY } from "@/lib/date-utils"
 
 export const runtime = "nodejs"
@@ -436,18 +437,7 @@ export async function GET(
     }
 
   const leaveWorkflowRoute = String((leaveRequest as any).workflow_route || "").toLowerCase()
-const isRegionalLeave = leaveWorkflowRoute === "regional" || leaveWorkflowRoute === "regional_hr"
-  const isAnnualLeaveRequest = ["annual", "annual_leave"].includes(String((leaveRequest as any).leave_type_key || "").toLowerCase())
-  const isJanuary2027 = new Date().getFullYear() === 2027 && new Date().getMonth() === 0
-
-  if (isAnnualLeaveRequest && !isJanuary2027) {
-    return NextResponse.json({ error: "Annual leave memos will be generated and available for download only in January 2027." }, { status: 423 })
-  }
-
-  // The official reference is required before any memo can be rendered.
-  if (!String((leaveRequest as any).memo_reference || "").trim() || !(leaveRequest as any).memo_reference_locked) {
-    return NextResponse.json({ error: "This leave memo cannot be downloaded until HR Records enters and locks the official reference." }, { status: 409 })
-  }
+  const isRegionalLeave = leaveWorkflowRoute === "regional" || leaveWorkflowRoute === "regional_hr"
 
   // Load the latest carryover balance because older requests may not have the
     // HR-entered outstanding days copied onto leave_plan_requests yet.
@@ -562,6 +552,21 @@ const isRegionalLeave = leaveWorkflowRoute === "regional" || leaveWorkflowRoute 
       .select("*, departments(name, code)")
       .eq("id", (leaveRequest as any).user_id)
       .single()
+
+    const memoAccess = getLeaveMemoAccess({
+      status: String((leaveRequest as any).status || ""),
+      workflowStage: String((leaveRequest as any).workflow_stage || ""),
+      workflowRoute: leaveWorkflowRoute,
+      leaveType: String((leaveRequest as any).leave_type_key || ""),
+      leaveStartDate: String((leaveRequest as any).hr_approved_start_date || (leaveRequest as any).adjusted_start_date || (leaveRequest as any).preferred_start_date || ""),
+      staffCategory: String((leaveRequest as any).staff_category || (applicantProfile as any)?.staff_category || ""),
+      staffPosition: String((applicantProfile as any)?.position || ""),
+      memoReference: String((leaveRequest as any).memo_reference || ""),
+      memoReferenceLocked: Boolean((leaveRequest as any).memo_reference_locked),
+    })
+    if (!memoAccess.canDownload) {
+      return NextResponse.json({ error: memoAccess.reason || "This leave memo is not available yet." }, { status: 423, headers: { "Cache-Control": "no-store" } })
+    }
 
     // Annual entitlement is based on the applicant profile; travel days stay separate.
   if (leaveRequest && String((leaveRequest as any).leave_type_key || "annual").toLowerCase() === "annual" && applicantProfile) {

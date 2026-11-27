@@ -5,6 +5,7 @@ export interface LeaveMemoAccessInput {
   leaveStartDate: string | null | undefined
   staffCategory: string | null | undefined
   staffPosition?: string | null
+  workflowRoute?: string | null
   memoReference: string | null | undefined
   memoReferenceLocked: boolean | null | undefined
 }
@@ -58,12 +59,13 @@ export function getLeaveMemoAccess(
     return { canDownload: false, reason: "This manager-category leave is waiting for final Managing Director approval.", daysUntilStart: null }
   }
 
-  if (!String(input.memoReference || "").trim() || input.memoReferenceLocked !== true) {
+  const isRegionalWorkflow = ["regional", "regional_hr"].includes(String(input.workflowRoute || "").toLowerCase())
+  if (!isRegionalWorkflow && (!String(input.memoReference || "").trim() || input.memoReferenceLocked !== true)) {
     return { canDownload: false, reason: "HR Records must enter and lock the official memo reference first.", daysUntilStart: null }
   }
 
   const leaveType = String(input.leaveType || "").trim().toLowerCase().replace(/_/g, " ")
-  if (!ANNUAL_LEAVE_TYPES.has(leaveType) && !ANNUAL_LEAVE_TYPES.has(String(input.leaveType || "").trim().toLowerCase())) {
+  if (!ANNUAL_LEAVE_TYPES.has(leaveType)) {
     return { canDownload: true, reason: null, daysUntilStart: null }
   }
 

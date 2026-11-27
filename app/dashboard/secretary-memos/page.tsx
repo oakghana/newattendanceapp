@@ -85,7 +85,7 @@ export default async function SecretaryMemosPage() {
   // Fetch approved leave memos from leave_plan_requests (the correct table)
   const { data: rawLeaveMemos } = await admin
     .from("leave_plan_requests")
-    .select("id, leave_type_key, status, preferred_start_date, preferred_end_date, reason, created_at, hr_approved_at, memo_token, user_id, hr_approver_id")
+    .select("id, leave_type_key, status, workflow_route, workflow_stage, staff_category, preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, hr_approved_start_date, hr_approved_end_date, memo_reference, memo_reference_locked, reason, created_at, hr_approved_at, memo_token, user_id, hr_approver_id")
     .in("status", ["hod_approved", "hr_approved", "approved", "regional_manager_approved"])
     .order("created_at", { ascending: false })
     .limit(300)
@@ -101,7 +101,7 @@ export default async function SecretaryMemosPage() {
   const { data: leaveProfiles } = leaveUserIds.length > 0
     ? await admin
         .from("user_profiles")
-        .select("id, first_name, last_name, employee_id, profile_image_url, department_id, departments(name)")
+        .select("id, first_name, last_name, employee_id, profile_image_url, department_id, staff_category, position, departments(name)")
         .in("id", leaveUserIds)
     : { data: [] }
 
@@ -112,12 +112,17 @@ export default async function SecretaryMemosPage() {
     id: leave.id,
     leave_type: leave.leave_type_key,
     status: leave.status,
-    start_date: leave.preferred_start_date,
-    end_date: leave.preferred_end_date,
+    workflow_route: leave.workflow_route || null,
+    workflow_stage: leave.workflow_stage || null,
+    staff_category: leave.staff_category || null,
+    start_date: leave.hr_approved_start_date || leave.adjusted_start_date || leave.preferred_start_date,
+    end_date: leave.hr_approved_end_date || leave.adjusted_end_date || leave.preferred_end_date,
     reason: leave.reason,
     created_at: leave.created_at,
     hr_approved_at: leave.hr_approved_at,
     memo_token: leave.memo_token,
+    memo_reference: leave.memo_reference,
+    memo_reference_locked: leave.memo_reference_locked,
     user_id: leave.user_id,
     user_profiles: leaveProfileMap.get(leave.user_id) || null,
   }))

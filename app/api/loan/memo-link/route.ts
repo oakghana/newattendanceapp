@@ -28,10 +28,10 @@ export async function POST(request: NextRequest) {
     const [{ data: profile, error: profileError }, { data: loan, error: loanError }] = await Promise.all([
       admin
         .from("user_profiles")
-        .select("id, role, assigned_location_id, departments(name, code)")
+        .select("id, role, first_name, last_name, assigned_location_id, departments(name, code)")
         .eq("id", user.id)
         .single(),
-      admin.from("loan_requests").select("id, user_id, status, workflow_stage, reference_number, md_approved_at, md_approved_by_name, staff_location_id, hod_reviewer_id, committee_reviewer_id, hr_officer_id, director_hr_id").eq("id", loanId).single(),
+      admin.from("loan_requests").select("id, user_id, staff_full_name, status, workflow_stage, reference_number, md_approved_at, md_approved_by_name, staff_location_id, hod_reviewer_id, committee_reviewer_id, hr_officer_id, director_hr_id").eq("id", loanId).single(),
     ])
 
     if (profileError || !profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
@@ -84,6 +84,38 @@ export async function POST(request: NextRequest) {
 
     if (!canAccess) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
+    let staffMemoOpenedAt: string | null = null
+    if (String(loan.user_id || "") === user.id) {
+      const { data: priorOpen } = await admin
+        .from("loan_request_timeline")
+        .select("created_at")
+        .eq("loan_request_id", loanId)
+        .eq("actor_id", user.id)
+        .eq("action_key", "staff_opened_memo")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      staffMemoOpenedAt = priorOpen?.created_at || null
+      if (!staffMemoOpenedAt) {
+        staffMemoOpenedAt = new Date().toISOString()
+        const staffName = `${String((profile as any).first_name || "").trim()} ${String((profile as any).last_name || "").trim()}`.trim() || String((loan as any).staff_full_name || "").trim() || "Staff member"
+        const { error: readLogError } = await admin.from("loan_request_timeline").insert({
+          loan_request_id: loanId,
+          actor_id: user.id,
+          actor_role: profile.role,
+          action_key: "staff_opened_memo",
+          from_status: loanStatus,
+          to_status: loanStatus,
+          note: `${staffName} opened the approved loan memo from the staff portal.`,
+          metadata: { opened_by_id: user.id, opened_by_name: staffName, opened_at: staffMemoOpenedAt },
+        })
+        if (readLogError) {
+          console.warn("[loan-memo-link] Staff memo-open event could not be recorded:", readLogError.message)
+          staffMemoOpenedAt = null
+        }
+      }
+    }
+
     const token = createMemoToken({
       loanId,
       userId: user.id,
@@ -91,7 +123,7 @@ export async function POST(request: NextRequest) {
     })
 
     const path = `/api/loan/memo/${loanId}?token=${encodeURIComponent(token)}${wantsAttachment ? "&disposition=attachment" : ""}`
-    return NextResponse.json({ success: true, path, expiresInSeconds: 600 })
+    return NextResponse.json({ success: true, path, expiresInSeconds: 600, staffMemoOpenedAt })
   } catch (error: any) {
     console.error("memo-link error", error)
     return NextResponse.json({ error: error?.message || "Failed to generate secure memo link" }, { status: 500 })

@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
+import { getLeaveMemoAccess } from "@/lib/leave-memo-access"
 
 export async function GET(request: NextRequest) {
   try {
@@ -55,6 +56,13 @@ export async function GET(request: NextRequest) {
           leave_type_key,
           reason,
           status,
+          workflow_stage,
+          workflow_route,
+          staff_category,
+          memo_reference_locked,
+          hr_approved_start_date,
+          hr_approved_end_date,
+          hr_approved_days,
           created_at,
           adjusted_days,
           requested_days,
@@ -88,7 +96,7 @@ export async function GET(request: NextRequest) {
       // Fetch user profiles
       const { data: profilesData, error: profileError } = await supabase
         .from("user_profiles")
-        .select("id, first_name, last_name, email, employee_id, department_id, assigned_location_id, departments(name)")
+        .select("id, first_name, last_name, email, employee_id, department_id, assigned_location_id, staff_category, position, departments(name)")
         .in("id", userIds)
 
       if (profileError) {
@@ -116,11 +124,16 @@ export async function GET(request: NextRequest) {
           location: locationMap.get((profile as any).assigned_location_id) || "Not Assigned",
           address: "N/A",
           leave_type: req.leave_type_key || "annual",
-          start_date: req.adjusted_start_date || req.preferred_start_date,
-          end_date: req.adjusted_end_date || req.preferred_end_date,
-          days: req.adjusted_days || req.requested_days || 0,
+          start_date: req.hr_approved_start_date || req.adjusted_start_date || req.preferred_start_date,
+          end_date: req.hr_approved_end_date || req.adjusted_end_date || req.preferred_end_date,
+          days: req.hr_approved_days || req.adjusted_days || req.requested_days || 0,
           reason: req.reason || "",
           status: req.status,
+          workflow_route: req.workflow_route || null,
+          workflow_stage: req.workflow_stage || null,
+          staff_category: req.staff_category || (profile as any).staff_category || null,
+          staff_position: (profile as any).position || null,
+          memo_reference_locked: req.memo_reference_locked === true,
           created_at: req.created_at,
           hr_approver_name: req.hr_approver_name,
           hr_approved_at: req.hr_approved_at,
@@ -132,8 +145,19 @@ export async function GET(request: NextRequest) {
           memo_reference: req.memo_reference || null,
         }
       })
+      const downloadableMemos = memos.filter((memo: any) => getLeaveMemoAccess({
+        status: memo.status,
+        workflowStage: memo.workflow_stage,
+        workflowRoute: memo.workflow_route,
+        leaveType: memo.leave_type,
+        leaveStartDate: memo.start_date,
+        staffCategory: memo.staff_category,
+        staffPosition: memo.staff_position,
+        memoReference: memo.memo_reference,
+        memoReferenceLocked: memo.memo_reference_locked,
+      }).canDownload)
 
-      return NextResponse.json({ memos })
+      return NextResponse.json({ memos: downloadableMemos })
     }
 
     // Get staff under this HOD/RM
@@ -192,6 +216,13 @@ export async function GET(request: NextRequest) {
         leave_type_key,
         reason,
         status,
+        workflow_stage,
+        workflow_route,
+        staff_category,
+        memo_reference_locked,
+        hr_approved_start_date,
+        hr_approved_end_date,
+        hr_approved_days,
         created_at,
         hr_approver_name,
         hr_approved_at,
@@ -220,7 +251,7 @@ export async function GET(request: NextRequest) {
     // Fetch user profiles and location data separately
     const { data: profilesData, error: profileError } = await supabase
       .from("user_profiles")
-      .select("id, first_name, last_name, email, assigned_location_id")
+      .select("id, first_name, last_name, email, assigned_location_id, staff_category, position")
       .in("id", staffIds)
 
     if (profileError) {
@@ -247,10 +278,16 @@ export async function GET(request: NextRequest) {
         location: locationMap.get((profile as any).assigned_location_id) || "Not Assigned",
         address: "N/A",
         leave_type: req.leave_type_key || "annual",
-        start_date: req.adjusted_start_date || req.preferred_start_date,
-        end_date: req.adjusted_end_date || req.preferred_end_date,
+        start_date: req.hr_approved_start_date || req.adjusted_start_date || req.preferred_start_date,
+        end_date: req.hr_approved_end_date || req.adjusted_end_date || req.preferred_end_date,
+        days: req.hr_approved_days || req.adjusted_days || req.requested_days || 0,
         reason: req.reason || "",
         status: req.status,
+        workflow_route: req.workflow_route || null,
+        workflow_stage: req.workflow_stage || null,
+        staff_category: req.staff_category || (profile as any).staff_category || null,
+        staff_position: (profile as any).position || null,
+        memo_reference_locked: req.memo_reference_locked === true,
         created_at: req.created_at,
         hr_approver_name: req.hr_approver_name,
         hr_approved_at: req.hr_approved_at,
@@ -259,10 +296,21 @@ export async function GET(request: NextRequest) {
         memo_token: req.memo_token || null,
         memo_reference: req.memo_reference || null,
       }
-    })
+      })
+      const downloadableMemos = memos.filter((memo: any) => getLeaveMemoAccess({
+        status: memo.status,
+        workflowStage: memo.workflow_stage,
+        workflowRoute: memo.workflow_route,
+        leaveType: memo.leave_type,
+        leaveStartDate: memo.start_date,
+        staffCategory: memo.staff_category,
+        staffPosition: memo.staff_position,
+        memoReference: memo.memo_reference,
+        memoReferenceLocked: memo.memo_reference_locked,
+      }).canDownload)
 
-    return NextResponse.json({ memos })
-  } catch (error) {
+      return NextResponse.json({ memos: downloadableMemos })
+    } catch (error) {
     console.error("[v0] Staff approved memos error:", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to fetch approved memos" },
