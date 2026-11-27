@@ -1133,10 +1133,38 @@ export async function GET(request: NextRequest) {
         throw myReqsErr
       }
 
+      const canViewNationwideAnnualLeave = ["loan_officer", "hr_loan_office"].includes(role)
+      let nationwideRequests: any[] = []
+      if (canViewNationwideAnnualLeave) {
+        const result = await fetchAllPages((from, to) =>
+          admin
+            .from("leave_plan_requests")
+            .select(`
+              id, user_id, leave_type_key, status, workflow_route, workflow_stage,
+              preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date,
+              requested_days, adjusted_days, submitted_at, created_at, is_archived, memo_reference_locked,
+              user:user_profiles!leave_plan_requests_user_id_fkey (
+                id, first_name, last_name, employee_id, position,
+                departments(name, code), assigned_location_id,
+                geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
+              )
+            `)
+            .eq("is_archived", false)
+            .order("created_at", { ascending: false })
+            .range(from, to),
+        )
+        if (result.error) {
+          if (isSchemaIssue(result.error)) return buildDegradedModeResponse("loan_office", getSchemaIssueMessage(result.error))
+          throw result.error
+        }
+        nationwideRequests = result.data || []
+      }
+
       return NextResponse.json({
         mode: "loan_office",
         myRequests: myReqs || [],
         requests: myReqs || [],
+        allRequests: canViewNationwideAnnualLeave ? nationwideRequests : myReqs || [],
       })
     }
 

@@ -1225,7 +1225,8 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const isAdmin = normalizedRole === "admin"
   const isDistrictOfficer = normalizedRole === "district_officer"
   const canViewLeaveAnalytics = isHrApprover || isHrOffice || isAdmin
-  const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin || isDistrictOfficer
+  const isNationwideAnnualLeaveViewer = ["hr_leave_office", "hr_office", "leave_loan_officer", "loan_officer", "hr_loan_office"].includes(normalizedRole)
+  const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin || isDistrictOfficer || isNationwideAnnualLeaveViewer
   const canManageLeaveTypePolicy = isHrOffice || isAdmin
   const isLoanOffice = [
     "loan_officer",
@@ -1266,8 +1267,14 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const [allRequestsLocationFilter, setAllRequestsLocationFilter] = useState("all")
   const [allRequestsDeptFilter, setAllRequestsDeptFilter] = useState("all")
   const [allRequestsAnnualMonthFilter, setAllRequestsAnnualMonthFilter] = useState("all")
- const [allRequestsPage, setAllRequestsPage] = useState(1)
- const [hodLocationFilter, setHodLocationFilter] = useState("all")
+  const [allRequestsPage, setAllRequestsPage] = useState(1)
+  const allRequestsSource: any[] = useMemo(() =>
+    (isAdmin || isHrOffice || isNationwideAnnualLeaveViewer)
+      ? (data?.allRequests || data?.requests || [])
+      : (data?.requests || []),
+    [data, isAdmin, isHrOffice, isNationwideAnnualLeaveViewer],
+  )
+  const [hodLocationFilter, setHodLocationFilter] = useState("all")
   const [hodDeptFilter, setHodDeptFilter] = useState("all")
   const [hodReviewView, setHodReviewView] = useState<"requests" | "yet-to-apply">("requests")
   const [allRequestsView, setAllRequestsView] = useState<"requests" | "yet-to-apply">("requests")
@@ -2225,30 +2232,30 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   // Unique location and department options derived from all loaded request data
   const allLeaveLocations: string[] = useMemo(() => {
     const set = new Set<string>()
-    for (const r of (data?.requests || [])) {
+    for (const r of allRequestsSource) {
       const loc = String(r?.user?.geofence_locations?.name || r?.user?.location_name || r?.location_name || "")
       if (loc) set.add(loc)
     }
     return Array.from(set).sort()
-  }, [data?.requests])
+  }, [allRequestsSource])
 
   const allLeaveRanks: string[] = useMemo(() => {
   const set = new Set<string>()
-  for (const r of (data?.requests || [])) {
+  for (const r of allRequestsSource) {
     const rank = String(r?.user?.rank || r?.rank || "")
     if (rank) set.add(rank)
   }
   return Array.from(set).sort()
-  }, [data?.requests])
+  }, [allRequestsSource])
 
   const allLeaveDepts: string[] = useMemo(() => {
   const set = new Set<string>()
-    for (const r of (data?.requests || [])) {
+    for (const r of allRequestsSource) {
       const dept = String(r?.user?.departments?.name || r?.user?.department_name || r?.department_name || "")
       if (dept) set.add(dept)
     }
     return Array.from(set).sort()
-  }, [data?.requests])
+  }, [allRequestsSource])
 
   const hrOfficeQueue: any[] = useMemo(() => {
     if (!data) return []
@@ -2406,7 +2413,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
 
   const allRequestsFiltered: any[] = useMemo(() => {
   if (!data) return []
-  let rows = ((isRegionalHr ? data.allRequests : data.requests) || []).map((r: any) => {
+  let rows = allRequestsSource.map((r: any) => {
   const rawStatus = String(r?.status || "")
   const isRegionalStaffSubmission = isRegionalHr && String(r?.workflow_route || "").toLowerCase() === "regional" && ["pending_hod_review", "pending_hod", "submitted", "pending_review"].includes(rawStatus)
   const normalized = isRegionalStaffSubmission
@@ -2447,7 +2454,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       })
     }
     return rows.sort((a: any, b: any) => new Date(String(b?.created_at || 0)).getTime() - new Date(String(a?.created_at || 0)).getTime())
-  }, [data, allRequestsSearch, allRequestsStatusFilter, allRequestsLocationFilter, allRequestsDeptFilter, allRequestsAnnualMonthFilter])
+  }, [allRequestsSource, allRequestsSearch, allRequestsStatusFilter, allRequestsLocationFilter, allRequestsDeptFilter, allRequestsAnnualMonthFilter])
 
   const allRequestsPageSize = 25
   const allRequestsTotalPages = Math.max(1, Math.ceil(allRequestsFiltered.length / allRequestsPageSize))
@@ -2928,9 +2935,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       t.push({ value: "hr-approve", label: "HR Approvals", Icon: ShieldCheck, count: hrApproverQueue.length + deferRecallPending })
     }
     if (isHrApprover || isAdmin) t.push({ value: "hr-approval-queue", label: "Approval Queue", Icon: ClipboardList, count: (hrApproverData?.requests || []).length })
-    if (canSeeAllRequests && !isRegionalHr) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.requests || []).length })
+    if (canSeeAllRequests && !isRegionalHr) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: allRequestsSource.length })
     return t
-  }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, isDistrictOfficer, canSeeAllRequests, editingId, myRequests.length, hodPendingReviews.length, hodReviewRequests.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests, normalizedRole])
+  }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, isDistrictOfficer, canSeeAllRequests, editingId, myRequests.length, hodPendingReviews.length, hodReviewRequests.length, hrOfficeQueue.length, hrApproverQueue.length, allRequestsSource, normalizedRole])
 
   // ── Render ────��──────��─────────────────���─────���────────────────������──��──
   return (
@@ -5575,7 +5582,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-slate-800">All Leave Requests</p>
-                      <p className="text-xs text-slate-500 mt-0.5">{allRequestsFiltered.length} of {((isRegionalHr ? data?.allRequests : data?.requests) || []).length} total</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{allRequestsFiltered.length} of {allRequestsSource.length} {isRegionalHr ? "regional" : (isHrOffice || isHrApprover || isAdmin || isNationwideAnnualLeaveViewer) ? "nationwide" : "visible"} requests</p>
                     </div>
                     <Button
                       size="sm"
