@@ -932,7 +932,7 @@ export async function GET(request: NextRequest) {
       if (isRegionalHr) {
         officeQuery = officeQuery
           .eq("workflow_route", "regional")
-          .in("status", ["pending_regional_hr_office_review", "pending_regional_hr_review", "pending_regional_manager_approval"])
+          .in("status", ["pending_regional_hr_office_review", "pending_regional_hr_review", "pending_hod_review", "pending_hod", "submitted", "pending_review"])
 
         let scopedStaffQuery = admin.from("user_profiles").select("id").neq("id", user.id)
         const regionalOwnedLocationIds = isAdmin
@@ -978,7 +978,7 @@ export async function GET(request: NextRequest) {
           if (isRegionalHr) {
             fallbackQuery = fallbackQuery
               .eq("workflow_route", "regional")
-              .in("status", ["pending_regional_hr_office_review", "pending_regional_hr_review", "pending_regional_manager_approval"])
+              .in("status", ["pending_regional_hr_office_review", "pending_regional_hr_review", "pending_hod_review", "pending_hod", "submitted", "pending_review"])
               .in("user_id", regionalScopedStaffIds.length ? regionalScopedStaffIds : ["00000000-0000-0000-0000-000000000000"])
           }
           const fallbackResult = await fetchAllPages((from, to) =>
@@ -1263,13 +1263,19 @@ export async function GET(request: NextRequest) {
           .select(`
             id,
             leave_year_period,
-            preferred_start_date,
-            preferred_end_date,
-            leave_type_key,
-            entitlement_days,
-            requested_days,
-            reason,
-            status,
+              preferred_start_date,
+              preferred_end_date,
+              adjusted_start_date,
+              adjusted_end_date,
+              adjusted_days,
+              leave_type_key,
+              workflow_route,
+              workflow_stage,
+              entitlement_days,
+              requested_days,
+              reason,
+              status,
+              memo_reference,
             is_archived,
             submitted_at,
             hod_reviewer_name,
@@ -1361,12 +1367,17 @@ export async function GET(request: NextRequest) {
               leave_year_period,
               preferred_start_date,
               preferred_end_date,
+              adjusted_start_date,
+              adjusted_end_date,
+              adjusted_days,
               leave_type_key,
               entitlement_days,
               requested_days,
               reason,
               status,
               workflow_route,
+              workflow_stage,
+              memo_reference,
               is_archived,
               submitted_at,
               manager_recommendation,

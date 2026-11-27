@@ -18,8 +18,6 @@ export interface ManagerLeaveApprovalRequest {
   preferred_end_date: string
   adjusted_start_date: string | null
   adjusted_end_date: string | null
-  hr_approved_start_date: string | null
-  hr_approved_end_date: string | null
   requested_days: number | null
   adjusted_days: number | null
   hr_approved_at: string | null
@@ -93,8 +91,8 @@ export function MdManagerLeaveApprovals({ requests: initialRequests }: { request
             <div className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">No manager leave requests are waiting for MD approval.</div>
           ) : requests.map((request) => {
             const staffName = `${request.user?.first_name || ""} ${request.user?.last_name || ""}`.trim() || "Staff member"
-            const start = request.hr_approved_start_date || request.adjusted_start_date || request.preferred_start_date
-            const end = request.hr_approved_end_date || request.adjusted_end_date || request.preferred_end_date
+  const start = request.adjusted_start_date || request.preferred_start_date
+  const end = request.adjusted_end_date || request.preferred_end_date
             const days = request.adjusted_days || request.requested_days || 0
             return (
               <div key={request.id} className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-amber-300 hover:bg-amber-50/20">
@@ -136,7 +134,7 @@ export function MdManagerLeaveApprovals({ requests: initialRequests }: { request
           {selectedRequest && (
             <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
               <p className="font-semibold text-slate-900">{leaveTypeLabel(selectedRequest.leave_type_key)} · {selectedRequest.user?.employee_id || "Staff member"}</p>
-              <p className="flex items-center gap-2 text-slate-600"><CalendarDays className="h-4 w-4" /> {formatDate(selectedRequest.hr_approved_start_date || selectedRequest.adjusted_start_date || selectedRequest.preferred_start_date)} – {formatDate(selectedRequest.hr_approved_end_date || selectedRequest.adjusted_end_date || selectedRequest.preferred_end_date)}</p>
+              <p className="flex items-center gap-2 text-slate-600"><CalendarDays className="h-4 w-4" /> {formatDate(selectedRequest.adjusted_start_date || selectedRequest.preferred_start_date)} – {formatDate(selectedRequest.adjusted_end_date || selectedRequest.preferred_end_date)}</p>
               <p className="flex items-center gap-2 text-slate-600"><UserRound className="h-4 w-4" /> HR-approved by {selectedRequest.hr_approver_name || "HR Executive"}</p>
             </div>
           )}

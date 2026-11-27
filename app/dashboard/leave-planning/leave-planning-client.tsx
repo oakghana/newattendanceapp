@@ -770,7 +770,7 @@ function WorkflowStages({ status }: { status: string }) {
   )
 }
 
-// ─── InfoPill ───────────────────────────────────────────────────────���────���───
+// ─── InfoPill ───────────────────────────────────────────────────────����────���───
 function InfoPill({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className={`rounded-lg p-2 text-center border ${highlight ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
@@ -2247,12 +2247,13 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
         leaveType: r?.leave_type_key,
         locationName: r?.location_name || r?.user?.location_name,
       })
-  const isRegionalActionableStatus = status === "pending_regional_hr_office_review" || status === "pending_regional_hr_review"
-  const isForwardedToHrExecutive = status.toLowerCase() === "hr_office_forwarded"
-  if (!((HR_OFFICE_PENDING_STATUSES as string[]).includes(status) || isForwardedToHrExecutive || (isRegionalHr && workflow.route === "regional" && isRegionalActionableStatus))) return false
-  // Regional HR owns only the Regional HR review stage. Once forwarded, the
-  // request leaves this actionable queue and belongs to the Regional Manager.
-  if (isRegionalHr && (workflow.route !== "regional" || !isRegionalActionableStatus)) return false
+      const isRegionalActionableStatus = status === "pending_regional_hr_office_review" || status === "pending_regional_hr_review"
+      const isRegionalStaffSubmission = workflow.route === "regional" && ["pending_hod_review", "pending_hod", "submitted", "pending_review"].includes(status)
+      const isForwardedToHrExecutive = status.toLowerCase() === "hr_office_forwarded"
+      if (!((HR_OFFICE_PENDING_STATUSES as string[]).includes(status) || isForwardedToHrExecutive || (isRegionalHr && workflow.route === "regional" && (isRegionalActionableStatus || isRegionalStaffSubmission)))) return false
+      // Regional HR reviews submitted regional requests. Once forwarded, the
+      // request leaves this actionable queue and belongs to the Regional Manager.
+      if (isRegionalHr && (workflow.route !== "regional" || !(isRegionalActionableStatus || isRegionalStaffSubmission))) return false
       return true
     })
     
@@ -2272,7 +2273,8 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       leaveType: r?.leave_type_key,
       locationName: r?.location_name || r?.user?.location_name,
     })
-    const normalized = workflow.route === "regional" && String(r.status || "") === "pending_hod_review"
+    const isUnroutedRegionalSubmission = workflow.route === "regional" && ["pending_hod_review", "pending_hod", "submitted", "pending_review"].includes(String(r.status || ""))
+    const normalized = isUnroutedRegionalSubmission
       ? { ...r, workflow_status: r.status, workflow_route: "regional", workflow_stage: "pending_regional_hr_review", status: "pending_regional_hr_review" }
       : r
     return { ...normalized, memo_reference: normalized.memo_reference || normalized.reference_number || "" }
@@ -2389,9 +2391,11 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const allRequestsFiltered: any[] = useMemo(() => {
   if (!data) return []
   let rows = ((isRegionalHr ? data.allRequests : data.requests) || []).map((r: any) => {
-  const normalized = isRegionalHr && String(r?.status || "") === "pending_hod_review" && String(r?.leave_type_key || "").toLowerCase() !== "annual"
-  ? { ...r, workflow_status: r.status, status: "pending_regional_hr_review" }
-  : r
+  const rawStatus = String(r?.status || "")
+  const isRegionalStaffSubmission = isRegionalHr && String(r?.workflow_route || "").toLowerCase() === "regional" && ["pending_hod_review", "pending_hod", "submitted", "pending_review"].includes(rawStatus)
+  const normalized = isRegionalStaffSubmission
+    ? { ...r, workflow_status: r.status, workflow_stage: "regional_hr_review", status: "pending_regional_hr_review" }
+    : r
   return { ...normalized, memo_reference: normalized.memo_reference || normalized.reference_number || "" }
   })
   if (allRequestsStatusFilter !== "all") {
@@ -3386,6 +3390,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                   if (!req) return null
                   const rId = review.id
                   const action = hodAction[rId]
+                  const effectiveStart = req.adjusted_start_date || req.preferred_start_date
+                  const effectiveEnd = req.adjusted_end_date || req.preferred_end_date
+                  const effectiveDays = req.adjusted_days ?? req.requested_days
                   const isRegionalRoute = String(req.workflow_route || "").toLowerCase() === "regional"
                   const annualRegionalManagerHold = normalizedRole === "regional_manager" && isRegionalRoute && ["annual", "annual_leave"].includes(String(req.leave_type_key || "").toLowerCase())
                   const canAct = !isRegionalRoute || normalizedRole === "regional_manager"
@@ -3405,10 +3412,15 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
                           <InfoPill label="Leave Type" value={leaveTypeLabelShort(req.leave_type_key)} />
-                          <InfoPill label="Start" value={fmtDate(req.preferred_start_date)} />
-                          <InfoPill label="End" value={fmtDate(req.preferred_end_date)} />
-                          <InfoPill label="Days" value={String(req.requested_days)} highlight />
+                          <InfoPill label={req.adjusted_start_date ? "Adjusted Start" : "Start"} value={fmtDate(effectiveStart)} />
+                          <InfoPill label={req.adjusted_end_date ? "Adjusted End" : "End"} value={fmtDate(effectiveEnd)} />
+                          <InfoPill label="Days" value={String(effectiveDays)} highlight />
                         </div>
+                        {(req.adjusted_start_date || req.adjusted_end_date) && (
+                          <p className="mb-4 text-xs text-slate-600">
+                            Staff submitted {fmtDate(req.preferred_start_date)}–{fmtDate(req.preferred_end_date)}; Regional HR adjusted the approved period above.
+                          </p>
+                        )}
                         {req.reason && (
                           <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-200 mb-4">
                             <strong>Reason:</strong> {req.reason}
@@ -3690,8 +3702,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                   <Alert className="border-blue-200 bg-blue-50">
                     <ClipboardList className="h-4 w-4 text-blue-600" />
                     <AlertDescription className="text-xs text-blue-800 ml-1">
-                      Review HOD-approved leave requests. You may adjust days — add travelling days, deduct public holidays or
-                      prior partial leave enjoyed. All adjustments and reasons will appear in the staff&apos;s official leave memo.
+                      {isRegionalHr
+                        ? "Review leave requests submitted by regional staff, adjust their requested dates and days, then forward them to the Regional Manager for final approval."
+                        : "Review HOD-approved leave requests. You may adjust days — add travelling days, deduct public holidays or prior partial leave enjoyed. All adjustments and reasons will appear in the staff&apos;s official leave memo."}
                     </AlertDescription>
                   </Alert>
 
@@ -4259,7 +4272,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                     {hrOfficeVisibleRows.map((req: any) => {
                   const isExpanded = officeExpanded === req.id
                   const isAnnualRow = String(req.leave_type_key || "").toLowerCase() === "annual"
-                  const adjStart = officeAdjStart[req.id] || req.preferred_start_date || ""
+                  const adjStart = officeAdjStart[req.id] || req.adjusted_start_date || req.preferred_start_date || ""
   const holidayD = Number(officeHolidayDays[req.id] || 0)
   const travelD = Number(officeTravelDays[req.id] || 0)
   const priorD = Number(officePriorDays[req.id] || 0)
@@ -4326,7 +4339,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                               <span className="text-slate-400">·</span>
                               <span>{leaveTypeLabelShort(req.leave_type_key)}</span>
                               <span className="text-slate-400">·</span>
-                              <span>HOD approved {fmtDate(req.hod_reviewed_at)}</span>
+                              <span>{isRegionalHr ? "Staff submitted" : "HOD approved"} {fmtDate(isRegionalHr ? req.created_at : req.hod_reviewed_at)}</span>
                             </p>
                           </div>
                           <Badge className={`text-xs border ml-2 flex-shrink-0 ${getStatusColor(req.status)}`}>
@@ -4425,7 +4438,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                           onClick={async () => {
                             const requestLeaveType = String(req.leave_type_key || req.leave_type || req.leave_type_name || "").toLowerCase()
                             const isAnnualRequest = requestLeaveType === "annual" || requestLeaveType.includes("annual")
-                            if (!isExpanded && isHrOffice && isAnnualRequest) {
+                            if (!isExpanded && isHrOffice && !isRegionalHr && isAnnualRequest) {
                               const startDate = String(req.preferred_start_date || req.original_start_date || req.start_date || "")
                               const parsedStart = startDate ? new Date(`${startDate}T00:00:00`) : null
                               if (parsedStart && !Number.isNaN(parsedStart.getTime())) {
@@ -4448,15 +4461,15 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                                 const leaveType = String(req.leave_type_key || "")
                                 return key.includes(leaveType) || key.includes("approval")
                               }) || templateOptions[0]
-                              setOfficeAdjStart((p) => ({ ...p, [req.id]: req.preferred_start_date || "" }))
+                              setOfficeAdjStart((p) => ({ ...p, [req.id]: req.adjusted_start_date || req.preferred_start_date || "" }))
                               // Annual leave defaults to the auto-calculated end date (derived from the
                               // breakdown fields below), so it's left unset here �� only a manual edit to
                               // the field should populate an override. Non-annual leave types have no
                               // auto-calculation, so they start from the request's own end date.
                               if (String(req.leave_type_key || "").toLowerCase() !== "annual") {
-                                setOfficeAdjEnd((p) => ({ ...p, [req.id]: req.preferred_end_date || "" }))
+                                setOfficeAdjEnd((p) => ({ ...p, [req.id]: req.adjusted_end_date || req.preferred_end_date || "" }))
                               } else {
-                                setOfficeAdjEnd((p) => ({ ...p, [req.id]: "" }))
+                                setOfficeAdjEnd((p) => ({ ...p, [req.id]: req.adjusted_end_date || "" }))
                               }
                               setOfficeTemplateKey((p) => ({ ...p, [req.id]: matchingTemplate?.template_key || getDefaultMemoTemplateKey(String(req.leave_type_key || "annual")) }))
                               const memoTpl = buildMemoTemplate(req)
@@ -4489,7 +4502,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                             }
                           }}
                           className="text-xs h-8 border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed">
-                          {isExpanded ? "▲ Collapse" : "▼ Adjust & Forward"}
+                          {isExpanded ? "▲ Collapse" : isRegionalHr ? "▼ Adjust Dates & Forward to Regional Manager" : "▼ Adjust & Forward"}
                         </Button>
                         <Button
                           size="sm"

@@ -166,7 +166,9 @@ export async function GET(request: NextRequest) {
       try {
         const ms = new Date(r.endDate).getTime() - new Date(r.startDate).getTime()
         days = Math.max(1, Math.round(ms / 86400000) + 1)
-      } catch {}
+      } catch {
+        days = 0
+      }
       return {
         id: r.id,
         userId: r.userId,

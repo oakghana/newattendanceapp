@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     const { data: leaveRequest, error: requestError } = await admin
       .from("leave_plan_requests")
-      .select("id, user_id, status, workflow_stage, staff_category, leave_type_key, preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, hr_approved_start_date, hr_approved_end_date, requested_days, adjusted_days")
+      .select("id, user_id, status, workflow_stage, staff_category, leave_type_key, preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, requested_days, adjusted_days")
       .eq("id", requestId)
       .maybeSingle()
 
@@ -76,8 +76,8 @@ export async function POST(request: NextRequest) {
       if (error) console.error("[leave-md-approval] audit insert failed:", error.message)
     })
 
-    const effectiveStart = String(leaveRequest.hr_approved_start_date || leaveRequest.adjusted_start_date || leaveRequest.preferred_start_date || "")
-    const effectiveEnd = String(leaveRequest.hr_approved_end_date || leaveRequest.adjusted_end_date || leaveRequest.preferred_end_date || "")
+    const effectiveStart = String(leaveRequest.adjusted_start_date || leaveRequest.preferred_start_date || "")
+    const effectiveEnd = String(leaveRequest.adjusted_end_date || leaveRequest.preferred_end_date || "")
     if (effectiveStart && effectiveEnd) {
       const start = new Date(`${effectiveStart.slice(0, 10)}T00:00:00Z`)
       const end = new Date(`${effectiveEnd.slice(0, 10)}T00:00:00Z`)
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
       }
       if (dates.length) {
         await admin.from("leave_status").upsert(
-          dates.map((date) => ({ user_id: leaveRequest.user_id, date, status: "approved", leave_plan_request_id: requestId })),
+          dates.map((date) => ({ user_id: leaveRequest.user_id, date, status: "approved", leave_request_id: requestId })),
           { onConflict: "user_id,date" },
         ).then(({ error }) => {
           if (error) console.warn("[leave-md-approval] could not seed leave status dates:", error.message)

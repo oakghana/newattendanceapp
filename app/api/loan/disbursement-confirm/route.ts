@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (staffAcknowledgement) {
-      const isManagingDirectorApproved = Boolean(loan.md_approved_at) && ["approved_director", "md_approved", "referenced", "staff_receiving_funds"].includes(String(loan.status || ""))
+      const isManagingDirectorApproved = Boolean(loan.md_approved_at) && ["approved_director", "md_approved", "referenced", "staff_receiving_funds", "partially_recovered"].includes(String(loan.status || ""))
       if (!isManagingDirectorApproved) {
         return NextResponse.json({ error: "Receipt can only be acknowledged after the Managing Director has approved the loan." }, { status: 409 })
       }
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const alreadyConfirmedByStatus = ["partially_recovered", "fully_recovered", "payment_completed"].includes(String(loan.status || "")) || Boolean(loan.repayment_plan_generated_at)
+    const scheduleAlreadyStarted = Boolean(loan.repayment_plan_generated_at)
     const { data: existingReceiptEvent } = await admin
       .from("loan_request_timeline")
       .select("id")
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       .in("action_key", ["confirm_disbursement", "staff_acknowledge_receipt"])
       .limit(1)
       .maybeSingle()
-    if (alreadyConfirmedByStatus || existingReceiptEvent) {
+    if (scheduleAlreadyStarted || ["fully_recovered", "payment_completed"].includes(String(loan.status || ""))) {
       return NextResponse.json({ error: "Receipt has already been confirmed and the repayment process has started." }, { status: 409 })
     }
 
@@ -136,30 +136,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Receipt was already confirmed by another action." }, { status: 409 })
     }
 
-    // Record audit entry in loan_request_timeline
-    try {
-      await admin.from("loan_request_timeline").insert({
-        loan_request_id: loanId,
-        actor_id: user.id,
-        actor_role: profile.role,
-        action_key: staffAcknowledgement ? "staff_acknowledge_receipt" : "confirm_disbursement",
-        from_status: loan.status,
-        to_status: "partially_recovered",
-        note: staffAcknowledgement
-          ? `Staff confirmed receipt of the loan disbursement: ${confirmedByName}.`
-          : `Disbursement confirmed received by staff. Action taken by ${confirmedByName}.`,
-        metadata: {
-          confirmed_by_id: user.id,
-          confirmed_by_name: confirmedByName,
-          confirmed_at: nowIso,
-          confirmation_source: staffAcknowledgement ? "staff_portal" : "accounts_office",
-        },
-      })
-    } catch (timelineErr) {
-      console.warn("[v0] Non-critical timeline insertion warning:", timelineErr)
+    // Record audit entry once. Retrying a failed schedule generation keeps the first receipt event intact.
+    if (!existingReceiptEvent) {
+      try {
+        await admin.from("loan_request_timeline").insert({
+          loan_request_id: loanId,
+          actor_id: user.id,
+          actor_role: profile.role,
+          action_key: staffAcknowledgement ? "staff_acknowledge_receipt" : "confirm_disbursement",
+          from_status: loan.status,
+          to_status: "partially_recovered",
+          note: staffAcknowledgement
+            ? `Staff confirmed receipt of the loan disbursement: ${confirmedByName}.`
+            : `Disbursement confirmed received by staff. Action taken by ${confirmedByName}.`,
+          metadata: {
+            confirmed_by_id: user.id,
+            confirmed_by_name: confirmedByName,
+            confirmed_at: nowIso,
+            confirmation_source: staffAcknowledgement ? "staff_portal" : "accounts_office",
+          },
+        })
+      } catch (timelineErr) {
+        console.warn("[v0] Non-critical timeline insertion warning:", timelineErr)
+      }
     }
 
-    // Every Accounts-confirmed disbursement, including Funeral Loans, receives a monthly repayment schedule.
+    // Every receipt confirmation, including Funeral Loans and staff acknowledgments, receives a monthly repayment schedule.
     const durationMonths = Math.max(1, Math.trunc(Number(loan.recovery_months || loan.repayment_duration_months || 12)))
     const scheduleStartDate = loan.recovery_start_date || loan.disbursement_date || nowIso.slice(0, 10)
     const { error: scheduleError } = await admin.rpc("generate_repayment_schedule", {

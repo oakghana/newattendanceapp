@@ -25,7 +25,7 @@ export default async function MdApprovalsPage() {
   const admin = await createAdminClient()
   const { data: pendingManagerLeaveRows, error: managerLeaveError } = await admin
     .from("leave_plan_requests")
-.select("id, user_id, status, workflow_stage, leave_type_key, staff_category, preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, hr_approved_start_date, hr_approved_end_date, requested_days, adjusted_days, hr_approved_at, hr_approver_name, memo_reference")
+.select("id, user_id, status, workflow_stage, leave_type_key, staff_category, preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, requested_days, adjusted_days, hr_approved_at, hr_approver_name, memo_reference")
     .in("status", ["hr_approved", "approved", "regional_manager_approved"])
     .eq("is_archived", false)
     .order("hr_approved_at", { ascending: true })

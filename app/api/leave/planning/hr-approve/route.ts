@@ -451,9 +451,9 @@ export async function POST(request: NextRequest) {
     const hasAnySignature = resolvedSigDataUrl.length > 0 || resolvedSigText.length > 0
 
     const now = new Date().toISOString()
-    const effectiveStart = String((leaveRequest as any).adjusted_start_date || (leaveRequest as any).preferred_start_date || "")
-    const effectiveEnd = String((leaveRequest as any).adjusted_end_date || (leaveRequest as any).preferred_end_date || "")
-    const effectiveDays = Number((leaveRequest as any).adjusted_days || (leaveRequest as any).requested_days || 0)
+  const effectiveStart = String(hr_approved_start_date || (leaveRequest as any).adjusted_start_date || (leaveRequest as any).preferred_start_date || "")
+  const effectiveEnd = String(hr_approved_end_date || (leaveRequest as any).adjusted_end_date || (leaveRequest as any).preferred_end_date || "")
+  const effectiveDays = Number(hr_approved_days ?? (leaveRequest as any).adjusted_days ?? (leaveRequest as any).requested_days ?? 0)
     const approvedMonths = Number((leaveRequest as any).approved_months || Math.max(1, Math.round(effectiveDays / 30)))
     const returnDate = new Date(effectiveEnd)
     if (!Number.isNaN(returnDate.getTime())) {
@@ -627,10 +627,10 @@ export async function POST(request: NextRequest) {
       updated_at: now,
     }
     
-    // Add HR executive date overrides if provided (safe to omit if columns don't exist yet)
-    if (hr_approved_start_date) updatePayload.hr_approved_start_date = String(hr_approved_start_date).slice(0, 10)
-    if (hr_approved_end_date) updatePayload.hr_approved_end_date = String(hr_approved_end_date).slice(0, 10)
-    if (hr_approved_days !== null && hr_approved_days !== undefined) updatePayload.hr_approved_days = Number(hr_approved_days)
+    // Store HR Executive date overrides in the existing adjusted date fields.
+    if (hr_approved_start_date) updatePayload.adjusted_start_date = String(hr_approved_start_date).slice(0, 10)
+    if (hr_approved_end_date) updatePayload.adjusted_end_date = String(hr_approved_end_date).slice(0, 10)
+    if (hr_approved_days !== null && hr_approved_days !== undefined) updatePayload.adjusted_days = Number(hr_approved_days)
 
     const { error: approveError } = await admin
       .from("leave_plan_requests")

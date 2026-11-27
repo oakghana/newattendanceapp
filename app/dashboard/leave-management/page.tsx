@@ -2,6 +2,7 @@ import { createAdminClient, createClient, getAuthenticatedUser } from "@/lib/sup
 import { LeaveManagementModuleClient } from "./leave-management-module-client"
 import { LeaveManagementPageWrapper } from "@/components/leave/leave-management-page-wrapper"
 import { isExcludedLocation, resolveSelfLeaveRoute } from "@/lib/hr-workflow"
+import { hasAssignedReviewer } from "@/lib/reviewer-linkage"
 import { Suspense } from "react"
 
 export default async function LeaveManagementPage() {
@@ -79,12 +80,6 @@ export default async function LeaveManagementPage() {
       admin
         .from("loan_hod_linkages")
         .select("id")
-        .eq("staff_user_id", user.id)
-        .limit(1)
-        .maybeSingle(),
-      admin
-        .from("loan_hod_linkages")
-        .select("id")
         .eq("hod_user_id", user.id)
         .limit(1)
         .maybeSingle(),
@@ -100,11 +95,15 @@ export default async function LeaveManagementPage() {
       )
     }
 
-    const results = await Promise.all(queries)
-    const [requestsRes, linkageRes, assignedHodRes, locationRes] = locationId
+    const [results, hasAssignedLeaveReviewer] = await Promise.all([
+      Promise.all(queries),
+      hasAssignedReviewer(admin, user.id),
+    ])
+    const [requestsRes, assignedHodRes, locationRes] = locationId
       ? results
-      : [results[0], results[1], results[2], undefined]
+      : [results[0], results[1], undefined]
     isAssignedHod = canReviewLeaveAsHod && Boolean((assignedHodRes?.data as any)?.id)
+    hasHodLinkage = hasAssignedLeaveReviewer
     userLocationName = (locationRes?.data as any)?.name || null
     const selfLeaveResolution = resolveSelfLeaveRoute({ role: profile.role, locationName: userLocationName })
 
@@ -318,9 +317,6 @@ export default async function LeaveManagementPage() {
       rank: (request.user_profiles as any)?.position || "",
     }))
 
-// Accounts Executive is an explicit HOD role. Do not make the tab depend
-    // on a staff-side linkage row or on whether the queue currently has items.
-    hasHodLinkage = canReviewLeaveAsHod && Boolean((assignedHodRes?.data as any)?.id)
     isAssignedHod = canReviewLeaveAsHod || (isAssignedHod && managerNotifications.length > 0)
   } catch (err) {
     console.error("[v0] Error fetching essential data:", err)

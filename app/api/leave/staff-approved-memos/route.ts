@@ -1,33 +1,31 @@
-import { createClient } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { getLeaveMemoAccess } from "@/lib/leave-memo-access"
 
 export async function GET(request: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json(
-        { error: "Server configuration error" },
-        { status: 500 }
-      )
-    }
+    const admin = await createAdminClient()
+    const { data: viewerProfile, error: profileError } = await admin
+      .from("user_profiles")
+      .select("id, role, department_id, assigned_location_id, region_id")
+      .eq("id", user.id)
+      .maybeSingle()
+    if (profileError || !viewerProfile) return NextResponse.json({ error: "Profile not found" }, { status: 403 })
 
-    const supabase = createClient(supabaseUrl, supabaseKey)
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get("user_id")
-    const userRole = searchParams.get("user_role")
-    const userDepartment = searchParams.get("user_department")
-
-    if (!userId || !userRole) {
-      return NextResponse.json(
-        { error: "Missing required parameters" },
-        { status: 400 }
-      )
+    const requestedUserId = searchParams.get("user_id")
+    if (requestedUserId && requestedUserId !== user.id) {
+      return NextResponse.json({ error: "You may only request memo access for your signed-in account." }, { status: 403 })
     }
+    const userId = user.id
+    const userRole = String(viewerProfile.role || "")
+    const userDepartment = viewerProfile.department_id
 
-    const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
+    const normalizedRole = userRole.toLowerCase().replace(/[-\s]+/g, "_")
   const isHodOrRm = ["department_head", "transport_manager", "regional_manager", "regional_manager_officer"].includes(normalizedRole)
   const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isHrExecutive = ["director_hr", "manager_hr", "admin", "hr_leave_office", "leave_loan_officer", "hr_office"].includes(normalizedRole)
@@ -60,9 +58,6 @@ export async function GET(request: NextRequest) {
           workflow_route,
           staff_category,
           memo_reference_locked,
-          hr_approved_start_date,
-          hr_approved_end_date,
-          hr_approved_days,
           created_at,
           adjusted_days,
           requested_days,
@@ -106,7 +101,7 @@ export async function GET(request: NextRequest) {
       const profileMap = new Map((profilesData || []).map((p: any) => [p.id, p]))
       const locationIds = [...new Set((profilesData || []).map((p: any) => p.assigned_location_id).filter(Boolean))]
       const { data: locationsData } = locationIds.length
-        ? await supabase.from("geofence_locations").select("id, name, location_code").in("id", locationIds)
+        ? await admin.from("geofence_locations").select("id, name, location_code").in("id", locationIds)
         : { data: [] }
       const locationMap = new Map((locationsData || []).map((location: any) => [location.id, location.name || location.location_code]))
 
@@ -124,9 +119,9 @@ export async function GET(request: NextRequest) {
           location: locationMap.get((profile as any).assigned_location_id) || "Not Assigned",
           address: "N/A",
           leave_type: req.leave_type_key || "annual",
-          start_date: req.hr_approved_start_date || req.adjusted_start_date || req.preferred_start_date,
-          end_date: req.hr_approved_end_date || req.adjusted_end_date || req.preferred_end_date,
-          days: req.hr_approved_days || req.adjusted_days || req.requested_days || 0,
+          start_date: req.adjusted_start_date || req.preferred_start_date,
+          end_date: req.adjusted_end_date || req.preferred_end_date,
+          days: req.adjusted_days || req.requested_days || 0,
           reason: req.reason || "",
           status: req.status,
           workflow_route: req.workflow_route || null,
@@ -220,9 +215,6 @@ export async function GET(request: NextRequest) {
         workflow_route,
         staff_category,
         memo_reference_locked,
-        hr_approved_start_date,
-        hr_approved_end_date,
-        hr_approved_days,
         created_at,
         hr_approver_name,
         hr_approved_at,
@@ -262,7 +254,7 @@ export async function GET(request: NextRequest) {
     const profileMap = new Map((profilesData || []).map((p: any) => [p.id, p]))
     const locationIds = [...new Set((profilesData || []).map((p: any) => p.assigned_location_id).filter(Boolean))]
     const { data: locationsData } = locationIds.length
-      ? await supabase.from("geofence_locations").select("id, name, location_code").in("id", locationIds)
+      ? await admin.from("geofence_locations").select("id, name, location_code").in("id", locationIds)
       : { data: [] }
     const locationMap = new Map((locationsData || []).map((location: any) => [location.id, location.name || location.location_code]))
 
@@ -278,9 +270,9 @@ export async function GET(request: NextRequest) {
         location: locationMap.get((profile as any).assigned_location_id) || "Not Assigned",
         address: "N/A",
         leave_type: req.leave_type_key || "annual",
-        start_date: req.hr_approved_start_date || req.adjusted_start_date || req.preferred_start_date,
-        end_date: req.hr_approved_end_date || req.adjusted_end_date || req.preferred_end_date,
-        days: req.hr_approved_days || req.adjusted_days || req.requested_days || 0,
+        start_date: req.adjusted_start_date || req.preferred_start_date,
+        end_date: req.adjusted_end_date || req.preferred_end_date,
+        days: req.adjusted_days || req.requested_days || 0,
         reason: req.reason || "",
         status: req.status,
         workflow_route: req.workflow_route || null,

@@ -5,7 +5,6 @@ import { calculateRequestedDays, summarizeManagerReviewStatus, type LeavePlanRev
 import { isAnnualLeave, canNonRegionalPipelineAct, canRegionalPipelineAct, isHodExemptRole, isSelfLeaveWorkflowRoute, resolveStaffAssignments } from "@/lib/hr-workflow"
 import { isManagerLeaveCategory } from "@/lib/leave-memo-access"
 import { isRegionalManagerScopeMatch, resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
-import { isAnnualLeaveProcessingOpen, annualLeaveProcessingOpensAt } from "@/lib/annual-leave-processing"
 
 function isSchemaIssue(error: any) {
   const code = error?.code || ""
@@ -147,19 +146,6 @@ export async function POST(request: NextRequest) {
     if (isHodExemptRole(requestUserProfile?.role) && !isAdmin && !isRegionalRequest && ["department_head", "transport_manager"].includes(role)) {
       return NextResponse.json({ error: "NSP and Intern leave requests do not require HOD review." }, { status: 403 })
     }
-    const isAnnualRegionalHrProcessing =
-      isRegionalRequest &&
-      isRegionalHr &&
-      isAnnualLeave(String((workflowRequest as any).leave_type_key || "")) &&
-      (isRegionalForward || action === "recommend_change")
-    if (isAnnualRegionalHrProcessing && !isAnnualLeaveProcessingOpen(String((workflowRequest as any).preferred_start_date || ""))) {
-      const opensAt = annualLeaveProcessingOpensAt(String((workflowRequest as any).preferred_start_date || ""))
-      return NextResponse.json(
-        { error: `Annual Leave processing opens on ${opensAt?.toLocaleDateString("en-GB") || "the first day of the previous month"}. Regional HR cannot adjust or forward this request before that date.`, code: "ANNUAL_LEAVE_PROCESSING_NOT_OPEN" },
-        { status: 423 },
-      )
-    }
-
     // A staff member can be linked to more than one HOD/Regional HR/Regional
     // Manager. All of them see the request, but only the first one to act may
     // endorse or approve it — once any of them has already moved it past this
@@ -169,6 +155,7 @@ export async function POST(request: NextRequest) {
     const currentStatus = String((workflowRequest as any).status || "")
     const stillActionableForThisStage = isRegionalForward
       ? ["pending_regional_hr_office_review", "pending_regional_hr_review"].includes(currentStatus)
+        || (isRegionalRequest && ["pending_hod_review", "pending_hod", "submitted", "pending_review"].includes(currentStatus))
       : isRegionalManagerApproval
         ? currentStatus === "pending_regional_manager_approval"
         : ["pending_hod_review", "pending_manager_review"].includes(currentStatus)
@@ -308,7 +295,7 @@ export async function POST(request: NextRequest) {
 
     const { data: leavePlan, error: leavePlanError } = await admin
       .from("leave_plan_requests")
-      .select("id, user_id, preferred_start_date, preferred_end_date, entitlement_days, workflow_route, leave_type_key, requested_days, memo_reference, user_profiles:user_id(assigned_location_id, region_id)")
+      .select("id, user_id, preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, adjusted_days, entitlement_days, workflow_route, leave_type_key, requested_days, memo_reference, user_profiles:user_id(assigned_location_id, region_id)")
       .eq("id", leave_plan_request_id)
       .single()
 
@@ -351,9 +338,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    let nextStartDate = leavePlan.preferred_start_date
-    let nextEndDate = leavePlan.preferred_end_date
-    let nextRequestedDays = calculateRequestedDays(nextStartDate, nextEndDate)
+    let nextStartDate = leavePlan.adjusted_start_date || leavePlan.preferred_start_date
+    let nextEndDate = leavePlan.adjusted_end_date || leavePlan.preferred_end_date
+    let nextRequestedDays = Number(leavePlan.adjusted_days || calculateRequestedDays(nextStartDate, nextEndDate))
     let effectiveEntitlement = Number(leavePlan.entitlement_days || 0)
     let entitlementExceededWarning: string | null = null
 
@@ -449,7 +436,7 @@ export async function POST(request: NextRequest) {
     const leavePlanColumns = new Set([
       "status", "workflow_stage", "manager_recommendation", "memo_reference", "updated_at", "entitlement_days", "outstanding_leave_days_added", "travelling_days_added", "adjustment_breakdown", "adjustment_reason",
       "memo_generated", "memo_generated_at", "hr_approver_id", "hod_reviewer_id", "hod_reviewed_at",
-      "hod_decision", "preferred_start_date", "preferred_end_date", "requested_days",
+      "hod_decision", "preferred_start_date", "preferred_end_date", "requested_days", "adjusted_start_date", "adjusted_end_date", "adjusted_days",
       "hr_approver_name", "hr_signature_data_url", "hr_approved_at", "hr_approval_note",
       "regional_manager_id", "regional_manager_name", "regional_manager_signature_data_url", "regional_manager_signature_text", "regional_manager_approved_at", "regional_manager_approval_note",
     ])
@@ -488,7 +475,11 @@ export async function POST(request: NextRequest) {
       requestUpdatePayload.hod_decision = "changes_requested"
     }
 
-    if (isRegionalForward || decision === "recommend_change") {
+    if (isRegionalForward) {
+      requestUpdatePayload.adjusted_start_date = nextStartDate
+      requestUpdatePayload.adjusted_end_date = nextEndDate
+      requestUpdatePayload.adjusted_days = nextRequestedDays
+    } else if (decision === "recommend_change") {
       requestUpdatePayload.preferred_start_date = nextStartDate
       requestUpdatePayload.preferred_end_date = nextEndDate
       requestUpdatePayload.requested_days = nextRequestedDays
@@ -499,6 +490,16 @@ export async function POST(request: NextRequest) {
     // schema guard when they are appended later in the approval flow.
     for (const key of Object.keys(requestUpdatePayload)) {
       if (!leavePlanColumns.has(key)) delete requestUpdatePayload[key]
+    }
+
+    const regionalManagerAssignment = isRegionalForward
+      ? await resolveStaffAssignments(admin, (leavePlan as any).user_id)
+      : null
+    if (isRegionalForward && !regionalManagerAssignment?.regionalManagerId) {
+      return NextResponse.json(
+        { error: "No Regional Manager is mapped to this staff member's location. Ask an admin to configure the regional office mapping before forwarding." },
+        { status: 400 },
+      )
     }
 
     let { error: requestUpdateError } = await admin
@@ -532,19 +533,30 @@ export async function POST(request: NextRequest) {
     // request would update status but never appear as an assigned review for
     // the Regional Manager — it would silently vanish from every queue.
     if (isRegionalForward) {
-      const assignment = await resolveStaffAssignments(admin, (leavePlan as any).user_id)
-      if (!assignment.regionalManagerId) {
-        return NextResponse.json(
-          { error: "No Regional Manager is mapped to this staff member's location. Ask an admin to configure the regional office mapping before forwarding." },
-          { status: 400 },
-        )
-      }
+      const { error: regionalAdjustmentAuditError } = await admin.from("leave_workflow_audit_events").insert({
+        request_id: leave_plan_request_id,
+        actor_user_id: user.id,
+        event_type: "regional_hr_adjusted_and_forwarded",
+        from_status: currentStatus,
+        to_status: "pending_regional_manager_approval",
+        metadata: {
+          original_start_date: leavePlan.preferred_start_date,
+          original_end_date: leavePlan.preferred_end_date,
+          adjusted_start_date: nextStartDate,
+          adjusted_end_date: nextEndDate,
+          adjusted_days: nextRequestedDays,
+          recommendation: String(recommendation || "").trim() || null,
+          memo_reference: normalizedMemoReference || null,
+        },
+      })
+      if (regionalAdjustmentAuditError) console.warn("[leave-review] Regional HR adjustment audit failed:", regionalAdjustmentAuditError.message)
+
       const { error: assignManagerError } = await admin
         .from("leave_plan_reviews")
         .upsert(
           {
             leave_plan_request_id,
-            reviewer_id: assignment.regionalManagerId,
+            reviewer_id: regionalManagerAssignment!.regionalManagerId!,
             reviewer_role: "regional_manager",
             decision: "pending",
             recommendation: null,
