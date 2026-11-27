@@ -80,6 +80,21 @@ import {
   Info,
 } from "lucide-react"
 
+const ANNUAL_START_MONTH_OPTIONS = [
+  { value: "01", label: "January" },
+  { value: "02", label: "February" },
+  { value: "03", label: "March" },
+  { value: "04", label: "April" },
+  { value: "05", label: "May" },
+  { value: "06", label: "June" },
+  { value: "07", label: "July" },
+  { value: "08", label: "August" },
+  { value: "09", label: "September" },
+  { value: "10", label: "October" },
+  { value: "11", label: "November" },
+  { value: "12", label: "December" },
+] as const
+
 interface LeaveAnalyticsRecord {
   id: string
   user_id: string
@@ -770,7 +785,7 @@ function WorkflowStages({ status }: { status: string }) {
   )
 }
 
-// ─── InfoPill ───────────────────────────────────────────────────────�����────���───
+// ─── InfoPill ───────────────────────────────────────────────────────������────���───
 function InfoPill({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className={`rounded-lg p-2 text-center border ${highlight ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
@@ -1210,7 +1225,8 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const isAdmin = normalizedRole === "admin"
   const isDistrictOfficer = normalizedRole === "district_officer"
   const canViewLeaveAnalytics = isHrApprover || isHrOffice || isAdmin
-  const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin || isDistrictOfficer
+  const isNationwideAnnualLeaveViewer = ["hr_leave_office", "hr_office", "leave_loan_officer", "loan_officer", "hr_loan_office"].includes(normalizedRole)
+  const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin || isDistrictOfficer || isNationwideAnnualLeaveViewer
   const canManageLeaveTypePolicy = isHrOffice || isAdmin
   const isLoanOffice = [
     "loan_officer",
@@ -1249,9 +1265,16 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   const [allRequestsSearch, setAllRequestsSearch] = useState("")
   const [allRequestsStatusFilter, setAllRequestsStatusFilter] = useState("all")
   const [allRequestsLocationFilter, setAllRequestsLocationFilter] = useState("all")
- const [allRequestsDeptFilter, setAllRequestsDeptFilter] = useState("all")
- const [allRequestsPage, setAllRequestsPage] = useState(1)
- const [hodLocationFilter, setHodLocationFilter] = useState("all")
+  const [allRequestsDeptFilter, setAllRequestsDeptFilter] = useState("all")
+  const [allRequestsAnnualMonthFilter, setAllRequestsAnnualMonthFilter] = useState("all")
+  const [allRequestsPage, setAllRequestsPage] = useState(1)
+  const allRequestsSource: any[] = useMemo(() =>
+    (isAdmin || isHrOffice || isNationwideAnnualLeaveViewer)
+      ? (data?.allRequests || data?.requests || [])
+      : (data?.requests || []),
+    [data, isAdmin, isHrOffice, isNationwideAnnualLeaveViewer],
+  )
+  const [hodLocationFilter, setHodLocationFilter] = useState("all")
   const [hodDeptFilter, setHodDeptFilter] = useState("all")
   const [hodReviewView, setHodReviewView] = useState<"requests" | "yet-to-apply">("requests")
   const [allRequestsView, setAllRequestsView] = useState<"requests" | "yet-to-apply">("requests")
@@ -2209,30 +2232,30 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
   // Unique location and department options derived from all loaded request data
   const allLeaveLocations: string[] = useMemo(() => {
     const set = new Set<string>()
-    for (const r of (data?.requests || [])) {
+    for (const r of allRequestsSource) {
       const loc = String(r?.user?.geofence_locations?.name || r?.user?.location_name || r?.location_name || "")
       if (loc) set.add(loc)
     }
     return Array.from(set).sort()
-  }, [data?.requests])
+  }, [allRequestsSource])
 
   const allLeaveRanks: string[] = useMemo(() => {
   const set = new Set<string>()
-  for (const r of (data?.requests || [])) {
+  for (const r of allRequestsSource) {
     const rank = String(r?.user?.rank || r?.rank || "")
     if (rank) set.add(rank)
   }
   return Array.from(set).sort()
-  }, [data?.requests])
+  }, [allRequestsSource])
 
   const allLeaveDepts: string[] = useMemo(() => {
   const set = new Set<string>()
-    for (const r of (data?.requests || [])) {
+    for (const r of allRequestsSource) {
       const dept = String(r?.user?.departments?.name || r?.user?.department_name || r?.department_name || "")
       if (dept) set.add(dept)
     }
     return Array.from(set).sort()
-  }, [data?.requests])
+  }, [allRequestsSource])
 
   const hrOfficeQueue: any[] = useMemo(() => {
     if (!data) return []
@@ -2390,7 +2413,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
 
   const allRequestsFiltered: any[] = useMemo(() => {
   if (!data) return []
-  let rows = ((isRegionalHr ? data.allRequests : data.requests) || []).map((r: any) => {
+  let rows = allRequestsSource.map((r: any) => {
   const rawStatus = String(r?.status || "")
   const isRegionalStaffSubmission = isRegionalHr && String(r?.workflow_route || "").toLowerCase() === "regional" && ["pending_hod_review", "pending_hod", "submitted", "pending_review"].includes(rawStatus)
   const normalized = isRegionalStaffSubmission
@@ -2423,8 +2446,15 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
         return dept === allRequestsDeptFilter
       })
     }
+    if (allRequestsAnnualMonthFilter !== "all") {
+      rows = rows.filter((r: any) => {
+        const leaveType = String(r?.leave_type_key || r?.leave_type || "").toLowerCase()
+        const startDate = String(r?.adjusted_start_date || r?.preferred_start_date || r?.start_date || "")
+        return leaveType.includes("annual") && startDate.slice(5, 7) === allRequestsAnnualMonthFilter
+      })
+    }
     return rows.sort((a: any, b: any) => new Date(String(b?.created_at || 0)).getTime() - new Date(String(a?.created_at || 0)).getTime())
-  }, [data, allRequestsSearch, allRequestsStatusFilter, allRequestsLocationFilter, allRequestsDeptFilter])
+  }, [allRequestsSource, allRequestsSearch, allRequestsStatusFilter, allRequestsLocationFilter, allRequestsDeptFilter, allRequestsAnnualMonthFilter])
 
   const allRequestsPageSize = 25
   const allRequestsTotalPages = Math.max(1, Math.ceil(allRequestsFiltered.length / allRequestsPageSize))
@@ -2905,9 +2935,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       t.push({ value: "hr-approve", label: "HR Approvals", Icon: ShieldCheck, count: hrApproverQueue.length + deferRecallPending })
     }
     if (isHrApprover || isAdmin) t.push({ value: "hr-approval-queue", label: "Approval Queue", Icon: ClipboardList, count: (hrApproverData?.requests || []).length })
-    if (canSeeAllRequests && !isRegionalHr) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.requests || []).length })
+    if (canSeeAllRequests && !isRegionalHr) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: allRequestsSource.length })
     return t
-  }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, isDistrictOfficer, canSeeAllRequests, editingId, myRequests.length, hodPendingReviews.length, hodReviewRequests.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests, normalizedRole])
+  }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, isDistrictOfficer, canSeeAllRequests, editingId, myRequests.length, hodPendingReviews.length, hodReviewRequests.length, hrOfficeQueue.length, hrApproverQueue.length, allRequestsSource, normalizedRole])
 
   // ── Render ────��──────��─────────────────���─────���────────────────������──��──
   return (
@@ -5552,14 +5582,22 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-slate-800">All Leave Requests</p>
-                      <p className="text-xs text-slate-500 mt-0.5">{allRequestsFiltered.length} of {(data?.requests || []).length} total</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{allRequestsFiltered.length} of {allRequestsSource.length} {isRegionalHr ? "regional" : (isHrOffice || isHrApprover || isAdmin || isNationwideAnnualLeaveViewer) ? "nationwide" : "visible"} requests</p>
                     </div>
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => downloadLeaveRequestsExcel(allRequestsFiltered, `all-leave-requests-${new Date().toISOString().slice(0, 10)}.xlsx`, "All Leave Requests")}
+                      disabled={allRequestsFiltered.length === 0}
+                      onClick={() => {
+                        const selectedMonth = ANNUAL_START_MONTH_OPTIONS.find((month) => month.value === allRequestsAnnualMonthFilter)
+                        const reportName = selectedMonth ? `Annual Leave Starting ${selectedMonth.label}` : "All Leave Requests"
+                        const fileName = selectedMonth
+                          ? `annual-leave-starting-${selectedMonth.label.toLowerCase()}`
+                          : "all-leave-requests"
+                        void downloadLeaveRequestsExcel(allRequestsFiltered, `${fileName}-${new Date().toISOString().slice(0, 10)}.xlsx`, reportName)
+                      }}
                     >
-                      <Download className="w-3 h-3 mr-1" /> Export Excel
+                      <Download className="w-3 h-3 mr-1" /> Export Excel ({allRequestsFiltered.length})
                     </Button>
                   </div>
                   <div className="flex flex-wrap items-end gap-2">
@@ -5588,6 +5626,15 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                         <SelectItem value="hr_rejected">HR Rejected</SelectItem>
                       </SelectContent>
                     </Select>
+                    <Select value={allRequestsAnnualMonthFilter} onValueChange={(value) => { setAllRequestsAnnualMonthFilter(value); setAllRequestsPage(1) }}>
+                      <SelectTrigger className="h-9 w-48"><SelectValue placeholder="Annual start month" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All annual start months</SelectItem>
+                        {ANNUAL_START_MONTH_OPTIONS.map((month) => (
+                          <SelectItem key={month.value} value={month.value}>{month.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Select value={allRequestsLocationFilter} onValueChange={(value) => { setAllRequestsLocationFilter(value); setAllRequestsPage(1) }}>
                       <SelectTrigger className="h-9 w-44"><SelectValue placeholder="All locations" /></SelectTrigger>
                       <SelectContent>
@@ -5602,13 +5649,35 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                         {allLeaveDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                    {(allRequestsSearch.trim() || allRequestsStatusFilter !== "all" || allRequestsAnnualMonthFilter !== "all" || allRequestsLocationFilter !== "all" || allRequestsDeptFilter !== "all") && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-9 text-slate-600"
+                        onClick={() => {
+                          setAllRequestsSearch("")
+                          setAllRequestsStatusFilter("all")
+                          setAllRequestsAnnualMonthFilter("all")
+                          setAllRequestsLocationFilter("all")
+                          setAllRequestsDeptFilter("all")
+                          setAllRequestsPage(1)
+                        }}
+                      >
+                        Clear filters
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
               {allRequestsFiltered.length === 0 ? (
                 <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
                   <LayoutList className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-                  <p className="font-medium">No leave requests found</p>
+                  <p className="font-medium">
+                    {allRequestsAnnualMonthFilter !== "all"
+                      ? `No annual leave starts in ${ANNUAL_START_MONTH_OPTIONS.find((month) => month.value === allRequestsAnnualMonthFilter)?.label || "this month"}.`
+                      : "No leave requests found"}
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -5625,7 +5694,7 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
                             </p>
                             <p className="text-xs text-slate-500">
                               {String(req?.leave_type_key || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}
-                              {" · "}{req?.preferred_start_date} — {req?.preferred_end_date}
+                              {" · "}{req?.adjusted_start_date || req?.preferred_start_date} — {req?.adjusted_end_date || req?.preferred_end_date}
                               {" · "}{req?.adjusted_days || req?.requested_days || "—"} day(s)
                             </p>
                             {req?.user?.departments?.name && (
