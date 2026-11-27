@@ -90,6 +90,17 @@ interface AttendanceRecord {
   }
 }
 
+interface ReportFilters {
+  startDate: string
+  endDate: string
+  selectedDepartment: string
+  selectedLocation: string
+  selectedRegion: string
+  selectedDistrict: string
+  selectedStatus: string
+  searchQuery: string
+}
+
 interface ReportSummary {
   totalRecords: number
   totalWorkHours: number
@@ -258,10 +269,21 @@ export function AttendanceReports({
   const [selectedRegion, setSelectedRegion] = useState("all")
   const [selectedDistrict, setSelectedDistrict] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
-  // searchInput updates instantly for a responsive box; searchQuery is debounced before it
-  // triggers a network fetch, so typing stays fast and doesn't hammer the API on every keystroke.
+  // Search edits stay local until the user applies the report filters; this prevents a request on every keystroke.
   const [searchInput, setSearchInput] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
+  const [appliedFilters, setAppliedFilters] = useState<ReportFilters | null>(null)
+  const draftFilters: ReportFilters = {
+    startDate,
+    endDate,
+    selectedDepartment,
+    selectedLocation,
+    selectedRegion,
+    selectedDistrict,
+    selectedStatus,
+    searchQuery: searchInput.trim(),
+  }
+  const hasUnappliedChanges = Boolean(appliedFilters) && Object.keys(draftFilters).some((key) => draftFilters[key as keyof ReportFilters] !== appliedFilters?.[key as keyof ReportFilters])
   const [sortKey, setSortKey] = useState<string>("check_in_time")
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
@@ -368,18 +390,22 @@ export function AttendanceReports({
 
   useEffect(() => {
     if (!authChecked || !isAuthenticated) return
-
-    fetchReport()
-    fetchDepartments()
-    fetchLocations()
-    fetchDistricts()
-  }, [authChecked, isAuthenticated, startDate, endDate, selectedDepartment, selectedLocation, selectedRegion, selectedDistrict, selectedStatus, searchQuery, page, pageSize])
+    void fetchDepartments()
+    void fetchLocations()
+    void fetchDistricts()
+  }, [authChecked, isAuthenticated])
 
   useEffect(() => {
-    setPage(1)
-  }, [searchQuery])
+    if (!authChecked || !isAuthenticated || appliedFilters) return
+    setAppliedFilters(draftFilters)
+  }, [authChecked, isAuthenticated, appliedFilters, draftFilters])
 
-  // Debounce the search box so we only hit the API ~300ms after the user stops typing.
+  useEffect(() => {
+    if (!authChecked || !isAuthenticated || !appliedFilters) return
+    void fetchReport(appliedFilters)
+  }, [authChecked, isAuthenticated, appliedFilters, page, pageSize])
+
+  // Keep the search field responsive without reloading report results until Apply is pressed.
   useEffect(() => {
     const handle = setTimeout(() => setSearchQuery(searchInput.trim()), 300)
     return () => clearTimeout(handle)
@@ -390,27 +416,27 @@ export function AttendanceReports({
     if (!authChecked || !isAuthenticated) return
 
     if (activeTab === "reasons") {
-      fetchReasons()
+      void fetchReasons()
     }
-  }, [authChecked, isAuthenticated, activeTab, startDate, endDate, selectedLocation, selectedDepartment, selectedDistrict])
+  }, [authChecked, isAuthenticated, activeTab, appliedFilters])
 
   const fetchReasons = async () => {
-    if (!isAuthenticated) return
+    if (!isAuthenticated || !appliedFilters) return
 
     setReasonsLoading(true)
     try {
       const params = new URLSearchParams({
-        start_date: startDate,
-        end_date: endDate,
+        start_date: appliedFilters.startDate,
+        end_date: appliedFilters.endDate,
         page: "1",
         page_size: String(1000),
       })
 
-      if (selectedDepartment !== "all") params.append("department_id", selectedDepartment)
+      if (appliedFilters.selectedDepartment !== "all") params.append("department_id", appliedFilters.selectedDepartment)
   if (locationIsLocked && scopeLocationId) params.append("location_id", scopeLocationId)
-  else if (selectedLocation !== "all") params.append("location_id", selectedLocation)
-  if (selectedRegion !== "all") params.append("region_id", selectedRegion)
-  if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
+  else if (appliedFilters.selectedLocation !== "all") params.append("location_id", appliedFilters.selectedLocation)
+  if (appliedFilters.selectedRegion !== "all") params.append("region_id", appliedFilters.selectedRegion)
+  if (appliedFilters.selectedDistrict !== "all") params.append("district_id", appliedFilters.selectedDistrict)
 
       const res = await authenticatedFetch(`/api/admin/reports/attendance?${params}`)
       const json = await res.json()
@@ -495,26 +521,26 @@ export function AttendanceReports({
     }
   }
 
-  const fetchReport = async () => {
+  const fetchReport = async (filters: ReportFilters) => {
     if (!isAuthenticated) return
 
     setLoading(true)
     setExportError(null)
     try {
-      console.log("[v0] Fetching report with dates:", startDate, endDate)
+      console.log("[v0] Fetching report with dates:", filters.startDate, filters.endDate)
 
       const params = new URLSearchParams({
-        start_date: startDate,
-        end_date: endDate,
+        start_date: filters.startDate,
+        end_date: filters.endDate,
       })
 
-      if (selectedDepartment !== "all") params.append("department_id", selectedDepartment)
+      if (filters.selectedDepartment !== "all") params.append("department_id", filters.selectedDepartment)
   if (locationIsLocked && scopeLocationId) params.append("location_id", scopeLocationId)
-  else if (selectedLocation !== "all") params.append("location_id", selectedLocation)
-  if (selectedRegion !== "all") params.append("region_id", selectedRegion)
-  if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
-      if (selectedStatus !== "all") params.append("status", selectedStatus)
-    if (searchQuery.trim()) params.append("search", searchQuery.trim())
+  else if (filters.selectedLocation !== "all") params.append("location_id", filters.selectedLocation)
+  if (filters.selectedRegion !== "all") params.append("region_id", filters.selectedRegion)
+  if (filters.selectedDistrict !== "all") params.append("district_id", filters.selectedDistrict)
+      if (filters.selectedStatus !== "all") params.append("status", filters.selectedStatus)
+    if (filters.searchQuery.trim()) params.append("search", filters.searchQuery.trim())
       // Pagination params
       params.append("page", String(page))
       params.append("page_size", String(pageSize))
@@ -537,9 +563,6 @@ export function AttendanceReports({
       if (result.success) {
         setRecords(result.data.records || [])
         setSummary(result.data.summary || null)
-        if (Array.isArray(result.data.locations)) {
-          setLocations(result.data.locations)
-        }
         setTotalRecords(result.data.summary?.totalRecords || 0)
         console.log("[v0] Successfully loaded", result.data.records?.length || 0, "records (page)")
       } else {
@@ -603,6 +626,8 @@ export function AttendanceReports({
   }
 
   const fetchAllRecordsForExport = async (): Promise<AttendanceRecord[]> => {
+    if (!appliedFilters) return []
+    const filters = appliedFilters
     // Paginate through ALL matching records in chunks of 1000 to bypass Supabase's row limit
     const PAGE_SIZE = 1000
     const allRecords: AttendanceRecord[] = []
@@ -611,20 +636,20 @@ export function AttendanceReports({
 
     while (hasMore) {
       const params = new URLSearchParams({
-        start_date: startDate,
-        end_date: endDate,
+        start_date: filters.startDate,
+        end_date: filters.endDate,
         export: "true",
         page: String(page),
         page_size: String(PAGE_SIZE),
       })
 
-      if (selectedDepartment !== "all") params.append("department_id", selectedDepartment)
+      if (filters.selectedDepartment !== "all") params.append("department_id", filters.selectedDepartment)
   if (locationIsLocked && scopeLocationId) params.append("location_id", scopeLocationId)
-  else if (selectedLocation !== "all") params.append("location_id", selectedLocation)
-  if (selectedRegion !== "all") params.append("region_id", selectedRegion)
-  if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
-      if (selectedStatus !== "all") params.append("status", selectedStatus)
-      if (searchQuery.trim()) params.append("search", searchQuery.trim())
+  else if (filters.selectedLocation !== "all") params.append("location_id", filters.selectedLocation)
+  if (filters.selectedRegion !== "all") params.append("region_id", filters.selectedRegion)
+  if (filters.selectedDistrict !== "all") params.append("district_id", filters.selectedDistrict)
+      if (filters.selectedStatus !== "all") params.append("status", filters.selectedStatus)
+      if (filters.searchQuery.trim()) params.append("search", filters.searchQuery.trim())
 
       const res = await authenticatedFetch(`/api/admin/reports/attendance?${params}`)
       const json = await res.json()
@@ -716,7 +741,7 @@ export function AttendanceReports({
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement("a")
         a.href = url
-        a.download = `qcc-attendance-report-${startDate}-to-${endDate}.csv`
+        a.download = `qcc-attendance-report-${appliedFilters?.startDate || startDate}-to-${appliedFilters?.endDate || endDate}.csv`
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
@@ -816,7 +841,7 @@ export function AttendanceReports({
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement("a")
         a.href = url
-        a.download = `qcc-attendance-report-${startDate}-to-${endDate}.xlsx`
+        a.download = `qcc-attendance-report-${appliedFilters?.startDate || startDate}-to-${appliedFilters?.endDate || endDate}.xlsx`
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
@@ -837,12 +862,12 @@ export function AttendanceReports({
               data: exportRecords,
               summary,
               filters: {
-                startDate,
-                endDate,
-                locationId: locationIsLocked && scopeLocationId ? scopeLocationId : selectedLocation !== "all" ? selectedLocation : null,
-                regionId: selectedRegion !== "all" ? selectedRegion : null,
-                districtId: selectedDistrict !== "all" ? selectedDistrict : null,
-                departmentId: selectedDepartment !== "all" ? selectedDepartment : null,
+                startDate: appliedFilters?.startDate || startDate,
+                endDate: appliedFilters?.endDate || endDate,
+                locationId: locationIsLocked && scopeLocationId ? scopeLocationId : appliedFilters?.selectedLocation !== "all" ? appliedFilters?.selectedLocation : null,
+                regionId: appliedFilters?.selectedRegion !== "all" ? appliedFilters?.selectedRegion : null,
+                districtId: appliedFilters?.selectedDistrict !== "all" ? appliedFilters?.selectedDistrict : null,
+                departmentId: appliedFilters?.selectedDepartment !== "all" ? appliedFilters?.selectedDepartment : null,
                 reportType: "attendance",
               },
             }),
@@ -862,7 +887,7 @@ export function AttendanceReports({
           const url = window.URL.createObjectURL(blob)
           const a = document.createElement("a")
           a.href = url
-          a.download = `qcc-attendance-report-${startDate}-to-${endDate}.pdf`
+          a.download = `qcc-attendance-report-${appliedFilters?.startDate || startDate}-to-${appliedFilters?.endDate || endDate}.pdf`
           document.body.appendChild(a)
           a.click()
           document.body.removeChild(a)
@@ -918,7 +943,7 @@ export function AttendanceReports({
     return filtered
   }
 
-  const filteredRecords = useMemo(() => applyClientFilters(records), [records, selectedDepartment, selectedLocation, selectedDistrict, selectedStatus, searchQuery])
+  const filteredRecords = useMemo(() => applyClientFilters(records), [records])
 
   const columnFilteredRecords = useMemo(() => {
     let r = filteredRecords
@@ -957,6 +982,49 @@ export function AttendanceReports({
   }, [filteredRecords, colFilter])
 
   const presentCount = useMemo(() => records.filter((r) => r.status === "present" || r.check_in_time).length, [records])
+
+  const applyReportFilters = () => {
+    if (!startDate || !endDate || startDate > endDate) {
+      setExportError("Choose a valid date range: the end date must be on or after the start date.")
+      return
+    }
+    setExportError(null)
+    const filters = { ...draftFilters, searchQuery: searchInput.trim() }
+    setSearchQuery(filters.searchQuery)
+    setPage(1)
+    setAppliedFilters(filters)
+  }
+
+  const clearReportFilters = () => {
+    const end = new Date()
+    const start = new Date(end)
+    start.setDate(start.getDate() - 30)
+    const resetStartDate = start.toISOString().split("T")[0]
+    const resetEndDate = end.toISOString().split("T")[0]
+    const filters: ReportFilters = {
+      ...draftFilters,
+      startDate: resetStartDate,
+      endDate: resetEndDate,
+      selectedDepartment: isDeptHead ? selectedDepartment : "all",
+      selectedLocation: isRegionalManager || locationIsLocked ? selectedLocation : "all",
+      selectedRegion: "all",
+      selectedDistrict: "all",
+      selectedStatus: "all",
+      searchQuery: "",
+    }
+    setStartDate(resetStartDate)
+    setEndDate(resetEndDate)
+    setSearchInput("")
+    setSearchQuery("")
+    setColFilter({ employee: "", department: "", checkInLocation: "", checkOutLocation: "", status: "all", hoursMin: "", hoursMax: "" })
+    setSelectedStatus("all")
+    setSelectedDistrict("all")
+    setSelectedRegion("all")
+    if (!isDeptHead) setSelectedDepartment("all")
+    if (!isRegionalManager && !locationIsLocked) setSelectedLocation("all")
+    setPage(1)
+    setAppliedFilters(filters)
+  }
 
   const setQuickDate = (preset: "today" | "week" | "month" | "quarter") => {
     const today = new Date()
@@ -1093,7 +1161,7 @@ export function AttendanceReports({
   <MapPin className="h-4 w-4 text-blue-600" />
   Region
   </label>
-  <Select value={selectedRegion} onValueChange={(value) => { setSelectedRegion(value); setSelectedLocation("all"); setSelectedDistrict("all"); setPage(1) }}>
+  <Select value={selectedRegion} onValueChange={(value) => { setSelectedRegion(value); setSelectedLocation("all"); setSelectedDistrict("all") }}>
   <SelectTrigger className="w-full border border-gray-200 dark:border-slate-600 rounded-md bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-slate-100">
   <SelectValue placeholder="All Regions" />
   </SelectTrigger>
@@ -1170,7 +1238,7 @@ export function AttendanceReports({
                   <Search className="h-4 w-4 text-primary" />
                   Search staff attendance
                 </label>
-                {searchQuery && (
+                {appliedFilters?.searchQuery && (
                   <span className="text-xs font-medium text-muted-foreground">
                     {sortedRecords.length.toLocaleString()} match{sortedRecords.length === 1 ? "" : "es"}
                   </span>
@@ -1228,22 +1296,19 @@ export function AttendanceReports({
                 </Button>
               ))}
 
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSearchInput("")
-                  setSearchQuery("")
-                  setSelectedStatus("all")
-                  setSelectedDistrict("all")
-                  setSelectedRegion("all")
-                  if (!isDeptHead) setSelectedDepartment("all")
-                  if (!isRegionalManager && !locationIsLocked) setSelectedLocation("all")
-                }}
-                className="ml-auto text-xs text-muted-foreground hover:text-foreground"
-              >
-                <X className="mr-1 h-3.5 w-3.5" /> Clear filters
-              </Button>
+                  {hasUnappliedChanges && (
+                    <span role="status" className="ml-auto text-xs font-medium text-amber-800 dark:text-amber-300">
+                      Changes not applied yet
+                    </span>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearReportFilters}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="mr-1 h-3.5 w-3.5" /> Clear filters
+                  </Button>
             </div>
           </div>
 
@@ -1388,7 +1453,7 @@ export function AttendanceReports({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-100 dark:border-slate-700/70">
         <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
           <Button
-            onClick={fetchReport}
+            onClick={applyReportFilters}
             disabled={loading}
             className={`w-full sm:w-auto justify-center bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white ${compactMode ? 'px-3 py-1.5 text-sm' : 'px-4 py-2'} rounded-md shadow-sm hover:shadow-md transition-all duration-200`}
           >
@@ -1400,7 +1465,7 @@ export function AttendanceReports({
             ) : (
               <>
                 <FileText className="mr-2 h-5 w-5" />
-                Generate Report
+                Apply &amp; Generate Report
               </>
             )}
           </Button>
