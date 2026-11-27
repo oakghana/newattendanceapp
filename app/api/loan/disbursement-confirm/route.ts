@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (staffAcknowledgement) {
-      const isManagingDirectorApproved = Boolean(loan.md_approved_at) && ["approved_director", "md_approved", "referenced", "staff_receiving_funds", "partially_recovered"].includes(String(loan.status || ""))
+      const isManagingDirectorApproved = Boolean(loan.md_approved_at || loan.md_approved_by_name) && ["approved_director", "md_approved", "referenced", "staff_receiving_funds", "partially_recovered"].includes(String(loan.status || ""))
       if (!isManagingDirectorApproved) {
         return NextResponse.json({ error: "Receipt can only be acknowledged after the Managing Director has approved the loan." }, { status: 409 })
       }

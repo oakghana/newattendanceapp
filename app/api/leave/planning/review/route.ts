@@ -412,6 +412,7 @@ export async function POST(request: NextRequest) {
           : isRegionalManagerApprovalComplete
             ? "approved"
             : nextStatus,
+      ...(isRegionalForward ? { workflow_stage: "pending_regional_manager_approval" } : {}),
       ...(isRegionalManagerApprovalComplete ? { workflow_stage: requiresMdApproval ? "md_approval_pending" : "completed", memo_generated: true, memo_generated_at: new Date().toISOString(), hr_approver_id: user.id } : {}),
       manager_recommendation: mergedRecommendations || null,
       ...(isRegionalForward && isAnnualLeave((leavePlan as any).leave_type_key) ? {

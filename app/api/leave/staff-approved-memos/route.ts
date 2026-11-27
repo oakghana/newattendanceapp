@@ -241,13 +241,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch user profiles and location data separately
-    const { data: profilesData, error: profileError } = await supabase
+    const { data: profilesData, error: profileFetchError } = await admin
       .from("user_profiles")
       .select("id, first_name, last_name, email, assigned_location_id, staff_category, position")
       .in("id", staffIds)
 
-    if (profileError) {
-      console.error("[v0] Profile fetch error:", profileError)
+    if (profileFetchError) {
+      console.error("[v0] Profile fetch error:", profileFetchError)
     }
 
     // Create profile map for fast lookup

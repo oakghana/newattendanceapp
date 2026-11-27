@@ -770,7 +770,7 @@ function WorkflowStages({ status }: { status: string }) {
   )
 }
 
-// ─── InfoPill ───────────────────────────────────────────────────────����────���───
+// ─── InfoPill ───────────────────────────────────────────────────────�����────���───
 function InfoPill({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className={`rounded-lg p-2 text-center border ${highlight ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
@@ -2257,9 +2257,9 @@ export function LeavePlanningClient({ profile, annualEntitlement = { annualLeave
       return true
     })
     
-  // Regional non-annual requests do not pass through HOD Review. Normalize
-  // the legacy database status for the Regional HR workspace display while
-  // preserving the original status for API actions and audit history.
+  // Regional requests are routed through Regional HR before Regional Manager
+  // review. Normalize legacy statuses for the Regional HR workspace display
+  // while preserving the original status for API actions and audit history.
   const regionalRequests = isRegionalHr
   ? requests.map((r: any) => {
     // HR Records owns the reference. Keep the persisted reference on the same

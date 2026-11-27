@@ -194,6 +194,7 @@ type LoanRequest = {
   category?: string | null
   memo_cc?: string | null
   md_approved_at?: string | null
+  md_approved_by_name?: string | null
   department_name?: string | null
   loan_label?: string | null
   category_name?: string | null
@@ -3214,11 +3215,12 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
 
   const canAcknowledgeOwnReceipt = (row: LoanRequest) =>
     row.user_id === data?.profile.id &&
-    Boolean(row.md_approved_at) &&
-    ["approved_director", "md_approved", "referenced", "staff_receiving_funds"].includes(String(row.status || "")) &&
+    Boolean(row.md_approved_at || row.md_approved_by_name) &&
+    ["approved_director", "md_approved", "referenced", "staff_receiving_funds", "partially_recovered"].includes(String(row.status || "")) &&
     Boolean(getStaffMemoOpenedAt(row.id)) &&
     !staffReceiptConfirmedIds.has(row.id) &&
-    !["partially_recovered", "fully_recovered", "payment_completed"].includes(String(row.status || ""))
+    !row.repayment_plan_generated_at &&
+    !["fully_recovered", "payment_completed"].includes(String(row.status || ""))
 
   const openSecureMemo = async (loanId: string) => {
     try {
@@ -4128,7 +4130,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                         </Button>}
                       </>
                     )}
-                    {["approved_director", "md_approved", "referenced", "staff_receiving_funds"].includes(row.status) && Boolean(row.md_approved_at) && (
+                    {["approved_director", "md_approved", "referenced", "staff_receiving_funds", "partially_recovered"].includes(row.status) && Boolean(row.md_approved_at || row.md_approved_by_name) && (
                       <div className="flex flex-wrap items-center gap-2">
                         <Button variant="outline" size="sm" onClick={() => void openSecureMemo(row.id)}>
                           <FileText className="h-4 w-4 mr-1" /> Open Approved Memo
@@ -4142,7 +4144,7 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                         )}
                         {canAcknowledgeOwnReceipt(row) && (
                           <Button size="sm" onClick={() => setReceiptConfirmationLoan(row)} className="bg-emerald-600 text-white hover:bg-emerald-700">
-                            <CheckCircle2 className="mr-1 h-4 w-4" /> Confirm Receipt
+                            <CheckCircle2 className="mr-1 h-4 w-4" /> {row.status === "partially_recovered" ? "Retry Repayment Start" : "Confirm Receipt"}
                           </Button>
                         )}
                         {staffReceiptConfirmedIds.has(row.id) && (
@@ -4160,7 +4162,9 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
               <DialogHeader>
                 <DialogTitle>Confirm loan receipt</DialogTitle>
                 <DialogDescription>
-                  Confirm only if the approved loan funds have reached you. This confirmation starts the repayment schedule for this loan.
+                  {receiptConfirmationLoan?.status === "partially_recovered"
+                    ? "Your receipt was recorded, but the repayment schedule did not finish starting. Retry to complete the repayment setup."
+                    : "Confirm only if the approved loan funds have reached you. This confirmation starts the repayment schedule for this loan."}
                 </DialogDescription>
               </DialogHeader>
               {receiptConfirmationLoan && (
