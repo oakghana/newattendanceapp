@@ -36,7 +36,7 @@ interface AttendanceRecord {
 }
 
 interface SimpleHrReportsProps {
-  scopeRole: "admin" | "regional_manager" | "regional_hr" | "department_head" | "transport_manager"
+  scopeRole: "admin" | "regional_manager" | "regional_hr" | "department_head" | "transport_manager" | "managing_director" | "director_hr" | "manager_hr"
   scopeDepartmentId: string | null
   scopeLocationId: string | null
 }
