@@ -122,6 +122,7 @@ export function CheckinFailuresClient() {
   const [activeTab, setActiveTab] = useState<"failures" | "long-checkins">("failures")
   const [longCheckins, setLongCheckins] = useState<LongCheckin[]>([])
   const [longPage, setLongPage] = useState(1)
+  const [longLimit, setLongLimit] = useState(50)
   const [longTotalPages, setLongTotalPages] = useState(1)
   const [longTotal, setLongTotal] = useState(0)
   const [selectedLongCheckins, setSelectedLongCheckins] = useState<Set<string>>(new Set())
@@ -131,7 +132,7 @@ export function CheckinFailuresClient() {
   const fetchLongCheckins = useCallback(async (requestedPage = longPage) => {
     try {
       setLongLoading(true)
-      const response = await fetch(`/api/admin/long-checkins?page=${requestedPage}&limit=20`, { cache: "no-store" })
+      const response = await fetch(`/api/admin/long-checkins?page=${requestedPage}&limit=${longLimit}`, { cache: "no-store" })
       const result = await response.json()
       if (!response.ok || !result.success) throw new Error(result.error || "Failed to load long check-ins")
       setLongCheckins(result.records || [])
@@ -144,7 +145,7 @@ export function CheckinFailuresClient() {
     } finally {
       setLongLoading(false)
     }
-  }, [longPage])
+  }, [longLimit, longPage])
 
   const checkoutLongCheckins = useCallback(async () => {
     if (!selectedLongCheckins.size) return
@@ -455,6 +456,24 @@ export function CheckinFailuresClient() {
                 <CardDescription>{longTotal} open check-in{longTotal === 1 ? "" : "s"} currently exceed the five-hour review threshold.</CardDescription>
               </div>
               <div className="flex items-center gap-2">
+                <label htmlFor="long-checkins-page-size" className="text-sm text-muted-foreground">Rows per page</label>
+                <Select
+                  value={String(longLimit)}
+                  onValueChange={(value) => {
+                    setLongLimit(Number(value))
+                    setLongPage(1)
+                    setSelectedLongCheckins(new Set())
+                  }}
+                >
+                  <SelectTrigger id="long-checkins-page-size" className="w-[84px]" aria-label="Rows per page">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Button variant="outline" onClick={() => void fetchLongCheckins()} disabled={longLoading}>
                   <RefreshCw className={`h-4 w-4 mr-2 ${longLoading ? "animate-spin" : ""}`} /> Refresh
                 </Button>
