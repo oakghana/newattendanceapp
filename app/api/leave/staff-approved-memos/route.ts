@@ -1,32 +1,31 @@
-import { createClient } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { getLeaveMemoAccess } from "@/lib/leave-memo-access"
 
 export async function GET(request: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json(
-        { error: "Server configuration error" },
-        { status: 500 }
-      )
-    }
+    const admin = await createAdminClient()
+    const { data: viewerProfile, error: profileError } = await admin
+      .from("user_profiles")
+      .select("id, role, department_id, assigned_location_id, region_id")
+      .eq("id", user.id)
+      .maybeSingle()
+    if (profileError || !viewerProfile) return NextResponse.json({ error: "Profile not found" }, { status: 403 })
 
-    const supabase = createClient(supabaseUrl, supabaseKey)
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get("user_id")
-    const userRole = searchParams.get("user_role")
-    const userDepartment = searchParams.get("user_department")
-
-    if (!userId || !userRole) {
-      return NextResponse.json(
-        { error: "Missing required parameters" },
-        { status: 400 }
-      )
+    const requestedUserId = searchParams.get("user_id")
+    if (requestedUserId && requestedUserId !== user.id) {
+      return NextResponse.json({ error: "You may only request memo access for your signed-in account." }, { status: 403 })
     }
+    const userId = user.id
+    const userRole = String(viewerProfile.role || "")
+    const userDepartment = viewerProfile.department_id
 
-    const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
+    const normalizedRole = userRole.toLowerCase().replace(/[-\s]+/g, "_")
   const isHodOrRm = ["department_head", "transport_manager", "regional_manager", "regional_manager_officer"].includes(normalizedRole)
   const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
   const isHrExecutive = ["director_hr", "manager_hr", "admin", "hr_leave_office", "leave_loan_officer", "hr_office"].includes(normalizedRole)
@@ -55,6 +54,10 @@ export async function GET(request: NextRequest) {
           leave_type_key,
           reason,
           status,
+          workflow_stage,
+          workflow_route,
+          staff_category,
+          memo_reference_locked,
           created_at,
           adjusted_days,
           requested_days,
@@ -88,7 +91,7 @@ export async function GET(request: NextRequest) {
       // Fetch user profiles
       const { data: profilesData, error: profileError } = await supabase
         .from("user_profiles")
-        .select("id, first_name, last_name, email, employee_id, department_id, assigned_location_id, departments(name)")
+        .select("id, first_name, last_name, email, employee_id, department_id, assigned_location_id, staff_category, position, departments(name)")
         .in("id", userIds)
 
       if (profileError) {
@@ -98,7 +101,7 @@ export async function GET(request: NextRequest) {
       const profileMap = new Map((profilesData || []).map((p: any) => [p.id, p]))
       const locationIds = [...new Set((profilesData || []).map((p: any) => p.assigned_location_id).filter(Boolean))]
       const { data: locationsData } = locationIds.length
-        ? await supabase.from("geofence_locations").select("id, name, location_code").in("id", locationIds)
+        ? await admin.from("geofence_locations").select("id, name, location_code").in("id", locationIds)
         : { data: [] }
       const locationMap = new Map((locationsData || []).map((location: any) => [location.id, location.name || location.location_code]))
 
@@ -121,6 +124,11 @@ export async function GET(request: NextRequest) {
           days: req.adjusted_days || req.requested_days || 0,
           reason: req.reason || "",
           status: req.status,
+          workflow_route: req.workflow_route || null,
+          workflow_stage: req.workflow_stage || null,
+          staff_category: req.staff_category || (profile as any).staff_category || null,
+          staff_position: (profile as any).position || null,
+          memo_reference_locked: req.memo_reference_locked === true,
           created_at: req.created_at,
           hr_approver_name: req.hr_approver_name,
           hr_approved_at: req.hr_approved_at,
@@ -132,8 +140,19 @@ export async function GET(request: NextRequest) {
           memo_reference: req.memo_reference || null,
         }
       })
+      const downloadableMemos = memos.filter((memo: any) => getLeaveMemoAccess({
+        status: memo.status,
+        workflowStage: memo.workflow_stage,
+        workflowRoute: memo.workflow_route,
+        leaveType: memo.leave_type,
+        leaveStartDate: memo.start_date,
+        staffCategory: memo.staff_category,
+        staffPosition: memo.staff_position,
+        memoReference: memo.memo_reference,
+        memoReferenceLocked: memo.memo_reference_locked,
+      }).canDownload)
 
-      return NextResponse.json({ memos })
+      return NextResponse.json({ memos: downloadableMemos })
     }
 
     // Get staff under this HOD/RM
@@ -192,6 +211,10 @@ export async function GET(request: NextRequest) {
         leave_type_key,
         reason,
         status,
+        workflow_stage,
+        workflow_route,
+        staff_category,
+        memo_reference_locked,
         created_at,
         hr_approver_name,
         hr_approved_at,
@@ -218,20 +241,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch user profiles and location data separately
-    const { data: profilesData, error: profileError } = await supabase
+    const { data: profilesData, error: profileFetchError } = await admin
       .from("user_profiles")
-      .select("id, first_name, last_name, email, assigned_location_id")
+      .select("id, first_name, last_name, email, assigned_location_id, staff_category, position")
       .in("id", staffIds)
 
-    if (profileError) {
-      console.error("[v0] Profile fetch error:", profileError)
+    if (profileFetchError) {
+      console.error("[v0] Profile fetch error:", profileFetchError)
     }
 
     // Create profile map for fast lookup
     const profileMap = new Map((profilesData || []).map((p: any) => [p.id, p]))
     const locationIds = [...new Set((profilesData || []).map((p: any) => p.assigned_location_id).filter(Boolean))]
     const { data: locationsData } = locationIds.length
-      ? await supabase.from("geofence_locations").select("id, name, location_code").in("id", locationIds)
+      ? await admin.from("geofence_locations").select("id, name, location_code").in("id", locationIds)
       : { data: [] }
     const locationMap = new Map((locationsData || []).map((location: any) => [location.id, location.name || location.location_code]))
 
@@ -249,8 +272,14 @@ export async function GET(request: NextRequest) {
         leave_type: req.leave_type_key || "annual",
         start_date: req.adjusted_start_date || req.preferred_start_date,
         end_date: req.adjusted_end_date || req.preferred_end_date,
+        days: req.adjusted_days || req.requested_days || 0,
         reason: req.reason || "",
         status: req.status,
+        workflow_route: req.workflow_route || null,
+        workflow_stage: req.workflow_stage || null,
+        staff_category: req.staff_category || (profile as any).staff_category || null,
+        staff_position: (profile as any).position || null,
+        memo_reference_locked: req.memo_reference_locked === true,
         created_at: req.created_at,
         hr_approver_name: req.hr_approver_name,
         hr_approved_at: req.hr_approved_at,
@@ -259,10 +288,21 @@ export async function GET(request: NextRequest) {
         memo_token: req.memo_token || null,
         memo_reference: req.memo_reference || null,
       }
-    })
+      })
+      const downloadableMemos = memos.filter((memo: any) => getLeaveMemoAccess({
+        status: memo.status,
+        workflowStage: memo.workflow_stage,
+        workflowRoute: memo.workflow_route,
+        leaveType: memo.leave_type,
+        leaveStartDate: memo.start_date,
+        staffCategory: memo.staff_category,
+        staffPosition: memo.staff_position,
+        memoReference: memo.memo_reference,
+        memoReferenceLocked: memo.memo_reference_locked,
+      }).canDownload)
 
-    return NextResponse.json({ memos })
-  } catch (error) {
+      return NextResponse.json({ memos: downloadableMemos })
+    } catch (error) {
     console.error("[v0] Staff approved memos error:", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to fetch approved memos" },

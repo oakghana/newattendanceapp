@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { getLeaveMemoAccess } from '@/lib/leave-memo-access'
 import { jsPDF } from 'jspdf'
 import fs from 'fs'
 import path from 'path'
@@ -17,10 +18,6 @@ function mapLeaveTypeToMemoType(leaveTypeKey: string): MemoType {
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────
-
-const APPROVED_STATUSES = [
-  'approved', 'hr_approved', 'hod_approved', 'finalized', 'completed', 'memo_issued',
-]
 
 function fmtLong(raw: string | null | undefined): string {
   if (!raw) return '—'
@@ -68,56 +65,74 @@ function leaveTypeLabel(key: string): string {
 
 export async function GET(request: NextRequest) {
   try {
-    const requestId = request.nextUrl.searchParams.get('request_id')
-    if (!requestId) {
-      return NextResponse.json({ error: 'request_id parameter required' }, { status: 400 })
+    const requestId = request.nextUrl.searchParams.get('request_id') || request.nextUrl.searchParams.get('leave_plan_request_id')
+    const memoToken = request.nextUrl.searchParams.get('memo_token') || ''
+    if (!requestId && !memoToken) {
+      return NextResponse.json({ error: 'request_id or memo_token is required' }, { status: 400 })
     }
 
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     const admin = await createAdminClient()
 
-    // Full fetch — all columns needed for the official memo
-    const { data: req, error: reqErr } = await admin
+    let requestQuery = admin
       .from('leave_plan_requests')
       .select(`
-        id, user_id, leave_type_key, status,
-        preferred_start_date, preferred_end_date,
-        adjusted_start_date, adjusted_end_date,
-        hr_approved_start_date, hr_approved_end_date, hr_approved_days,
-        requested_days, adjusted_days, entitlement_days, leave_entitlement_days,
+        id, user_id, leave_type_key, status, workflow_route, workflow_stage, staff_category,
+        preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date,
+        requested_days, adjusted_days, entitlement_days,
         prior_leave_days_deducted, holiday_days_deducted, travelling_days_added, leave_year_period,
-        hr_approver_id, hr_approver_name,
-        hr_approved_at, hr_signature_data_url, hr_signature_text,
-        submitted_at, created_at,
-        memo_subject, memo_body,
-        memo_draft_subject, memo_draft_body
+        hr_approver_id, hr_approver_name, hr_approved_at, hr_signature_data_url, hr_signature_text,
+        submitted_at, created_at, memo_subject, memo_body, memo_draft_subject, memo_draft_body,
+        memo_reference, memo_reference_locked, memo_token
       `)
-      .eq('id', requestId)
-      .single()
+    requestQuery = requestId ? requestQuery.eq('id', requestId) : requestQuery.eq('memo_token', memoToken)
+    const { data: req, error: reqErr } = await requestQuery.maybeSingle()
 
     if (reqErr || !req) {
       return NextResponse.json({ error: 'Leave request not found' }, { status: 404 })
     }
-
-    if (!APPROVED_STATUSES.includes(String(req.status || '').toLowerCase())) {
-      return NextResponse.json({ error: 'Leave request is not approved' }, { status: 403 })
+    const resolvedRequestId = String(req.id)
+    if (memoToken && String(req.memo_token || '') !== memoToken) {
+      return NextResponse.json({ error: 'Invalid or expired memo token.' }, { status: 401 })
     }
-    if (!String((req as any).memo_reference || '').trim() || !(req as any).memo_reference_locked) {
-      return NextResponse.json({ error: 'This leave memo cannot be downloaded until HR Records enters and locks the official reference.' }, { status: 409 })
+
+    const { data: callerProfile } = user
+      ? await admin.from('user_profiles').select('role').eq('id', user.id).maybeSingle()
+      : { data: null }
+    const callerRole = String(callerProfile?.role || '').toLowerCase().trim().replace(/[-\s]+/g, '_')
+    const isApplicant = Boolean(user && String(req.user_id) === user.id)
+    const memoAuthorizedRoles = new Set([
+      'admin', 'administrator', 'it_admin', 'department_head', 'hod', 'regional_manager', 'regional_manager_officer',
+      'hr', 'hr_office', 'hr_leave_office', 'leave_loan_officer', 'hr_executive', 'manager_hr', 'director_hr',
+      'regional_hr', 'regional_hr_officer', 'regional_hr_office', 'regional_hr_leave_office', 'regional_leave_office',
+      'hr_records', 'hr_records_officer', 'hr_records_manager', 'accounts_executive', 'secretary', 'loan_office',
+    ])
+    if (!isApplicant && !memoAuthorizedRoles.has(callerRole) && !memoToken) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     // ── Staff profile ────────────────────────────────────────────────────────
     const { data: staff } = await admin
       .from('user_profiles')
-      .select('first_name, last_name, employee_id, department_id, position, rank, staff_category, date_of_appointment, years_of_service')
+      .select('first_name, last_name, employee_id, department_id, position, staff_category, date_of_appointment, years_of_service')
       .eq('id', req.user_id)
-      .single()
+      .maybeSingle()
 
-    // ── Unified management for staff category label ──────────────────────────
-    const { data: staffMgmt } = await admin
-      .from('unified_user_management')
-      .select('full_name, employee_id, department_name, position')
-      .eq('user_id', req.user_id)
-      .single()
+    const memoAccess = getLeaveMemoAccess({
+      status: String(req.status || ''),
+      workflowStage: String(req.workflow_stage || ''),
+      workflowRoute: String(req.workflow_route || ''),
+      leaveType: String(req.leave_type_key || ''),
+      leaveStartDate: String(req.adjusted_start_date || req.preferred_start_date || ''),
+      staffCategory: String(req.staff_category || staff?.staff_category || ''),
+      staffPosition: String(staff?.position || ''),
+      memoReference: String(req.memo_reference || ''),
+      memoReferenceLocked: Boolean(req.memo_reference_locked),
+    })
+    if (!memoAccess.canDownload) {
+      return NextResponse.json({ error: memoAccess.reason || 'This leave memo is not available yet.' }, { status: 423 })
+    }
 
     // ── HR-adjusted outstanding balance ───────────────────────────────────────
     // Leave Office adjustments are stored separately from the original request.
@@ -130,9 +145,9 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
 
     // ── Department ────────────────────────────────────────────────────────────
-    let departmentName = staffMgmt?.department_name || 'N/A'
+    let departmentName = 'N/A'
     const deptId = staff?.department_id
-    if (deptId && departmentName === 'N/A') {
+    if (deptId) {
       const { data: dept } = await admin
         .from('departments')
         .select('name')
@@ -183,7 +198,7 @@ export async function GET(request: NextRequest) {
     const { data: memo } = await admin
       .from('leave_payment_memos')
       .select('signer_name, signer_position, signature_data_url, leave_period_start, leave_period_end, approved_days, created_at')
-      .eq('leave_plan_request_id', requestId)
+      .eq('leave_plan_request_id', resolvedRequestId)
       .maybeSingle()
 
     if (memo?.signer_name && !req.hr_approver_id) signerName = memo.signer_name
@@ -220,27 +235,26 @@ export async function GET(request: NextRequest) {
             if (signerProfile?.signature_data_url) signerSigDataUrl = signerProfile.signature_data_url
           }
         }
-      } catch { /* fallback failed — proceed without signature image */ }
+      } catch (signatureFallbackError) {
+        console.warn('[leave-download-memo] Signature fallback failed:', signatureFallbackError)
+      }
     }
 
     // ── Computed values ───────────────────────────────────────────────────────
-    const staffFullName = staffMgmt?.full_name ||
-      (staff ? `${staff.first_name || ''} ${staff.last_name || ''}`.trim() : 'Unknown')
-    const employeeId = staffMgmt?.employee_id || staff?.employee_id || 'N/A'
-    const position = staffMgmt?.position || staff?.position || ''
+    const staffFullName = staff ? `${staff.first_name || ''} ${staff.last_name || ''}`.trim() : 'Unknown'
+    const employeeId = staff?.employee_id || 'N/A'
+    const position = staff?.position || ''
 
-    const startRaw = req.hr_approved_start_date || req.adjusted_start_date || req.preferred_start_date
+    const startRaw = req.adjusted_start_date || req.preferred_start_date
     const leaveTypeKey = String(req.leave_type_key || 'annual').toLowerCase()
     const isCalendarLeave = leaveTypeKey === 'maternity' || leaveTypeKey === 'paternity'
-    const storedGrantedDays = Number(req.hr_approved_days ?? req.adjusted_days ?? req.requested_days ?? 0)
-    // Always resolve entitlement from the current staff profile. If the richer
-    // profile query is unavailable on a legacy schema, use the management view
-    // position/category rather than falling back to stale request totals.
-    const entitlementProfile = staff || staffMgmt
+    const storedGrantedDays = Number(req.adjusted_days ?? req.requested_days ?? 0)
+    // The current staff profile is the source of truth for annual entitlement.
+    const entitlementProfile = staff
     const resolvedEntitlement = leaveTypeKey === 'annual' && entitlementProfile
       ? resolveEntitlementFromProfile(entitlementProfile)
       : null
-    const storedEntitledDays = Number(req.entitlement_days ?? req.leave_entitlement_days ?? 0)
+    const storedEntitledDays = Number(req.entitlement_days ?? 0)
     const adjustedEntitlementDays = leaveTypeKey === 'annual'
       ? Number(outstandingBalance?.entitlement_days ?? 0)
       : 0
@@ -294,8 +308,8 @@ export async function GET(request: NextRequest) {
           return end.toISOString().slice(0, 10)
         })()
       : leaveTypeKey === 'annual'
-        ? (annualDates?.endDate.toISOString().slice(0, 10) || req.hr_approved_end_date || req.adjusted_end_date || req.preferred_end_date)
-        : (req.hr_approved_end_date || req.adjusted_end_date || req.preferred_end_date)
+? (annualDates?.endDate.toISOString().slice(0, 10) || req.adjusted_end_date || req.preferred_end_date)
+  : (req.adjusted_end_date || req.preferred_end_date)
     const grantedDays = isCalendarLeave
       ? (storedEntitledDays || storedGrantedDays)
       : (breakdown?.grantedDays ?? annualDates?.grantedDays ?? storedGrantedDays)
@@ -324,7 +338,7 @@ export async function GET(request: NextRequest) {
     }
 
     const letterDate = req.hr_approved_at || memo?.created_at || new Date().toISOString()
-    const refSuffix = requestId.split('-').pop()?.toUpperCase().slice(0, 6) || 'MEMO'
+    const refSuffix = resolvedRequestId.split('-').pop()?.toUpperCase().slice(0, 6) || 'MEMO'
     const refNumber = `QCC/HRD/ANL/${yearLabel}/${refSuffix}`
 
     // ── Serialized staff date label for the serial field ─────────────────────

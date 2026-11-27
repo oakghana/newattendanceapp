@@ -3,6 +3,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isAdminRole, isDepartmentHeadRole, isRegionalHrRole, isRegionalManagerRole, normalizeAppRole } from "@/lib/role-capabilities"
 import { resolveOwnedLocationIdsForRegionalOffice } from "@/lib/regional-manager-scope"
 import { isNonRegionalLocation } from "@/lib/location-mappings"
+import { isManagerLeaveCategory } from "@/lib/leave-memo-access"
 
 export async function GET(request: NextRequest) {
   try {
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
     // Current workflow source: leave_plan_requests with final HR approval.
     let requestsQuery = admin
       .from("leave_plan_requests")
-      .select("id, user_id, leave_type_key, preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, status, is_archived")
+      .select("id, user_id, leave_type_key, preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, status, workflow_stage, staff_category, is_archived")
       .eq("status", "hr_approved")
       .eq("is_archived", false)
       .order("preferred_start_date", { ascending: true })
@@ -117,6 +118,7 @@ export async function GET(request: NextRequest) {
     if (error) return NextResponse.json({ entries: [], rangeStart, rangeEnd })
 
     const normalized = (requests || []).flatMap((r: any) => {
+      if (isManagerLeaveCategory(r.staff_category) && String(r.workflow_stage || "") !== "md_approved") return []
       const startDate = String(r?.adjusted_start_date || r?.preferred_start_date || "")
       const endDate = String(r?.adjusted_end_date || r?.preferred_end_date || "")
       if (!startDate || !endDate) return []
@@ -164,7 +166,9 @@ export async function GET(request: NextRequest) {
       try {
         const ms = new Date(r.endDate).getTime() - new Date(r.startDate).getTime()
         days = Math.max(1, Math.round(ms / 86400000) + 1)
-      } catch {}
+      } catch {
+        days = 0
+      }
       return {
         id: r.id,
         userId: r.userId,

@@ -93,7 +93,7 @@ interface Props {
     last_name: string
     profile_image_url: string | null
     md_signature_url: string | null
-    departments: { name: string } | null
+    departments: { name: string } | { name: string }[] | null
   }
 }
 
@@ -1227,7 +1227,7 @@ export function MdApprovalsClient({ profile }: Props) {
                 <p className="text-xs font-semibold tracking-[0.2em] uppercase text-amber-400 mb-0.5">Managing Director</p>
                 <h1 className="text-xl font-bold tracking-tight leading-none">{fullName}</h1>
                 <p className="text-slate-400 text-xs mt-1">
-                  {profile.departments?.name || "QCC Head Office"} &mdash; Loan Approval Command
+                  {(Array.isArray(profile.departments) ? profile.departments[0]?.name : profile.departments?.name) || "QCC Head Office"} &mdash; Loan Approval Command
                 </p>
               </div>
             </div>

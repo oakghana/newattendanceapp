@@ -62,6 +62,7 @@ import {
   Clock,
   Download,
   Edit3,
+  Eye,
   FileCheck,
   FileSpreadsheet,
   FileText,
@@ -193,6 +194,7 @@ type LoanRequest = {
   category?: string | null
   memo_cc?: string | null
   md_approved_at?: string | null
+  md_approved_by_name?: string | null
   department_name?: string | null
   loan_label?: string | null
   category_name?: string | null
@@ -1169,6 +1171,10 @@ export default function LoanAppPage() {
   const [loading, setLoading] = useState(true)
   const loanLoadInFlightRef = useRef(false)
   const [data, setData] = useState<WorkflowResponse | null>(null)
+  const [staffMemoOpenedAt, setStaffMemoOpenedAt] = useState<Record<string, string>>({})
+  const [receiptConfirmationLoan, setReceiptConfirmationLoan] = useState<LoanRequest | null>(null)
+  const [confirmingReceiptId, setConfirmingReceiptId] = useState<string | null>(null)
+  const [staffReceiptConfirmedIds, setStaffReceiptConfirmedIds] = useState<Set<string>>(new Set())
   const [warning, setWarning] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<string>("")
   const [assignmentModal, setAssignmentModal] = useState<{
@@ -3200,18 +3206,68 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
     })
   }, [data?.myTasks, data?.profile?.id])
 
+  const getStaffMemoOpenedAt = (loanId: string) => {
+    const localOpenedAt = staffMemoOpenedAt[loanId]
+    if (localOpenedAt) return localOpenedAt
+    const timeline = data?.myTimelines.find((item) => item.loan_request_id === loanId)?.entries || []
+    return timeline.filter((entry) => entry.action_key === "staff_opened_memo").slice(-1)[0]?.created_at || null
+  }
+
+  const canAcknowledgeOwnReceipt = (row: LoanRequest) =>
+    row.user_id === data?.profile.id &&
+    Boolean(row.md_approved_at || row.md_approved_by_name) &&
+    ["approved_director", "md_approved", "referenced", "staff_receiving_funds", "partially_recovered"].includes(String(row.status || "")) &&
+    Boolean(getStaffMemoOpenedAt(row.id)) &&
+    !staffReceiptConfirmedIds.has(row.id) &&
+    !row.repayment_plan_generated_at &&
+    !["fully_recovered", "payment_completed"].includes(String(row.status || ""))
+
   const openSecureMemo = async (loanId: string) => {
-    const res = await fetch("/api/loan/memo-link", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: loanId }),
-    })
-    const result = await res.json()
-    if (!res.ok) {
-      toast({ title: "Memo unavailable", description: result.error || "Failed to generate secure memo link", variant: "destructive" })
-      return
+    try {
+      const res = await fetch("/api/loan/memo-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: loanId }),
+      })
+      const result = await res.json()
+      if (!res.ok) {
+        toast({ title: "Memo unavailable", description: result.error || "Failed to generate secure memo link", variant: "destructive" })
+        return
+      }
+      if (result.staffMemoOpenedAt) {
+        setStaffMemoOpenedAt((current) => ({ ...current, [loanId]: result.staffMemoOpenedAt }))
+      }
+      window.open(result.path, "_blank", "noopener,noreferrer")
+    } catch (error) {
+      toast({ title: "Memo unavailable", description: error instanceof Error ? error.message : "Failed to open the memo.", variant: "destructive" })
     }
-    window.open(result.path, "_blank", "noopener,noreferrer")
+  }
+
+  const acknowledgeStaffReceipt = async () => {
+    const loan = receiptConfirmationLoan
+    if (!loan || confirmingReceiptId) return
+    setConfirmingReceiptId(loan.id)
+    try {
+      const response = await fetch("/api/loan/disbursement-confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ loan_id: loan.id, staff_acknowledgement: true }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok || !result.success) throw new Error(result.error || "Could not confirm receipt.")
+      setStaffReceiptConfirmedIds((current) => new Set(current).add(loan.id))
+      setData((current) => current ? {
+        ...current,
+        myRequests: current.myRequests.map((row) => row.id === loan.id ? { ...row, status: "partially_recovered", repayment_plan_generated_at: result.confirmedAt || new Date().toISOString() } : row),
+        myTasks: current.myTasks?.map((row) => row.id === loan.id ? { ...row, status: "partially_recovered", repayment_plan_generated_at: result.confirmedAt || new Date().toISOString() } : row),
+      } : current)
+      toast({ title: "Receipt confirmed", description: "Your confirmation was recorded and the repayment process has started." })
+      setReceiptConfirmationLoan(null)
+    } catch (error) {
+      toast({ title: "Could not confirm receipt", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" })
+    } finally {
+      setConfirmingReceiptId(null)
+    }
   }
 
   const openActionModal = (row: LoanRequest, actionType: ActionType) => {
@@ -4074,18 +4130,58 @@ const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loa
                         </Button>}
                       </>
                     )}
-                    {row.status === "approved_director" && (
-                      <>
-                        <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>
-                          <FileText className="h-4 w-4 mr-1" /> Secure Memo PDF
+                    {["approved_director", "md_approved", "referenced", "staff_receiving_funds", "partially_recovered"].includes(row.status) && Boolean(row.md_approved_at || row.md_approved_by_name) && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => void openSecureMemo(row.id)}>
+                          <FileText className="h-4 w-4 mr-1" /> Open Approved Memo
                         </Button>
-                      </>
+                        {getStaffMemoOpenedAt(row.id) ? (
+                          <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-800">
+                            <Eye className="mr-1 h-3 w-3" /> Memo opened by you · {fmtDate(getStaffMemoOpenedAt(row.id)!)}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Open the memo before confirming receipt.</span>
+                        )}
+                        {canAcknowledgeOwnReceipt(row) && (
+                          <Button size="sm" onClick={() => setReceiptConfirmationLoan(row)} className="bg-emerald-600 text-white hover:bg-emerald-700">
+                            <CheckCircle2 className="mr-1 h-4 w-4" /> {row.status === "partially_recovered" ? "Retry Repayment Start" : "Confirm Receipt"}
+                          </Button>
+                        )}
+                        {staffReceiptConfirmedIds.has(row.id) && (
+                          <Badge className="border border-emerald-200 bg-emerald-100 text-emerald-800">Receipt confirmed · repayment started</Badge>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
               ))}
             </CardContent>
           </Card>
+          <Dialog open={Boolean(receiptConfirmationLoan)} onOpenChange={(open) => { if (!open && !confirmingReceiptId) setReceiptConfirmationLoan(null) }}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Confirm loan receipt</DialogTitle>
+                <DialogDescription>
+                  {receiptConfirmationLoan?.status === "partially_recovered"
+                    ? "Your receipt was recorded, but the repayment schedule did not finish starting. Retry to complete the repayment setup."
+                    : "Confirm only if the approved loan funds have reached you. This confirmation starts the repayment schedule for this loan."}
+                </DialogDescription>
+              </DialogHeader>
+              {receiptConfirmationLoan && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm">
+                  <p className="font-semibold text-emerald-950">{receiptConfirmationLoan.request_number} · {receiptConfirmationLoan.loan_type_label}</p>
+                  <p className="mt-1 text-emerald-800">GHc {displayLoanAmount(receiptConfirmationLoan)}</p>
+                </div>
+              )}
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setReceiptConfirmationLoan(null)} disabled={Boolean(confirmingReceiptId)}>Not yet</Button>
+                <Button type="button" onClick={() => void acknowledgeStaffReceipt()} disabled={!receiptConfirmationLoan || confirmingReceiptId === receiptConfirmationLoan.id} className="bg-emerald-600 text-white hover:bg-emerald-700">
+                  {confirmingReceiptId === receiptConfirmationLoan?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  {confirmingReceiptId === receiptConfirmationLoan?.id ? "Confirming..." : "Yes, I received it"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         <TabsContent value="tracking" className="space-y-5">

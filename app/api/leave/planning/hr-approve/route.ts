@@ -5,6 +5,7 @@ import { isHrApproverRole, buildHologramCode } from "@/lib/leave-planning"
 import { canNonRegionalPipelineAct } from "@/lib/hr-workflow"
 import { renderTemplate } from "@/lib/leave-templates"
 import { createLeaveResumptionTrackingForLeaveRequest } from "@/lib/leave-resumption-service"
+import { isManagerLeaveCategory } from "@/lib/leave-memo-access"
 import crypto from "crypto"
 
 // Statuses the HR approver sees in their queue (pending action or already actioned)
@@ -110,20 +111,24 @@ export async function GET(request: NextRequest) {
         created_at,
         updated_at
       `
-    let { data: requests, error: requestError } = await admin
+    const primaryRequestResult = await admin
       .from("leave_plan_requests")
       .select(leaveApproveSelect)
       .in("status", allEligible)
       .order("created_at", { ascending: false })
+    let requests: any[] | null = primaryRequestResult.data as any[] | null
+    let requestError: any = primaryRequestResult.error
 
     if (requestError && /memo_office_(subject|body|cc)/i.test(String(requestError.message || ""))) {
       const fallbackSelect = leaveApproveSelect
         .replace("memo_office_subject,\n        memo_office_body,\n        memo_office_cc,\n        ", "")
-      ;({ data: requests, error: requestError } = await admin
+      const fallbackRequestResult = await admin
         .from("leave_plan_requests")
         .select(fallbackSelect)
         .in("status", allEligible)
-        .order("created_at", { ascending: false }))
+        .order("created_at", { ascending: false })
+      requests = fallbackRequestResult.data as any[] | null
+      requestError = fallbackRequestResult.error
     }
 
     if (requestError) {
@@ -301,6 +306,7 @@ export async function POST(request: NextRequest) {
       .replace(/[-\s]+/g, "_")
     const deptName = (profile as any)?.departments?.name || null
     const deptCode = (profile as any)?.departments?.code || null
+    const approverName = `${String((profile as any).first_name || "")} ${String((profile as any).last_name || "")}`.trim() || "HR Approver"
 
     if (!isHrApproverRole(role, deptName, deptCode) && role !== "admin") {
       return NextResponse.json(
@@ -379,9 +385,12 @@ export async function POST(request: NextRequest) {
         created_at: new Date().toISOString(),
       }
       
-      await admin.from("audit_logs").insert(auditEntry).catch((e) => {
-        console.warn("[v0] Failed to log duplicate attempt:", e)
-      })
+      try {
+        const { error: auditError } = await admin.from("audit_logs").insert(auditEntry)
+        if (auditError) console.warn("[v0] Failed to log duplicate attempt:", auditError)
+      } catch (auditError) {
+        console.warn("[v0] Failed to log duplicate attempt:", auditError)
+      }
       
       return NextResponse.json(
         {
@@ -401,14 +410,6 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       )
     }
-
-    const approverName = [
-      String((profile as any).first_name || ""),
-      String((profile as any).last_name || ""),
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .trim() || "HR Approver"
 
     // Priority 0: inline signature supplied in this request body
     const inlineSigMode = hr_signature_mode ? String(hr_signature_mode).toLowerCase().trim() : ""
@@ -450,9 +451,9 @@ export async function POST(request: NextRequest) {
     const hasAnySignature = resolvedSigDataUrl.length > 0 || resolvedSigText.length > 0
 
     const now = new Date().toISOString()
-    const effectiveStart = String((leaveRequest as any).adjusted_start_date || (leaveRequest as any).preferred_start_date || "")
-    const effectiveEnd = String((leaveRequest as any).adjusted_end_date || (leaveRequest as any).preferred_end_date || "")
-    const effectiveDays = Number((leaveRequest as any).adjusted_days || (leaveRequest as any).requested_days || 0)
+  const effectiveStart = String(hr_approved_start_date || (leaveRequest as any).adjusted_start_date || (leaveRequest as any).preferred_start_date || "")
+  const effectiveEnd = String(hr_approved_end_date || (leaveRequest as any).adjusted_end_date || (leaveRequest as any).preferred_end_date || "")
+  const effectiveDays = Number(hr_approved_days ?? (leaveRequest as any).adjusted_days ?? (leaveRequest as any).requested_days ?? 0)
     const approvedMonths = Number((leaveRequest as any).approved_months || Math.max(1, Math.round(effectiveDays / 30)))
     const returnDate = new Date(effectiveEnd)
     if (!Number.isNaN(returnDate.getTime())) {
@@ -463,7 +464,7 @@ export async function POST(request: NextRequest) {
 
     const { data: applicantProfile } = await admin
       .from("user_profiles")
-      .select("first_name, last_name, employee_id, staff_number")
+      .select("first_name, last_name, employee_id, staff_number, staff_category, position")
       .eq("id", (leaveRequest as any).user_id)
       .maybeSingle()
 
@@ -569,15 +570,15 @@ export async function POST(request: NextRequest) {
         title: "Leave Request Not Approved",
         message: `Your leave request has been rejected by HR. ${note ? `Reason: ${note}` : ""}`,
         data: { leave_plan_request_id, action: "reject", note: note || null },
-      }).then(() => {}).catch(() => {})
+      })
 
       // Email notification
-      notifyLeaveHrRejected(admin, {
+      void Promise.resolve(notifyLeaveHrRejected(admin, {
         staffUserId: (leaveRequest as any).user_id,
         staffName: "Staff Member",
         approverName,
         note: note || "",
-      }).catch(() => {})
+      })).catch(() => {})
 
       return NextResponse.json({ success: true, message: "Leave request rejected." })
     }
@@ -599,9 +600,15 @@ export async function POST(request: NextRequest) {
     const finalSigText = resolvedSigText.length > 0 ? resolvedSigText : null
     const finalSigDataUrl = resolvedSigDataUrl.length > 0 ? resolvedSigDataUrl : null
 
-    // Build update object — only include hr_approved_* fields if they have values
+    const requiresMdApproval = action === "approve" && isManagerLeaveCategory(
+      String((leaveRequest as any).staff_category || (applicantProfile as any)?.staff_category || ""),
+      String((applicantProfile as any)?.position || ""),
+    )
+
+    // Manager-category requests complete HR review first, then wait in the MD hub.
     const updatePayload: any = {
       status: "hr_approved",
+      ...(requiresMdApproval ? { workflow_stage: "md_approval_pending" } : {}),
       hr_approver_id: user.id,
       hr_approver_name: approverName,
       hr_approved_at: now,
@@ -620,10 +627,10 @@ export async function POST(request: NextRequest) {
       updated_at: now,
     }
     
-    // Add HR executive date overrides if provided (safe to omit if columns don't exist yet)
-    if (hr_approved_start_date) updatePayload.hr_approved_start_date = String(hr_approved_start_date).slice(0, 10)
-    if (hr_approved_end_date) updatePayload.hr_approved_end_date = String(hr_approved_end_date).slice(0, 10)
-    if (hr_approved_days !== null && hr_approved_days !== undefined) updatePayload.hr_approved_days = Number(hr_approved_days)
+    // Store HR Executive date overrides in the existing adjusted date fields.
+    if (hr_approved_start_date) updatePayload.adjusted_start_date = String(hr_approved_start_date).slice(0, 10)
+    if (hr_approved_end_date) updatePayload.adjusted_end_date = String(hr_approved_end_date).slice(0, 10)
+    if (hr_approved_days !== null && hr_approved_days !== undefined) updatePayload.adjusted_days = Number(hr_approved_days)
 
     const { error: approveError } = await admin
       .from("leave_plan_requests")
@@ -633,6 +640,61 @@ export async function POST(request: NextRequest) {
     if (approveError) {
       console.error("[hr-approve] approve update error:", approveError)
       throw approveError
+    }
+
+    if (requiresMdApproval) {
+      const { error: mdHandoffAuditError } = await admin.from("leave_workflow_audit_events").insert({
+        request_id: leave_plan_request_id,
+        actor_user_id: user.id,
+        event_type: "manager_leave_hr_approved_pending_md",
+        from_status: currentStatus,
+        to_status: "md_approval_pending",
+        metadata: { hr_approver_name: approverName, hr_approved_at: now },
+      })
+      if (mdHandoffAuditError) console.warn("[hr-approve] Manager leave MD handoff audit failed:", mdHandoffAuditError.message)
+
+      const { error: staffMdNotificationError } = await admin.from("staff_notifications").insert({
+        recipient_id: (leaveRequest as any).user_id,
+        sender_id: user.id,
+        sender_role: role,
+        sender_label: "HR Executive",
+        notification_type: "manager_leave_pending_md_approval",
+        message: "Your leave request has passed HR Executive review and is awaiting final Managing Director approval. Annual leave memos become available within 14 days of the approved start date; other leave memos are available after final approval and reference requirements are met.",
+        action_url: "/dashboard/loan-app",
+        data: { leave_plan_request_id, workflow_stage: "md_approval_pending" },
+        is_read: false,
+      })
+      if (staffMdNotificationError) console.warn("[hr-approve] Manager leave staff notification failed:", staffMdNotificationError.message)
+
+      const { data: managingDirectors } = await admin
+        .from("user_profiles")
+        .select("id")
+        .eq("role", "managing_director")
+        .eq("is_active", true)
+      const managerNotifications = (managingDirectors || []).map((director: any) => ({
+        recipient_id: director.id,
+        sender_id: user.id,
+        sender_role: role,
+        sender_label: "HR Executive",
+        notification_type: "manager_leave_md_approval_required",
+        message: `${staffName} has a manager-category leave request awaiting your final approval.`,
+        action_url: "/dashboard/md-approvals",
+        data: { leave_plan_request_id, workflow_stage: "md_approval_pending" },
+        is_read: false,
+      }))
+      if (managerNotifications.length) {
+        const { error: mdNotificationError } = await admin.from("staff_notifications").insert(managerNotifications)
+        if (mdNotificationError) console.warn("[hr-approve] MD notification failed:", mdNotificationError.message)
+      }
+
+      return NextResponse.json({
+        success: true,
+        status: "hr_approved",
+        workflow_stage: "md_approval_pending",
+        awaiting_md_approval: true,
+        message: "HR approved this manager-category leave request. It is now waiting for final Managing Director approval.",
+        leave_plan_request_id,
+      })
     }
 
     // Update leave_status entries (one per date in the approved range)
@@ -674,42 +736,42 @@ export async function POST(request: NextRequest) {
     }
 
     // In-app notification
-    await admin.from("staff_notifications").insert({
-      recipient_id: (leaveRequest as any).user_id,
-      type: "leave_plan_hr_approved",
-      title: "Leave Request Approved",
-      message: `Your leave request (${effectiveStart} to ${effectiveEnd}, ${effectiveDays} day(s)) has been approved by HR. Your leave memo is ready for download.`,
-      data: {
-        leave_plan_request_id,
-        action: "approve",
-        memo_token: memoToken,
-        effective_start: effectiveStart,
-        effective_end: effectiveEnd,
-        effective_days: effectiveDays,
-      },
-    }).then(() => {}).catch(() => {})
+      await admin.from("staff_notifications").insert({
+        recipient_id: (leaveRequest as any).user_id,
+        type: "leave_plan_hr_approved",
+        title: "Leave Request Approved",
+        message: `Your leave request (${effectiveStart} to ${effectiveEnd}, ${effectiveDays} day(s)) has been approved by HR. Your leave memo is ready for download.`,
+        data: {
+          leave_plan_request_id,
+          action: "approve",
+          memo_token: memoToken,
+          effective_start: effectiveStart,
+          effective_end: effectiveEnd,
+          effective_days: effectiveDays,
+        },
+      })
 
     // Email notification (staff + HOD)
-    notifyLeaveHrApproved(admin, {
-      leavePlanRequestId: leave_plan_request_id,
-      staffUserId: (leaveRequest as any).user_id,
-      staffName: "Staff Member",
-      leaveType: String((leaveRequest as any).leave_type_key || "annual"),
-      effectiveStart,
-      effectiveEnd,
-      effectiveDays,
-      approverName,
-      memoToken,
-    }).catch(() => {})
+      void Promise.resolve(notifyLeaveHrApproved(admin, {
+        leavePlanRequestId: leave_plan_request_id,
+        staffUserId: (leaveRequest as any).user_id,
+        staffName: "Staff Member",
+        leaveType: String((leaveRequest as any).leave_type_key || "annual"),
+        effectiveStart,
+        effectiveEnd,
+        effectiveDays,
+        approverName,
+        memoToken,
+      })).catch(() => {})
 
     // ── Create leave resumption tracking record ───────────────────────────
     // This seeds the leave_resumption_notifications table so the escalation
     // cron can detect non-resumption and notify HOD/RM/HR roles automatically.
-    createLeaveResumptionTrackingForLeaveRequest({
+    void Promise.resolve(createLeaveResumptionTrackingForLeaveRequest({
       id: leave_plan_request_id,
       user_id: (leaveRequest as any).user_id,
       end_date: effectiveEnd,
-    }).catch(() => {})
+    })).catch(() => {})
 
     // ── Notify HOD, Regional Manager, HR Leave Office of this approval ────
     // Fetch key role holders so they are aware the staff will be on leave.
@@ -746,7 +808,7 @@ export async function POST(request: NextRequest) {
             notification_type: "leave_hr_approved",
             is_read: false,
           }))
-          await admin.from("staff_notifications").insert(notifRows).catch(() => {})
+          await admin.from("staff_notifications").insert(notifRows)
         }
       } catch {
         // Non-fatal — don't block the response

@@ -1633,7 +1633,7 @@ export function LeaveManagementClient({
       {canUseStaffLeaveHub && !hasHodLinkage && (normalizedRole !== "hr_leave_office" && normalizedRole !== "leave_loan_officer") && normalizedRole !== "hr_office" && normalizedRole !== "hr" && (
         <Alert className="border-blue-200 bg-blue-50">
           <AlertDescription className="text-blue-800">
-            Your leave profile is not linked to a HOD yet. Kindly inform HR/Admin to complete your HOD linkage so approvals route correctly.
+            Your leave profile has no assigned HOD or Regional Manager yet. Kindly inform HR/Admin to complete the reviewer assignment so approvals route correctly.
           </AlertDescription>
         </Alert>
       )}

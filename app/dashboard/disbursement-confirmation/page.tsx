@@ -16,6 +16,8 @@ interface DisbursedLoan {
   md_approved_at: string | null
   staff_receiving_funds_confirmed_at: string | null
   staff_receiving_funds_confirmed_by: string | null
+  memo_opened_at?: string | null
+  memo_opened_by?: string | null
   created_at: string
   department_name?: string
 }
@@ -171,6 +173,7 @@ export default async function DisbursementConfirmationPage() {
   const profileMapById = new Map<string, any>()
   const profileMapByEmpId = new Map<string, any>()
   const timelineMap = new Map<string, any>()
+  const memoReadTimelineMap = new Map<string, any>()
 
   const [profilesByIdRes, profilesByEmpRes, timelineRes] = await Promise.all([
     userIds.length > 0
@@ -188,9 +191,9 @@ export default async function DisbursementConfirmationPage() {
     loanIds.length > 0
       ? admin
           .from("loan_request_timeline")
-          .select("loan_request_id, actor_id, actor_role, note, metadata, created_at")
+          .select("loan_request_id, actor_id, actor_role, action_key, note, metadata, created_at")
           .in("loan_request_id", loanIds)
-          .eq("action_key", "confirm_disbursement")
+          .in("action_key", ["confirm_disbursement", "staff_acknowledge_receipt", "staff_opened_memo"])
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] }),
   ])
@@ -206,7 +209,9 @@ export default async function DisbursementConfirmationPage() {
   }
 
   for (const te of (timelineRes.data as any[]) || []) {
-    if (!timelineMap.has(te.loan_request_id)) {
+    if (te.action_key === "staff_opened_memo") {
+      if (!memoReadTimelineMap.has(te.loan_request_id)) memoReadTimelineMap.set(te.loan_request_id, te)
+    } else if (!timelineMap.has(te.loan_request_id)) {
       timelineMap.set(te.loan_request_id, te)
     }
   }
@@ -222,6 +227,7 @@ export default async function DisbursementConfirmationPage() {
     const resolvedEmail = prof?.email || loan.corporate_email || ""
 
     const timelineEntry = timelineMap.get(loan.id)
+    const memoReadEntry = memoReadTimelineMap.get(loan.id)
     const isConfirmed =
       loan.status === "partially_recovered" ||
       loan.status === "fully_recovered" ||
@@ -247,6 +253,8 @@ export default async function DisbursementConfirmationPage() {
       md_approved_at: loan.md_approved_at,
       staff_receiving_funds_confirmed_at: confirmedAt,
       staff_receiving_funds_confirmed_by: confirmedBy,
+      memo_opened_at: memoReadEntry?.created_at || null,
+      memo_opened_by: memoReadEntry?.metadata?.opened_by_name || (memoReadEntry ? "Staff member" : null),
       created_at: loan.created_at,
       department_name: resolvedDept,
       recovery_start_date: loan.recovery_start_date,

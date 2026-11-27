@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
+import { isManagerLeaveCategory } from "@/lib/leave-memo-access"
 
 // GET /api/leave/staff-history?userId=<uid>
 // Returns the current-year and previous-year leave records for a given staff member.
@@ -30,6 +31,8 @@ export async function GET(request: NextRequest) {
         id,
         leave_type_key,
         status,
+        workflow_stage,
+        staff_category,
         preferred_start_date,
         preferred_end_date,
         adjusted_start_date,
@@ -56,12 +59,14 @@ export async function GET(request: NextRequest) {
 
     // Compute quick stats for current period
     const approvedStatuses = ["approved", "hr_approved", "hod_approved", "manager_confirmed", "hr_office_forwarded", "completed"]
-    const currentApproved = current.filter((r: any) => approvedStatuses.includes(String(r.status || "")))
+    const isAwaitingManagerMdApproval = (record: any) =>
+      isManagerLeaveCategory(record.staff_category) && String(record.workflow_stage || "") !== "md_approved" && ["approved", "hr_approved"].includes(String(record.status || ""))
+    const currentApproved = current.filter((r: any) => approvedStatuses.includes(String(r.status || "")) && !isAwaitingManagerMdApproval(r))
     const daysUsedThisYear = currentApproved.reduce((sum: number, r: any) => {
       return sum + Number(r.adjusted_days || r.requested_days || 0)
     }, 0)
 
-    const previousApproved = previous.filter((r: any) => approvedStatuses.includes(String(r.status || "")))
+    const previousApproved = previous.filter((r: any) => approvedStatuses.includes(String(r.status || "")) && !isAwaitingManagerMdApproval(r))
     const daysUsedLastYear = previousApproved.reduce((sum: number, r: any) => {
       return sum + Number(r.adjusted_days || r.requested_days || 0)
     }, 0)
@@ -77,7 +82,7 @@ export async function GET(request: NextRequest) {
           total: current.length,
           approved: currentApproved.length,
           daysUsed: daysUsedThisYear,
-          pending: current.filter((r: any) => ["pending", "pending_manager_review", "submitted"].includes(String(r.status || ""))).length,
+          pending: current.filter((r: any) => ["pending", "pending_manager_review", "submitted"].includes(String(r.status || "")) || isAwaitingManagerMdApproval(r)).length,
         },
         previousYear: {
           total: previous.length,
